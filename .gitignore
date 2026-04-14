@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+bun.lock
+
+# Native host binaries (compiled locally)
+packages/bunview/bin/
+
+# Build-time tool cache (NSIS, appimagetool, etc. — downloaded on demand)
+packages/bunview/host/.deps/
+
+# Build output
+dist/
+*.exe
+*.app
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Bun
+.bun/

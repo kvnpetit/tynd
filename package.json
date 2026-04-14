@@ -1,0 +1,5 @@
+{
+  "name": "bunview-workspace",
+  "private": true,
+  "workspaces": ["packages/*", "examples/*"]
+}
