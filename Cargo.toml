@@ -30,7 +30,7 @@ rfd         = "0.17"
 arboard     = "3"
 open        = { version = "5", features = ["shellexecute-on-windows"] }
 pollster    = "0.4"
-notify-rust = { version = "4", default-features = false }
+notify-rust = "4"
 image       = { version = "0.25", default-features = false, features = ["png", "ico", "bmp"] }
 
 # Embedded JS runtime (lite)
