@@ -7,7 +7,7 @@ version      = "0.1.0"
 edition      = "2021"
 rust-version = "1.83"
 license      = "MIT"
-repository   = "https://github.com/kvnpetit/vorn"
+repository   = "https://github.com/kvnpetit/tynd"
 authors      = ["Kevin Petit"]
 
 [workspace.dependencies]

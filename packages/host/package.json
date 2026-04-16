@@ -1,7 +1,7 @@
 {
-  "name": "@vorn/host",
+  "name": "@tynd/host",
   "version": "0.0.0",
-  "description": "Pre-built native host binaries for Vorn (webview + QuickJS)",
+  "description": "Pre-built native host binaries for Tynd (webview + QuickJS)",
   "private": false,
   "scripts": {
     "postinstall": "bun run install.ts",
@@ -12,6 +12,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/kvnpetit/vorn"
+    "url": "https://github.com/kvnpetit/tynd"
   }
 }

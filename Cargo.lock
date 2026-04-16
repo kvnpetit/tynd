@@ -2496,9 +2496,9 @@ dependencies = [
 
 [[package]]
 name = "pxfm"
-version = "0.1.28"
+version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5a041e753da8b807c9255f28de81879c78c876392ff2469cde94799b2896b9d"
+checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
 name = "quick-error"
@@ -3293,6 +3293,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "tynd-full"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "mimalloc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tynd-host",
+ "zstd",
+]
+
+[[package]]
+name = "tynd-host"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "dirs",
+ "image",
+ "muda",
+ "notify-rust",
+ "open",
+ "pollster",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tao",
+ "tray-icon",
+ "wry",
+ "zstd",
+]
+
+[[package]]
+name = "tynd-lite"
+version = "0.1.0"
+dependencies = [
+ "mimalloc",
+ "rquickjs",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tynd-host",
+]
+
+[[package]]
 name = "typenum"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3373,51 +3418,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vorn-full"
-version = "0.1.0"
-dependencies = [
- "dirs",
- "mimalloc",
- "serde",
- "serde_json",
- "tempfile",
- "vorn-host",
- "zstd",
-]
-
-[[package]]
-name = "vorn-host"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "dirs",
- "image",
- "muda",
- "notify-rust",
- "open",
- "pollster",
- "rfd",
- "serde",
- "serde_json",
- "tao",
- "tray-icon",
- "wry",
- "zstd",
-]
-
-[[package]]
-name = "vorn-lite"
-version = "0.1.0"
-dependencies = [
- "mimalloc",
- "rquickjs",
- "serde",
- "serde_json",
- "tempfile",
- "vorn-host",
-]
 
 [[package]]
 name = "walkdir"

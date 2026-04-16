@@ -34,45 +34,45 @@ jobs:
         include:
           - runner: windows-latest
             target: windows-x64
-            full_bin: target/release/vorn-full.exe
-            lite_bin: target/release/vorn-lite.exe
-            full_asset: vorn-full-windows-x64.exe
-            lite_asset: vorn-lite-windows-x64.exe
+            full_bin: target/release/tynd-full.exe
+            lite_bin: target/release/tynd-lite.exe
+            full_asset: tynd-full-windows-x64.exe
+            lite_asset: tynd-lite-windows-x64.exe
 
           - runner: windows-11-arm
             target: windows-arm64
-            full_bin: target/release/vorn-full.exe
-            lite_bin: target/release/vorn-lite.exe
-            full_asset: vorn-full-windows-arm64.exe
-            lite_asset: vorn-lite-windows-arm64.exe
+            full_bin: target/release/tynd-full.exe
+            lite_bin: target/release/tynd-lite.exe
+            full_asset: tynd-full-windows-arm64.exe
+            lite_asset: tynd-lite-windows-arm64.exe
 
           - runner: ubuntu-latest
             target: linux-x64
-            full_bin: target/release/vorn-full
-            lite_bin: target/release/vorn-lite
-            full_asset: vorn-full-linux-x64
-            lite_asset: vorn-lite-linux-x64
+            full_bin: target/release/tynd-full
+            lite_bin: target/release/tynd-lite
+            full_asset: tynd-full-linux-x64
+            lite_asset: tynd-lite-linux-x64
 
           - runner: ubuntu-24.04-arm
             target: linux-arm64
-            full_bin: target/release/vorn-full
-            lite_bin: target/release/vorn-lite
-            full_asset: vorn-full-linux-arm64
-            lite_asset: vorn-lite-linux-arm64
+            full_bin: target/release/tynd-full
+            lite_bin: target/release/tynd-lite
+            full_asset: tynd-full-linux-arm64
+            lite_asset: tynd-lite-linux-arm64
 
           - runner: macos-13
             target: macos-x64
-            full_bin: target/release/vorn-full
-            lite_bin: target/release/vorn-lite
-            full_asset: vorn-full-macos-x64
-            lite_asset: vorn-lite-macos-x64
+            full_bin: target/release/tynd-full
+            lite_bin: target/release/tynd-lite
+            full_asset: tynd-full-macos-x64
+            lite_asset: tynd-lite-macos-x64
 
           - runner: macos-latest
             target: macos-arm64
-            full_bin: target/release/vorn-full
-            lite_bin: target/release/vorn-lite
-            full_asset: vorn-full-macos-arm64
-            lite_asset: vorn-lite-macos-arm64
+            full_bin: target/release/tynd-full
+            lite_bin: target/release/tynd-lite
+            full_asset: tynd-full-macos-arm64
+            lite_asset: tynd-lite-macos-arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -92,17 +92,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: vorn-rust-release
+          shared-key: tynd-rust-release
           key: ${{ matrix.target }}
 
       - name: cargo clippy (release)
         run: cargo clippy --release --workspace --all-targets -- -D warnings
 
-      - name: Build vorn-full
-        run: cargo build --release -p vorn-full
+      - name: Build tynd-full
+        run: cargo build --release -p tynd-full
 
-      - name: Build vorn-lite
-        run: cargo build --release -p vorn-lite
+      - name: Build tynd-lite
+        run: cargo build --release -p tynd-lite
 
       - name: Stage release assets
         shell: bash
@@ -126,7 +126,7 @@ jobs:
             ${{ matrix.lite_asset }}
 
   publish:
-    name: Publish @vorn/cli + @vorn/core + @vorn/host
+    name: Publish @tynd/cli + @tynd/core + @tynd/host
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -168,23 +168,23 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Build @vorn/cli
+      - name: Build @tynd/cli
         run: bun run build
         working-directory: packages/cli
 
-      - name: Publish @vorn/cli
+      - name: Publish @tynd/cli
         run: npm publish --access public --provenance
         working-directory: packages/cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @vorn/core
+      - name: Publish @tynd/core
         run: npm publish --access public --provenance
         working-directory: packages/core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @vorn/host
+      - name: Publish @tynd/host
         run: npm publish --access public --provenance
         working-directory: packages/host
         env:

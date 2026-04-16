@@ -12,7 +12,7 @@ static DIRS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 pub fn register_dir(path: PathBuf) {
     match DIRS.lock() {
         Ok(mut g) => g.push(path),
-        Err(e) => eprintln!("[vorn] cleanup: mutex poisoned, temp dir will leak: {e}"),
+        Err(e) => eprintln!("[tynd] cleanup: mutex poisoned, temp dir will leak: {e}"),
     }
 }
 

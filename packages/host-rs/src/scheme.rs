@@ -60,7 +60,7 @@ fn walk(base: &PathBuf, cur: &PathBuf, map: &mut HashMap<String, Asset>) {
             match zstd::decode_all(bytes.as_slice()) {
                 Ok(out) => (key, out),
                 Err(e) => {
-                    eprintln!("[vorn] Failed to decompress asset '{rel}': {e}");
+                    eprintln!("[tynd] Failed to decompress asset '{rel}': {e}");
                     continue;
                 },
             }

@@ -10,16 +10,16 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 use serde::Deserialize;
 use serde_json::Value;
-use vorn_host::{
+use tynd_host::{
     runtime::{BackendBridge, BackendCall, BackendConfig, BackendEvent, MenuItemDef, TrayConfig},
-    vorn_log,
+    tynd_log,
     window::WindowConfig,
 };
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 enum BunMsg {
-    #[serde(rename = "vorn:config")]
+    #[serde(rename = "tynd:config")]
     Config {
         window: Option<WindowConfig>,
         #[serde(rename = "devUrl")]
@@ -75,7 +75,7 @@ impl ReloadHandle {
 }
 
 /// Spawn a Bun subprocess, wait for the initial config, and return the bridge
-/// plus a reload handle. When launched by a packed binary, VORN_BUN_PATH points
+/// plus a reload handle. When launched by a packed binary, TYND_BUN_PATH points
 /// to the embedded runtime instead of the system bun.
 pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     let (call_tx, call_rx) = mpsc::channel::<BackendCall>();
@@ -84,7 +84,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     let (child, stdin, config) = match spawn_bun(entry_path, event_tx.clone()) {
         Ok(t) => t,
         Err(e) => {
-            vorn_log!("{e}");
+            tynd_log!("{e}");
             std::process::exit(1);
         },
     };
@@ -104,8 +104,8 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
                     },
                     BackendCall::Typed { id, fn_name, args } => {
                         let msg = match fn_name.as_str() {
-                            "__vorn_on_ready__" => serde_json::json!({ "type": "vorn:ready" }),
-                            "__vorn_on_close__" => serde_json::json!({ "type": "vorn:close" }),
+                            "__tynd_on_ready__" => serde_json::json!({ "type": "tynd:ready" }),
+                            "__tynd_on_close__" => serde_json::json!({ "type": "tynd:close" }),
                             _ => serde_json::json!({
                                 "type": "call",
                                 "id":   id,
@@ -119,7 +119,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
                                 s.into_bytes()
                             },
                             Err(e) => {
-                                eprintln!("[vorn] failed to serialize BackendCall: {e}");
+                                eprintln!("[tynd] failed to serialize BackendCall: {e}");
                                 continue;
                             },
                         }
@@ -147,13 +147,13 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     (bridge, reload)
 }
 
-/// Spawn a Bun subprocess, wait for `vorn:config`, spawn the stdout reader thread,
+/// Spawn a Bun subprocess, wait for `tynd:config`, spawn the stdout reader thread,
 /// and return the child handle + stdin + parsed config.
 fn spawn_bun(
     entry_path: &str,
     event_tx: mpsc::Sender<BackendEvent>,
 ) -> Result<(Child, ChildStdin, BackendConfig), String> {
-    let bun_bin = std::env::var("VORN_BUN_PATH").unwrap_or_else(|_| "bun".into());
+    let bun_bin = std::env::var("TYND_BUN_PATH").unwrap_or_else(|_| "bun".into());
 
     let mut cmd = Command::new(&bun_bin);
     cmd.arg("run")
@@ -171,7 +171,7 @@ fn spawn_bun(
 
     let mut child = cmd.spawn().map_err(|e| {
         let mut msg = format!("Failed to start runtime: {e}");
-        if std::env::var("VORN_BUN_PATH").is_err() {
+        if std::env::var("TYND_BUN_PATH").is_err() {
             msg.push_str("\nEnsure runtime is installed and in PATH");
         }
         msg
@@ -214,7 +214,7 @@ fn spawn_bun(
                             let _ = event_tx.send(BackendEvent::Emit { name, payload });
                         },
                         Ok(BunMsg::Config { .. }) => {},
-                        Err(e) => vorn_log!("Parse error ({e}): {trimmed}"),
+                        Err(e) => tynd_log!("Parse error ({e}): {trimmed}"),
                     }
                 },
                 // Any error means Bun closed or crashed — the reader thread exits.
@@ -251,7 +251,7 @@ fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> Result<Back
                 menu,
                 tray,
             }) => {
-                let icon_path = std::env::var("VORN_ICON_PATH").ok();
+                let icon_path = std::env::var("TYND_ICON_PATH").ok();
                 return Ok(BackendConfig {
                     window: window.unwrap_or_default(),
                     dev_url,
@@ -261,8 +261,8 @@ fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> Result<Back
                     tray,
                 });
             },
-            Ok(other) => return Err(format!("Expected vorn:config, got: {other:?}")),
-            Err(e) => return Err(format!("Failed to parse vorn:config: {e}\nLine: {trimmed}")),
+            Ok(other) => return Err(format!("Expected tynd:config, got: {other:?}")),
+            Err(e) => return Err(format!("Failed to parse tynd:config: {e}\nLine: {trimmed}")),
         }
     }
 }

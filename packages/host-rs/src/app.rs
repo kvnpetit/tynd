@@ -86,7 +86,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 Some(m)
             },
             Err(e) => {
-                crate::vorn_log!("Menu build failed: {e}");
+                crate::tynd_log!("Menu build failed: {e}");
                 None
             },
         }
@@ -119,7 +119,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 Some(tray)
             },
             Err(e) => {
-                crate::vorn_log!("System tray failed: {e}");
+                crate::tynd_log!("System tray failed: {e}");
                 None
             },
         });
@@ -131,7 +131,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let default_app_name: String = std::env::current_exe()
         .ok()
         .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-        .unwrap_or_else(|| "vorn".to_string());
+        .unwrap_or_else(|| "tynd".to_string());
     let app_name = config.window.title.as_deref().unwrap_or(&default_app_name);
     let mut web_context = wry::WebContext::new(webview_data_dir(app_name));
 
@@ -157,7 +157,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             };
 
             // Page-ready signal (fired once on DOMContentLoaded)
-            if v.get("__vorn_page_ready")
+            if v.get("__tynd_page_ready")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
             {
@@ -236,14 +236,14 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
 
             Event::UserEvent(UserEvent::Backend(evt)) => match evt {
                 BackendEvent::Return { id, ok, value } => {
-                    if id == "__vorn_on_close__" {
+                    if id == "__tynd_on_close__" {
                         if !exit_started.swap(true, Ordering::SeqCst) {
                             crate::cleanup::run();
                             std::process::exit(0);
                         }
                         return;
                     }
-                    if id.starts_with("__vorn_") {
+                    if id.starts_with("__tynd_") {
                         return;
                     }
                     let _ = webview.evaluate_script(&ipc::eval_resolve(&id, ok, &value));
@@ -319,7 +319,7 @@ fn webview_data_dir(app_name: &str) -> Option<std::path::PathBuf> {
         safe.pop();
     }
     if safe.is_empty() {
-        safe = "vorn".to_string();
+        safe = "tynd".to_string();
     }
     dirs::data_local_dir().map(|d| d.join(safe).join("WebView2"))
 }

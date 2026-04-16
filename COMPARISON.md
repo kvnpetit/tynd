@@ -1,8 +1,8 @@
-# Vorn vs Tauri v2 vs Wails v3 vs Electron — Exhaustive Feature Comparison
+# Tynd vs Tauri v2 vs Wails v3 vs Electron — Exhaustive Feature Comparison
 
 > Last updated: April 16, 2026 | Desktop only (mobile features marked 📱)
 
-> ⚠️ **Architecture note — Electron:** Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tauri, Wails, and Vorn use the OS's native WebView (WebView2 / WKWebView / WebKitGTK). This explains both Electron's broader API surface and its larger binary footprint.
+> ⚠️ **Architecture note — Electron:** Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tauri, Wails, and Tynd use the OS's native WebView (WebView2 / WKWebView / WebKitGTK). This explains both Electron's broader API surface and its larger binary footprint.
 
 ## Legend
 
@@ -18,7 +18,7 @@
 
 ## 1. Window — Core Operations
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Set title | ✅ | ✅ | ✅ | ✅ |
 | Get current title | ❌ | ✅ | ❌ | ✅ |
@@ -63,7 +63,7 @@
 
 ## 2. Window — Appearance & Styling
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Frameless / borderless | ✅ | ✅ | ✅ | ✅ |
 | Transparent background | ✅ | ✅ | ✅ | ✅ |
@@ -99,7 +99,7 @@
 
 Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron exposes `webContents` and `WebContentsView`.
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Webview / Window distinction | ❌ | ✅ | ❌ | ✅ |
 | Get current webview | ❌ | ✅ | N/A | ✅ |
@@ -125,7 +125,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 4. Multi-Window
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Create secondary windows | ❌ | ✅ | ✅ | ✅ |
 | Per-window independent configuration | ❌ | ✅ | ✅ | ✅ |
@@ -141,7 +141,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 5. Window Events
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Close requested (preventable) | ❌ | ✅ | ✅ | ✅ |
 | Resized | ❌ | ✅ | ✅ | ✅ |
@@ -162,7 +162,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 6. Cursor & Mouse
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Set cursor icon | ❌ | ✅ | ❌ | ⚠️ |
 | Set cursor position | ❌ | ✅ | ❌ | ❌ |
@@ -176,7 +176,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 7. Monitors & Screens
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | List all monitors | ❌ | ✅ | ✅ | ✅ |
 | Get primary monitor | ❌ | ✅ | ✅ | ✅ |
@@ -191,7 +191,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 8. Drag & Drop
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Receive dropped files (native OS paths) | ❌ | ✅ | ✅ | ✅ |
 | Targeted drop zones | ❌ | ❌ | ✅ | ❌ |
@@ -202,7 +202,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 9. Dialogs
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Single file picker | ✅ | ✅ | ✅ | ✅ |
 | Multiple file picker | ✅ | ✅ | ✅ | ✅ |
@@ -227,7 +227,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 10. System Tray
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Tray icon at startup | ✅ | ✅ | ✅ | ✅ |
 | Multiple tray icons | ❌ | ✅ | ✅ | ✅ |
@@ -254,7 +254,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 11. Menu Bar — Application Menu
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Native menu bar | ✅ | ✅ | ✅ | ✅ |
 | Set menu for specific window | ❌ | ✅ | ✅ | ✅ |
@@ -280,7 +280,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 12. Context Menu
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Show context menu programmatically | ❌ | ✅ | ✅ | ✅ |
 | Context data on click | ❌ | ❌ | ✅ | ❌ |
@@ -291,7 +291,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 13. Clipboard
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Read text | ✅ | ✅ | ✅ | ✅ |
 | Write text | ✅ | ✅ | ✅ | ✅ |
@@ -307,7 +307,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 14. Notifications
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Basic notification (title + body) | ✅ | ✅ | ✅ | ✅ |
 | Custom icon | ❌ | ✅ | ❌ | ✅ |
@@ -327,7 +327,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 15. Global Shortcuts
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Register global hotkey | ❌ | ✅ | ✅ | ✅ |
 | Unregister hotkey | ❌ | ✅ | ✅ | ✅ |
@@ -340,7 +340,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 16. Shell & File System
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Open URL in default browser | ✅ | ✅ | ✅ | ✅ |
 | Open file / folder with default app | ✅ | ✅ | ✅ | ✅ |
@@ -367,7 +367,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 17. IPC & Events
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Typed RPC frontend → backend | ✅ | ✅ | ✅ | ✅ |
 | Auto-generated TS types (zero build step) | ✅ | ⚠️ | ✅ | ⚠️ |
@@ -397,7 +397,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 18. HTTP Client & WebSocket
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | HTTP requests from frontend | ❌ | ✅ | ⚠️ | ✅ |
 | WebSocket client | ❌ | ✅ | ❌ | ✅ |
@@ -408,7 +408,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 19. Auto-Updater
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Check for updates | ❌ | ✅ | ❌ | ✅ |
 | Download + install | ❌ | ✅ | ❌ | ✅ |
@@ -425,7 +425,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 20. Single Instance & Deep Linking
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Single instance lock | ❌ | ✅ | ✅ | ✅ |
 | Focus existing window on 2nd launch | ❌ | ✅ | ✅ | ✅ |
@@ -440,7 +440,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 21. Autolaunch
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Enable launch at system startup | ❌ | ✅ | ❌ | ✅ |
 | Disable autolaunch | ❌ | ✅ | ❌ | ✅ |
@@ -450,7 +450,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 22. Persistent Storage
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Key-value store — get / set / delete | ❌ | ✅ | ✅ | ⚠️ |
 | Store — has / keys / values / entries / length | ❌ | ✅ | ❌ | ⚠️ |
@@ -467,7 +467,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 23. Logging
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Structured logging (debug / info / warn / error) | ❌ | ✅ | ✅ | ⚠️ |
 | Write to file with rotation | ❌ | ✅ | ✅ | ⚠️ |
@@ -479,7 +479,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 24. App-Level APIs
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Get app name | ❌ | ✅ | ✅ | ✅ |
 | Get app version | ❌ | ✅ | ✅ | ✅ |
@@ -500,7 +500,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 25. OS & Environment
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Platform name | ❌ | ✅ | ✅ | ✅ |
 | CPU architecture | ❌ | ✅ | ✅ | ✅ |
@@ -519,7 +519,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 26. Path Utilities
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | App data / local data dir | ❌ | ✅ | ❌ | ✅ |
 | App config / cache / log dir | ❌ | ✅ | ❌ | ✅ |
@@ -539,7 +539,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 27. Security & Permissions
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Capability-based ACL | ❌ | ✅ | ❌ | ❌ |
 | Default-deny model | ❌ | ✅ | ❌ | ❌ |
@@ -559,7 +559,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 28. Mobile (iOS / Android)
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | iOS support | ❌ | ✅ | ❌ | ❌ |
 | Android support | ❌ | ✅ | ❌ | ❌ |
@@ -574,7 +574,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 29. Build & Distribution
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | **Windows** | | | | |
 | NSIS installer (.exe) | ❌ | ✅ | ✅ | ✅ |
@@ -611,7 +611,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 30. Developer Experience & CLI
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Project scaffold | ✅ | ✅ | ✅ | ✅ |
 | Templates (vanilla / React / Vue…) | ✅ | ✅ | ✅ | ✅ |
@@ -635,7 +635,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 31. IPC Architecture — Technical Detail
 
-| Mechanism | Vorn | Tauri v2 | Wails v3 | Electron |
+| Mechanism | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | JS → native transport | ✅ wry `postMessage` | ✅ wry `postMessage` | ❌ HTTP POST | ✅ Chromium IPC |
 | Native → JS push | ✅ `evaluate_script` | ✅ `evaluate_script` | ❌ WebSocket | ✅ `webContents.send` |
@@ -648,7 +648,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 32. Printing & PDF Export
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Programmatic print (open system dialog) | ❌ | ❌ | ✅ | ✅ |
 | Silent print (no dialog) | ❌ | ❌ | ❌ | ✅ |
@@ -662,7 +662,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 33. Screen & Media Capture
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Screen / window source enumeration | ❌ | ❌ | ❌ | ✅ |
 | `getDisplayMedia` / MediaStream | ❌ | ❌ | ❌ | ✅ |
@@ -676,7 +676,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 34. Accessibility
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Enable / disable accessibility support | ❌ | ❌ | ❌ | ✅ |
 | VoiceOver (macOS) integration | ⚠️ | ⚠️ | ⚠️ | ✅ |
@@ -689,7 +689,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 35. Spellcheck & Find in Page
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Built-in spellchecker | ❌ | ❌ | ❌ | ✅ |
 | Custom dictionary | ❌ | ❌ | ❌ | ✅ |
@@ -702,7 +702,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 36. Extensions, WebFrame & Service Workers
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Load Chrome extension | ❌ | ❌ | ❌ | ✅ |
 | Extension manifest v3 support | ❌ | ❌ | ❌ | ✅ |
@@ -715,7 +715,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ## 37. In-app Purchase (Storefronts)
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | macOS StoreKit — product lookup | ❌ | ❌ | ❌ | ✅ |
 | macOS StoreKit — purchase / restore | ❌ | ❌ | ❌ | ✅ |
@@ -729,7 +729,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 Features available in Electron with no direct equivalent in the other frameworks.
 
-| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Screen / window capture (desktopCapturer) | ❌ | ❌ | ❌ | ✅ |
 | Power monitor (sleep / wake / idle) | ❌ | ❌ | ❌ | ✅ |
@@ -749,7 +749,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 
 ## Summary Score
 
-| Category | Vorn | Tauri v2 | Wails v3 | Electron |
+| Category | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Window — core ops | 14/39 | 38/39 | 29/39 | 37/39 |
 | Window — appearance | 4/27 | 19/27 | 18/27 | 18/27 |
@@ -790,18 +790,18 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
 | **Total** | **~62/503 (12%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
-> **Note on scores:** Vorn is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
+> **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
 ---
 
-## Vorn unique strengths
+## Tynd unique strengths
 
 | Feature | Description |
 |---|---|
 | **Zero-codegen typed RPC** | `createBackend<typeof backend>()` — types come from `typeof`, no generated files, no build step |
 | **100% TypeScript backend** | No Rust or Go to learn or maintain |
 | **Dual runtimes** | `full` (Bun subprocess — full npm ecosystem) or `lite` (QuickJS embedded — smaller binary, ~20 ms startup) |
-| **Direct OS APIs from frontend** | `dialog`, `vornWindow`, `clipboard`, `shell`, `notification`, `tray` call into Rust directly — no round-trip through the TypeScript backend |
+| **Direct OS APIs from frontend** | `dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray` call into Rust directly — no round-trip through the TypeScript backend |
 | **Same IPC stack as Tauri v2** | wry + tao + `bv://` custom scheme — zero TCP, zero WebSocket, no firewall prompt |
 | **Structural security model** | The exposure surface is the exported module — code and security policy cannot drift apart |
 

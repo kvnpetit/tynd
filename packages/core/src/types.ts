@@ -103,9 +103,9 @@ export type EmitterMap = Record<string, unknown>
 /** Typed event emitter. Create via `createEmitter<T>()` in your backend. */
 export interface Emitter<T extends EmitterMap> {
   /** @internal — type marker for BackendClient inference */
-  readonly __vorn_emitter__: true
+  readonly __tynd_emitter__: true
   /** @internal — phantom type field, never has a real runtime value */
-  readonly __vorn_event_types__: T
+  readonly __tynd_event_types__: T
   emit<K extends keyof T>(event: K & string, payload: T[K]): void
 }
 

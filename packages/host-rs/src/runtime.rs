@@ -19,7 +19,7 @@ pub enum BackendEvent {
 }
 
 /// Everything `run_app` needs to talk to the backend.
-/// Constructed by `vorn-full` (Bun bridge) or `vorn-lite` (QuickJS bridge).
+/// Constructed by `tynd-full` (Bun bridge) or `tynd-lite` (QuickJS bridge).
 #[derive(Debug)]
 pub struct BackendBridge {
     /// Window and frontend config sent by the backend at startup
@@ -56,8 +56,8 @@ impl BackendCall {
 
     /// Internal lifecycle signal — result is silently discarded by the host.
     pub fn lifecycle(fn_name: &str) -> Self {
-        let id = format!("__vorn_{fn_name}__");
-        let fn_name = format!("__vorn_{fn_name}__");
+        let id = format!("__tynd_{fn_name}__");
+        let fn_name = format!("__tynd_{fn_name}__");
         Self::Typed {
             id,
             fn_name,

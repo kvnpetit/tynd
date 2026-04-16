@@ -1,9 +1,9 @@
-//! Embedded-assets support for `vorn build` (lite runtime).
+//! Embedded-assets support for `tynd build` (lite runtime).
 //!
-//! `vorn build` appends a packed section to the vorn-lite binary:
+//! `tynd build` appends a packed section to the tynd-lite binary:
 //!
 //! ```text
-//! [vorn-lite binary]
+//! [tynd-lite binary]
 //! ┌─ packed section ──────────────────────────────────────────────────┐
 //! │  file_count : u32 LE                                              │
 //! │  for each file:                                                   │
@@ -13,18 +13,18 @@
 //! │    data     : raw bytes                                           │
 //! └───────────────────────────────────────────────────────────────────┘
 //! section_size : u64 LE   (byte count of the packed section above)
-//! magic        : "VORNPKG\0" (8 bytes)
+//! magic        : "TYNDPKG\0" (8 bytes)
 //! ```
 //!
 //! At startup, `try_load_embedded()` checks for the magic trailer.
 //! If found, it extracts all files to a temporary directory and returns
-//! the paths that vorn-lite needs.
+//! the paths that tynd-lite needs.
 
 use std::fs;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
-const MAGIC: &[u8; 8] = b"VORNPKG\0";
+const MAGIC: &[u8; 8] = b"TYNDPKG\0";
 /// section_size(u64) + magic(8) = 16 bytes
 const TRAILER_LEN: u64 = 16;
 
@@ -70,13 +70,13 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let file_count = u32::from_le_bytes(cb) as usize;
 
     // `std::mem::forget` prevents TempDir from auto-deleting on drop.
-    // Cleanup is instead registered with vorn_host::cleanup so it runs
+    // Cleanup is instead registered with tynd_host::cleanup so it runs
     // before every process::exit (which bypasses Rust's drop machinery).
-    let td = tempfile::TempDir::with_prefix("vorn-").ok()?;
+    let td = tempfile::TempDir::with_prefix("tynd-").ok()?;
     let temp_dir = td.path().to_owned();
     #[allow(clippy::mem_forget)] // intentional: cleanup::run() handles removal across exit paths
     std::mem::forget(td);
-    vorn_host::cleanup::register_dir(temp_dir.clone());
+    tynd_host::cleanup::register_dir(temp_dir.clone());
     let bundle_dir = temp_dir.join("backend");
     let frontend_dir = temp_dir.join("frontend");
     fs::create_dir_all(&bundle_dir).ok()?;
@@ -132,13 +132,13 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     }
 
     let bundle_path = bundle_path_opt.unwrap_or_else(|| {
-        vorn_host::vorn_log!("Embedded pack is missing bundle.js — rebuild with `vorn build`");
-        vorn_host::cleanup::run();
+        tynd_host::tynd_log!("Embedded pack is missing bundle.js — rebuild with `tynd build`");
+        tynd_host::cleanup::run();
         std::process::exit(1);
     });
     let frontend_dir = frontend_dir_opt.unwrap_or_else(|| {
-        vorn_host::vorn_log!("Embedded pack is missing frontend files — rebuild with `vorn build`");
-        vorn_host::cleanup::run();
+        tynd_host::tynd_log!("Embedded pack is missing frontend files — rebuild with `tynd build`");
+        tynd_host::cleanup::run();
         std::process::exit(1);
     });
 

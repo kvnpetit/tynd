@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
- * Postinstall script for @vorn/host.
- * Downloads the vorn-full and vorn-lite binaries for the current platform
+ * Postinstall script for @tynd/host.
+ * Downloads the tynd-full and tynd-lite binaries for the current platform
  * from GitHub Releases and places them in bin/{platform}-{arch}/.
  */
 
@@ -52,16 +52,16 @@ const binDir = join(import.meta.dir, "bin", platArch)
 mkdirSync(binDir, { recursive: true })
 
 async function download(runtime: "full" | "lite"): Promise<void> {
-  const assetName = `vorn-${runtime}-${platArch}${ext}`
-  const destPath = join(binDir, `vorn-${runtime}${ext}`)
+  const assetName = `tynd-${runtime}-${platArch}${ext}`
+  const destPath = join(binDir, `tynd-${runtime}${ext}`)
 
   if (existsSync(destPath)) {
-    console.log(`  ✓ vorn-${runtime} already present, skipping`)
+    console.log(`  ✓ tynd-${runtime} already present, skipping`)
     return
   }
 
   const url = `${BASE_URL}/${assetName}`
-  console.log(`  ↓ Downloading vorn-${runtime} (${platArch})…`)
+  console.log(`  ↓ Downloading tynd-${runtime} (${platArch})…`)
 
   const res = await fetch(url)
   if (!res.ok) {
@@ -75,7 +75,7 @@ async function download(runtime: "full" | "lite"): Promise<void> {
     chmodSync(destPath, 0o755)
   }
 
-  console.log(`  ✓ vorn-${runtime} ready`)
+  console.log(`  ✓ tynd-${runtime} ready`)
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -83,14 +83,14 @@ async function download(runtime: "full" | "lite"): Promise<void> {
 // In monorepo workspace, script runs from packages/host/ directly — skip download
 if (!import.meta.dir.includes("node_modules")) process.exit(0)
 
-console.log(`\n@vorn/host ${VERSION} — installing binaries (${platArch})\n`)
+console.log(`\n@tynd/host ${VERSION} — installing binaries (${platArch})\n`)
 
 try {
   await download("full")
   await download("lite")
   console.log()
 } catch (err) {
-  console.error(`\n[ERROR] @vorn/host postinstall failed:\n  ${err}`)
+  console.error(`\n[ERROR] @tynd/host postinstall failed:\n  ${err}`)
   console.error(`  You can retry with: bun run install.ts\n`)
   process.exit(1)
 }

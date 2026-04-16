@@ -77,7 +77,7 @@ pub(crate) fn init_bar(menu: &muda::Menu, window: &tao::window::Window) {
         use tao::platform::windows::WindowExtWindows;
         unsafe {
             if let Err(e) = menu.init_for_hwnd(window.hwnd()) {
-                crate::vorn_log!("menu.init_for_hwnd: {e}");
+                crate::tynd_log!("menu.init_for_hwnd: {e}");
             }
         }
     }

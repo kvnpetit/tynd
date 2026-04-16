@@ -1,7 +1,7 @@
 /**
- * @vorn/core — backend API
- * Import from "@vorn/core" in your Bun/Node backend only.
- * For frontend use: import from "@vorn/core/client"
+ * @tynd/core — backend API
+ * Import from "@tynd/core" in your Bun/Node backend only.
+ * For frontend use: import from "@tynd/core/client"
  */
 
 export type {
@@ -15,19 +15,19 @@ export type {
 } from "./types.js"
 
 import * as v from "valibot"
-import { vorn } from "./logger.js"
+import { tynd } from "./logger.js"
 import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types.js"
 
-// __VORN_RUNTIME__ is replaced at bundle time by the CLI:
-//   buildLiteBundle → define: { "globalThis.__VORN_RUNTIME__": '"lite"' }
-//   buildFullBundle → define: { "globalThis.__VORN_RUNTIME__": '"full"' }
+// __TYND_RUNTIME__ is replaced at bundle time by the CLI:
+//   buildLiteBundle → define: { "globalThis.__TYND_RUNTIME__": '"lite"' }
+//   buildFullBundle → define: { "globalThis.__TYND_RUNTIME__": '"full"' }
 // This lets Bun's DCE eliminate the dead branch entirely from each bundle.
-// Fallback to __vorn_lite__ (injected by QuickJS host at runtime) for
+// Fallback to __tynd_lite__ (injected by QuickJS host at runtime) for
 // cases where the bundle is run without the CLI bundler's define.
 const _g = globalThis as Record<string, unknown>
 const IS_LITE: boolean =
-  _g["__VORN_RUNTIME__"] === "lite" ||
-  (_g["__VORN_RUNTIME__"] === undefined && _g["__vorn_lite__"] !== undefined)
+  _g["__TYND_RUNTIME__"] === "lite" ||
+  (_g["__TYND_RUNTIME__"] === undefined && _g["__tynd_lite__"] !== undefined)
 
 let _emitFn: ((name: string, payload: unknown) => void) | null = null
 
@@ -41,11 +41,11 @@ let _emitFn: ((name: string, payload: unknown) => void) | null = null
  */
 export function createEmitter<T extends EmitterMap>(): Emitter<T> {
   return {
-    __vorn_emitter__: true,
-    __vorn_event_types__: undefined as unknown as T,
+    __tynd_emitter__: true,
+    __tynd_event_types__: undefined as unknown as T,
     emit<K extends keyof T>(event: K & string, payload: T[K]) {
       if (!_emitFn) {
-        vorn.warn(`emit("${event}") before app.start() — event dropped`)
+        tynd.warn(`emit("${event}") before app.start() — event dropped`)
         return
       }
       _emitFn(event, payload)
@@ -60,10 +60,10 @@ let _closeFired = false
 
 export const app = {
   /**
-   * Start the Vorn app. Call this once at the end of your backend entry file.
+   * Start the Tynd app. Call this once at the end of your backend entry file.
    *
    * In **full** mode: spawns the Bun/Node IPC listener (stdin/stdout).
-   * In **lite** mode: writes window config to `globalThis.__vorn_config__`
+   * In **lite** mode: writes window config to `globalThis.__tynd_config__`
    * for the Rust host to read, then exports lifecycle hooks.
    *
    * @example
@@ -78,7 +78,7 @@ export const app = {
           return path ? `  • ${path}: ${i.message}` : `  • ${i.message}`
         })
         .join("\n")
-      vorn.error(`app.start() received invalid config:\n${issues}`)
+      tynd.error(`app.start() received invalid config:\n${issues}`)
       throw new Error("Invalid app.start() config")
     }
     const validated = result.output
@@ -114,10 +114,10 @@ function _startFull(config: AppConfig): void {
 
   // 1. Send window/frontend config to Rust (reads this as its first stdout line)
   const configMsg = JSON.stringify({
-    type: "vorn:config",
+    type: "tynd:config",
     window: config.window ?? {},
-    devUrl: config.devUrl ?? process.env["VORN_DEV_URL"],
-    frontendDir: process.env["VORN_FRONTEND_DIR"] ?? config.frontendDir,
+    devUrl: config.devUrl ?? process.env["TYND_DEV_URL"],
+    frontendDir: process.env["TYND_FRONTEND_DIR"] ?? config.frontendDir,
     menu: config.menu ?? [],
     tray: config.tray ?? null,
   })
@@ -129,16 +129,16 @@ function _startFull(config: AppConfig): void {
   }
 
   // 3. Start reading IPC calls from Rust (stdin)
-  // Entry path: injected by CLI via VORN_ENTRY env var (preferred),
+  // Entry path: injected by CLI via TYND_ENTRY env var (preferred),
   // or falling back to the current module's URL (works when run directly).
-  const entry = process.env["VORN_ENTRY"] ?? import.meta.path
+  const entry = process.env["TYND_ENTRY"] ?? import.meta.path
   _startListener(entry)
 }
 
 function _startLite(config: AppConfig): void {
-  // Write window config — Rust reads globalThis.__vorn_config__ after eval
+  // Write window config — Rust reads globalThis.__tynd_config__ after eval
   const g = globalThis as Record<string, unknown>
-  g["__vorn_config__"] = JSON.stringify({
+  g["__tynd_config__"] = JSON.stringify({
     window: config.window ?? {},
     menu: config.menu ?? [],
     tray: config.tray ?? null,
@@ -147,8 +147,8 @@ function _startLite(config: AppConfig): void {
     frontendDir: config.frontendDir ?? null,
   })
 
-  // Wire up emit — calls __vorn_emit__(name, payloadJson) injected by Rust
-  const nativeEmit = g["__vorn_emit__"] as ((name: string, payload: string) => void) | undefined
+  // Wire up emit — calls __tynd_emit__(name, payloadJson) injected by Rust
+  const nativeEmit = g["__tynd_emit__"] as ((name: string, payload: string) => void) | undefined
 
   _emitFn = (name, payload) => {
     if (nativeEmit) {
@@ -156,10 +156,10 @@ function _startLite(config: AppConfig): void {
     }
   }
 
-  // Export lifecycle hooks — Rust calls __vorn_on_ready__ / __vorn_on_close__
-  // These will be picked up from __vorn_mod__ if exported, but we also store
+  // Export lifecycle hooks — Rust calls __tynd_on_ready__ / __tynd_on_close__
+  // These will be picked up from __tynd_mod__ if exported, but we also store
   // them on globalThis so main.rs can call them even without module awareness.
-  g["__vorn_on_ready__"] = () => {
+  g["__tynd_on_ready__"] = () => {
     for (const fn of _onReadyFns) {
       try {
         fn()
@@ -168,7 +168,7 @@ function _startLite(config: AppConfig): void {
       }
     }
   }
-  g["__vorn_on_close__"] = () => {
+  g["__tynd_on_close__"] = () => {
     for (const fn of _onCloseFns) {
       try {
         fn()
@@ -200,7 +200,7 @@ function _startListener(entryPath: string): void {
 
     for (const line of lines) {
       if (!line.trim()) continue
-      _handleLine(line, entryPath).catch((e) => vorn.error(`IPC error: ${e}`))
+      _handleLine(line, entryPath).catch((e) => tynd.error(`IPC error: ${e}`))
     }
   })
 
@@ -266,7 +266,7 @@ const CallMsgSchema = v.object({
   args: v.array(v.unknown()),
 })
 const LifecycleMsgSchema = v.object({
-  type: v.union([v.literal("vorn:ready"), v.literal("vorn:close")]),
+  type: v.union([v.literal("tynd:ready"), v.literal("tynd:close")]),
 })
 const IpcMsgSchema = v.union([CallMsgSchema, LifecycleMsgSchema])
 
@@ -275,13 +275,13 @@ async function _handleLine(line: string, entryPath: string): Promise<void> {
   try {
     raw = JSON.parse(line)
   } catch {
-    vorn.error(`Invalid JSON from Rust: ${line}`)
+    tynd.error(`Invalid JSON from Rust: ${line}`)
     return
   }
 
   const parsed = v.safeParse(IpcMsgSchema, raw)
   if (!parsed.success) {
-    vorn.error(`Invalid IPC message shape: ${line}`)
+    tynd.error(`Invalid IPC message shape: ${line}`)
     return
   }
   const msg = parsed.output
@@ -305,7 +305,7 @@ async function _handleLine(line: string, entryPath: string): Promise<void> {
       break
     }
 
-    case "vorn:ready":
+    case "tynd:ready":
       _readyFired = true
       for (const fn of _onReadyFns) {
         try {
@@ -316,7 +316,7 @@ async function _handleLine(line: string, entryPath: string): Promise<void> {
       }
       break
 
-    case "vorn:close":
+    case "tynd:close":
       _closeFired = true
       for (const fn of _onCloseFns) {
         try {

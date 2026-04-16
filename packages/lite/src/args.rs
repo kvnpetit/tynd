@@ -1,9 +1,9 @@
-/// CLI arguments for the vorn-lite host binary.
-/// Unlike vorn-full, window config comes from the JS bundle itself
-/// (globalThis.__vorn_config__), but frontend path is a CLI arg because
+/// CLI arguments for the tynd-lite host binary.
+/// Unlike tynd-full, window config comes from the JS bundle itself
+/// (globalThis.__tynd_config__), but frontend path is a CLI arg because
 /// import.meta.dir is not available in a browser-target IIFE bundle.
 pub(crate) struct Args {
-    /// Path to the pre-built JS bundle (IIFE, sets globalThis.__vorn_mod__)
+    /// Path to the pre-built JS bundle (IIFE, sets globalThis.__tynd_mod__)
     pub bundle_path: String,
     /// Optional: directory of static frontend files to serve via bv://
     pub frontend_dir: Option<String>,
@@ -49,8 +49,8 @@ impl Args {
         }
 
         if bundle_path.is_empty() {
-            vorn_host::vorn_log!("Error: --bundle <path> is required");
-            vorn_host::vorn_log!("Usage: vorn-lite --bundle /path/to/bundle.js [--frontend-dir /path/to/dist] [--debug]");
+            tynd_host::tynd_log!("Error: --bundle <path> is required");
+            tynd_host::tynd_log!("Usage: tynd-lite --bundle /path/to/bundle.js [--frontend-dir /path/to/dist] [--debug]");
             std::process::exit(1);
         }
 
