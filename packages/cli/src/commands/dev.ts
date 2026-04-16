@@ -50,10 +50,20 @@ export async function dev(opts: DevOptions): Promise<void> {
     const devParts = devCommand.split(/\s+/).filter(Boolean)
     devServerProc = Bun.spawn(devParts, {
       cwd: opts.cwd,
-      stdout: "inherit",
-      stderr: "inherit",
+      stdout: "pipe",
+      stderr: "pipe",
       env: { ...process.env },
     })
+    pipeWithPrefix(
+      devServerProc.stdout as ReadableStream<Uint8Array>,
+      process.stdout,
+      log.cyan(`[${frontend.buildTool}]`),
+    )
+    pipeWithPrefix(
+      devServerProc.stderr as ReadableStream<Uint8Array>,
+      process.stderr,
+      log.cyan(`[${frontend.buildTool}]`),
+    )
     log.step("Waiting for dev server…")
     if (!(await waitForServer(devUrl))) {
       log.error(`Dev server did not respond at ${devUrl} within 30s`)
@@ -127,10 +137,12 @@ export async function dev(opts: DevOptions): Promise<void> {
 
   let hostProc = Bun.spawn([binPath, ...makeArgs()], {
     cwd: opts.cwd,
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: "pipe",
+    stderr: "pipe",
     env,
   })
+  pipeWithPrefix(hostProc.stdout as ReadableStream<Uint8Array>, process.stdout, log.gray("[host]"))
+  pipeWithPrefix(hostProc.stderr as ReadableStream<Uint8Array>, process.stderr, log.gray("[host]"))
 
   // ── Backend file watcher → restart on change ──────────────────────────────
 
@@ -177,10 +189,12 @@ export async function dev(opts: DevOptions): Promise<void> {
 
       hostProc = Bun.spawn([binPath, ...makeArgs()], {
         cwd: opts.cwd,
-        stdout: "inherit",
-        stderr: "inherit",
+        stdout: "pipe",
+        stderr: "pipe",
         env,
       })
+      pipeWithPrefix(hostProc.stdout, process.stdout, log.gray("[host]"))
+      pipeWithPrefix(hostProc.stderr, process.stderr, log.gray("[host]"))
       log.success(`${reason === "config" ? "Restarted" : "Reloaded"} in ${Date.now() - t0}ms`)
       log.blank()
       reloading = false
@@ -266,6 +280,36 @@ async function buildBackendDev(o: {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Forward a child stream to our own, prefixing each line. Line-buffered so prefix
+// attaches once per line even when chunks split mid-line.
+function pipeWithPrefix(
+  src: ReadableStream<Uint8Array>,
+  dest: NodeJS.WriteStream,
+  prefix: string,
+): void {
+  const decoder = new TextDecoder()
+  let buf = ""
+  ;(async () => {
+    const reader = src.getReader()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        let idx = buf.indexOf("\n")
+        while (idx !== -1) {
+          dest.write(`${prefix} ${buf.slice(0, idx)}\n`)
+          buf = buf.slice(idx + 1)
+          idx = buf.indexOf("\n")
+        }
+      }
+      if (buf) dest.write(`${prefix} ${buf}\n`)
+    } catch {
+      /* stream closed mid-read — child exited */
+    }
+  })()
+}
 
 async function waitForServer(url: string, timeout = 30_000): Promise<boolean> {
   const start = Date.now()
