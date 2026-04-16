@@ -5,7 +5,7 @@ export const events = createEmitter<{
 }>()
 
 export async function greet(name: string): Promise<string> {
-  return `Hello, ${name}! Welcome to react-full.`
+  return `Hello, ${name}! Welcome to full.`
 }
 
 app.onReady(() => {
@@ -13,9 +13,10 @@ app.onReady(() => {
 })
 
 app.start({
+  frontendDir: import.meta.dir + "/../dist",
   window: {
-    title: "react-full",
-    width: 1200,
+    title:  "full",
+    width:  1200,
     height: 800,
     center: true,
   },

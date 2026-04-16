@@ -5,7 +5,7 @@ export const events = createEmitter<{
 }>()
 
 export function greet(name: string): string {
-  return `Hello, ${name}! Welcome to react-lite.`
+  return `Hello, ${name}! Welcome to lite.`
 }
 
 app.onReady(() => {
@@ -14,8 +14,8 @@ app.onReady(() => {
 
 app.start({
   window: {
-    title: "react-lite",
-    width: 1200,
+    title:  "lite",
+    width:  1200,
     height: 800,
     center: true,
   },
