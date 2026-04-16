@@ -1,0 +1,23 @@
+[package]
+name    = "vorn-host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wry        = "0.55.0"
+tao        = "0.35.0"
+serde      = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rfd          = "0.17"
+arboard      = { version = "3" }
+open         = { version = "5", features = ["shellexecute-on-windows"] }
+pollster     = "0.4"
+notify-rust  = { version = "4", default-features = false }
+image        = { version = "0.25", default-features = false, features = ["png", "ico", "bmp"] }
+muda         = "0.17"
+tray-icon    = "0.22"
+dirs         = "6"
+flate2       = "1.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+arboard = { version = "3", features = ["wayland-data-control"] }

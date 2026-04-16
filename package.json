@@ -1,5 +1,13 @@
 {
-  "name": "bunview-workspace",
+  "name": "vorn",
   "private": true,
-  "workspaces": ["packages/*", "examples/*"]
+  "workspaces": ["packages/*", "playground/*", "benchmarks/*"],
+  "scripts": {
+    "bench": "bun benchmarks/run.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@vorn/cli":  "workspace:*",
+    "@vorn/core": "workspace:*"
+  }
 }

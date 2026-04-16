@@ -1,0 +1,19 @@
+{
+  "name": "@vorn/core",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kvnpetit/vorn"
+  },
+  "files": ["src"],
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

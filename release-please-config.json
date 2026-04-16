@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    "packages/cli": {
+      "release-type": "node",
+      "package-name": "@vorn/cli",
+      "component": "cli",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/core": {
+      "release-type": "node",
+      "package-name": "@vorn/core",
+      "component": "core",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/host": {
+      "release-type": "node",
+      "package-name": "@vorn/host",
+      "component": "host",
+      "changelog-path": "CHANGELOG.md"
+    }
+  },
+  "separate-pull-requests": true
+}

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Vite / frontend build output
+dist/
+dist-ssr/
+*.local
+
+# Velox build cache & release output
+.velox/
+release/
+
+# Temporary icon conversion (SVG → PNG by velox build)
+*.velox.png
+
+# Logs
+logs/
+*.log
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

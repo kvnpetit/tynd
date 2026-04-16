@@ -1,17 +1,20 @@
 # Dependencies
 node_modules/
-bun.lock
 
-# Native host binaries (compiled locally)
-packages/bunview/bin/
+# Rust build output
+target/
 
-# Build-time tool cache (NSIS, appimagetool, etc. — downloaded on demand)
-packages/bunview/host/.deps/
+# Vorn build cache & release output
+.vorn/
+.velox/
+release/
 
-# Build output
+# Temporary icon conversion (SVG → PNG by vorn build)
+*.vorn.png
+
+# Frontend bundles
 dist/
-*.exe
-*.app
+dist-ssr/
 
 # OS files
 .DS_Store
