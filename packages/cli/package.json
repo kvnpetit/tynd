@@ -1,6 +1,6 @@
 {
   "name": "@vorn/cli",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Vorn framework CLI — create, dev, build",
   "private": false,
   "type": "module",
