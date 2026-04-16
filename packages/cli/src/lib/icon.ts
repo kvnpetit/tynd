@@ -173,7 +173,7 @@ export async function setWindowsExeIcon(
 
     // Find existing icon group ID or use 1
     const existing = ResEdit.Resource.IconGroupEntry.fromEntries(res.entries)
-    const iconGroupID = existing.length > 0 ? existing[0].id : 1
+    const iconGroupID = existing[0]?.id ?? 1
 
     // Replace (or create) icon group in the resource section
     ResEdit.Resource.IconGroupEntry.replaceIconsForResource(

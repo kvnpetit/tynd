@@ -38,13 +38,19 @@ rquickjs    = { version = "0.9", features = ["full"] }
 
 [workspace.lints.rust]
 unused_must_use        = "deny"
-unsafe_op_in_unsafe_fn = "warn"
+unsafe_op_in_unsafe_fn = "deny"
+unused_lifetimes       = "warn"
+unused_qualifications  = "warn"
 
-# `clippy::all` is the bar we enforce (warn + CI -D warnings).
-# Enabling `pedantic` wholesale generates too much noise for a native-OS framework;
-# we opt in individually when it becomes worth it.
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Bug-catchers — real safety gains
+dbg_macro           = "warn"
+todo                = "warn"
+unimplemented       = "warn"
+panic_in_result_fn  = "warn"
+lossy_float_literal = "warn"
 
 [profile.release]
 opt-level     = 3

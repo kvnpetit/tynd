@@ -35,8 +35,8 @@ async function readInstalledVersion(pkg: string): Promise<string | null> {
 function compareSemver(a: string, b: string): number {
   const cleanA = a.split("-")[0]!
   const cleanB = b.split("-")[0]!
-  const pa = cleanA.split(".").map((n) => parseInt(n, 10) || 0)
-  const pb = cleanB.split(".").map((n) => parseInt(n, 10) || 0)
+  const pa = cleanA.split(".").map((n) => Number.parseInt(n, 10) || 0)
+  const pb = cleanB.split(".").map((n) => Number.parseInt(n, 10) || 0)
   for (let i = 0; i < 3; i++) {
     const da = pa[i] ?? 0
     const db = pb[i] ?? 0
