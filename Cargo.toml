@@ -1,0 +1,63 @@
+[workspace]
+members  = ["packages/host-rs", "packages/full", "packages/lite"]
+resolver = "2"
+
+[workspace.package]
+version      = "0.1.0"
+edition      = "2021"
+rust-version = "1.83"
+license      = "MIT"
+repository   = "https://github.com/kvnpetit/vorn"
+authors      = ["Kevin Petit"]
+
+[workspace.dependencies]
+# Shared foundations
+serde       = { version = "1.0", features = ["derive"] }
+serde_json  = "1.0"
+tempfile    = "3.27"
+dirs        = "6"
+flate2      = "1.0"
+mimalloc    = { version = "0.1", default-features = false }
+
+# wry / tao ecosystem
+wry         = "0.55.0"
+tao         = "0.35.0"
+muda        = "0.17"
+tray-icon   = "0.22"
+
+# OS integration
+rfd         = "0.17"
+arboard     = "3"
+open        = { version = "5", features = ["shellexecute-on-windows"] }
+pollster    = "0.4"
+notify-rust = { version = "4", default-features = false }
+image       = { version = "0.25", default-features = false, features = ["png", "ico", "bmp"] }
+
+# Embedded JS runtime (lite)
+rquickjs    = { version = "0.9", features = ["full"] }
+
+[workspace.lints.rust]
+unused_must_use        = "deny"
+unsafe_op_in_unsafe_fn = "warn"
+
+# `clippy::all` is the bar we enforce (warn + CI -D warnings).
+# Enabling `pedantic` wholesale generates too much noise for a native-OS framework;
+# we opt in individually when it becomes worth it.
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+opt-level     = 3
+lto           = "fat"
+codegen-units = 1
+panic         = "abort"
+strip         = true
+debug         = false
+incremental   = false
+
+[profile.dev]
+opt-level = 0
+
+# Build deps with light opt so debug iteration stays fast without tanking runtime speed
+[profile.dev.package."*"]
+opt-level = 1
