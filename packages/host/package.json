@@ -1,0 +1,16 @@
+{
+  "name": "@vorn/host",
+  "version": "0.1.0",
+  "description": "Pre-built native host binaries for Vorn (webview + QuickJS)",
+  "private": false,
+  "scripts": {
+    "postinstall": "bun run install.ts"
+  },
+  "files": [
+    "install.ts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kvnpetit/vorn"
+  }
+}
