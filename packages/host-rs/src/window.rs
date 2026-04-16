@@ -57,7 +57,7 @@ pub fn build_window<T>(
             Ok(icon) => {
                 wb = wb.with_window_icon(Some(icon));
             },
-            Err(e) => crate::vorn_log!("Window icon '{}': {e}", path),
+            Err(e) => crate::tynd_log!("Window icon '{}': {e}", path),
         }
     }
 

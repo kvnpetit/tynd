@@ -1,6 +1,6 @@
 [package]
-name                 = "vorn-lite"
-description          = "Vorn runtime (lite) — embedded QuickJS backend + launcher"
+name                 = "tynd-lite"
+description          = "Tynd runtime (lite) — embedded QuickJS backend + launcher"
 version.workspace      = true
 edition.workspace      = true
 rust-version.workspace = true
@@ -9,14 +9,14 @@ repository.workspace   = true
 authors.workspace      = true
 
 [[bin]]
-name = "vorn-lite"
+name = "tynd-lite"
 path = "src/main.rs"
 
 [lints]
 workspace = true
 
 [dependencies]
-vorn-host            = { path = "../host-rs" }
+tynd-host            = { path = "../host-rs" }
 rquickjs.workspace   = true
 serde.workspace      = true
 serde_json.workspace = true

@@ -1,8 +1,8 @@
-# Vorn
+# Tynd
 
 Native desktop apps with **TypeScript** — same concept as Tauri/Wails but the backend is pure TS.
 
-| | Tauri v2 | Wails v3 | **Vorn** |
+| | Tauri v2 | Wails v3 | **Tynd** |
 |---|---|---|---|
 | Backend language | Rust | Go | **TypeScript (full or lite runtime)** |
 | Frontend | Any | Any | Any |
@@ -22,8 +22,8 @@ TypeScript backend                         Native OS window
          │
          │ stdin/stdout JSON
          ▼
-  vorn-full  (Bun subprocess, wry + tao Rust host)
-  vorn-lite  (QuickJS embedded,  wry + tao Rust host)
+  tynd-full  (Bun subprocess, wry + tao Rust host)
+  tynd-lite  (QuickJS embedded,  wry + tao Rust host)
 ```
 
 **Zero network.** Frontend served via `bv://` custom protocol (wry `with_custom_protocol`). RPC via native `webview_bind`. Events via `evaluate_script`. Identical architecture to Tauri v2.
@@ -47,7 +47,7 @@ TypeScript backend                         Native OS window
 
 ## Requirements
 
-**[Bun](https://bun.sh) is required.** Vorn is a Bun-first framework — the CLI, the dev server, and the full runtime all run on Bun.
+**[Bun](https://bun.sh) is required.** Tynd is a Bun-first framework — the CLI, the dev server, and the full runtime all run on Bun.
 
 End users who install your app need nothing — the runtime is embedded in the distributed binary.
 
@@ -56,7 +56,7 @@ End users who install your app need nothing — the runtime is embedded in the d
 ## Quick start
 
 ```bash
-bunx vorn create my-app
+bunx tynd create my-app
 cd my-app
 bun run dev
 ```
@@ -64,8 +64,8 @@ bun run dev
 With a specific framework / runtime:
 
 ```bash
-bunx vorn create my-app --framework react --runtime full
-bunx vorn create my-app --framework vue   --runtime lite
+bunx tynd create my-app --framework react --runtime full
+bunx tynd create my-app --framework vue   --runtime lite
 ```
 
 ---
@@ -73,17 +73,17 @@ bunx vorn create my-app --framework vue   --runtime lite
 ## CLI
 
 ```bash
-vorn create [name]           # scaffold a new project (interactive if no args)
+tynd create [name]           # scaffold a new project (interactive if no args)
   --framework react|vue|svelte|solid|preact|lit|angular
   --runtime   full|lite
 
-vorn dev                     # start app in development mode (HMR)
-vorn build                   # bundle backend + frontend → single binary
-vorn init                    # add vorn to an existing project
-vorn clean                   # remove build artifacts (.vorn/cache, release/)
-vorn validate                # check config and project structure
-vorn upgrade                 # upgrade @vorn/cli and @vorn/core to latest
-vorn info                    # show environment info (Bun, Rust, WebView2…)
+tynd dev                     # start app in development mode (HMR)
+tynd build                   # bundle backend + frontend → single binary
+tynd init                    # add tynd to an existing project
+tynd clean                   # remove build artifacts (.tynd/cache, release/)
+tynd validate                # check config and project structure
+tynd upgrade                 # upgrade @tynd/cli and @tynd/core to latest
+tynd info                    # show environment info (Bun, Rust, WebView2…)
 ```
 
 ---
@@ -97,7 +97,7 @@ vorn info                    # show environment info (Bun, Rust, WebView2…)
 | Lit                   | ✅ Vite `lit-ts`    | ✅ | ♻ Full reload only — Web Components by design |
 | Angular               | ✅ Angular CLI      | ✅ | ♻ Full reload by default (opt-in HMR via `ng serve --hmr`) |
 
-`vorn init` also detects existing **Vite**, **CRA**, **Angular CLI**, **Parcel**, **Rsbuild**, and **Webpack** setups.
+`tynd init` also detects existing **Vite**, **CRA**, **Angular CLI**, **Parcel**, **Rsbuild**, and **Webpack** setups.
 
 **Blocked (SSR):** Next.js, Nuxt, SvelteKit, Remix, Gatsby, Blitz.js, RedwoodJS, SolidStart, Angular Universal, Analog, Qwik City, Astro, TanStack Start, Vike. Use the SPA variant instead (plain Svelte vs SvelteKit, plain Solid vs SolidStart, …).
 
@@ -109,7 +109,7 @@ See [`FRAMEWORKS.md`](FRAMEWORKS.md) for the full matrix, per-framework notes, o
 
 ```
 my-app/
-├── vorn.config.ts            ← project config
+├── tynd.config.ts            ← project config
 ├── package.json
 ├── backend/
 │   └── main.ts               ← backend entry — app.start() here
@@ -126,7 +126,7 @@ my-app/
 Called once at the bottom of your backend entry file.
 
 ```typescript
-import { app, createEmitter } from "@vorn/core"
+import { app, createEmitter } from "@tynd/core"
 
 // 1. Declare typed events
 export const events = createEmitter<{
@@ -249,7 +249,7 @@ app.start({
 ## Frontend API
 
 ```typescript
-import { createBackend } from "@vorn/core/client"
+import { createBackend } from "@tynd/core/client"
 import type * as backend from "../../backend/main"
 
 const api = createBackend<typeof backend>()
@@ -271,7 +271,7 @@ All OS APIs are called from the frontend. They go through the Rust host directly
 #### `dialog`
 
 ```typescript
-import { dialog } from "@vorn/core/client"
+import { dialog } from "@tynd/core/client"
 
 const path  = await dialog.openFile({ filters: [{ name: "Images", extensions: ["png", "jpg"] }] })
 const paths = await dialog.openFiles()
@@ -280,37 +280,37 @@ await dialog.message("Done!", { title: "Success" })
 const ok    = await dialog.confirm("Delete this file?")
 ```
 
-#### `vornWindow`
+#### `tyndWindow`
 
 ```typescript
-import { vornWindow } from "@vorn/core/client"
+import { tyndWindow } from "@tynd/core/client"
 
-await vornWindow.setTitle("My App — Unsaved")
-await vornWindow.setSize(1400, 900)
-await vornWindow.maximize()
-await vornWindow.unmaximize()
-await vornWindow.minimize()
-await vornWindow.unminimize()
-await vornWindow.center()
-await vornWindow.setFullscreen(true)
-await vornWindow.setAlwaysOnTop(true)
-await vornWindow.setDecorations(false)
-await vornWindow.hide()
-await vornWindow.show()
+await tyndWindow.setTitle("My App — Unsaved")
+await tyndWindow.setSize(1400, 900)
+await tyndWindow.maximize()
+await tyndWindow.unmaximize()
+await tyndWindow.minimize()
+await tyndWindow.unminimize()
+await tyndWindow.center()
+await tyndWindow.setFullscreen(true)
+await tyndWindow.setAlwaysOnTop(true)
+await tyndWindow.setDecorations(false)
+await tyndWindow.hide()
+await tyndWindow.show()
 
-const isMax  = await vornWindow.isMaximized()   // boolean
-const isMin  = await vornWindow.isMinimized()   // boolean
-const isFull = await vornWindow.isFullscreen()  // boolean
-const isVis  = await vornWindow.isVisible()     // boolean
+const isMax  = await tyndWindow.isMaximized()   // boolean
+const isMin  = await tyndWindow.isMinimized()   // boolean
+const isFull = await tyndWindow.isFullscreen()  // boolean
+const isVis  = await tyndWindow.isVisible()     // boolean
 
 // Subscribe to native menu item by id
-vornWindow.onMenu("file.new", () => newDocument())
+tyndWindow.onMenu("file.new", () => newDocument())
 ```
 
 #### `clipboard`
 
 ```typescript
-import { clipboard } from "@vorn/core/client"
+import { clipboard } from "@tynd/core/client"
 
 const text = await clipboard.readText()
 await clipboard.writeText("Hello!")
@@ -319,7 +319,7 @@ await clipboard.writeText("Hello!")
 #### `shell`
 
 ```typescript
-import { shell } from "@vorn/core/client"
+import { shell } from "@tynd/core/client"
 
 await shell.openExternal("https://example.com")
 await shell.openPath("/home/user/document.pdf")
@@ -328,7 +328,7 @@ await shell.openPath("/home/user/document.pdf")
 #### `notification`
 
 ```typescript
-import { notification } from "@vorn/core/client"
+import { notification } from "@tynd/core/client"
 
 await notification.send("Build Complete", { body: "0 errors." })
 ```
@@ -336,11 +336,11 @@ await notification.send("Build Complete", { body: "0 errors." })
 #### `tray`
 
 ```typescript
-import { tray } from "@vorn/core/client"
+import { tray } from "@tynd/core/client"
 
-tray.onClick(() => vornWindow.show())
+tray.onClick(() => tyndWindow.show())
 tray.onRightClick(() => { /* ... */ })
-tray.onDoubleClick(() => vornWindow.show())
+tray.onDoubleClick(() => tyndWindow.show())
 tray.onMenu("quit", () => process.exit(0))
 ```
 
@@ -353,7 +353,7 @@ tray.onMenu("quit", () => process.exit(0))
 | `api.<fn>()` | Frontend → Backend | wry `window.ipc.postMessage` → stdin JSON |
 | `api.on()` | Backend → Frontend | Rust `evaluate_script` |
 | `events.emit()` | Backend → Frontend | stdout JSON → Rust → `evaluate_script` |
-| `dialog` / `vornWindow` / … | Frontend → Rust | wry `window.ipc.postMessage` (direct, no backend round-trip) |
+| `dialog` / `tyndWindow` / … | Frontend → Rust | wry `window.ipc.postMessage` (direct, no backend round-trip) |
 
 **No HTTP. No WebSocket. No firewall prompt.** Identical to Tauri v2's IPC stack.
 
@@ -361,10 +361,10 @@ Frontend assets served via `bv://localhost/` (wry custom protocol → filesystem
 
 ---
 
-## vorn.config.ts
+## tynd.config.ts
 
 ```typescript
-import type { VornConfig } from "@vorn/cli"
+import type { TyndConfig } from "@tynd/cli"
 
 export default {
   runtime:     "full",              // "full" | "lite"
@@ -377,21 +377,21 @@ export default {
     height: 800,
     center: true,
   },
-} satisfies VornConfig
+} satisfies TyndConfig
 ```
 
-### `VornConfig` fields
+### `TyndConfig` fields
 
 | Field | Default | Description |
 |---|---|---|
 | `runtime` | `"full"` | `"full"` or `"lite"` — see [RUNTIMES.md](RUNTIMES.md) |
 | `backend` | `"backend/main.ts"` | Backend entry file |
 | `frontendDir` | `"frontend"` | Built frontend output directory |
-| `frontendEntry` | — | Simple TS/JS entry (no framework) — auto-bundled by vorn |
+| `frontendEntry` | — | Simple TS/JS entry (no framework) — auto-bundled by tynd |
 | `devUrl` | auto | Dev server URL override |
 | `devCommand` | auto | Dev server start command override |
 | `icon` | auto | App icon path — auto-detected from `public/favicon.{ico,png,svg}` |
-| `binaryArgs` | — | Extra args passed to the `vorn-full` / `vorn-lite` binary |
+| `binaryArgs` | — | Extra args passed to the `tynd-full` / `tynd-lite` binary |
 | `window` | — | Default window options (title, width, height, center) |
 
 **Icon auto-detection order:** `public/favicon.ico` → `public/favicon.png` → `public/icon.ico` → `public/icon.png` → `public/logo.ico` → `public/logo.png` → SVG variants (`public/favicon.svg`, `public/icon.svg`, `public/logo.svg`) → `assets/icon.{ico,png}` → `icon.{ico,png}`. SVG icons are auto-converted to PNG via WASM. Set `icon` explicitly to override.
@@ -410,7 +410,7 @@ export default {
 
 ## Building from source
 
-The `vorn-full` and `vorn-lite` binaries are Rust crates.
+The `tynd-full` and `tynd-lite` binaries are Rust crates.
 
 ```bash
 # Requirements
@@ -421,18 +421,18 @@ sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
 
 # Build
-cargo build --release -p vorn-full
-cargo build --release -p vorn-lite
+cargo build --release -p tynd-full
+cargo build --release -p tynd-lite
 ```
 
 ### Crate layout
 
 ```
 packages/
-├── host-rs/     ← vorn-host (library: wry + tao event loop, OS APIs)
-├── full/        ← vorn-full (binary: spawns Bun subprocess, links host)
-├── lite/        ← vorn-lite (binary: embeds QuickJS, links host)
-├── host/        ← @vorn/host (npm: postinstall downloads pre-built binaries)
-├── core/        ← @vorn/core (TypeScript: app, createEmitter, client API)
-└── cli/         ← @vorn/cli  (TypeScript: vorn create/dev/build/info)
+├── host-rs/     ← tynd-host (library: wry + tao event loop, OS APIs)
+├── full/        ← tynd-full (binary: spawns Bun subprocess, links host)
+├── lite/        ← tynd-lite (binary: embeds QuickJS, links host)
+├── host/        ← @tynd/host (npm: postinstall downloads pre-built binaries)
+├── core/        ← @tynd/core (TypeScript: app, createEmitter, client API)
+└── cli/         ← @tynd/cli  (TypeScript: tynd create/dev/build/info)
 ```

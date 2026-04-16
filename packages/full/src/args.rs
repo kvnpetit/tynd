@@ -1,5 +1,5 @@
-/// CLI arguments for the vorn-full host binary.
-/// Window config comes from the backend's first stdout message (vorn:config),
+/// CLI arguments for the tynd-full host binary.
+/// Window config comes from the backend's first stdout message (tynd:config),
 /// so we only need the backend entry path here.
 pub(crate) struct Args {
     /// Absolute path to the backend TypeScript entry file
@@ -30,9 +30,9 @@ impl Args {
         }
 
         if backend_entry.is_empty() {
-            vorn_host::vorn_log!("Error: --backend-entry <path> is required");
-            vorn_host::vorn_log!(
-                "Usage: vorn-full --backend-entry /path/to/backend/main.ts [--debug]"
+            tynd_host::tynd_log!("Error: --backend-entry <path> is required");
+            tynd_host::tynd_log!(
+                "Usage: tynd-full --backend-entry /path/to/backend/main.ts [--debug]"
             );
             std::process::exit(1);
         }

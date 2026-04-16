@@ -1,4 +1,4 @@
-// @vorn/core/client — frontend API. Backend imports from "@vorn/core".
+// @tynd/core/client — frontend API. Backend imports from "@tynd/core".
 
 import type {
   ConfirmOptions,
@@ -20,7 +20,7 @@ export type {
   SaveFileOptions,
 }
 
-import { vorn } from "./logger.js"
+import { tynd } from "./logger.js"
 
 type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
   k: infer I,
@@ -67,15 +67,15 @@ export type BackendClient<T> = ModuleFunctions<T> & {
 
 declare global {
   interface Window {
-    __vorn__: {
+    __tynd__: {
       call(fn: string, args: unknown[]): Promise<unknown>
       os_call(api: string, method: string, args: unknown): Promise<unknown>
       os_on(name: string, handler: (data: unknown) => void): () => void
       on(name: string, handler: (payload: unknown) => void): () => void
       off(name: string, handler: (payload: unknown) => void): void
     }
-    __vorn_os_result__: (id: string, ok: boolean, value: unknown) => void
-    __vorn_os_event__: (name: string, data: unknown) => void
+    __tynd_os_result__: (id: string, ok: boolean, value: unknown) => void
+    __tynd_os_event__: (name: string, data: unknown) => void
   }
 }
 
@@ -94,14 +94,14 @@ export function createBackend<T>(): BackendClient<T> {
       // A thenable Proxy would make `await api` invoke `api.then()` as a backend call.
       if (prop === "then" || prop === "catch" || prop === "finally") return undefined
 
-      if (!window.__vorn__) {
-        vorn.error("window.__vorn__ is not available — are you running outside a vorn app?")
-        return () => Promise.reject(new Error("[vorn] not in a vorn app context"))
+      if (!window.__tynd__) {
+        tynd.error("window.__tynd__ is not available — are you running outside a tynd app?")
+        return () => Promise.reject(new Error("[tynd] not in a tynd app context"))
       }
 
       // Event subscription helpers
       if (prop === "on") {
-        return (event: string, handler: (p: unknown) => void) => window.__vorn__.on(event, handler)
+        return (event: string, handler: (p: unknown) => void) => window.__tynd__.on(event, handler)
       }
 
       if (prop === "once") {
@@ -110,23 +110,23 @@ export function createBackend<T>(): BackendClient<T> {
           const wrapper = (p: unknown) => {
             if (!called) {
               called = true
-              window.__vorn__.off(event, wrapper)
+              window.__tynd__.off(event, wrapper)
               handler(p)
             }
           }
-          window.__vorn__.on(event, wrapper)
-          return () => window.__vorn__.off(event, wrapper)
+          window.__tynd__.on(event, wrapper)
+          return () => window.__tynd__.off(event, wrapper)
         }
       }
 
       // Default: proxy as a backend function call
-      return (...args: unknown[]) => window.__vorn__.call(prop, args)
+      return (...args: unknown[]) => window.__tynd__.call(prop, args)
     },
   })
 }
 
 function _osCall<T>(api: string, method: string, args: unknown = null): Promise<T> {
-  return window.__vorn__.os_call(api, method, args) as Promise<T>
+  return window.__tynd__.os_call(api, method, args) as Promise<T>
 }
 
 /**
@@ -167,10 +167,10 @@ export const dialog = {
  * Control the native application window from the frontend.
  *
  * @example
- * await vornWindow.setTitle("My App — Unsaved")
- * await vornWindow.maximize()
+ * await tyndWindow.setTitle("My App — Unsaved")
+ * await tyndWindow.maximize()
  */
-export const vornWindow = {
+export const tyndWindow = {
   setTitle(title: string): Promise<void> {
     return _osCall("window", "setTitle", { title })
   },
@@ -225,10 +225,10 @@ export const vornWindow = {
    * Returns an unsubscribe function.
    *
    * @example
-   * vornWindow.onMenu("file.open", () => openFile())
+   * tyndWindow.onMenu("file.open", () => openFile())
    */
   onMenu(id: string, handler: () => void): () => void {
-    return window.__vorn__.os_on("menu:action", (data: unknown) => {
+    return window.__tynd__.os_on("menu:action", (data: unknown) => {
       if (((data as Record<string, unknown>)?.["id"] as string) === id) handler()
     })
   },
@@ -283,23 +283,23 @@ export const notification = {
  * The tray itself is configured in `app.start({ tray: { ... } })`.
  *
  * @example
- * tray.onClick(() => vornWindow.show())
- * tray.onMenu("show", () => vornWindow.show())
+ * tray.onClick(() => tyndWindow.show())
+ * tray.onMenu("show", () => tyndWindow.show())
  */
 export const tray = {
   /** Fires when the tray icon is left-clicked. */
   onClick(handler: () => void): () => void {
-    return window.__vorn__.os_on("tray:click", () => handler())
+    return window.__tynd__.os_on("tray:click", () => handler())
   },
 
   /** Fires when the tray icon is right-clicked. */
   onRightClick(handler: () => void): () => void {
-    return window.__vorn__.os_on("tray:right-click", () => handler())
+    return window.__tynd__.os_on("tray:right-click", () => handler())
   },
 
   /** Fires when the tray icon is double-clicked. */
   onDoubleClick(handler: () => void): () => void {
-    return window.__vorn__.os_on("tray:double-click", () => handler())
+    return window.__tynd__.os_on("tray:double-click", () => handler())
   },
 
   /**
@@ -310,7 +310,7 @@ export const tray = {
    * tray.onMenu("quit", () => process.exit(0))
    */
   onMenu(id: string, handler: () => void): () => void {
-    return window.__vorn__.os_on("menu:action", (data: unknown) => {
+    return window.__tynd__.os_on("menu:action", (data: unknown) => {
       if (((data as Record<string, unknown>)?.["id"] as string) === id) handler()
     })
   },

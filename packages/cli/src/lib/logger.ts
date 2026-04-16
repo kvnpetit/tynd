@@ -15,7 +15,7 @@ const c = {
   white: ansi("\x1b[97m"),
 }
 
-const prefix = `${c.cyan}${c.bold}vorn${c.reset}`
+const prefix = `${c.cyan}${c.bold}tynd${c.reset}`
 
 export type LogLevel = "quiet" | "normal" | "verbose"
 

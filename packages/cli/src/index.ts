@@ -12,7 +12,7 @@ import { ConfigError } from "./lib/config.ts"
 import { log, setLogLevel } from "./lib/logger.ts"
 import { VERSION } from "./lib/version.ts"
 
-const cli = cac("vorn")
+const cli = cac("tynd")
 
 const frameworkValues = FRAMEWORKS.map((f) => f.value).join(" | ")
 
@@ -20,7 +20,7 @@ cli.option("--verbose", "Show debug-level logs")
 cli.option("--quiet", "Suppress everything except errors")
 
 cli
-  .command("create [name]", "Scaffold a new Vorn project")
+  .command("create [name]", "Scaffold a new Tynd project")
   .option("-f, --framework <fw>", `Frontend framework: ${frameworkValues}`)
   .option("-r, --runtime <runtime>", "Runtime: full | lite")
   .option("--no-install", "Skip dependency installation prompt")
@@ -36,7 +36,7 @@ cli
         name ??
         (await (async () => {
           log.blank()
-          log.info("Create a new Vorn project")
+          log.info("Create a new Tynd project")
           log.blank()
           return text("Project name", "my-app")
         })())
@@ -82,7 +82,7 @@ cli
   })
 
 cli
-  .command("init", "Add vorn to an existing project")
+  .command("init", "Add tynd to an existing project")
   .option("--cwd <dir>", "Project directory", { default: process.cwd() })
   .option("-r, --runtime <r>", "Runtime: full | lite")
   .option("-f, --force", "Overwrite existing files", { default: false })
@@ -119,7 +119,7 @@ cli
   })
 
 cli
-  .command("upgrade", "Upgrade @vorn/cli and @vorn/core to latest")
+  .command("upgrade", "Upgrade @tynd/cli and @tynd/core to latest")
   .option("-y, --yes", "Skip confirmation", { default: false })
   .action(async (opts: { yes: boolean }) => {
     await upgrade(opts)
@@ -155,14 +155,14 @@ if (firstArg && !KNOWN_COMMANDS.includes(firstArg)) {
   const suggestion = closestCommand(firstArg, KNOWN_COMMANDS)
   if (suggestion) {
     process.stderr.write(`\n  error: unknown command "${firstArg}"\n`)
-    process.stderr.write(`         did you mean ${log.cyan(`vorn ${suggestion}`)}?\n\n`)
+    process.stderr.write(`         did you mean ${log.cyan(`tynd ${suggestion}`)}?\n\n`)
     process.exit(1)
   }
 }
 
 process.on("unhandledRejection", (err) => {
   if (err instanceof ConfigError) {
-    log.error("vorn.config is invalid:")
+    log.error("tynd.config is invalid:")
     for (const issue of err.issues) log.dim(`  • ${issue}`)
     process.exit(1)
   }
@@ -173,7 +173,7 @@ try {
   cli.parse()
 } catch (err: unknown) {
   if (err instanceof ConfigError) {
-    log.error("vorn.config is invalid:")
+    log.error("tynd.config is invalid:")
     for (const issue of err.issues) log.dim(`  • ${issue}`)
     process.exit(1)
   }

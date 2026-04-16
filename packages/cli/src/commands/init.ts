@@ -4,7 +4,7 @@ import path from "node:path"
 import { detectFrontend } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
 import { loadPackageJson, type PackageJson } from "../lib/pkg.ts"
-import { backendMain, vornConfig } from "../lib/template.ts"
+import { backendMain, tyndConfig } from "../lib/template.ts"
 import { VERSION } from "../lib/version.ts"
 
 export interface InitOptions {
@@ -14,12 +14,12 @@ export interface InitOptions {
 }
 
 export async function init(opts: InitOptions): Promise<void> {
-  const configPath = path.join(opts.cwd, "vorn.config.ts")
+  const configPath = path.join(opts.cwd, "tynd.config.ts")
 
   log.blank()
 
   if (existsSync(configPath) && !opts.force) {
-    log.warn("vorn.config.ts already exists. Use --force to overwrite.")
+    log.warn("tynd.config.ts already exists. Use --force to overwrite.")
     log.blank()
     return
   }
@@ -32,7 +32,7 @@ export async function init(opts: InitOptions): Promise<void> {
     if (pkg.name) name = pkg.name
   } else {
     // No package.json → synthesize a minimal one so `bun install` and the
-    // generated deps (@vorn/core, @vorn/host) have somewhere to land.
+    // generated deps (@tynd/core, @tynd/host) have somewhere to land.
     pkg = { name, version: "0.0.0" }
     log.step(`${log.cyan("create")}  package.json`)
   }
@@ -61,8 +61,8 @@ export async function init(opts: InitOptions): Promise<void> {
 
   await write(
     opts.cwd,
-    "vorn.config.ts",
-    vornConfig(name, opts.runtime, frontendDir, frontendEntry),
+    "tynd.config.ts",
+    tyndConfig(name, opts.runtime, frontendDir, frontendEntry),
     opts.force,
   )
 
@@ -100,7 +100,7 @@ export async function init(opts: InitOptions): Promise<void> {
     await write(
       opts.cwd,
       "frontend/main.ts",
-      `import { createBackend } from "@vorn/core/client"
+      `import { createBackend } from "@tynd/core/client"
 import type * as backend from "../backend/main"
 
 const api = createBackend<typeof backend>()
@@ -124,11 +124,11 @@ api.on("ready", ({ message }) => {
   log.blank()
 
   if (hasFrontend) {
-    log.dim(`  ${log.cyan("vorn dev")}   — starts ${frontend.buildTool} dev server + vorn host`)
-    log.dim(`  ${log.cyan("vorn build")} — runs ${frontend.buildTool} build + bundles backend`)
+    log.dim(`  ${log.cyan("tynd dev")}   — starts ${frontend.buildTool} dev server + tynd host`)
+    log.dim(`  ${log.cyan("tynd build")} — runs ${frontend.buildTool} build + bundles backend`)
   } else {
-    log.dim(`  ${log.cyan("vorn dev")}   — starts vorn host`)
-    log.dim(`  ${log.cyan("vorn build")} — bundles backend`)
+    log.dim(`  ${log.cyan("tynd dev")}   — starts tynd host`)
+    log.dim(`  ${log.cyan("tynd build")} — bundles backend`)
   }
 
   log.blank()
@@ -147,7 +147,7 @@ async function write(cwd: string, rel: string, content: string, force: boolean):
 
 async function patchGitignore(cwd: string): Promise<void> {
   const gitignorePath = path.join(cwd, ".gitignore")
-  const entry = ".vorn/"
+  const entry = ".tynd/"
   if (existsSync(gitignorePath)) {
     const content = readFileSync(gitignorePath, "utf-8")
     if (content.includes(entry)) return
@@ -162,24 +162,24 @@ async function patchPackageJson(pkgPath: string, pkg: PackageJson): Promise<void
   const scripts = pkg.scripts ?? {}
 
   // Preserve existing scripts under `build:ui` / `dev:ui` if we'd overwrite them
-  if (scripts["build"] && scripts["build"] !== "vorn build") {
+  if (scripts["build"] && scripts["build"] !== "tynd build") {
     scripts["build:ui"] = scripts["build"]
   }
-  if (scripts["dev"] && scripts["dev"] !== "vorn dev") {
+  if (scripts["dev"] && scripts["dev"] !== "tynd dev") {
     scripts["dev:ui"] = scripts["dev"]
   }
-  scripts["dev"] = "vorn dev"
-  scripts["build"] = "vorn build"
+  scripts["dev"] = "tynd dev"
+  scripts["build"] = "tynd build"
   pkg.scripts = scripts
 
   // Pin runtime deps to the CLI version so they never outrun the CLI.
   const deps = pkg.dependencies ?? {}
   const range = `^${VERSION}`
-  if (!deps["@vorn/core"]) deps["@vorn/core"] = range
-  if (!deps["@vorn/host"]) deps["@vorn/host"] = range
+  if (!deps["@tynd/core"]) deps["@tynd/core"] = range
+  if (!deps["@tynd/host"]) deps["@tynd/host"] = range
   pkg.dependencies = deps
 
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")
   log.step(`${log.cyan("patch")}   package.json`)
-  log.debug(`patchPackageJson: deps @vorn/core, @vorn/host → ${range}`)
+  log.debug(`patchPackageJson: deps @tynd/core, @tynd/host → ${range}`)
 }

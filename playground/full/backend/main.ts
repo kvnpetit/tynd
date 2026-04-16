@@ -1,4 +1,4 @@
-import { app, createEmitter } from "@vorn/core"
+import { app, createEmitter } from "@tynd/core"
 
 export const events = createEmitter<{
   ready: { message: string }

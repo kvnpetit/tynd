@@ -1,9 +1,9 @@
-//! Embedded-assets support for `vorn build` (full runtime).
+//! Embedded-assets support for `tynd build` (full runtime).
 //!
-//! `vorn build` appends a packed section to the vorn-full binary:
+//! `tynd build` appends a packed section to the tynd-full binary:
 //!
 //! ```text
-//! [vorn-full binary]
+//! [tynd-full binary]
 //! ┌─ packed section ──────────────────────────────────────────────────┐
 //! │  file_count : u32 LE                                              │
 //! │  for each file:                                                   │
@@ -13,7 +13,7 @@
 //! │    data     : raw bytes                                           │
 //! └───────────────────────────────────────────────────────────────────┘
 //! section_size : u64 LE   (byte count of the packed section above)
-//! magic        : "VORNPKG\0" (8 bytes)
+//! magic        : "TYNDPKG\0" (8 bytes)
 //! ```
 //!
 //! Entry names (ORDER MATTERS — bun.version MUST be first):
@@ -31,7 +31,7 @@ use std::fs;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
-const MAGIC: &[u8; 8] = b"VORNPKG\0";
+const MAGIC: &[u8; 8] = b"TYNDPKG\0";
 /// section_size(u64) + magic(8) = 16 bytes
 const TRAILER_LEN: u64 = 16;
 
@@ -82,11 +82,11 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
 
     // cleanup::run() removes the temp dir across every exit path, including
     // process::exit which bypasses Drop — mem::forget prevents double-free.
-    let td = tempfile::TempDir::with_prefix("vorn-").ok()?;
+    let td = tempfile::TempDir::with_prefix("tynd-").ok()?;
     let temp_dir = td.path().to_owned();
     #[allow(clippy::mem_forget)]
     std::mem::forget(td);
-    vorn_host::cleanup::register_dir(temp_dir.clone());
+    tynd_host::cleanup::register_dir(temp_dir.clone());
 
     let bundle_dir = temp_dir.join("backend");
     let frontend_dir = temp_dir.join("frontend");
@@ -118,7 +118,7 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
             "bun.version" => {
                 // Cap to 256 bytes so a corrupted binary can't trigger a giant alloc.
                 if data_len > 256 {
-                    vorn_host::vorn_log!("Embedded bun.version entry is suspiciously large ({data_len} bytes) — skipping");
+                    tynd_host::tynd_log!("Embedded bun.version entry is suspiciously large ({data_len} bytes) — skipping");
                     let mut skip = (&mut f).take(data_len);
                     std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
                     continue;
@@ -150,7 +150,7 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
 
                     if let Some(parent) = cache_path.parent() {
                         if let Err(e) = fs::create_dir_all(parent) {
-                            vorn_host::vorn_log!("Failed to create cache dir: {e}");
+                            tynd_host::tynd_log!("Failed to create cache dir: {e}");
                             let mut skip = (&mut f).take(data_len);
                             std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
                             continue;
@@ -159,14 +159,14 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
 
                     let compressed_reader = (&mut f).take(data_len);
                     let mut decoder = zstd::Decoder::new(compressed_reader).ok().or_else(|| {
-                        vorn_host::vorn_log!("Failed to init zstd decoder");
+                        tynd_host::tynd_log!("Failed to init zstd decoder");
                         None
                     })?;
                     match fs::File::create(&cache_path) {
                         Ok(out_file) => {
                             let mut writer = BufWriter::new(out_file);
                             if let Err(e) = std::io::copy(&mut decoder, &mut writer) {
-                                vorn_host::vorn_log!("Failed to decompress runtime: {e}");
+                                tynd_host::tynd_log!("Failed to decompress runtime: {e}");
                                 let _ = fs::remove_file(&cache_path);
                                 std::io::copy(&mut decoder, &mut std::io::sink()).ok();
                             } else {
@@ -183,7 +183,7 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
                             }
                         },
                         Err(e) => {
-                            vorn_host::vorn_log!("Failed to create cache file: {e}");
+                            tynd_host::tynd_log!("Failed to create cache file: {e}");
                             std::io::copy(&mut decoder, &mut std::io::sink()).ok();
                         },
                     }
@@ -234,20 +234,20 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let bun_path = match bun_path_opt {
         Some(ref p) if p.exists() => p.to_string_lossy().into_owned(),
         _ => {
-            vorn_host::vorn_log!("Cached runtime not available — falling back to system 'bun'");
+            tynd_host::tynd_log!("Cached runtime not available — falling back to system 'bun'");
             "bun".to_string()
         },
     };
 
     let bundle_path = bundle_path_opt.unwrap_or_else(|| {
-        vorn_host::vorn_log!("Embedded pack is missing bundle.js — rebuild with `vorn build`");
-        vorn_host::cleanup::run();
+        tynd_host::tynd_log!("Embedded pack is missing bundle.js — rebuild with `tynd build`");
+        tynd_host::cleanup::run();
         std::process::exit(1);
     });
 
     let frontend_dir = frontend_dir_opt.unwrap_or_else(|| {
-        vorn_host::vorn_log!("Embedded pack is missing frontend files — rebuild with `vorn build`");
-        vorn_host::cleanup::run();
+        tynd_host::tynd_log!("Embedded pack is missing frontend files — rebuild with `tynd build`");
+        tynd_host::cleanup::run();
         std::process::exit(1);
     });
 
@@ -261,9 +261,9 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
 
 /// Returns the persistent cache path for the Bun binary.
 ///
-/// - Windows: `%LOCALAPPDATA%\vorn\{app}\bun-{ver}\bun.exe`
-/// - macOS:   `~/Library/Caches/vorn/{app}/bun-{ver}/bun`
-/// - Linux:   `~/.cache/vorn/{app}/bun-{ver}/bun`
+/// - Windows: `%LOCALAPPDATA%\tynd\{app}\bun-{ver}\bun.exe`
+/// - macOS:   `~/Library/Caches/tynd/{app}/bun-{ver}/bun`
+/// - Linux:   `~/.cache/tynd/{app}/bun-{ver}/bun`
 fn bun_cache_path(app_name: &str, version: &str) -> PathBuf {
     let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
     let bin_name = if cfg!(windows) {
@@ -271,7 +271,7 @@ fn bun_cache_path(app_name: &str, version: &str) -> PathBuf {
     } else {
         app_name.to_string()
     };
-    base.join("vorn")
+    base.join("tynd")
         .join(app_name)
         .join(format!("bun-{version}"))
         .join(bin_name)

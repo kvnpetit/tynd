@@ -1,5 +1,5 @@
 /**
- * Minimal Windows PE utilities for vorn build post-processing.
+ * Minimal Windows PE utilities for tynd build post-processing.
  */
 
 import { readFileSync, writeFileSync } from "node:fs"

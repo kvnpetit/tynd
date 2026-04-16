@@ -1,9 +1,9 @@
 # Lite vs Full — Choosing a Runtime
 
-Vorn ships two backend runtimes. Both use **the same TypeScript API** — you switch with one line.
+Tynd ships two backend runtimes. Both use **the same TypeScript API** — you switch with one line.
 
 ```typescript
-// vorn.config.ts
+// tynd.config.ts
 export default {
   runtime: "full",  // or "lite"
 }

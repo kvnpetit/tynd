@@ -51,9 +51,9 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
 
   const cliCurrent = VERSION
   const [coreCurrent, cliLatest, coreLatest] = await Promise.all([
-    readInstalledVersion("@vorn/core"),
-    fetchLatestVersion("@vorn/cli"),
-    fetchLatestVersion("@vorn/core"),
+    readInstalledVersion("@tynd/core"),
+    fetchLatestVersion("@tynd/cli"),
+    fetchLatestVersion("@tynd/core"),
   ])
 
   if (!cliLatest || !coreLatest) {
@@ -64,23 +64,23 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
   const coreCurrentStr = coreCurrent ?? VERSION
 
   log.step(
-    `@vorn/cli   ${log.gray(cliCurrent)}      → ${Bun.semver.order(cliLatest, cliCurrent) > 0 ? log.cyan(cliLatest) : log.gray(cliLatest)}`,
+    `@tynd/cli   ${log.gray(cliCurrent)}      → ${Bun.semver.order(cliLatest, cliCurrent) > 0 ? log.cyan(cliLatest) : log.gray(cliLatest)}`,
   )
   log.step(
-    `@vorn/core  ${log.gray(coreCurrentStr)} → ${Bun.semver.order(coreLatest, coreCurrentStr) > 0 ? log.cyan(coreLatest) : log.gray(coreLatest)}`,
+    `@tynd/core  ${log.gray(coreCurrentStr)} → ${Bun.semver.order(coreLatest, coreCurrentStr) > 0 ? log.cyan(coreLatest) : log.gray(coreLatest)}`,
   )
 
-  // @vorn/host ships the pre-built native binaries for both runtimes.
+  // @tynd/host ships the pre-built native binaries for both runtimes.
   const runtimeResults: Array<{ name: string; current: string; latest: string }> = []
-  const hostCurrent = await readInstalledVersion("@vorn/host")
+  const hostCurrent = await readInstalledVersion("@tynd/host")
   if (hostCurrent !== null) {
-    const hostLatest = await fetchLatestVersion("@vorn/host")
+    const hostLatest = await fetchLatestVersion("@tynd/host")
     if (hostLatest) {
       log.step(
-        `@vorn/host  ${log.gray(hostCurrent)} → ${Bun.semver.order(hostLatest, hostCurrent) > 0 ? log.cyan(hostLatest) : log.gray(hostLatest)}`,
+        `@tynd/host  ${log.gray(hostCurrent)} → ${Bun.semver.order(hostLatest, hostCurrent) > 0 ? log.cyan(hostLatest) : log.gray(hostLatest)}`,
       )
       if (Bun.semver.order(hostLatest, hostCurrent) > 0) {
-        runtimeResults.push({ name: "@vorn/host", current: hostCurrent, latest: hostLatest })
+        runtimeResults.push({ name: "@tynd/host", current: hostCurrent, latest: hostLatest })
       }
     }
   }
@@ -100,7 +100,7 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
 
   if (!opts.yes) {
     const pkgList = [
-      corePkgsNeedUpgrade ? `@vorn/cli@${cliLatest}, @vorn/core@${coreLatest}` : null,
+      corePkgsNeedUpgrade ? `@tynd/cli@${cliLatest}, @tynd/core@${coreLatest}` : null,
       ...runtimeResults.map((r) => `${r.name}@${r.latest}`),
     ]
       .filter(Boolean)
@@ -116,7 +116,7 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
   log.step("Installing…")
   const installPkgs: string[] = []
   if (corePkgsNeedUpgrade) {
-    installPkgs.push(`@vorn/cli@${cliLatest}`, `@vorn/core@${coreLatest}`)
+    installPkgs.push(`@tynd/cli@${cliLatest}`, `@tynd/core@${coreLatest}`)
   }
   for (const r of runtimeResults) installPkgs.push(`${r.name}@${r.latest}`)
 

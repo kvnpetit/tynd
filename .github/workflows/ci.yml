@@ -40,7 +40,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: vorn-rust
+          shared-key: tynd-rust
           save-if: ${{ github.event.pull_request.base.ref == 'main' }}
 
       - name: cargo fmt --check
@@ -88,6 +88,6 @@ jobs:
       - name: Typecheck workspaces
         run: bun run typecheck
 
-      - name: Build @vorn/cli
+      - name: Build @tynd/cli
         run: bun run build
         working-directory: packages/cli

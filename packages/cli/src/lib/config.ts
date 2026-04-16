@@ -6,7 +6,7 @@ export type Runtime = "full" | "lite"
 
 // Window/menu/tray config lives in the backend (app.start({ window: {...} }))
 // because each spawned window can define its own settings programmatically.
-// vorn.config.ts only covers build/CLI concerns.
+// tynd.config.ts only covers build/CLI concerns.
 const ConfigSchema = v.object({
   runtime: v.union([v.literal("full"), v.literal("lite")]),
   backend: v.pipe(v.string(), v.minLength(1)),
@@ -19,14 +19,14 @@ const ConfigSchema = v.object({
 })
 
 /**
- * Vorn configuration — runtime-validated via valibot.
+ * Tynd configuration — runtime-validated via valibot.
  *
  * Prefer editing JSDoc on the schema fields above rather than duplicating
  * them here. Types are inferred from the schema so they never drift.
  */
-export type VornConfig = v.InferOutput<typeof ConfigSchema>
+export type TyndConfig = v.InferOutput<typeof ConfigSchema>
 
-const DEFAULTS: VornConfig = {
+const DEFAULTS: TyndConfig = {
   runtime: "full",
   backend: "backend/main.ts",
   frontendDir: "frontend",
@@ -35,20 +35,20 @@ const DEFAULTS: VornConfig = {
 export class ConfigError extends Error {
   readonly issues: readonly string[]
   constructor(issues: string[]) {
-    super(`Invalid vorn.config: ${issues.length} issue${issues.length > 1 ? "s" : ""}`)
+    super(`Invalid tynd.config: ${issues.length} issue${issues.length > 1 ? "s" : ""}`)
     this.name = "ConfigError"
     this.issues = issues
   }
 }
 
-/** Load vorn.config.ts from the project directory (defaults to cwd). */
-export async function loadConfig(cwd = process.cwd()): Promise<VornConfig> {
-  const candidates = [path.resolve(cwd, "vorn.config.ts"), path.resolve(cwd, "vorn.config.js")]
+/** Load tynd.config.ts from the project directory (defaults to cwd). */
+export async function loadConfig(cwd = process.cwd()): Promise<TyndConfig> {
+  const candidates = [path.resolve(cwd, "tynd.config.ts"), path.resolve(cwd, "tynd.config.js")]
 
   for (const file of candidates) {
     if (existsSync(file)) {
       const mod = (await import(file)) as { default?: unknown }
-      const merged = { ...DEFAULTS, ...((mod.default ?? {}) as Partial<VornConfig>) }
+      const merged = { ...DEFAULTS, ...((mod.default ?? {}) as Partial<TyndConfig>) }
       return validateConfig(merged)
     }
   }
@@ -57,7 +57,7 @@ export async function loadConfig(cwd = process.cwd()): Promise<VornConfig> {
 }
 
 /** Resolve config paths relative to cwd. */
-export function resolvePaths(cfg: VornConfig, cwd: string): VornConfig {
+export function resolvePaths(cfg: TyndConfig, cwd: string): TyndConfig {
   return {
     ...cfg,
     backend: path.resolve(cwd, cfg.backend),
@@ -69,7 +69,7 @@ export function resolvePaths(cfg: VornConfig, cwd: string): VornConfig {
  * Runtime-validate a freshly-loaded config. Throws ConfigError listing every
  * bad field so users fix them all in one edit cycle.
  */
-export function validateConfig(raw: unknown): VornConfig {
+export function validateConfig(raw: unknown): TyndConfig {
   const result = v.safeParse(ConfigSchema, raw)
   if (result.success) return result.output
 

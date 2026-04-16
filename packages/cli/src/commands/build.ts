@@ -33,7 +33,7 @@ export interface BuildOptions {
 
 export async function build(opts: BuildOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
-  const cacheDir = path.join(opts.cwd, ".vorn", "cache")
+  const cacheDir = path.join(opts.cwd, ".tynd", "cache")
 
   const frontend = await detectFrontend(opts.cwd)
 
@@ -116,7 +116,7 @@ export async function build(opts: BuildOptions): Promise<void> {
 
   const backendHash = hashSources(
     [backendSrcDir],
-    [path.join(opts.cwd, "vorn.config.ts"), path.join(opts.cwd, "package.json")],
+    [path.join(opts.cwd, "tynd.config.ts"), path.join(opts.cwd, "package.json")],
   )
   const backendCached = readCache(cacheDir, "backend")
   const backendHit = backendCached?.hash === backendHash && existsSync(cachedBundle)
@@ -138,7 +138,7 @@ export async function build(opts: BuildOptions): Promise<void> {
 
   const hostBin = findBinary(cfg.runtime, opts.cwd)
   if (!hostBin) {
-    log.hint(`vorn-${cfg.runtime} binary not found.`, "Install: bun add @vorn/host")
+    log.hint(`tynd-${cfg.runtime} binary not found.`, "Install: bun add @tynd/host")
     process.exit(1)
   }
   log.step(`Host: ${log.gray(path.relative(opts.cwd, hostBin))}`)
@@ -188,14 +188,14 @@ export async function build(opts: BuildOptions): Promise<void> {
 }
 
 //
-// Appends a packed section directly to the vorn-lite binary.
+// Appends a packed section directly to the tynd-lite binary.
 // No Bun runtime — the output is purely Rust + QuickJS.
 //
 // Format (appended after binary):
 //   [file_count: u32 LE]
 //   per file: [path_len: u16 LE][path: UTF-8][data_len: u32 LE][data: bytes]
 //   [section_size: u64 LE]  ← total bytes above (file_count + all file entries)
-//   [magic: "VORNPKG\0" 8 bytes]
+//   [magic: "TYNDPKG\0" 8 bytes]
 
 interface LitePackOpts {
   hostBin: string
@@ -257,8 +257,8 @@ async function packageLite(o: LitePackOpts): Promise<void> {
 }
 
 //
-// Compresses the local Bun binary with zstd and packs it into the vorn-full
-// host binary using the VORNPKG\0 format (same as lite mode).
+// Compresses the local Bun binary with zstd and packs it into the tynd-full
+// host binary using the TYNDPKG\0 format (same as lite mode).
 // At runtime, Rust decompresses Bun once to a persistent cache dir.
 
 interface FullPackOpts {
@@ -279,7 +279,7 @@ async function packageFull(o: FullPackOpts): Promise<void> {
   let bunSrcPath = bunBin
   let tmpBunDir: string | null = null
   if (o.platform === "windows" && o.iconPath) {
-    tmpBunDir = mkdtempSync(path.join(tmpdir(), "vorn-bun-"))
+    tmpBunDir = mkdtempSync(path.join(tmpdir(), "tynd-bun-"))
     const appName = path.basename(o.outFile, ".exe")
     bunSrcPath = path.join(tmpBunDir, `${appName}.exe`)
     writeFileSync(bunSrcPath, readFileSync(bunBin))
@@ -400,7 +400,7 @@ function packAssets(files: PackEntry[]): Buffer {
 
   const trailer = Buffer.allocUnsafe(16)
   trailer.writeBigUInt64LE(BigInt(sectionSize), 0)
-  trailer.write("VORNPKG\0", 8, "ascii")
+  trailer.write("TYNDPKG\0", 8, "ascii")
   chunks.push(trailer)
 
   return Buffer.concat(chunks)

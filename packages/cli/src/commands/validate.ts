@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
-import { ConfigError, loadConfig, resolvePaths, type VornConfig } from "../lib/config.ts"
+import { ConfigError, loadConfig, resolvePaths, type TyndConfig } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
 
@@ -25,15 +25,15 @@ export async function validate(opts: ValidateOptions): Promise<void> {
   const error = (msg: string, hint?: string) => issues.push({ level: "error", message: msg, hint })
 
   // 1. Config loads
-  let cfg: VornConfig
+  let cfg: TyndConfig
   try {
     cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
-    pass("vorn.config.ts valid")
+    pass("tynd.config.ts valid")
   } catch (e) {
     if (e instanceof ConfigError) {
       for (const issue of e.issues) error(issue)
     } else {
-      error("vorn.config.ts missing or invalid", "Run: vorn init")
+      error("tynd.config.ts missing or invalid", "Run: tynd init")
     }
     output(issues, opts)
     return
@@ -61,15 +61,15 @@ export async function validate(opts: ValidateOptions): Promise<void> {
   if (existsSync(cfg.frontendDir)) {
     pass("frontend directory exists")
   } else {
-    warn("frontend directory missing", "Run: vorn build")
+    warn("frontend directory missing", "Run: tynd build")
   }
 
   // 4. Host binary
   const binPath = findBinary(cfg.runtime, opts.cwd)
   if (binPath) {
-    pass(`vorn-${cfg.runtime} binary found`)
+    pass(`tynd-${cfg.runtime} binary found`)
   } else {
-    warn(`vorn-${cfg.runtime} binary not found`, `Install: bun add @vorn/${cfg.runtime}`)
+    warn(`tynd-${cfg.runtime} binary not found`, `Install: bun add @tynd/${cfg.runtime}`)
   }
 
   output(issues, opts)
@@ -86,7 +86,7 @@ function output(issues: Issue[], opts: ValidateOptions): void {
   }
 
   log.blank()
-  log.info(log.bold("vorn validate"))
+  log.info(log.bold("tynd validate"))
   log.blank()
 
   for (const issue of issues) {

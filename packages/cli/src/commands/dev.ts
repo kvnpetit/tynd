@@ -12,7 +12,7 @@ export interface DevOptions {
 
 export async function dev(opts: DevOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
-  const cacheDir = path.join(opts.cwd, ".vorn", "cache")
+  const cacheDir = path.join(opts.cwd, ".tynd", "cache")
 
   const frontend = await detectFrontend(opts.cwd)
 
@@ -30,7 +30,7 @@ export async function dev(opts: DevOptions): Promise<void> {
 
   const binPath = findBinary(cfg.runtime, opts.cwd)
   if (!binPath) {
-    log.hint(`vorn-${cfg.runtime} binary not found.`, "Install: bun add @vorn/host")
+    log.hint(`tynd-${cfg.runtime} binary not found.`, "Install: bun add @tynd/host")
     process.exit(1)
   }
 
@@ -98,11 +98,11 @@ export async function dev(opts: DevOptions): Promise<void> {
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   )
-  if (devUrl) env["VORN_DEV_URL"] = devUrl
+  if (devUrl) env["TYND_DEV_URL"] = devUrl
   // Full mode: backend reads these env vars — no need to hardcode in app.start()
   if (cfg.runtime === "full") {
-    env["VORN_ENTRY"] = cfg.backend
-    env["VORN_FRONTEND_DIR"] = cfg.frontendDir
+    env["TYND_ENTRY"] = cfg.backend
+    env["TYND_FRONTEND_DIR"] = cfg.frontendDir
   }
 
   const makeArgs = (): string[] => {
@@ -110,7 +110,7 @@ export async function dev(opts: DevOptions): Promise<void> {
       cfg.runtime === "lite" ? ["--bundle", bundlePath] : ["--backend-entry", cfg.backend]
 
     // Lite mode: QuickJS can't read env vars, so pass frontend location as CLI args.
-    // Full mode: Bun subprocess reads VORN_DEV_URL / VORN_FRONTEND_DIR from env.
+    // Full mode: Bun subprocess reads TYND_DEV_URL / TYND_FRONTEND_DIR from env.
     if (cfg.runtime === "lite") {
       if (devUrl) {
         args.push("--dev-url", devUrl)
@@ -226,7 +226,7 @@ export async function dev(opts: DevOptions): Promise<void> {
     }, 300)
   }
 
-  const configPath = path.join(opts.cwd, "vorn.config.ts")
+  const configPath = path.join(opts.cwd, "tynd.config.ts")
   const backendWatcher = watch(backendSrcDir, { recursive: true }, (_, filename) => {
     if (!filename || !WATCH_EXTS.test(filename)) return
     log.debug(`backend file changed: ${filename}`)
@@ -239,7 +239,7 @@ export async function dev(opts: DevOptions): Promise<void> {
   log.dim(
     `  Watching backend for changes… ${log.gray(`(${path.relative(opts.cwd, backendSrcDir)}/)`)}`,
   )
-  log.dim(`  Watching ${log.gray("vorn.config.ts")} for changes…`)
+  log.dim(`  Watching ${log.gray("tynd.config.ts")} for changes…`)
   if (devUrl) log.dim(`  Frontend HMR active via ${frontend.buildTool}`)
   log.blank()
 
@@ -280,7 +280,7 @@ async function buildBackendDev(o: {
 }): Promise<void> {
   const backendHash = hashSources(
     [o.backendSrcDir],
-    [path.join(o.opts.cwd, "vorn.config.ts"), path.join(o.opts.cwd, "package.json")],
+    [path.join(o.opts.cwd, "tynd.config.ts"), path.join(o.opts.cwd, "package.json")],
   )
   const cached = readCache(o.cacheDir, "backend-dev")
   const cacheHit = cached?.hash === backendHash && existsSync(o.bundlePath)

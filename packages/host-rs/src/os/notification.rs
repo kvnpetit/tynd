@@ -15,7 +15,7 @@ fn send(args: &Value) -> Result<Value, String> {
     let app_name = std::env::current_exe()
         .ok()
         .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-        .unwrap_or_else(|| "vorn".to_string());
+        .unwrap_or_else(|| "tynd".to_string());
 
     Notification::new()
         .appname(&app_name)

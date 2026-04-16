@@ -7,9 +7,9 @@ use std::collections::{BinaryHeap, HashSet};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use vorn_host::{
+use tynd_host::{
     runtime::{BackendBridge, BackendCall, BackendConfig, BackendEvent, MenuItemDef, TrayConfig},
-    vorn_log,
+    tynd_log,
 };
 
 enum JsMsg {
@@ -81,7 +81,7 @@ impl ReloadHandle {
 /// Start the QuickJS backend.
 ///
 /// - Loads `bundle_code` in an embedded QuickJS runtime
-/// - Blocks until the bundle sets `globalThis.__vorn_config__`
+/// - Blocks until the bundle sets `globalThis.__tynd_config__`
 /// - Returns a `BackendBridge` plus a `ReloadHandle` for dev-mode hot reload
 pub(crate) fn start(
     bundle_path: &str,
@@ -90,8 +90,8 @@ pub(crate) fn start(
     icon_path: Option<String>,
 ) -> (BackendBridge, ReloadHandle) {
     let bundle_code = std::fs::read_to_string(bundle_path).unwrap_or_else(|e| {
-        vorn_log!("Cannot read bundle '{bundle_path}': {e}");
-        vorn_log!("Build first: vorn build");
+        tynd_log!("Cannot read bundle '{bundle_path}': {e}");
+        tynd_log!("Build first: tynd build");
         std::process::exit(1);
     });
 
@@ -127,7 +127,7 @@ pub(crate) fn start(
     });
 
     let mut config = cfg_rx.recv().unwrap_or_else(|_| {
-        vorn_log!("JS thread died before sending config — check your backend calls app.start()");
+        tynd_log!("JS thread died before sending config — check your backend calls app.start()");
         std::process::exit(1);
     });
 
@@ -179,21 +179,21 @@ fn js_thread_main(
         let result = ctx.with(|ctx| -> rquickjs::Result<()> {
             let g = ctx.globals();
 
-            g.set("__vorn_lite__", true)?;
+            g.set("__tynd_lite__", true)?;
 
             // console → eprintln
             g.set(
-                "__vorn_log__",
+                "__tynd_log__",
                 Function::new(ctx.clone(), |level: String, msg: String| {
                     eprintln!("[{level}] {msg}");
                 })?,
             )?;
 
-            // __vorn_emit__(name, payloadJson) — called by app.start() emit
+            // __tynd_emit__(name, payloadJson) — called by app.start() emit
             {
                 let tx = event_tx_emit.clone();
                 g.set(
-                    "__vorn_emit__",
+                    "__tynd_emit__",
                     Function::new(ctx.clone(), move |name: String, payload_json: String| {
                         let payload = serde_json::from_str(&payload_json).unwrap_or(Value::Null);
                         let _ = tx.send(BackendEvent::Emit { name, payload });
@@ -201,22 +201,22 @@ fn js_thread_main(
                 )?;
             }
 
-            // __vorn_set_interval__(id, ms, once) — called by JS setTimeout/setInterval
+            // __tynd_set_interval__(id, ms, once) — called by JS setTimeout/setInterval
             {
                 let tx = timer_tx_set.clone();
                 g.set(
-                    "__vorn_set_interval__",
+                    "__tynd_set_interval__",
                     Function::new(ctx.clone(), move |id: u32, ms: u32, once: bool| {
                         let _ = tx.send(TimerCmd::Set { id, ms, once });
                     })?,
                 )?;
             }
 
-            // __vorn_clear_interval__(id) — called by JS clearTimeout/clearInterval
+            // __tynd_clear_interval__(id) — called by JS clearTimeout/clearInterval
             {
                 let tx = timer_tx_clr.clone();
                 g.set(
-                    "__vorn_clear_interval__",
+                    "__tynd_clear_interval__",
                     Function::new(ctx.clone(), move |id: u32| {
                         let _ = tx.send(TimerCmd::Clear(id));
                     })?,
@@ -230,7 +230,7 @@ fn js_thread_main(
 
         if let Err(e) = result {
             let msg = format!("Bundle evaluation failed: {e}");
-            vorn_log!("{msg}");
+            tynd_log!("{msg}");
             let _ = event_tx.send(BackendEvent::Error { message: msg });
             // Don't exit — let the outer (reload) code handle recovery.
             // config_tx is dropped implicitly; the initial `start()` receiver
@@ -242,7 +242,7 @@ fn js_thread_main(
 
     // Read config set by app.start()
     let config: BackendConfig = ctx.with(|ctx| {
-        let json: Option<String> = ctx.globals().get("__vorn_config__").unwrap_or(None);
+        let json: Option<String> = ctx.globals().get("__tynd_config__").unwrap_or(None);
         json.and_then(|s| parse_config(&s)).unwrap_or_default()
     });
     let _ = config_tx.send(config);
@@ -265,7 +265,7 @@ fn js_thread_main(
                 };
 
                 let result = ctx.with(|ctx| {
-                    if fn_name.starts_with("__vorn_") {
+                    if fn_name.starts_with("__tynd_") {
                         call_global(&ctx, &fn_name)
                     } else {
                         call_module_fn(&ctx, &fn_name, &args)
@@ -289,7 +289,7 @@ fn js_thread_main(
 
             JsMsg::TimerFire(id) => {
                 let _ = ctx.with(|ctx| -> rquickjs::Result<()> {
-                    let fire: Function = ctx.globals().get("__vorn_fire_timer__")?;
+                    let fire: Function = ctx.globals().get("__tynd_fire_timer__")?;
                     fire.call::<_, ()>((id,))
                 });
             },
@@ -301,7 +301,7 @@ fn js_thread_main(
                 Ok(true) => {},
                 Ok(false) => break,
                 Err(e) => {
-                    vorn_log!("Job error: {e}");
+                    tynd_log!("Job error: {e}");
                 },
             }
         }
@@ -413,7 +413,7 @@ fn call_global(ctx: &rquickjs::Ctx, fn_name: &str) -> Result<Value, String> {
 
 fn call_module_fn(ctx: &rquickjs::Ctx, fn_name: &str, args: &[Value]) -> Result<Value, String> {
     let g = ctx.globals();
-    let module: Option<Object> = g.get("__vorn_mod__").ok();
+    let module: Option<Object> = g.get("__tynd_mod__").ok();
     let Some(module) = module else {
         return Err(format!("Module not loaded — cannot call '{fn_name}'"));
     };
@@ -488,11 +488,11 @@ globalThis.globalThis = globalThis;
     return out;
   }
   globalThis.console = {
-    log:   function () { __vorn_log__('log',   join(arguments)); },
-    info:  function () { __vorn_log__('info',  join(arguments)); },
-    warn:  function () { __vorn_log__('warn',  join(arguments)); },
-    error: function () { __vorn_log__('error', join(arguments)); },
-    debug: function () { __vorn_log__('debug', join(arguments)); },
+    log:   function () { __tynd_log__('log',   join(arguments)); },
+    info:  function () { __tynd_log__('info',  join(arguments)); },
+    warn:  function () { __tynd_log__('warn',  join(arguments)); },
+    error: function () { __tynd_log__('error', join(arguments)); },
+    debug: function () { __tynd_log__('debug', join(arguments)); },
   };
 })();
 
@@ -501,20 +501,20 @@ globalThis.globalThis = globalThis;
   var handlers = {};
   globalThis.setTimeout = function (fn, ms) {
     var id = nextId++; handlers[id] = { fn: fn, once: true };
-    __vorn_set_interval__(id, ms || 0, true);
+    __tynd_set_interval__(id, ms || 0, true);
     return id;
   };
   globalThis.setInterval = function (fn, ms) {
     var id = nextId++; handlers[id] = { fn: fn, once: false };
-    __vorn_set_interval__(id, ms || 0, false);
+    __tynd_set_interval__(id, ms || 0, false);
     return id;
   };
   globalThis.clearTimeout = function (id) {
-    delete handlers[id]; __vorn_clear_interval__(id);
+    delete handlers[id]; __tynd_clear_interval__(id);
   };
   globalThis.clearInterval = globalThis.clearTimeout;
   // Fired by Rust timer thread
-  globalThis.__vorn_fire_timer__ = function (id) {
+  globalThis.__tynd_fire_timer__ = function (id) {
     var h = handlers[id]; if (!h) return;
     if (h.once) delete handlers[id];
     try { h.fn(); } catch (e) { console.error('timer ' + id + ': ' + e); }
@@ -522,5 +522,5 @@ globalThis.globalThis = globalThis;
 })();
 
 // Store user module exports on globalThis for RPC dispatch
-globalThis.__vorn_mod__ = globalThis;
+globalThis.__tynd_mod__ = globalThis;
 ";

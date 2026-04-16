@@ -1,5 +1,5 @@
 {
-  "name": "vorn",
+  "name": "tynd",
   "version": "0.0.0",
   "private": true,
   "workspaces": [
@@ -7,7 +7,7 @@
     "playground/*"
   ],
   "scripts": {
-    "typecheck": "bun run --filter '@vorn/*' typecheck",
+    "typecheck": "bun run --filter '@tynd/*' typecheck",
     "lint": "biome lint",
     "format": "biome format --write",
     "format:check": "biome format",
@@ -23,8 +23,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
     "@types/bun": "latest",
-    "@vorn/cli": "workspace:*",
-    "@vorn/core": "workspace:*",
+    "@tynd/cli": "workspace:*",
+    "@tynd/core": "workspace:*",
     "typescript": "~6.0.2"
   }
 }

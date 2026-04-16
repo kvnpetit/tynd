@@ -26,7 +26,7 @@ export async function clean(opts: CleanOptions): Promise<void> {
   const targets = [
     ...(includeFrontend ? [frontendAbs] : []),
     path.join(opts.cwd, "release"),
-    path.join(opts.cwd, ".vorn", "cache"),
+    path.join(opts.cwd, ".tynd", "cache"),
   ].filter(existsSync)
   log.debug(`clean targets (${targets.length}): ${targets.join(", ")}`)
 

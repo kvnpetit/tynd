@@ -11,7 +11,7 @@ export interface FrontendInfo {
   buildTool: BuildTool
   /** Production build output dir (relative to cwd) */
   outDir: string
-  /** Command to run a production build (used by `vorn build`) */
+  /** Command to run a production build (used by `tynd build`) */
   buildCommand: string | null
   /** Command to start the dev server */
   devCommand: string | null
@@ -38,12 +38,12 @@ export function getArch(): Arch {
 
 export function binaryName(runtime: "full" | "lite"): string {
   const suffix = getPlatform() === "windows" ? ".exe" : ""
-  return `vorn-${runtime}${suffix}`
+  return `tynd-${runtime}${suffix}`
 }
 
 /**
- * Locate vorn-full / vorn-lite binary.
- * Search order: Cargo workspace target/release → target/debug → node_modules/@vorn/{runtime}/bin → PATH
+ * Locate tynd-full / tynd-lite binary.
+ * Search order: Cargo workspace target/release → target/debug → node_modules/@tynd/{runtime}/bin → PATH
  */
 export function findBinary(runtime: "full" | "lite", cwd: string): string | null {
   const name = binaryName(runtime)
@@ -69,8 +69,8 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
     dir = parent
   }
 
-  // 2. Published npm package (@vorn/host contains both runtimes)
-  const nmBin = path.join(cwd, "node_modules", "@vorn/host", "bin", `${plat}-${arch}`, name)
+  // 2. Published npm package (@tynd/host contains both runtimes)
+  const nmBin = path.join(cwd, "node_modules", "@tynd/host", "bin", `${plat}-${arch}`, name)
   if (existsSync(nmBin)) {
     log.debug(`findBinary: matched node_modules → ${nmBin}`)
     return nmBin
@@ -95,7 +95,7 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
   return null
 }
 
-/** Server-side frameworks incompatible with vorn (they own the server). */
+/** Server-side frameworks incompatible with tynd (they own the server). */
 const SERVER_FRAMEWORKS: Record<string, string> = {
   next: "Next.js",
   "@remix-run/react": "Remix",

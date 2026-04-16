@@ -13,7 +13,7 @@ export type CacheEntry = v.InferOutput<typeof CacheEntrySchema>
 /** Directory names always excluded when walking source trees. */
 const ALWAYS_EXCLUDE = new Set([
   "node_modules",
-  ".vorn",
+  ".tynd",
   ".git",
   "release",
   ".DS_Store",

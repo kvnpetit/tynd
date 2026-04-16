@@ -1,11 +1,11 @@
 {
-  "name": "@vorn/core",
+  "name": "@tynd/core",
   "version": "0.0.0",
   "private": false,
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kvnpetit/vorn"
+    "url": "https://github.com/kvnpetit/tynd"
   },
   "files": [
     "src"

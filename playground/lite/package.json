@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vorn dev",
-    "build": "vorn build",
+    "dev": "tynd dev",
+    "build": "tynd build",
     "lint": "eslint .",
     "preview": "vite preview",
     "build:ui": "tsc -b && vite build",
@@ -14,11 +14,11 @@
   "dependencies": {
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "@vorn/core": "workspace:*",
-    "@vorn/host": "workspace:*"
+    "@tynd/core": "workspace:*",
+    "@tynd/host": "workspace:*"
   },
   "devDependencies": {
-    "@vorn/cli": "workspace:*",
+    "@tynd/cli": "workspace:*",
     "@eslint/js": "^9.39.4",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",

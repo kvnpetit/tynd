@@ -113,6 +113,6 @@ export async function create(name: string, opts: CreateOptions): Promise<void> {
   log.blank()
   log.dim(`  cd ${name}`)
   if (!shouldInstall) log.dim(`  bun install`)
-  log.dim(`  vorn dev`)
+  log.dim(`  tynd dev`)
   log.blank()
 }

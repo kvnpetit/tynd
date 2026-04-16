@@ -23,7 +23,7 @@ const RASTER_EXTS = new Set([".ico", ".png", ".jpg", ".jpeg", ".webp"])
 
 /**
  * Find the best icon for the project, auto-converting SVG → PNG if needed.
- * Converted PNGs go to `.vorn/cache/` so bundlers like Vite don't pick them up.
+ * Converted PNGs go to `.tynd/cache/` so bundlers like Vite don't pick them up.
  */
 export async function detectIcon(cwd: string, configIcon?: string): Promise<string | null> {
   const candidates = configIcon
@@ -49,7 +49,7 @@ export async function detectIcon(cwd: string, configIcon?: string): Promise<stri
   }
 
   if (svgCandidate) {
-    const outPath = path.join(cwd, ".vorn", "cache", "icon.png")
+    const outPath = path.join(cwd, ".tynd", "cache", "icon.png")
     const converted = await svgToPng(svgCandidate, outPath)
     if (converted) return converted
     log.warn(

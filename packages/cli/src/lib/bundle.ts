@@ -1,9 +1,9 @@
 /**
- * Bun build for the vorn-lite backend.
+ * Bun build for the tynd-lite backend.
  *
  * Bun does not support esbuild's `--global-name` flag so we cannot build IIFE
  * directly. Instead we build in ESM format and rewrite the trailing
- * `export { a, b, c };` to `globalThis.__vorn_mod__ = { a, b, c };` so the
+ * `export { a, b, c };` to `globalThis.__tynd_mod__ = { a, b, c };` so the
  * embedded runtime can read the module exports from globalThis.
  */
 
@@ -39,7 +39,7 @@ export async function buildFullBundle(entryPath: string, outPath: string): Promi
     target: "bun",
     format: "esm",
     minify: true,
-    define: { "globalThis.__VORN_RUNTIME__": '"full"' },
+    define: { "globalThis.__TYND_RUNTIME__": '"full"' },
   })
 
   if (!result.success) {
@@ -67,8 +67,8 @@ export async function buildLiteBundle(
     format: "esm",
     minify,
     define: {
-      "globalThis.__VORN_RUNTIME__": '"lite"',
-      ...(dev ? { "globalThis.__VORN_DEV__": "true" } : {}),
+      "globalThis.__TYND_RUNTIME__": '"lite"',
+      ...(dev ? { "globalThis.__TYND_DEV__": "true" } : {}),
     },
   })
 
@@ -87,7 +87,7 @@ export async function buildLiteBundle(
   // _startLite() ignores, so replacing with {} is safe.
   code = code.replace(/\bimport\.meta\b/g, "({})")
 
-  await Bun.write(outPath, esmToGlobal(code, "__vorn_mod__"))
+  await Bun.write(outPath, esmToGlobal(code, "__tynd_mod__"))
 }
 
 export function esmToGlobal(code: string, globalName: string): string {

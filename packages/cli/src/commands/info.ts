@@ -45,7 +45,7 @@ export async function info(opts: InfoOptions): Promise<void> {
   }
 
   log.blank()
-  log.info(log.bold("Vorn environment"))
+  log.info(log.bold("Tynd environment"))
   log.blank()
   log.step(`CLI:       ${log.cyan(report.cli.version)}`)
   log.step(`Platform:  ${log.cyan(report.platform.os)} / ${report.platform.arch}`)
@@ -60,11 +60,11 @@ export async function info(opts: InfoOptions): Promise<void> {
     if (report.project.binary && "path" in report.project.binary) {
       log.step(`Binary:    ${log.gray(report.project.binary.path)}`)
     } else {
-      log.step(`Binary:    ${log.yellow(`vorn-${cfg.runtime} not found`)}`)
-      log.dim(`           Install: bun add @vorn/host`)
+      log.step(`Binary:    ${log.yellow(`tynd-${cfg.runtime} not found`)}`)
+      log.dim(`           Install: bun add @tynd/host`)
     }
   } else {
-    log.step("No vorn.config.ts found in current directory")
+    log.step("No tynd.config.ts found in current directory")
   }
 
   log.blank()

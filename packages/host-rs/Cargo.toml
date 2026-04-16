@@ -1,6 +1,6 @@
 [package]
-name                 = "vorn-host"
-description          = "Native WebView host for the Vorn framework (wry + tao + OS integration)"
+name                 = "tynd-host"
+description          = "Native WebView host for the Tynd framework (wry + tao + OS integration)"
 version.workspace      = true
 edition.workspace      = true
 rust-version.workspace = true

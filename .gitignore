@@ -4,12 +4,12 @@ node_modules/
 # Rust build output
 target/
 
-# Vorn build cache & release output
-.vorn/
+# Tynd build cache & release output
+.tynd/
 release/
 
-# Temporary icon conversion (SVG → PNG by vorn build)
-*.vorn.png
+# Temporary icon conversion (SVG → PNG by tynd build)
+*.tynd.png
 
 # Frontend bundles
 dist/

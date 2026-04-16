@@ -1,6 +1,6 @@
 [package]
-name                 = "vorn-full"
-description          = "Vorn runtime (full) — Bun subprocess backend + embedded launcher"
+name                 = "tynd-full"
+description          = "Tynd runtime (full) — Bun subprocess backend + embedded launcher"
 version.workspace      = true
 edition.workspace      = true
 rust-version.workspace = true
@@ -9,14 +9,14 @@ repository.workspace   = true
 authors.workspace      = true
 
 [[bin]]
-name = "vorn-full"
+name = "tynd-full"
 path = "src/main.rs"
 
 [lints]
 workspace = true
 
 [dependencies]
-vorn-host            = { path = "../host-rs" }
+tynd-host            = { path = "../host-rs" }
 serde.workspace      = true
 serde_json.workspace = true
 mimalloc.workspace   = true
