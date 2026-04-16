@@ -1,6 +1,6 @@
 {
   "name": "@vorn/host",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Pre-built native host binaries for Vorn (webview + QuickJS)",
   "private": false,
   "scripts": {
