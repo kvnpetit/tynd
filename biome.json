@@ -14,8 +14,7 @@
       "!**/.vorn",
       "!**/bin/index.js",
       "!**/bun.lock",
-      "!**/release",
-      "!benchmarks/results"
+      "!**/release"
     ]
   },
   "formatter": {

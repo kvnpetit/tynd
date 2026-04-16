@@ -4,12 +4,9 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "playground/*",
-    "benchmarks/*"
+    "playground/*"
   ],
   "scripts": {
-    "bench": "bun benchmarks/run.ts",
-
     "typecheck": "bun run --filter '@vorn/*' typecheck",
     "lint": "biome lint",
     "format": "biome format --write",

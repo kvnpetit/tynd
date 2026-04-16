@@ -101,7 +101,7 @@ Lite has no persistence. Use `full` with `bun:sqlite`, or keep state in-memory w
 
 ## Performance
 
-Measured on Windows 11, Bun 1.3.11, release binaries. Run `bun bench` for numbers on your machine.
+Measured on Windows 11, Bun 1.3.11, release binaries. Numbers are indicative — real workloads vary.
 
 | Benchmark | `lite` | `full` | Winner |
 |-----------|--------|--------|--------|
