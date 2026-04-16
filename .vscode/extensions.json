@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "rust-lang.rust-analyzer",
+    "tamasfe.even-better-toml",
+    "editorconfig.editorconfig",
+    "oven.bun-vscode"
+  ]
+}
