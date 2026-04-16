@@ -12,29 +12,29 @@ authors      = ["Kevin Petit"]
 
 [workspace.dependencies]
 # Shared foundations
-serde       = { version = "1.0", features = ["derive"] }
-serde_json  = "1.0"
+serde       = { version = "1.0.228", features = ["derive"] }
+serde_json  = "1.0.149"
 tempfile    = "3.27"
 dirs        = "6"
-flate2      = "1.0"
-mimalloc    = { version = "0.1", default-features = false }
+zstd        = { version = "0.13.3", default-features = false }
+mimalloc    = { version = "0.1.48", default-features = false }
 
 # wry / tao ecosystem
 wry         = "0.55.0"
 tao         = "0.35.0"
-muda        = "0.17"
+muda        = "0.17.2"
 tray-icon   = "0.22"
 
 # OS integration
-rfd         = "0.17"
-arboard     = "3"
-open        = { version = "5", features = ["shellexecute-on-windows"] }
+rfd         = "0.17.2"
+arboard     = "3.6.1"
+open        = { version = "5.3.3", features = ["shellexecute-on-windows"] }
 pollster    = "0.4"
-notify-rust = "4"
-image       = { version = "0.25", default-features = false, features = ["png", "ico", "bmp"] }
+notify-rust = "4.15.0"
+image       = { version = "0.25.10", default-features = false, features = ["png", "ico", "bmp"] }
 
 # Embedded JS runtime (lite)
-rquickjs    = { version = "0.9", features = ["full"] }
+rquickjs    = { version = "0.11.0", features = ["full"] }
 
 [workspace.lints.rust]
 unused_must_use               = "deny"
