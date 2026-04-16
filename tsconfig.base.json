@@ -9,6 +9,8 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
     "noUncheckedIndexedAccess": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "exactOptionalPropertyTypes": true,
 
     "isolatedModules": true,
     "verbatimModuleSyntax": true,

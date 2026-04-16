@@ -77,7 +77,9 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         }));
     }
 
-    let _app_menu: Option<muda::Menu> = if !config.menu.is_empty() {
+    let _app_menu: Option<muda::Menu> = if config.menu.is_empty() {
+        None
+    } else {
         match build_muda_bar(&config.menu) {
             Ok(menu) => {
                 init_menu_bar(&menu, &native_window);
@@ -88,8 +90,6 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 None
             },
         }
-    } else {
-        None
     };
 
     let _system_tray: Option<tray_icon::TrayIcon> =
@@ -158,7 +158,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
 
             // Page-ready signal (fired once on DOMContentLoaded)
             if v.get("__vorn_page_ready")
-                .and_then(|f| f.as_bool())
+                .and_then(Value::as_bool)
                 .unwrap_or(false)
             {
                 let _ = proxy_for_ipc.send_event(UserEvent::PageReady);
@@ -202,7 +202,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         let dir = dir.clone();
         wb = wb
             .with_custom_protocol("bv".into(), move |_id, req: Request<Vec<u8>>| {
-                scheme::handle(&dir, req)
+                scheme::handle(&dir, &req)
             })
             .with_url("bv://localhost/");
     } else {
@@ -279,7 +279,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 let proxy = proxy.clone();
                 let exit_started = exit_started.clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(2000));
+                    std::thread::sleep(std::time::Duration::from_secs(2));
                     if !exit_started.load(Ordering::SeqCst) {
                         let _ = proxy.send_event(UserEvent::ForceExit);
                     }

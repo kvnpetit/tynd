@@ -3,11 +3,11 @@ use serde_json::Value;
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
-        "openFile" => open_file(args, false),
-        "openFiles" => open_file(args, true),
-        "saveFile" => save_file(args),
-        "message" => message_box(args),
-        "confirm" => confirm(args),
+        "openFile" => Ok(open_file(args, false)),
+        "openFiles" => Ok(open_file(args, true)),
+        "saveFile" => Ok(save_file(args)),
+        "message" => Ok(message_box(args)),
+        "confirm" => Ok(confirm(args)),
         _ => Err(format!("dialog.{method}: unknown method")),
     }
 }
@@ -38,11 +38,11 @@ fn apply_filters(mut d: AsyncFileDialog, args: &Value) -> AsyncFileDialog {
     d
 }
 
-fn open_file(args: &Value, multiple: bool) -> Result<Value, String> {
+fn open_file(args: &Value, multiple: bool) -> Value {
     let d = build_open_dialog(args);
     if multiple {
         let files = pollster::block_on(d.pick_files());
-        Ok(match files {
+        match files {
             None => Value::Null,
             Some(handles) => Value::Array(
                 handles
@@ -50,16 +50,16 @@ fn open_file(args: &Value, multiple: bool) -> Result<Value, String> {
                     .map(|h| Value::String(h.path().to_string_lossy().into_owned()))
                     .collect(),
             ),
-        })
+        }
     } else {
         let file = pollster::block_on(d.pick_file());
-        Ok(file
-            .map(|h| Value::String(h.path().to_string_lossy().into_owned()))
-            .unwrap_or(Value::Null))
+        file.map_or(Value::Null, |h| {
+            Value::String(h.path().to_string_lossy().into_owned())
+        })
     }
 }
 
-fn save_file(args: &Value) -> Result<Value, String> {
+fn save_file(args: &Value) -> Value {
     let mut d = AsyncFileDialog::new();
     if let Some(title) = args.get("title").and_then(|t| t.as_str()) {
         d = d.set_title(title);
@@ -73,12 +73,12 @@ fn save_file(args: &Value) -> Result<Value, String> {
     d = apply_filters(d, args);
 
     let file = pollster::block_on(d.save_file());
-    Ok(file
-        .map(|h| Value::String(h.path().to_string_lossy().into_owned()))
-        .unwrap_or(Value::Null))
+    file.map_or(Value::Null, |h| {
+        Value::String(h.path().to_string_lossy().into_owned())
+    })
 }
 
-fn message_box(args: &Value) -> Result<Value, String> {
+fn message_box(args: &Value) -> Value {
     let text = args
         .get("message")
         .and_then(|m| m.as_str())
@@ -102,10 +102,10 @@ fn message_box(args: &Value) -> Result<Value, String> {
             .set_buttons(MessageButtons::Ok)
             .show(),
     );
-    Ok(Value::Null)
+    Value::Null
 }
 
-fn confirm(args: &Value) -> Result<Value, String> {
+fn confirm(args: &Value) -> Value {
     let text = args
         .get("message")
         .and_then(|m| m.as_str())
@@ -124,5 +124,5 @@ fn confirm(args: &Value) -> Result<Value, String> {
             .set_buttons(MessageButtons::OkCancel)
             .show(),
     );
-    Ok(Value::Bool(result == MessageDialogResult::Ok))
+    Value::Bool(result == MessageDialogResult::Ok)
 }

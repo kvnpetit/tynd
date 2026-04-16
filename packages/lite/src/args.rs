@@ -2,7 +2,7 @@
 /// Unlike vorn-full, window config comes from the JS bundle itself
 /// (globalThis.__vorn_config__), but frontend path is a CLI arg because
 /// import.meta.dir is not available in a browser-target IIFE bundle.
-pub struct Args {
+pub(crate) struct Args {
     /// Path to the pre-built JS bundle (IIFE, sets globalThis.__vorn_mod__)
     pub bundle_path: String,
     /// Optional: directory of static frontend files to serve via bv://
@@ -14,7 +14,7 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn parse() -> Self {
+    pub(crate) fn parse() -> Self {
         let raw: Vec<String> = std::env::args().collect();
         let mut bundle_path = String::new();
         let mut frontend_dir = None;
@@ -27,7 +27,7 @@ impl Args {
                 "--bundle" | "-b" => {
                     i += 1;
                     if i < raw.len() {
-                        bundle_path = raw[i].clone();
+                        bundle_path.clone_from(&raw[i]);
                     }
                 },
                 "--frontend-dir" | "-f" => {

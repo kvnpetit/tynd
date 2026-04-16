@@ -16,8 +16,8 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
         },
 
         "setSize" => {
-            let w = args.get("width").and_then(|v| v.as_f64()).unwrap_or(800.0);
-            let h = args.get("height").and_then(|v| v.as_f64()).unwrap_or(600.0);
+            let w = args.get("width").and_then(Value::as_f64).unwrap_or(800.0);
+            let h = args.get("height").and_then(Value::as_f64).unwrap_or(600.0);
             if !w.is_finite() || w <= 0.0 || !h.is_finite() || h <= 0.0 {
                 return Err("setSize: width and height must be positive finite numbers".into());
             }
@@ -49,7 +49,7 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
         "setFullscreen" => {
             let full = args
                 .get("fullscreen")
-                .and_then(|f| f.as_bool())
+                .and_then(Value::as_bool)
                 .unwrap_or(false);
             win.set_fullscreen(if full {
                 Some(tao::window::Fullscreen::Borderless(None))
@@ -60,10 +60,7 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
         },
 
         "setAlwaysOnTop" => {
-            let always = args
-                .get("always")
-                .and_then(|a| a.as_bool())
-                .unwrap_or(false);
+            let always = args.get("always").and_then(Value::as_bool).unwrap_or(false);
             win.set_always_on_top(always);
             Ok(Value::Null)
         },
@@ -71,7 +68,7 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
         "setDecorations" => {
             let dec = args
                 .get("decorations")
-                .and_then(|d| d.as_bool())
+                .and_then(Value::as_bool)
                 .unwrap_or(true);
             win.set_decorations(dec);
             Ok(Value::Null)

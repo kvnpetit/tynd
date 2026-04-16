@@ -1,3 +1,6 @@
+// rquickjs types (Function, Object, Value, String) are parameterized by ctx lifetime;
+// elided everywhere here to keep call sites readable — context is obvious.
+#![allow(elided_lifetimes_in_paths)]
 use rquickjs::{Context, Function, Object, Runtime};
 use serde_json::Value;
 use std::collections::{BinaryHeap, HashSet};
@@ -23,7 +26,7 @@ enum TimerCmd {
 /// - Loads `bundle_code` in an embedded QuickJS runtime
 /// - Blocks until the bundle sets `globalThis.__vorn_config__`
 /// - Returns a `BackendBridge` ready for `run_app()`
-pub fn start(
+pub(crate) fn start(
     bundle_path: &str,
     frontend_dir: Option<String>,
     dev_url: Option<String>,
@@ -81,6 +84,8 @@ pub fn start(
     }
 }
 
+// Thread entry fn — all channels must be owned (moved into thread scope).
+#[allow(clippy::needless_pass_by_value)]
 fn js_thread_main(
     bundle_code: String,
     js_tx: mpsc::Sender<JsMsg>,
@@ -271,7 +276,9 @@ fn start_timer_thread(cmd_rx: mpsc::Receiver<TimerCmd>, js_tx: mpsc::Sender<JsMs
                 if js_tx.send(JsMsg::TimerFire(e.id)).is_err() {
                     return;
                 }
-                if !e.once {
+                if e.once {
+                    active.remove(&e.id); // timeout done, no longer active
+                } else {
                     // Re-schedule interval using fire_at + dur to prevent drift
                     let dur = Duration::from_millis(e.ms as u64);
                     heap.push(Entry {
@@ -281,16 +288,13 @@ fn start_timer_thread(cmd_rx: mpsc::Receiver<TimerCmd>, js_tx: mpsc::Sender<JsMs
                         once: false,
                     });
                     // active stays — interval is still scheduled
-                } else {
-                    active.remove(&e.id); // timeout done, no longer active
                 }
             }
 
             // Sleep until the next deadline or a new command arrives
-            let timeout = heap
-                .peek()
-                .map(|e| e.fire_at.saturating_duration_since(Instant::now()))
-                .unwrap_or(Duration::from_secs(3600));
+            let timeout = heap.peek().map_or(Duration::from_secs(3600), |e| {
+                e.fire_at.saturating_duration_since(Instant::now())
+            });
 
             match cmd_rx.recv_timeout(timeout) {
                 Ok(TimerCmd::Set { id, ms, once }) => {
