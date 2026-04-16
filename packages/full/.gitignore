@@ -1,0 +1,2 @@
+# Cargo local override (workspace build puts binaries at repo root target/)
+/target/
