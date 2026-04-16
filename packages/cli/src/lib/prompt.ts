@@ -10,15 +10,11 @@ function onCancel(): never {
   process.exit(0)
 }
 
-// ── confirm ───────────────────────────────────────────────────────────────────
-
 export async function confirm(question: string, initialValue = false): Promise<boolean> {
   const result = await clackConfirm({ message: question, initialValue })
   if (isCancel(result)) onCancel()
   return result as boolean
 }
-
-// ── text ──────────────────────────────────────────────────────────────────────
 
 export async function text(message: string, defaultValue = ""): Promise<string> {
   const result = await clackText({
@@ -28,8 +24,6 @@ export async function text(message: string, defaultValue = ""): Promise<string> 
   if (isCancel(result)) onCancel()
   return result as string
 }
-
-// ── select ────────────────────────────────────────────────────────────────────
 
 export type SelectOption<T extends string = string> = Parameters<
   typeof clackSelect<T>

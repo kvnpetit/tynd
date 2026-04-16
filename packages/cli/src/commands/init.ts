@@ -22,8 +22,6 @@ export async function init(opts: InitOptions): Promise<void> {
     return
   }
 
-  // ── Detect existing project ───────────────────────────────────────────────
-
   let name = path.basename(opts.cwd)
   const pkgPath = path.join(opts.cwd, "package.json")
   let pkg: Record<string, unknown> | null = null
@@ -54,13 +52,9 @@ export async function init(opts: InitOptions): Promise<void> {
   }
   log.blank()
 
-  // ── Write vorn.config.ts ─────────────────────────────────────────────────
-
   const frontendDir = hasFrontend ? frontend.outDir : "frontend"
 
   await write(opts.cwd, "vorn.config.ts", vornConfig(name, opts.runtime, frontendDir), opts.force)
-
-  // ── Write backend/main.ts ─────────────────────────────────────────────────
 
   const backendRelFront = hasFrontend
     ? `/../${frontendDir}` // e.g. /../dist
@@ -72,8 +66,6 @@ export async function init(opts: InitOptions): Promise<void> {
     backendMain(name, opts.runtime, backendRelFront),
     opts.force,
   )
-
-  // ── If no existing frontend, scaffold a minimal one ───────────────────────
 
   if (!hasFrontend) {
     await write(
@@ -111,8 +103,6 @@ api.on("ready", ({ message }) => {
     )
   }
 
-  // ── Patch package.json scripts ────────────────────────────────────────────
-
   if (pkg) {
     await patchPackageJson(pkgPath, pkg)
   }
@@ -133,8 +123,6 @@ api.on("ready", ({ message }) => {
 
   log.blank()
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function write(cwd: string, rel: string, content: string, force: boolean): Promise<void> {
   const abs = path.join(cwd, rel)

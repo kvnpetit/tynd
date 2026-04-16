@@ -2,14 +2,10 @@ import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 export interface CacheEntry {
   hash: string
   updatedAt: number
 }
-
-// ── Constants ─────────────────────────────────────────────────────────────────
 
 /** Directory names always excluded when walking source trees. */
 const ALWAYS_EXCLUDE = new Set([
@@ -20,8 +16,6 @@ const ALWAYS_EXCLUDE = new Set([
   ".DS_Store",
   "Thumbs.db",
 ])
-
-// ── Hashing ───────────────────────────────────────────────────────────────────
 
 /**
  * Compute a deterministic SHA-256 over:
@@ -80,8 +74,6 @@ function walkSorted(dir: string, exclude: Set<string>): string[] {
   }
   return out
 }
-
-// ── Manifest I/O ──────────────────────────────────────────────────────────────
 
 export function readCache(cacheDir: string, key: string): CacheEntry | null {
   const file = path.join(cacheDir, `${key}.json`)

@@ -35,8 +35,6 @@ export async function build(opts: BuildOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
   const cacheDir = path.join(opts.cwd, ".vorn", "cache")
 
-  // ── SSR check (fast-fail before anything else) ───────────────────────────
-
   const frontend = await detectFrontend(opts.cwd)
 
   if (frontend.blockedBy) {
@@ -48,8 +46,6 @@ export async function build(opts: BuildOptions): Promise<void> {
   log.blank()
   log.info(`Building ${log.cyan(cfg.runtime)} app`)
   log.blank()
-
-  // ── 1. Frontend ───────────────────────────────────────────────────────────
 
   if (frontend.buildTool !== "none" && frontend.buildCommand) {
     const frontendHash = hashSources(
@@ -110,8 +106,6 @@ export async function build(opts: BuildOptions): Promise<void> {
     log.step("No frontend build step — skipping")
   }
 
-  // ── 2. Backend bundle (.vorn/cache/ — never in source tree) ──────────────
-
   const backendSrcDir = path.dirname(cfg.backend)
   const bundleFilename = cfg.runtime === "lite" ? "bundle.js" : "bundle.dist.js"
   const cachedBundle = path.join(cacheDir, bundleFilename)
@@ -138,8 +132,6 @@ export async function build(opts: BuildOptions): Promise<void> {
     log.success("Backend bundled")
   }
 
-  // ── 3. Host binary ────────────────────────────────────────────────────────
-
   const hostBin = findBinary(cfg.runtime, opts.cwd)
   if (!hostBin) {
     log.error(`vorn-${cfg.runtime} binary not found.`)
@@ -148,8 +140,6 @@ export async function build(opts: BuildOptions): Promise<void> {
   }
   log.step(`Host: ${log.gray(path.relative(opts.cwd, hostBin))}`)
 
-  // ── 4. Frontend files ─────────────────────────────────────────────────────
-
   if (!existsSync(cfg.frontendDir)) {
     log.error(`Frontend directory not found: ${log.gray(cfg.frontendDir)}`)
     process.exit(1)
@@ -157,14 +147,10 @@ export async function build(opts: BuildOptions): Promise<void> {
   const frontendFiles = collectFiles(cfg.frontendDir)
   log.step(`Frontend: ${frontendFiles.length} files`)
 
-  // ── 5. Icon detection ─────────────────────────────────────────────────────
-
   const iconPath = await detectIcon(opts.cwd, cfg.icon)
   if (iconPath) {
     log.step(`Icon:    ${log.gray(path.relative(opts.cwd, iconPath))}`)
   }
-
-  // ── 6. Output path ────────────────────────────────────────────────────────
 
   const platform = getPlatform()
   const binExt = platform === "windows" ? ".exe" : ""
@@ -174,8 +160,6 @@ export async function build(opts: BuildOptions): Promise<void> {
     : path.join(opts.cwd, "release", appName + binExt)
 
   mkdirSync(path.dirname(outFile), { recursive: true })
-
-  // ── 7. Package ────────────────────────────────────────────────────────────
 
   if (cfg.runtime === "lite") {
     await packageLite({
@@ -198,7 +182,6 @@ export async function build(opts: BuildOptions): Promise<void> {
   }
 }
 
-// ── Lite mode packaging ───────────────────────────────────────────────────────
 //
 // Appends a packed section directly to the vorn-lite binary.
 // No Bun runtime — the output is purely Rust + QuickJS.
@@ -268,7 +251,6 @@ async function packageLite(o: LitePackOpts): Promise<void> {
   log.blank()
 }
 
-// ── Full mode packaging ───────────────────────────────────────────────────────
 //
 // Compresses the local Bun binary with gzip and packs it into the vorn-full
 // host binary using the VORNPKG\0 format (same as lite mode).
@@ -360,8 +342,6 @@ async function packageFull(o: FullPackOpts): Promise<void> {
   log.blank()
 }
 
-// ── Asset packing ─────────────────────────────────────────────────────────────
-
 const TEXT_EXTS = /\.(html|htm|js|mjs|cjs|css|json|svg)$/i
 
 /**
@@ -420,8 +400,6 @@ function packAssets(files: PackEntry[]): Buffer {
 
   return Buffer.concat(chunks)
 }
-
-// ── Collect all files in a directory recursively ──────────────────────────────
 
 function collectFiles(dir: string): Array<{ abs: string; rel: string }> {
   const results: Array<{ abs: string; rel: string }> = []

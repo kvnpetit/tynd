@@ -11,8 +11,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { log } from "./logger.ts"
 
-// ── Detection ─────────────────────────────────────────────────────────────────
-
 // Ordered by preference: ICO best for Windows PE, then PNG, then SVG
 const ICON_CANDIDATES = [
   "public/favicon.ico",
@@ -79,8 +77,6 @@ export async function detectIcon(cwd: string, configIcon?: string): Promise<stri
   return null
 }
 
-// ── SVG → PNG ─────────────────────────────────────────────────────────────────
-
 /**
  * Convert an SVG file to PNG using @resvg/resvg-js (WASM).
  * Writes the result to `outPath` (caller decides where — use .vorn/cache/).
@@ -103,8 +99,6 @@ export async function svgToPng(svgPath: string, outPath: string): Promise<string
     return null
   }
 }
-
-// ── PNG → ICO conversion ──────────────────────────────────────────────────────
 
 /**
  * Wrap raw PNG bytes in a minimal ICO container.
@@ -135,8 +129,6 @@ export function pngToIco(pngBytes: Buffer): Buffer {
   pngBytes.copy(buf, dataOffset)
   return buf
 }
-
-// ── Windows PE icon embedding ─────────────────────────────────────────────────
 
 /**
  * Embed an icon into a Windows PE binary using `resedit` (pure JS/TS).

@@ -19,8 +19,6 @@ export interface FrontendInfo {
   blockedBy?: string
 }
 
-// ── Platform ──────────────────────────────────────────────────────────────────
-
 export function getPlatform(): Platform {
   switch (process.platform) {
     case "win32":
@@ -81,11 +79,8 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
   return null
 }
 
-// ── Frontend framework detection ──────────────────────────────────────────────
-
 /** Server-side frameworks incompatible with vorn (they own the server). */
 const SERVER_FRAMEWORKS: Record<string, string> = {
-  // ── React ecosystem ──────────────────────────────────────────────────────
   next: "Next.js",
   "@remix-run/react": "Remix",
   "@remix-run/node": "Remix",
@@ -94,21 +89,15 @@ const SERVER_FRAMEWORKS: Record<string, string> = {
   gatsby: "Gatsby",
   "@redwoodjs/core": "RedwoodJS",
   blitz: "Blitz.js",
-  // ── Vue ecosystem ────────────────────────────────────────────────────────
   nuxt: "Nuxt",
   "@nuxtjs/bridge": "Nuxt Bridge",
-  // ── Svelte ecosystem ─────────────────────────────────────────────────────
   "@sveltejs/kit": "SvelteKit",
-  // ── Solid ecosystem ──────────────────────────────────────────────────────
   "@solidjs/start": "SolidStart",
-  // ── Angular ecosystem ────────────────────────────────────────────────────
   "@angular/platform-server": "Angular Universal",
   "@nguniversal/express-engine": "Angular Universal",
   "@analogjs/core": "Analog",
   "@analogjs/platform": "Analog",
-  // ── Qwik ecosystem ───────────────────────────────────────────────────────
   "@builder.io/qwik-city": "Qwik City",
-  // ── Framework-agnostic SSR ───────────────────────────────────────────────
   astro: "Astro",
   "@tanstack/start": "TanStack Start",
   "@tanstack/react-start": "TanStack Start",

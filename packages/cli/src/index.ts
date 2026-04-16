@@ -13,8 +13,6 @@ import { VERSION } from "./lib/version.ts"
 
 const cli = cac("vorn")
 
-// ── vorn create [name] ───────────────────────────────────────────────────────
-
 const frameworkValues = FRAMEWORKS.map((f) => f.value).join(" | ")
 
 cli
@@ -54,16 +52,12 @@ cli
     await create(resolvedName, { framework: resolvedFw, runtime: resolvedRuntime })
   })
 
-// ── vorn dev ─────────────────────────────────────────────────────────────────
-
 cli
   .command("dev", "Start the app in development mode")
   .option("--cwd <dir>", "Project directory", { default: process.cwd() })
   .action(async (opts: { cwd: string }) => {
     await dev({ cwd: opts.cwd })
   })
-
-// ── vorn build ───────────────────────────────────────────────────────────────
 
 cli
   .command("build", "Build and package the app as a single distributable binary")
@@ -72,8 +66,6 @@ cli
   .action(async (opts: { cwd: string; outfile?: string }) => {
     await build(opts)
   })
-
-// ── vorn init ────────────────────────────────────────────────────────────────
 
 cli
   .command("init", "Add vorn to an existing project")
@@ -95,8 +87,6 @@ cli
     await init({ cwd: opts.cwd, runtime, force: opts.force })
   })
 
-// ── vorn clean ───────────────────────────────────────────────────────────────
-
 cli
   .command("clean", "Remove build artifacts")
   .option("--cwd <dir>", "Project directory", { default: process.cwd() })
@@ -104,8 +94,6 @@ cli
   .action(async (opts: { cwd: string; yes: boolean }) => {
     await clean(opts)
   })
-
-// ── vorn validate ────────────────────────────────────────────────────────────
 
 cli
   .command("validate", "Validate the project config and file structure")
@@ -115,8 +103,6 @@ cli
     await validate(opts)
   })
 
-// ── vorn upgrade ─────────────────────────────────────────────────────────────
-
 cli
   .command("upgrade", "Upgrade @vorn/cli and @vorn/core to latest")
   .option("-y, --yes", "Skip confirmation", { default: false })
@@ -124,13 +110,9 @@ cli
     await upgrade(opts)
   })
 
-// ── vorn info ────────────────────────────────────────────────────────────────
-
 cli.command("info", "Show environment and project info").action(async () => {
   await info()
 })
-
-// ── Global ────────────────────────────────────────────────────────────────────
 
 cli.help()
 cli.version(VERSION)

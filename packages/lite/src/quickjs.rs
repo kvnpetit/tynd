@@ -476,7 +476,6 @@ fn parse_config(json: &str) -> Option<BackendConfig> {
 
 // JS globals installed before the user bundle runs.
 const JS_GLOBALS: &str = r"
-// ── globalThis + console ──────────────────────────────────────────────────────
 globalThis.globalThis = globalThis;
 (function () {
   function fmt(a) {
@@ -497,7 +496,6 @@ globalThis.globalThis = globalThis;
   };
 })();
 
-// ── setTimeout / setInterval / clearTimeout / clearInterval ───────────────────
 (function () {
   var nextId = 1;
   var handlers = {};

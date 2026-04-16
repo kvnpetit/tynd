@@ -26,8 +26,6 @@ export type {
 
 import { vorn } from "./logger.js"
 
-// ── Type utilities ────────────────────────────────────────────────────────────
-
 type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
   k: infer I,
 ) => void
@@ -71,8 +69,6 @@ export type BackendClient<T> = ModuleFunctions<T> & {
   ): () => void
 }
 
-// ── Runtime types ─────────────────────────────────────────────────────────────
-
 declare global {
   interface Window {
     __vorn__: {
@@ -86,8 +82,6 @@ declare global {
     __vorn_os_event__: (name: string, data: unknown) => void
   }
 }
-
-// ── createBackend ─────────────────────────────────────────────────────────────
 
 /**
  * Create a fully type-safe proxy to your backend.
@@ -141,13 +135,9 @@ export function createBackend<T>(): BackendClient<T> {
   })
 }
 
-// ── OS API internal helper ────────────────────────────────────────────────────
-
 function _osCall<T>(api: string, method: string, args: unknown = null): Promise<T> {
   return window.__vorn__.os_call(api, method, args) as Promise<T>
 }
-
-// ── dialog ────────────────────────────────────────────────────────────────────
 
 /**
  * Native file system and message dialogs.
@@ -182,8 +172,6 @@ export const dialog = {
     return _osCall("dialog", "confirm", { message, ...opts })
   },
 }
-
-// ── vornWindow ────────────────────────────────────────────────────────────────
 
 /**
  * Control the native application window from the frontend.
@@ -256,8 +244,6 @@ export const vornWindow = {
   },
 }
 
-// ── clipboard ─────────────────────────────────────────────────────────────────
-
 /**
  * Read and write the system clipboard.
  *
@@ -273,8 +259,6 @@ export const clipboard = {
     return _osCall("clipboard", "writeText", text)
   },
 }
-
-// ── shell ─────────────────────────────────────────────────────────────────────
 
 /**
  * Open URLs and paths with the system default application.
@@ -292,8 +276,6 @@ export const shell = {
   },
 }
 
-// ── notification ──────────────────────────────────────────────────────────────
-
 /**
  * Send a native OS desktop notification.
  *
@@ -305,8 +287,6 @@ export const notification = {
     return _osCall("notification", "send", { title, body: opts?.body ?? "" })
   },
 }
-
-// ── tray ──────────────────────────────────────────────────────────────────────
 
 /**
  * Subscribe to system tray events.

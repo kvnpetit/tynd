@@ -4,10 +4,7 @@ import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
 import { init } from "./init.ts"
 
-// ── Supported frameworks ───────────────────────────────────────────────────────
-
 export const FRAMEWORKS = [
-  // ── Vite-based ──────────────────────────────────────────────────────────────
   { value: "react", label: "React", hint: "Vite + React + TypeScript", viteTemplate: "react-ts" },
   { value: "vue", label: "Vue", hint: "Vite + Vue 3 + TypeScript", viteTemplate: "vue-ts" },
   {
@@ -24,7 +21,6 @@ export const FRAMEWORKS = [
     viteTemplate: "preact-ts",
   },
   { value: "lit", label: "Lit", hint: "Vite + Lit + TypeScript", viteTemplate: "lit-ts" },
-  // ── Own CLI ─────────────────────────────────────────────────────────────────
   { value: "angular", label: "Angular", hint: "Angular CLI + TypeScript", viteTemplate: null },
 ] as const
 
@@ -34,8 +30,6 @@ export interface CreateOptions {
   framework: Framework
   runtime: "full" | "lite"
 }
-
-// ── create ────────────────────────────────────────────────────────────────────
 
 export async function create(name: string, opts: CreateOptions): Promise<void> {
   const projectDir = path.resolve(process.cwd(), name)
@@ -54,17 +48,13 @@ export async function create(name: string, opts: CreateOptions): Promise<void> {
   log.info(`Creating ${log.bold(name)} — ${log.cyan(fw.label)} / ${log.cyan(opts.runtime)}`)
   log.blank()
 
-  // ── 1. Scaffold with the official framework CLI ───────────────────────────
-
   if (fw.viteTemplate !== null) {
-    // ── Vite-based frameworks ─────────────────────────────────────────────
     log.step(`Scaffolding with ${log.cyan("Vite")} (${fw.hint})…`)
     await exec("bun", ["create", "vite@latest", name, "--template", fw.viteTemplate], {
       cwd: process.cwd(),
     })
     log.success(`${fw.label} project created`)
   } else {
-    // ── Angular ───────────────────────────────────────────────────────────
     log.step(`Scaffolding with ${log.cyan("Angular CLI")}…`)
     await exec(
       "bunx",
@@ -84,11 +74,7 @@ export async function create(name: string, opts: CreateOptions): Promise<void> {
 
   log.blank()
 
-  // ── 2. Apply vorn on top ──────────────────────────────────────────────────
-
   await init({ cwd: projectDir, runtime: opts.runtime, force: false })
-
-  // ── 3. Install deps ───────────────────────────────────────────────────────
 
   log.step("Installing dependencies…")
   try {

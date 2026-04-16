@@ -14,8 +14,6 @@ export async function dev(opts: DevOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
   const cacheDir = path.join(opts.cwd, ".vorn", "cache")
 
-  // ── SSR check ────────────────────────────────────────────────────────────
-
   const frontend = await detectFrontend(opts.cwd)
 
   if (frontend.blockedBy) {
@@ -28,16 +26,12 @@ export async function dev(opts: DevOptions): Promise<void> {
   log.info(`Starting in ${log.cyan("dev")} mode (${cfg.runtime})`)
   log.blank()
 
-  // ── Host binary ───────────────────────────────────────────────────────────
-
   const binPath = findBinary(cfg.runtime, opts.cwd)
   if (!binPath) {
     log.error(`vorn-${cfg.runtime} binary not found.`)
     log.dim(`  Install: bun add @vorn/host`)
     process.exit(1)
   }
-
-  // ── Frontend dev server ───────────────────────────────────────────────────
 
   const hasFwk = frontend.buildTool !== "none"
   const devUrl = cfg.devUrl ?? (hasFwk ? frontend.devUrl : null)
@@ -90,8 +84,6 @@ export async function dev(opts: DevOptions): Promise<void> {
 
   log.blank()
 
-  // ── Backend bundle (lite) — initial build with cache ──────────────────────
-
   const backendSrcDir = path.dirname(cfg.backend)
   const bundlePath = path.join(cacheDir, "bundle.dev.js")
 
@@ -99,8 +91,6 @@ export async function dev(opts: DevOptions): Promise<void> {
     await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: false })
     log.blank()
   }
-
-  // ── Spawn the host binary ─────────────────────────────────────────────────
 
   const env: Record<string, string> = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -155,8 +145,6 @@ export async function dev(opts: DevOptions): Promise<void> {
   // QuickJS thread in lite mode). Config changes still do a full host restart
   // so window settings re-apply.
   const canHotReload = true
-
-  // ── Backend file watcher → restart on change ──────────────────────────────
 
   const WATCH_EXTS = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json)$/
 
@@ -252,8 +240,6 @@ export async function dev(opts: DevOptions): Promise<void> {
   if (devUrl) log.dim(`  Frontend HMR active via ${frontend.buildTool}`)
   log.blank()
 
-  // ── Graceful shutdown ─────────────────────────────────────────────────────
-
   const shutdown = () => {
     backendWatcher.close()
     configWatcher?.close()
@@ -281,8 +267,6 @@ export async function dev(opts: DevOptions): Promise<void> {
   }
 }
 
-// ── Backend bundle helper (dev mode — non-minified) ───────────────────────────
-
 async function buildBackendDev(o: {
   cfg: ReturnType<typeof resolvePaths>
   opts: DevOptions
@@ -309,8 +293,6 @@ async function buildBackendDev(o: {
   writeCache(o.cacheDir, "backend-dev", { hash: backendHash, updatedAt: Date.now() })
   if (!o.silent) log.success("Bundle ready")
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 // Forward a child stream to our own, prefixing each line. Line-buffered so prefix
 // attaches once per line even when chunks split mid-line.

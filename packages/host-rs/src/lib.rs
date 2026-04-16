@@ -1,9 +1,11 @@
 pub mod app;
 pub mod cleanup;
 pub mod ipc;
+pub(crate) mod menu;
 pub mod os;
 pub mod runtime;
 pub mod scheme;
+pub(crate) mod tray;
 pub mod window;
 
 /// Log a developer-facing diagnostic message prefixed with `[vorn]`.

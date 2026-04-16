@@ -15,8 +15,6 @@ export interface WindowConfig {
   maximized?: boolean
 }
 
-// ── Menu types ────────────────────────────────────────────────────────────────
-
 /** Native OS roles for menu items. Role items are managed by the OS. */
 export type MenuRole =
   | "quit"
@@ -54,8 +52,6 @@ export interface MenuSubmenu {
 
 export type MenuItem = MenuSeparator | MenuAction | MenuSubmenu
 
-// ── Tray types ────────────────────────────────────────────────────────────────
-
 export interface TrayConfig {
   /** Path to tray icon (PNG/ICO/BMP) */
   icon: string
@@ -63,8 +59,6 @@ export interface TrayConfig {
   /** Context menu shown on right-click */
   menu?: MenuItem[]
 }
-
-// ── App config ────────────────────────────────────────────────────────────────
 
 export interface AppConfig {
   window?: WindowConfig
@@ -77,8 +71,6 @@ export interface AppConfig {
   /** Frontend directory override. Auto-injected by CLI via VORN_FRONTEND_DIR. */
   frontendDir?: string
 }
-
-// ── Notification types ────────────────────────────────────────────────────────
 
 export interface NotificationOptions {
   /** Notification body text */
@@ -95,8 +87,6 @@ export interface Emitter<T extends EmitterMap> {
   readonly __vorn_event_types__: T
   emit<K extends keyof T>(event: K & string, payload: T[K]): void
 }
-
-// ── OS API types ──────────────────────────────────────────────────────────────
 
 export interface FileFilter {
   /** Display name, e.g. "Images" */
