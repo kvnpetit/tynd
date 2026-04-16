@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Rust build output
+target/
+
+# Vorn build cache & release output
+.vorn/
+release/
+
+# Temporary icon conversion (SVG → PNG by vorn build)
+*.vorn.png
+
+# Frontend bundles
+dist/
+dist-ssr/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Bun
+.bun/

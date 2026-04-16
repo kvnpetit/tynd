@@ -1,0 +1,34 @@
+{
+  "name": "vorn",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "playground/*",
+    "benchmarks/*"
+  ],
+  "scripts": {
+    "bench": "bun benchmarks/run.ts",
+
+    "typecheck": "bun run --filter '@vorn/*' typecheck",
+    "lint": "biome lint",
+    "format": "biome format --write",
+    "format:check": "biome format",
+    "check": "biome check --write",
+    "check:ts": "biome ci && bun run typecheck",
+
+    "fmt:rust": "cargo fmt --all",
+    "fmt:rust:check": "cargo fmt --all -- --check",
+    "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
+    "check:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo check --workspace --all-targets",
+
+    "check:all": "bun run check:ts && bun run check:rust",
+    "fix:all": "biome check --write && cargo fmt --all"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.12",
+    "@types/bun": "latest",
+    "@vorn/cli": "workspace:*",
+    "@vorn/core": "workspace:*",
+    "typescript": "~5.9.3"
+  }
+}
