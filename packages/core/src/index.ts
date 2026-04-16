@@ -14,8 +14,9 @@ export type {
   WindowConfig,
 } from "./types.js"
 
+import * as v from "valibot"
 import { vorn } from "./logger.js"
-import type { AppConfig, Emitter, EmitterMap } from "./types.js"
+import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types.js"
 
 // __VORN_RUNTIME__ is replaced at bundle time by the CLI:
 //   buildLiteBundle → define: { "globalThis.__VORN_RUNTIME__": '"lite"' }
@@ -69,10 +70,22 @@ export const app = {
    * app.start({ window: { title: "My App" } })
    */
   start(config: AppConfig = {}): void {
+    const result = v.safeParse(AppConfigSchema, config)
+    if (!result.success) {
+      const issues = result.issues
+        .map((i) => {
+          const path = i.path?.map((p) => p.key).join(".") ?? ""
+          return path ? `  • ${path}: ${i.message}` : `  • ${i.message}`
+        })
+        .join("\n")
+      vorn.error(`app.start() received invalid config:\n${issues}`)
+      throw new Error("Invalid app.start() config")
+    }
+    const validated = result.output
     if (IS_LITE) {
-      _startLite(config)
+      _startLite(validated)
     } else {
-      _startFull(config)
+      _startFull(validated)
     }
   },
 
@@ -246,22 +259,36 @@ function _redirectConsoleToStderr() {
   }
 }
 
+const CallMsgSchema = v.object({
+  type: v.literal("call"),
+  id: v.string(),
+  fn: v.string(),
+  args: v.array(v.unknown()),
+})
+const LifecycleMsgSchema = v.object({
+  type: v.union([v.literal("vorn:ready"), v.literal("vorn:close")]),
+})
+const IpcMsgSchema = v.union([CallMsgSchema, LifecycleMsgSchema])
+
 async function _handleLine(line: string, entryPath: string): Promise<void> {
-  let msg: Record<string, unknown>
+  let raw: unknown
   try {
-    msg = JSON.parse(line) as Record<string, unknown>
+    raw = JSON.parse(line)
   } catch {
     vorn.error(`Invalid JSON from Rust: ${line}`)
     return
   }
 
-  switch (msg["type"]) {
+  const parsed = v.safeParse(IpcMsgSchema, raw)
+  if (!parsed.success) {
+    vorn.error(`Invalid IPC message shape: ${line}`)
+    return
+  }
+  const msg = parsed.output
+
+  switch (msg.type) {
     case "call": {
-      const { id, fn, args } = msg as {
-        id: string
-        fn: string
-        args: unknown[]
-      }
+      const { id, fn, args } = msg
       try {
         const mod = await _getModule(entryPath)
         const handler = mod[fn]
