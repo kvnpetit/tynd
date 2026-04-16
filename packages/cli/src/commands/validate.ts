@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
-import { loadConfig, resolvePaths, type VornConfig } from "../lib/config.ts"
+import { ConfigError, loadConfig, resolvePaths, type VornConfig } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
 
@@ -28,8 +28,12 @@ export async function validate(opts: ValidateOptions): Promise<void> {
   try {
     cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
     pass("vorn.config.ts valid")
-  } catch {
-    error("vorn.config.ts missing or invalid", "Run: vorn init")
+  } catch (e) {
+    if (e instanceof ConfigError) {
+      for (const issue of e.issues) error(issue)
+    } else {
+      error("vorn.config.ts missing or invalid", "Run: vorn init")
+    }
     output(issues, opts)
     return
   }
