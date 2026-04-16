@@ -4,13 +4,9 @@ import * as v from "valibot"
 
 export type Runtime = "full" | "lite"
 
-const WindowSchema = v.object({
-  title: v.optional(v.pipe(v.string(), v.minLength(1))),
-  width: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
-  height: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
-  center: v.optional(v.boolean()),
-})
-
+// Window/menu/tray config lives in the backend (app.start({ window: {...} }))
+// because each spawned window can define its own settings programmatically.
+// vorn.config.ts only covers build/CLI concerns.
 const ConfigSchema = v.object({
   runtime: v.union([v.literal("full"), v.literal("lite")]),
   backend: v.pipe(v.string(), v.minLength(1)),
@@ -20,7 +16,6 @@ const ConfigSchema = v.object({
   devCommand: v.optional(v.pipe(v.string(), v.minLength(1))),
   icon: v.optional(v.pipe(v.string(), v.minLength(1))),
   binaryArgs: v.optional(v.array(v.string())),
-  window: v.optional(WindowSchema),
 })
 
 /**

@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { detectFrontend } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
+import { loadPackageJson, type PackageJson } from "../lib/pkg.ts"
 import { backendMain, vornConfig } from "../lib/template.ts"
 import { VERSION } from "../lib/version.ts"
 
@@ -25,25 +26,14 @@ export async function init(opts: InitOptions): Promise<void> {
 
   let name = path.basename(opts.cwd)
   const pkgPath = path.join(opts.cwd, "package.json")
-  let pkg: Record<string, unknown> | null = null
+  let pkg: PackageJson | null = await loadPackageJson(opts.cwd)
 
-  if (existsSync(pkgPath)) {
-    try {
-      pkg = (await Bun.file(pkgPath).json()) as Record<string, unknown>
-      if (typeof pkg["name"] === "string") name = pkg["name"]
-    } catch {
-      /* ignore */
-    }
+  if (pkg) {
+    if (pkg.name) name = pkg.name
   } else {
-    // No package.json → generate a minimal one. Without it, `bun install`
-    // has nothing to resolve and `vorn dev` / `vorn build` would fail to
-    // wire up @vorn/core and @vorn/host.
-    pkg = {
-      name,
-      version: "0.0.0",
-      private: true,
-      type: "module",
-    }
+    // No package.json → synthesize a minimal one so `bun install` and the
+    // generated deps (@vorn/core, @vorn/host) have somewhere to land.
+    pkg = { name, version: "0.0.0" }
     log.step(`${log.cyan("create")}  package.json`)
   }
 
@@ -168,32 +158,28 @@ async function patchGitignore(cwd: string): Promise<void> {
   // No .gitignore → silently skip; Vite scaffold always creates one
 }
 
-async function patchPackageJson(pkgPath: string, pkg: Record<string, unknown>): Promise<void> {
-  const scripts = (pkg["scripts"] as Record<string, string> | undefined) ?? {}
+async function patchPackageJson(pkgPath: string, pkg: PackageJson): Promise<void> {
+  const scripts = pkg.scripts ?? {}
 
-  // Preserve existing scripts under a different name if they'd be overwritten
+  // Preserve existing scripts under `build:ui` / `dev:ui` if we'd overwrite them
   if (scripts["build"] && scripts["build"] !== "vorn build") {
     scripts["build:ui"] = scripts["build"]
   }
   if (scripts["dev"] && scripts["dev"] !== "vorn dev") {
     scripts["dev:ui"] = scripts["dev"]
   }
-
   scripts["dev"] = "vorn dev"
   scripts["build"] = "vorn build"
-  pkg["scripts"] = scripts
+  pkg.scripts = scripts
 
-  // Pin to the CLI's own version so `vorn dev` / `vorn build` never pull a
-  // newer runtime than the CLI was built against. Caret lets users receive
-  // backwards-compatible patch updates via `bun install`.
-  const deps = (pkg["dependencies"] as Record<string, string> | undefined) ?? {}
+  // Pin runtime deps to the CLI version so they never outrun the CLI.
+  const deps = pkg.dependencies ?? {}
   const range = `^${VERSION}`
   if (!deps["@vorn/core"]) deps["@vorn/core"] = range
   if (!deps["@vorn/host"]) deps["@vorn/host"] = range
-  pkg["dependencies"] = deps
+  pkg.dependencies = deps
 
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")
-  log.step(
-    `${log.cyan("patch")}   package.json (scripts: dev, build — deps: @vorn/core, @vorn/host)`,
-  )
+  log.step(`${log.cyan("patch")}   package.json`)
+  log.debug(`patchPackageJson: deps @vorn/core, @vorn/host → ${range}`)
 }

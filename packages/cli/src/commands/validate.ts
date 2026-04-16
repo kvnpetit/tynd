@@ -17,6 +17,7 @@ export interface ValidateOptions {
 }
 
 export async function validate(opts: ValidateOptions): Promise<void> {
+  log.debug(`validate: cwd=${opts.cwd}`)
   const issues: Issue[] = []
 
   const pass = (msg: string) => issues.push({ level: "info", message: msg })

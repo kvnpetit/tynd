@@ -1,8 +1,11 @@
 import path from "node:path"
+import * as v from "valibot"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
 import { confirm } from "../lib/prompt.ts"
 import { VERSION } from "../lib/version.ts"
+
+const VersionedSchema = v.object({ version: v.string() })
 
 export interface UpgradeOptions {
   yes: boolean
@@ -13,10 +16,19 @@ async function fetchLatestVersion(pkg: string): Promise<string | null> {
     const res = await fetch(`https://registry.npmjs.org/${pkg}/latest`, {
       signal: AbortSignal.timeout(5000),
     })
-    if (!res.ok) return null
-    const data = (await res.json()) as { version: string }
-    return data.version ?? null
-  } catch {
+    if (!res.ok) {
+      log.debug(`fetchLatestVersion(${pkg}): HTTP ${res.status}`)
+      return null
+    }
+    const parsed = v.safeParse(VersionedSchema, await res.json())
+    if (!parsed.success) {
+      log.debug(`fetchLatestVersion(${pkg}): unexpected response shape`)
+      return null
+    }
+    log.debug(`fetchLatestVersion(${pkg}): ${parsed.output.version}`)
+    return parsed.output.version
+  } catch (e) {
+    log.debug(`fetchLatestVersion(${pkg}): ${e}`)
     return null
   }
 }
@@ -25,8 +37,8 @@ async function fetchLatestVersion(pkg: string): Promise<string | null> {
 async function readInstalledVersion(pkg: string): Promise<string | null> {
   try {
     const pkgJson = path.join(process.cwd(), "node_modules", pkg, "package.json")
-    const data = (await Bun.file(pkgJson).json()) as { version?: string }
-    return data.version ?? null
+    const parsed = v.safeParse(VersionedSchema, await Bun.file(pkgJson).json())
+    return parsed.success ? parsed.output.version : null
   } catch {
     return null
   }

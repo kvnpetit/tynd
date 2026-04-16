@@ -22,5 +22,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest"
+  },
+  "dependencies": {
+    "valibot": "^1.3.1"
   }
 }

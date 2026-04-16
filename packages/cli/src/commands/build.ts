@@ -47,7 +47,9 @@ export async function build(opts: BuildOptions): Promise<void> {
 
   log.blank()
   log.info(`Building ${log.cyan(cfg.runtime)} app`)
+  log.debug(`backend=${cfg.backend} frontendDir=${cfg.frontendDir}`)
   log.blank()
+  const t0 = Date.now()
 
   if (frontend.buildTool !== "none" && frontend.buildCommand) {
     const frontendHash = hashSources(
@@ -161,6 +163,7 @@ export async function build(opts: BuildOptions): Promise<void> {
     : path.join(opts.cwd, "release", appName + binExt)
 
   mkdirSync(path.dirname(outFile), { recursive: true })
+  log.debug(`out=${outFile} host=${hostBin}`)
 
   if (cfg.runtime === "lite") {
     await packageLite({
@@ -181,6 +184,7 @@ export async function build(opts: BuildOptions): Promise<void> {
       iconPath,
     })
   }
+  log.debug(`build finished in ${Date.now() - t0}ms`)
 }
 
 //

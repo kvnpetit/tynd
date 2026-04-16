@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { log } from "./logger.ts"
+import { allDeps, loadPackageJson } from "./pkg.ts"
 
 export type Platform = "windows" | "macos" | "linux"
 export type Arch = "x64" | "arm64"
@@ -230,8 +231,8 @@ async function resolveOutDir(cwd: string, tool: BuildTool): Promise<string> {
 
 /** Detect the frontend framework from package.json dependencies. */
 export async function detectFrontend(cwd: string): Promise<FrontendInfo> {
-  const pkgPath = path.join(cwd, "package.json")
-  if (!existsSync(pkgPath)) {
+  const pkg = await loadPackageJson(cwd)
+  if (!pkg) {
     return {
       buildTool: "none",
       outDir: "frontend",
@@ -240,12 +241,7 @@ export async function detectFrontend(cwd: string): Promise<FrontendInfo> {
       devUrl: null,
     }
   }
-
-  const pkg = (await Bun.file(pkgPath).json()) as {
-    dependencies?: Record<string, string>
-    devDependencies?: Record<string, string>
-  }
-  const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+  const deps = allDeps(pkg)
 
   // Block incompatible server frameworks
   for (const [dep, name] of Object.entries(SERVER_FRAMEWORKS)) {

@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import * as v from "valibot"
 import { log } from "./logger.ts"
 
-export interface CacheEntry {
-  hash: string
-  updatedAt: number
-}
+const CacheEntrySchema = v.object({
+  hash: v.pipe(v.string(), v.minLength(1)),
+  updatedAt: v.pipe(v.number(), v.integer(), v.minValue(0)),
+})
+export type CacheEntry = v.InferOutput<typeof CacheEntrySchema>
 
 /** Directory names always excluded when walking source trees. */
 const ALWAYS_EXCLUDE = new Set([
@@ -83,9 +85,13 @@ export function readCache(cacheDir: string, key: string): CacheEntry | null {
     return null
   }
   try {
-    const entry = JSON.parse(readFileSync(file, "utf8")) as CacheEntry
-    log.debug(`cache hit (${key}): hash=${entry.hash.slice(0, 12)}…`)
-    return entry
+    const parsed = v.safeParse(CacheEntrySchema, JSON.parse(readFileSync(file, "utf8")))
+    if (!parsed.success) {
+      log.debug(`cache miss (${key}): schema mismatch in ${file}`)
+      return null
+    }
+    log.debug(`cache hit (${key}): hash=${parsed.output.hash.slice(0, 12)}…`)
+    return parsed.output
   } catch {
     log.debug(`cache miss (${key}): failed to parse ${file}`)
     return null

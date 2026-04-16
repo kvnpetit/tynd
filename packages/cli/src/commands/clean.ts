@@ -24,10 +24,11 @@ export async function clean(opts: CleanOptions): Promise<void> {
   const includeFrontend = BUILD_OUTPUT_DIRS.has(frontendBasename)
 
   const targets = [
-    ...(includeFrontend ? [frontendAbs] : []), // built frontend (skipped if source dir)
-    path.join(opts.cwd, "release"), // vorn build output
-    path.join(opts.cwd, ".vorn", "cache"), // incremental build cache
+    ...(includeFrontend ? [frontendAbs] : []),
+    path.join(opts.cwd, "release"),
+    path.join(opts.cwd, ".vorn", "cache"),
   ].filter(existsSync)
+  log.debug(`clean targets (${targets.length}): ${targets.join(", ")}`)
 
   log.blank()
 
