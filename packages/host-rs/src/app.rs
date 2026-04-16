@@ -227,11 +227,11 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 let _ = call_tx.send(BackendCall::lifecycle("on_ready"));
             },
 
-            Event::UserEvent(UserEvent::ForceExit) => {
-                if !exit_started.swap(true, Ordering::SeqCst) {
-                    crate::cleanup::run();
-                    std::process::exit(0);
-                }
+            Event::UserEvent(UserEvent::ForceExit)
+                if !exit_started.swap(true, Ordering::SeqCst) =>
+            {
+                crate::cleanup::run();
+                std::process::exit(0);
             },
 
             Event::UserEvent(UserEvent::Backend(evt)) => match evt {
