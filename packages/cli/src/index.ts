@@ -8,12 +8,15 @@ import { info } from "./commands/info.ts"
 import { init } from "./commands/init.ts"
 import { upgrade } from "./commands/upgrade.ts"
 import { validate } from "./commands/validate.ts"
-import { log } from "./lib/logger.ts"
+import { log, setLogLevel } from "./lib/logger.ts"
 import { VERSION } from "./lib/version.ts"
 
 const cli = cac("vorn")
 
 const frameworkValues = FRAMEWORKS.map((f) => f.value).join(" | ")
+
+cli.option("--verbose", "Show debug-level logs")
+cli.option("--quiet", "Suppress everything except errors")
 
 cli
   .command("create [name]", "Scaffold a new Vorn project")
@@ -101,7 +104,8 @@ cli
   .command("clean", "Remove build artifacts")
   .option("--cwd <dir>", "Project directory", { default: process.cwd() })
   .option("-y, --yes", "Skip confirmation", { default: false })
-  .action(async (opts: { cwd: string; yes: boolean }) => {
+  .option("-n, --dry-run", "Show what would be deleted without deleting", { default: false })
+  .action(async (opts: { cwd: string; yes: boolean; dryRun: boolean }) => {
     await clean(opts)
   })
 
@@ -120,9 +124,13 @@ cli
     await upgrade(opts)
   })
 
-cli.command("info", "Show environment and project info").action(async () => {
-  await info()
-})
+cli
+  .command("info", "Show environment and project info")
+  .option("--cwd <dir>", "Project directory", { default: process.cwd() })
+  .option("--json", "Output as JSON", { default: false })
+  .action(async (opts: { cwd: string; json: boolean }) => {
+    await info(opts)
+  })
 
 cli.help()
 cli.version(VERSION)
@@ -131,6 +139,24 @@ cli.version(VERSION)
 if (process.argv.slice(2).length === 0) {
   cli.outputHelp()
   process.exit(0)
+}
+
+// Parse global verbosity flags early so they take effect across all commands.
+const rawArgs = process.argv.slice(2)
+if (rawArgs.includes("--verbose")) setLogLevel("verbose")
+else if (rawArgs.includes("--quiet")) setLogLevel("quiet")
+
+// Typo suggestion: if the first positional isn't a known command, propose the
+// closest match before cac prints its generic "Unknown command" error.
+const KNOWN_COMMANDS = ["create", "dev", "build", "init", "clean", "validate", "upgrade", "info"]
+const firstArg = rawArgs.find((a) => !a.startsWith("-"))
+if (firstArg && !KNOWN_COMMANDS.includes(firstArg)) {
+  const suggestion = closestCommand(firstArg, KNOWN_COMMANDS)
+  if (suggestion) {
+    process.stderr.write(`\n  error: unknown command "${firstArg}"\n`)
+    process.stderr.write(`         did you mean ${log.cyan(`vorn ${suggestion}`)}?\n\n`)
+    process.exit(1)
+  }
 }
 
 try {
@@ -150,4 +176,36 @@ try {
     process.exit(1)
   }
   throw err
+}
+
+/**
+ * Find the command with the smallest Levenshtein distance to `input`, but only
+ * return it if the match is close enough (distance ≤ half the input length).
+ */
+function closestCommand(input: string, commands: string[]): string | null {
+  let best: { cmd: string; dist: number } | null = null
+  for (const cmd of commands) {
+    const d = levenshtein(input, cmd)
+    if (!best || d < best.dist) best = { cmd, dist: d }
+  }
+  if (!best) return null
+  return best.dist <= Math.max(1, Math.floor(input.length / 2)) ? best.cmd : null
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length
+  const n = b.length
+  if (m === 0) return n
+  if (n === 0) return m
+  const row = Array.from({ length: n + 1 }, (_, i) => i)
+  for (let i = 1; i <= m; i++) {
+    let prev = i
+    for (let j = 1; j <= n; j++) {
+      const cur = a[i - 1] === b[j - 1] ? row[j - 1]! : Math.min(row[j - 1]!, row[j]!, prev) + 1
+      row[j - 1] = prev
+      prev = cur
+    }
+    row[n] = prev
+  }
+  return row[n]!
 }

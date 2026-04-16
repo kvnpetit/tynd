@@ -58,18 +58,18 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
     `@vorn/core  ${log.gray(coreCurrentStr)} → ${Bun.semver.order(coreLatest, coreCurrentStr) > 0 ? log.cyan(coreLatest) : log.gray(coreLatest)}`,
   )
 
-  // Check optional runtime packages
-  const runtimePkgs = ["@vorn/full", "@vorn/lite"] as const
+  // @vorn/host ships the pre-built native binaries for both runtimes.
   const runtimeResults: Array<{ name: string; current: string; latest: string }> = []
-  for (const pkg of runtimePkgs) {
-    const current = await readInstalledVersion(pkg)
-    if (current === null) continue
-    const latest = await fetchLatestVersion(pkg)
-    if (latest) {
+  const hostCurrent = await readInstalledVersion("@vorn/host")
+  if (hostCurrent !== null) {
+    const hostLatest = await fetchLatestVersion("@vorn/host")
+    if (hostLatest) {
       log.step(
-        `${pkg}  ${log.gray(current)} → ${Bun.semver.order(latest, current) > 0 ? log.cyan(latest) : log.gray(latest)}`,
+        `@vorn/host  ${log.gray(hostCurrent)} → ${Bun.semver.order(hostLatest, hostCurrent) > 0 ? log.cyan(hostLatest) : log.gray(hostLatest)}`,
       )
-      if (Bun.semver.order(latest, current) > 0) runtimeResults.push({ name: pkg, current, latest })
+      if (Bun.semver.order(hostLatest, hostCurrent) > 0) {
+        runtimeResults.push({ name: "@vorn/host", current: hostCurrent, latest: hostLatest })
+      }
     }
   }
 

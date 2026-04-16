@@ -7,6 +7,7 @@ import { confirm } from "../lib/prompt.ts"
 export interface CleanOptions {
   cwd: string
   yes: boolean
+  dryRun: boolean
 }
 
 // Build output dir names — only delete frontendDir when it matches these
@@ -36,11 +37,17 @@ export async function clean(opts: CleanOptions): Promise<void> {
     return
   }
 
-  log.info("Will delete:")
+  log.info(opts.dryRun ? "Would delete:" : "Will delete:")
   for (const t of targets) {
     log.step(path.relative(opts.cwd, t))
   }
   log.blank()
+
+  if (opts.dryRun) {
+    log.info(log.gray("Dry run — nothing was deleted."))
+    log.blank()
+    return
+  }
 
   if (!opts.yes) {
     const ok = await confirm("Proceed with deletion?")
