@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vorn IPC Benchmark</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+
+    :root {
+      --bg:      #0f1117;
+      --surface: #1a1d27;
+      --border:  #2a2d3a;
+      --text:    #e2e6f0;
+      --dim:     #6b7280;
+      --accent:  #6c85f7;
+      --lite:    #34d399;
+      --full:    #f59e0b;
+      --ok:      #4ade80;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 28px 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px }
+
+    .runtime-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--border);
+      color: var(--dim);
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    .badge-lite { background: #064e3b; color: var(--lite) }
+    .badge-full { background: #451a03; color: var(--full) }
+    .badge-dev  { background: #1e293b; color: #94a3b8 }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .run-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .run-btn:hover    { opacity: 0.85 }
+    .run-btn:disabled { opacity: 0.4; cursor: not-allowed }
+
+    .status {
+      font-size: 13px;
+      color: var(--dim);
+    }
+    .status.done { color: var(--ok) }
+
+    .log {
+      list-style: none;
+      font-size: 12px;
+      color: var(--dim);
+      line-height: 2;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .log li::before { content: "✓  "; color: var(--ok) }
+    .log li.na::before { content: "—  "; color: var(--dim) }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Vorn Benchmark</h1>
+    <span class="runtime-badge">…</span>
+  </header>
+
+  <div class="controls">
+    <button class="run-btn">▶ Run</button>
+    <span class="status">Ready</span>
+  </div>
+
+  <ul class="log results-log"></ul>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
