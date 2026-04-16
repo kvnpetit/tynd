@@ -4,6 +4,7 @@ import path from "node:path"
 import { detectFrontend } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
 import { backendMain, vornConfig } from "../lib/template.ts"
+import { VERSION } from "../lib/version.ts"
 
 export interface InitOptions {
   cwd: string
@@ -53,8 +54,16 @@ export async function init(opts: InitOptions): Promise<void> {
   log.blank()
 
   const frontendDir = hasFrontend ? frontend.outDir : "frontend"
+  // Without a framework, Bun.build turns frontend/main.ts → frontend/main.js
+  // on dev/build. The generated HTML references the produced .js file.
+  const frontendEntry = hasFrontend ? undefined : "frontend/main.ts"
 
-  await write(opts.cwd, "vorn.config.ts", vornConfig(name, opts.runtime, frontendDir), opts.force)
+  await write(
+    opts.cwd,
+    "vorn.config.ts",
+    vornConfig(name, opts.runtime, frontendDir, frontendEntry),
+    opts.force,
+  )
 
   const backendRelFront = hasFrontend
     ? `/../${frontendDir}` // e.g. /../dist
@@ -163,10 +172,13 @@ async function patchPackageJson(pkgPath: string, pkg: Record<string, unknown>): 
   scripts["build"] = "vorn build"
   pkg["scripts"] = scripts
 
-  // Ensure required vorn packages are listed as dependencies
+  // Pin to the CLI's own version so `vorn dev` / `vorn build` never pull a
+  // newer runtime than the CLI was built against. Caret lets users receive
+  // backwards-compatible patch updates via `bun install`.
   const deps = (pkg["dependencies"] as Record<string, string> | undefined) ?? {}
-  if (!deps["@vorn/core"]) deps["@vorn/core"] = "latest"
-  if (!deps["@vorn/host"]) deps["@vorn/host"] = "latest"
+  const range = `^${VERSION}`
+  if (!deps["@vorn/core"]) deps["@vorn/core"] = range
+  if (!deps["@vorn/host"]) deps["@vorn/host"] = range
   pkg["dependencies"] = deps
 
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")

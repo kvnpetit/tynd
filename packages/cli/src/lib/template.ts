@@ -5,14 +5,20 @@
  * These templates only generate the vorn-specific files.
  */
 
-export function vornConfig(name: string, runtime: "full" | "lite", frontendDir = "dist"): string {
+export function vornConfig(
+  name: string,
+  runtime: "full" | "lite",
+  frontendDir = "dist",
+  frontendEntry?: string,
+): string {
+  const entryLine = frontendEntry ? `  frontendEntry: "${frontendEntry}",\n` : ""
   return `import type { VornConfig } from "@vorn/cli"
 
 // ${name} — vorn configuration
 export default {
   runtime:     "${runtime}",
   backend:     "backend/main.ts",
-  frontendDir: "${frontendDir}",
+${entryLine}  frontendDir: "${frontendDir}",
 } satisfies VornConfig
 `
 }

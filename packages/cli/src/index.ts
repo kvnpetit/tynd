@@ -19,38 +19,48 @@ cli
   .command("create [name]", "Scaffold a new Vorn project")
   .option("-f, --framework <fw>", `Frontend framework: ${frameworkValues}`)
   .option("-r, --runtime <runtime>", "Runtime: full | lite")
-  .action(async (name: string | undefined, opts: { framework?: string; runtime?: string }) => {
-    const { text, select } = await import("./lib/prompt.ts")
+  .option("--no-install", "Skip dependency installation prompt")
+  .action(
+    async (
+      name: string | undefined,
+      opts: { framework?: string; runtime?: string; install?: boolean },
+    ) => {
+      const { text, select } = await import("./lib/prompt.ts")
 
-    // Resolve each arg independently — prompt only for what is missing
-    const resolvedName =
-      name ??
-      (await (async () => {
-        log.blank()
-        log.info("Create a new Vorn project")
-        log.blank()
-        return text("Project name", "my-app")
-      })())
+      // Resolve each arg independently — prompt only for what is missing
+      const resolvedName =
+        name ??
+        (await (async () => {
+          log.blank()
+          log.info("Create a new Vorn project")
+          log.blank()
+          return text("Project name", "my-app")
+        })())
 
-    const resolvedFw: Framework =
-      (FRAMEWORKS.find((f) => f.value === opts.framework)?.value as Framework | undefined) ??
-      (await select<Framework>("Frontend framework", [...FRAMEWORKS]))
+      const resolvedFw: Framework =
+        (FRAMEWORKS.find((f) => f.value === opts.framework)?.value as Framework | undefined) ??
+        (await select<Framework>("Frontend framework", [...FRAMEWORKS]))
 
-    const resolvedRuntime: "full" | "lite" =
-      opts.runtime === "full" || opts.runtime === "lite"
-        ? opts.runtime
-        : await select<"full" | "lite">("Backend runtime", [
-            { value: "full", label: "full", hint: "full — Node.js APIs, npm ecosystem" },
-            {
-              value: "lite",
-              label: "lite",
-              hint: "smaller binary (~10 MB), no file system or SQLite",
-            },
-          ])
+      const resolvedRuntime: "full" | "lite" =
+        opts.runtime === "full" || opts.runtime === "lite"
+          ? opts.runtime
+          : await select<"full" | "lite">("Backend runtime", [
+              { value: "full", label: "full", hint: "full — Node.js APIs, npm ecosystem" },
+              {
+                value: "lite",
+                label: "lite",
+                hint: "smaller binary (~10 MB), no file system or SQLite",
+              },
+            ])
 
-    log.blank()
-    await create(resolvedName, { framework: resolvedFw, runtime: resolvedRuntime })
-  })
+      log.blank()
+      await create(resolvedName, {
+        framework: resolvedFw,
+        runtime: resolvedRuntime,
+        noInstall: opts.install === false,
+      })
+    },
+  )
 
 cli
   .command("dev", "Start the app in development mode")

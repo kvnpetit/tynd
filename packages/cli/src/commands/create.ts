@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
+import { confirm } from "../lib/prompt.ts"
 import { init } from "./init.ts"
 
 export const FRAMEWORKS = [
@@ -29,6 +30,8 @@ export type Framework = (typeof FRAMEWORKS)[number]["value"]
 export interface CreateOptions {
   framework: Framework
   runtime: "full" | "lite"
+  /** Skip the install prompt and never run `bun install`. Default: ask. */
+  noInstall?: boolean
 }
 
 export async function create(name: string, opts: CreateOptions): Promise<void> {
@@ -76,20 +79,23 @@ export async function create(name: string, opts: CreateOptions): Promise<void> {
 
   await init({ cwd: projectDir, runtime: opts.runtime, force: false })
 
-  log.step("Installing dependencies…")
-  try {
-    await exec("bun", ["install"], { cwd: projectDir })
-    log.success("Dependencies installed")
-  } catch (err) {
-    log.warn(`bun install failed: ${err}`)
-    log.dim("  Once published: bun install")
-    log.dim("  Local dev:      bun link @vorn/cli && bun link @vorn/core")
+  const shouldInstall = opts.noInstall ? false : await confirm("Install dependencies now?", true)
+
+  if (shouldInstall) {
+    log.step("Installing dependencies…")
+    try {
+      await exec("bun", ["install"], { cwd: projectDir })
+      log.success("Dependencies installed")
+    } catch (err) {
+      log.warn(`bun install failed: ${err}`)
+    }
   }
 
   log.blank()
   log.success(`${log.bold(name)} is ready!`)
   log.blank()
   log.dim(`  cd ${name}`)
+  if (!shouldInstall) log.dim(`  bun install`)
   log.dim(`  vorn dev`)
   log.blank()
 }
