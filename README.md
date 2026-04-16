@@ -41,7 +41,7 @@ TypeScript backend                         Native OS window
 | Binary size | ~5 MB smaller | Larger (runtime embedded) |
 | Startup | ~20 ms | ~80 ms |
 
-→ See [`docs/runtimes.md`](docs/runtimes.md) for the full comparison (APIs, performance, detection, examples).
+→ See [`RUNTIMES.md`](RUNTIMES.md) for the full comparison (APIs, performance, detection, examples).
 
 ---
 
@@ -367,7 +367,7 @@ export default {
 
 | Field | Default | Description |
 |---|---|---|
-| `runtime` | `"full"` | `"full"` or `"lite"` — see [docs/runtimes.md](docs/runtimes.md) |
+| `runtime` | `"full"` | `"full"` or `"lite"` — see [RUNTIMES.md](RUNTIMES.md) |
 | `backend` | `"backend/main.ts"` | Backend entry file |
 | `frontendDir` | `"frontend"` | Built frontend output directory |
 | `frontendEntry` | — | Simple TS/JS entry (no framework) — auto-bundled by vorn |
