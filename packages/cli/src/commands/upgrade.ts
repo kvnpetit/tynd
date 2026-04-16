@@ -32,24 +32,6 @@ async function readInstalledVersion(pkg: string): Promise<string | null> {
   }
 }
 
-function compareSemver(a: string, b: string): number {
-  const cleanA = a.split("-")[0]!
-  const cleanB = b.split("-")[0]!
-  const pa = cleanA.split(".").map((n) => Number.parseInt(n, 10) || 0)
-  const pb = cleanB.split(".").map((n) => Number.parseInt(n, 10) || 0)
-  for (let i = 0; i < 3; i++) {
-    const da = pa[i] ?? 0
-    const db = pb[i] ?? 0
-    if (da > db) return 1
-    if (da < db) return -1
-  }
-  const hasPreA = a.includes("-")
-  const hasPreB = b.includes("-")
-  if (!hasPreA && hasPreB) return 1
-  if (hasPreA && !hasPreB) return -1
-  return 0
-}
-
 export async function upgrade(opts: UpgradeOptions): Promise<void> {
   log.blank()
   log.info("Checking for updates…")
@@ -70,10 +52,10 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
   const coreCurrentStr = coreCurrent ?? VERSION
 
   log.step(
-    `@vorn/cli   ${log.gray(cliCurrent)}      → ${compareSemver(cliLatest, cliCurrent) > 0 ? log.cyan(cliLatest) : log.gray(cliLatest)}`,
+    `@vorn/cli   ${log.gray(cliCurrent)}      → ${Bun.semver.order(cliLatest, cliCurrent) > 0 ? log.cyan(cliLatest) : log.gray(cliLatest)}`,
   )
   log.step(
-    `@vorn/core  ${log.gray(coreCurrentStr)} → ${compareSemver(coreLatest, coreCurrentStr) > 0 ? log.cyan(coreLatest) : log.gray(coreLatest)}`,
+    `@vorn/core  ${log.gray(coreCurrentStr)} → ${Bun.semver.order(coreLatest, coreCurrentStr) > 0 ? log.cyan(coreLatest) : log.gray(coreLatest)}`,
   )
 
   // Check optional runtime packages
@@ -85,16 +67,16 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
     const latest = await fetchLatestVersion(pkg)
     if (latest) {
       log.step(
-        `${pkg}  ${log.gray(current)} → ${compareSemver(latest, current) > 0 ? log.cyan(latest) : log.gray(latest)}`,
+        `${pkg}  ${log.gray(current)} → ${Bun.semver.order(latest, current) > 0 ? log.cyan(latest) : log.gray(latest)}`,
       )
-      if (compareSemver(latest, current) > 0) runtimeResults.push({ name: pkg, current, latest })
+      if (Bun.semver.order(latest, current) > 0) runtimeResults.push({ name: pkg, current, latest })
     }
   }
 
   log.blank()
 
   const corePkgsNeedUpgrade =
-    compareSemver(cliLatest, cliCurrent) > 0 || compareSemver(coreLatest, coreCurrentStr) > 0
+    Bun.semver.order(cliLatest, cliCurrent) > 0 || Bun.semver.order(coreLatest, coreCurrentStr) > 0
 
   const needsUpgrade = corePkgsNeedUpgrade || runtimeResults.length > 0
 
