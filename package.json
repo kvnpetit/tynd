@@ -1,6 +1,6 @@
 {
   "name": "vorn",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -13,12 +13,10 @@
     "format:check": "biome format",
     "check": "biome check --write",
     "check:ts": "biome ci && bun run typecheck",
-
     "fmt:rust": "cargo fmt --all",
     "fmt:rust:check": "cargo fmt --all -- --check",
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
     "check:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo check --workspace --all-targets",
-
     "check:all": "bun run check:ts && bun run check:rust",
     "fix:all": "biome check --write && cargo fmt --all"
   },
