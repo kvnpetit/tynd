@@ -14,8 +14,8 @@ app.onReady(() => {
 
 app.start({
   window: {
-    title:  "lite",
-    width:  1200,
+    title: "lite",
+    width: 1200,
     height: 800,
     center: true,
   },

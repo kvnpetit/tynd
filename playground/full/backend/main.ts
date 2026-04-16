@@ -13,10 +13,10 @@ app.onReady(() => {
 })
 
 app.start({
-  frontendDir: import.meta.dir + "/../dist",
+  frontendDir: `${import.meta.dir}/../dist`,
   window: {
-    title:  "full",
-    width:  1200,
+    title: "full",
+    width: 1200,
     height: 800,
     center: true,
   },
