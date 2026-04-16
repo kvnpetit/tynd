@@ -1,0 +1,134 @@
+name: Build & Publish Host
+
+on:
+  push:
+    tags:
+      - "host-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g. host-v0.1.0)"
+        required: true
+
+concurrency:
+  group: build-host-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: windows-x64
+            full_bin: target/release/vorn-full.exe
+            lite_bin: target/release/vorn-lite.exe
+            full_asset: vorn-full-windows-x64.exe
+            lite_asset: vorn-lite-windows-x64.exe
+
+          - runner: ubuntu-latest
+            target: linux-x64
+            full_bin: target/release/vorn-full
+            lite_bin: target/release/vorn-lite
+            full_asset: vorn-full-linux-x64
+            lite_asset: vorn-lite-linux-x64
+
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+            full_bin: target/release/vorn-full
+            lite_bin: target/release/vorn-lite
+            full_asset: vorn-full-linux-arm64
+            lite_asset: vorn-lite-linux-arm64
+
+          - runner: macos-13
+            target: macos-x64
+            full_bin: target/release/vorn-full
+            lite_bin: target/release/vorn-lite
+            full_asset: vorn-full-macos-x64
+            lite_asset: vorn-lite-macos-x64
+
+          - runner: macos-latest
+            target: macos-arm64
+            full_bin: target/release/vorn-full
+            lite_bin: target/release/vorn-lite
+            full_asset: vorn-full-macos-arm64
+            lite_asset: vorn-lite-macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Install system dependencies (Linux)
+        if: startsWith(matrix.runner, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo clippy (release)
+        run: cargo clippy --release --workspace --all-targets -- -D warnings
+
+      - name: Build vorn-full
+        run: cargo build --release -p vorn-full
+
+      - name: Build vorn-lite
+        run: cargo build --release -p vorn-lite
+
+      - name: Stage release assets
+        shell: bash
+        run: |
+          cp "${{ matrix.full_bin }}" "${{ matrix.full_asset }}"
+          cp "${{ matrix.lite_bin }}" "${{ matrix.lite_asset }}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            ${{ matrix.full_asset }}
+            ${{ matrix.lite_asset }}
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          files: |
+            ${{ matrix.full_asset }}
+            ${{ matrix.lite_asset }}
+
+  publish-npm:
+    name: Publish @vorn/host
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish @vorn/host
+        run: npm publish --access public --provenance
+        working-directory: packages/host
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
