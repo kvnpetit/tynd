@@ -182,14 +182,14 @@ async function resolveOutDir(cwd: string, tool: BuildTool): Promise<string> {
               unknown
             >
             const builder = build?.["builder"] as string | undefined
-            const outPath = (build?.["options"] as Record<string, unknown>)?.["outputPath"]
-            if (typeof outPath === "string") {
-              // Angular 17+ (@angular/build:application) puts browser assets in <outputPath>/browser/
-              if (builder?.includes("@angular/build:application")) {
-                return `${outPath}/browser`
-              }
-              return outPath
+            const outPathRaw = (build?.["options"] as Record<string, unknown>)?.["outputPath"]
+            // Angular CLI defaults to `dist/<project-name>` when outputPath is omitted.
+            const outPath = typeof outPathRaw === "string" ? outPathRaw : `dist/${projectName}`
+            // Angular 17+ (@angular/build:application) puts browser assets in <outputPath>/browser/
+            if (builder?.includes("@angular/build:application")) {
+              return `${outPath}/browser`
             }
+            return outPath
           }
         }
       } catch {
