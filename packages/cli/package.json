@@ -1,6 +1,6 @@
 {
   "name": "@vorn/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Vorn framework CLI — create, dev, build",
   "private": false,
   "type": "module",
@@ -8,7 +8,10 @@
     "type": "git",
     "url": "https://github.com/kvnpetit/vorn"
   },
-  "files": ["bin", "src/lib/config.ts"],
+  "files": [
+    "bin",
+    "src/lib/config.ts"
+  ],
   "bin": {
     "vorn": "./bin/index.js"
   },
