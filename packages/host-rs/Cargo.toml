@@ -25,7 +25,7 @@ image.workspace       = true
 muda.workspace        = true
 tray-icon.workspace   = true
 dirs.workspace        = true
-flate2.workspace      = true
+zstd.workspace        = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 arboard = { version = "3", features = ["wayland-data-control"] }

@@ -18,9 +18,9 @@
 //!
 //! Entry names (ORDER MATTERS — bun.version MUST be first):
 //!   - "bun.version"        — UTF-8 version string, used as cache key
-//!   - "bun.gz"             — gzip-compressed Bun binary
-//!   - "bundle.js"          — backend JS bundle (plain, not gzipped)
-//!   - "frontend/<path>.gz" — gzipped frontend assets
+//!   - "bun.zst"            — zstd-compressed Bun binary
+//!   - "bundle.js"          — backend JS bundle (plain, not compressed)
+//!   - "frontend/<path>.zst" — zstd-compressed frontend assets
 //!   - "icon.ico"           — optional application icon
 //!
 //! At startup, `try_load_embedded()` checks for the magic trailer.
@@ -30,8 +30,6 @@
 use std::fs;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
-
-use flate2::read::GzDecoder;
 
 const MAGIC: &[u8; 8] = b"VORNPKG\0";
 /// section_size(u64) + magic(8) = 16 bytes
@@ -138,7 +136,7 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
                 bun_path_opt = Some(cache_path);
             },
 
-            "bun.gz" => {
+            "bun.zst" => {
                 let cache_path = if let Some(p) = &bun_path_opt {
                     p.clone()
                 } else {
@@ -166,19 +164,19 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
                     }
 
                     let compressed_reader = (&mut f).take(data_len);
-                    let mut decoder = GzDecoder::new(compressed_reader);
+                    let mut decoder = zstd::Decoder::new(compressed_reader).ok().or_else(|| {
+                        vorn_host::vorn_log!("Failed to init zstd decoder");
+                        None
+                    })?;
                     match fs::File::create(&cache_path) {
                         Ok(out_file) => {
                             let mut writer = BufWriter::new(out_file);
                             if let Err(e) = std::io::copy(&mut decoder, &mut writer) {
                                 vorn_host::vorn_log!("Failed to decompress runtime: {e}");
                                 let _ = fs::remove_file(&cache_path);
-                                // Drain remaining compressed bytes so the file cursor
-                                // lands at the next pack entry, not mid-block.
                                 std::io::copy(&mut decoder, &mut std::io::sink()).ok();
                             } else {
                                 let _ = writer.flush();
-                                // Make executable on Unix
                                 #[cfg(unix)]
                                 {
                                     use std::os::unix::fs::PermissionsExt;
@@ -192,9 +190,7 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
                         },
                         Err(e) => {
                             vorn_host::vorn_log!("Failed to create cache file: {e}");
-                            // Drain remaining compressed bytes
-                            let mut drain = decoder;
-                            std::io::copy(&mut drain, &mut std::io::sink()).ok();
+                            std::io::copy(&mut decoder, &mut std::io::sink()).ok();
                         },
                     }
                 }

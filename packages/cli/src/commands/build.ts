@@ -12,9 +12,9 @@ import {
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
-import { gzip as gzipCb, gzipSync } from "node:zlib"
+import { zstdCompress as zstdCompressCb, zstdCompressSync } from "node:zlib"
 
-const gzipAsync = promisify(gzipCb)
+const zstdAsync = promisify(zstdCompressCb)
 
 import { buildFrontendEntry, buildFullBundle, buildLiteBundle } from "../lib/bundle.ts"
 import { hashSources, readCache, writeCache } from "../lib/cache.ts"
@@ -204,7 +204,7 @@ interface LitePackOpts {
 async function packageLite(o: LitePackOpts): Promise<void> {
   log.step("Packing assets into binary…")
 
-  // bundle.js: data entry — never auto-gzipped (QuickJS reads it directly)
+  // bundle.js: data entry — never auto-compressed (QuickJS reads it directly)
   const packFiles: PackEntry[] = [
     { rel: "bundle.js", data: readFileSync(o.backendBundle) },
     ...o.frontendFiles.map((f) => ({ rel: `frontend/${f.rel}`, abs: f.abs })),
@@ -252,7 +252,7 @@ async function packageLite(o: LitePackOpts): Promise<void> {
 }
 
 //
-// Compresses the local Bun binary with gzip and packs it into the vorn-full
+// Compresses the local Bun binary with zstd and packs it into the vorn-full
 // host binary using the VORNPKG\0 format (same as lite mode).
 // At runtime, Rust decompresses Bun once to a persistent cache dir.
 
@@ -269,7 +269,7 @@ async function packageFull(o: FullPackOpts): Promise<void> {
   log.step("Compressing runtime (this may take a moment)…")
   const bunBin = process.execPath
 
-  // On Windows: embed app icon into the bun binary copy before gzipping,
+  // On Windows: embed app icon into the bun binary copy before compression,
   // so the extracted subprocess shows the app icon in Task Manager.
   let bunSrcPath = bunBin
   let tmpBunDir: string | null = null
@@ -282,7 +282,7 @@ async function packageFull(o: FullPackOpts): Promise<void> {
   }
 
   const bunBytes = readFileSync(bunSrcPath)
-  const bunCompressed = Buffer.from(await gzipAsync(bunBytes, { level: 9 }))
+  const bunCompressed = Buffer.from(await zstdAsync(bunBytes))
   if (tmpBunDir)
     try {
       rmSync(tmpBunDir, { recursive: true })
@@ -293,12 +293,12 @@ async function packageFull(o: FullPackOpts): Promise<void> {
 
   log.step("Packing assets…")
 
-  // bun.version MUST be first — Rust reads it to determine cache path before bun.gz
+  // bun.version MUST be first — Rust reads it to determine cache path before bun.zst
   const packFiles: PackEntry[] = [
     { rel: "bun.version", data: Buffer.from(Bun.version, "utf8") },
-    { rel: "bun.gz", data: bunCompressed },
-    { rel: "bundle.js", data: readFileSync(o.backendBundle) }, // NOT auto-gzipped
-    ...o.frontendFiles.map((f) => ({ rel: `frontend/${f.rel}`, abs: f.abs })), // auto-gzipped by packAssets
+    { rel: "bun.zst", data: bunCompressed },
+    { rel: "bundle.js", data: readFileSync(o.backendBundle) }, // NOT auto-compressed
+    ...o.frontendFiles.map((f) => ({ rel: `frontend/${f.rel}`, abs: f.abs })),
   ]
 
   // Pack icon — convert PNG → ICO if needed
@@ -346,7 +346,7 @@ const TEXT_EXTS = /\.(html|htm|js|mjs|cjs|css|json|svg)$/i
 
 /**
  * A pack entry is either:
- *  - `{ rel, abs }` — read from disk, auto-gzip text files (TEXT_EXTS) and append .gz suffix
+ *  - `{ rel, abs }` — read from disk, auto-compress text files (TEXT_EXTS) with zstd and append .zst suffix
  *  - `{ rel, data }` — pre-processed buffer, packed as-is (rel and data are already final)
  */
 type PackEntry = { rel: string; abs: string } | { rel: string; data: Buffer }
@@ -369,16 +369,16 @@ function packAssets(files: PackEntry[]): Buffer {
       packRel = entry.rel
       data = entry.data
     } else {
-      // File on disk: auto-gzip text files
-      const shouldGzip = TEXT_EXTS.test(entry.rel)
-      packRel = shouldGzip ? `${entry.rel}.gz` : entry.rel
+      // File on disk: auto-compress text files with zstd
+      const shouldCompress = TEXT_EXTS.test(entry.rel)
+      packRel = shouldCompress ? `${entry.rel}.zst` : entry.rel
       let raw: Buffer
       try {
         raw = readFileSync(entry.abs)
       } catch (e) {
         throw new Error(`Failed to read asset "${entry.rel}": ${e}`)
       }
-      data = shouldGzip ? gzipSync(raw, { level: 9 }) : raw
+      data = shouldCompress ? Buffer.from(zstdCompressSync(raw)) : raw
     }
 
     const pathBytes = Buffer.from(packRel, "utf8")

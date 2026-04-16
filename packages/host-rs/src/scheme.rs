@@ -1,5 +1,4 @@
-use flate2::read::GzDecoder;
-use std::{borrow::Cow, collections::HashMap, io::Read, path::PathBuf, sync::OnceLock};
+use std::{borrow::Cow, collections::HashMap, path::PathBuf, sync::OnceLock};
 use wry::http::{Request, Response, StatusCode};
 
 struct Asset {
@@ -34,7 +33,7 @@ impl AssetCache {
     }
 }
 
-#[allow(clippy::case_sensitive_file_extension_comparisons)] // .gz suffix written by CLI, always lowercase
+#[allow(clippy::case_sensitive_file_extension_comparisons)] // .zst suffix written by CLI, always lowercase
 fn walk(base: &PathBuf, cur: &PathBuf, map: &mut HashMap<String, Asset>) {
     let Ok(entries) = std::fs::read_dir(cur) else {
         return;
@@ -53,18 +52,18 @@ fn walk(base: &PathBuf, cur: &PathBuf, map: &mut HashMap<String, Asset>) {
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .unwrap_or_default();
 
-        // Detect gzip: strip .gz suffix, decompress bytes in memory.
+        // Detect zstd: strip .zst suffix, decompress bytes in memory.
         // Compression is only for binary size — assets are served uncompressed
         // because wry's custom protocol does not process Content-Encoding.
-        let (key, bytes) = if rel.ends_with(".gz") {
-            let key = rel[..rel.len() - 3].to_owned();
-            let mut dec = GzDecoder::new(bytes.as_slice());
-            let mut out = Vec::new();
-            if let Err(e) = dec.read_to_end(&mut out) {
-                eprintln!("[vorn] Failed to decompress asset '{rel}': {e}");
-                continue;
+        let (key, bytes) = if rel.ends_with(".zst") {
+            let key = rel[..rel.len() - 4].to_owned();
+            match zstd::decode_all(bytes.as_slice()) {
+                Ok(out) => (key, out),
+                Err(e) => {
+                    eprintln!("[vorn] Failed to decompress asset '{rel}': {e}");
+                    continue;
+                },
             }
-            (key, out)
         } else {
             (rel.clone(), bytes)
         };
@@ -152,7 +151,7 @@ pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'sta
 
 fn mime_for(path: &std::path::Path) -> &'static str {
     // If the extension is "gz", look at the extension before it
-    // e.g. "index.js.gz" → use "js" to determine MIME
+    // e.g. "index.js.zst" → use "js" to determine MIME
     let ext = match path.extension().and_then(|e| e.to_str()) {
         Some("gz") => path
             .file_stem()
