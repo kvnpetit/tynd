@@ -1,0 +1,15 @@
+# Normalize line endings — prevent CRLF drift on Windows
+* text=auto eol=lf
+
+# Binary files
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.wasm binary
