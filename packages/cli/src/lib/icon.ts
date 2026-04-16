@@ -1,17 +1,8 @@
-/**
- * Icon utilities for vorn build — fully cross-platform (pure TS/JS + WASM).
- *
- * Conversion pipeline:
- *   SVG  → PNG  via @resvg/resvg-js (WASM, no native modules)
- *   PNG  → ICO  via pngToIco (pure Buffer manipulation)
- *   ICO/PNG → PE  via resedit (pure JS PE resource editor)
- */
-
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { log } from "./logger.ts"
 
-// Ordered by preference: ICO best for Windows PE, then PNG, then SVG
+// Ordered by preference: ICO best for Windows PE, then PNG, then SVG.
 const ICON_CANDIDATES = [
   "public/favicon.ico",
   "public/favicon.png",
@@ -19,7 +10,7 @@ const ICON_CANDIDATES = [
   "public/icon.png",
   "public/logo.ico",
   "public/logo.png",
-  "public/favicon.svg", // SVG — auto-converted if found
+  "public/favicon.svg",
   "public/icon.svg",
   "public/logo.svg",
   "assets/icon.ico",
@@ -32,10 +23,7 @@ const RASTER_EXTS = new Set([".ico", ".png", ".jpg", ".jpeg", ".webp"])
 
 /**
  * Find the best icon for the project, auto-converting SVG → PNG if needed.
- * Returns absolute path to a raster icon file, or null if nothing found.
- *
- * Converted PNGs are written to `.vorn/cache/` (never inside `public/`)
- * so Vite and other bundlers never pick them up as static assets.
+ * Converted PNGs go to `.vorn/cache/` so bundlers like Vite don't pick them up.
  */
 export async function detectIcon(cwd: string, configIcon?: string): Promise<string | null> {
   const candidates = configIcon
@@ -51,7 +39,6 @@ export async function detectIcon(cwd: string, configIcon?: string): Promise<stri
     if (RASTER_EXTS.has(ext)) return abs
 
     if (ext === ".svg" && svgCandidate === null) {
-      // Check for companion raster (favicon.svg → favicon.png / favicon.ico)
       const base = abs.slice(0, -4)
       for (const rExt of [".ico", ".png", ".jpg"]) {
         const companion = base + rExt
@@ -61,11 +48,8 @@ export async function detectIcon(cwd: string, configIcon?: string): Promise<stri
     }
   }
 
-  // Convert SVG → PNG using @resvg/resvg-js (pure WASM, cross-platform).
-  // Output goes to .vorn/cache/ — never inside public/ so bundlers ignore it.
   if (svgCandidate) {
-    const cacheDir = path.join(cwd, ".vorn", "cache")
-    const outPath = path.join(cacheDir, "icon.png")
+    const outPath = path.join(cwd, ".vorn", "cache", "icon.png")
     const converted = await svgToPng(svgCandidate, outPath)
     if (converted) return converted
     log.warn(
@@ -77,11 +61,7 @@ export async function detectIcon(cwd: string, configIcon?: string): Promise<stri
   return null
 }
 
-/**
- * Convert an SVG file to PNG using @resvg/resvg-js (WASM).
- * Writes the result to `outPath` (caller decides where — use .vorn/cache/).
- * Returns `outPath` on success, or null on failure.
- */
+/** Convert SVG → PNG via @resvg/resvg-js (WASM). Returns outPath on success. */
 export async function svgToPng(svgPath: string, outPath: string): Promise<string | null> {
   try {
     const { Resvg } = await import("@resvg/resvg-js")
@@ -91,19 +71,14 @@ export async function svgToPng(svgPath: string, outPath: string): Promise<string
       fitTo: { mode: "width", value: 256 },
       background: "transparent",
     })
-    const rendered = resvg.render()
-    const pngData = rendered.asPng()
-    writeFileSync(outPath, pngData)
+    writeFileSync(outPath, resvg.render().asPng())
     return outPath
-  } catch (_e) {
+  } catch {
     return null
   }
 }
 
-/**
- * Wrap raw PNG bytes in a minimal ICO container.
- * Modern Windows (Vista+) supports PNG payloads inside ICO files directly.
- */
+/** Wrap raw PNG bytes in a minimal ICO container (Vista+ accepts PNG payloads). */
 export function pngToIco(pngBytes: Buffer): Buffer {
   if (pngBytes.length < 24) throw new Error("Invalid PNG: too small")
 
@@ -115,28 +90,22 @@ export function pngToIco(pngBytes: Buffer): Buffer {
   const dataOffset = 6 + 16 // ICONDIR + ICONDIRENTRY
   const buf = Buffer.allocUnsafe(dataOffset + pngBytes.length)
 
-  buf.writeUInt16LE(0, 0) // reserved
-  buf.writeUInt16LE(1, 2) // type: icon
-  buf.writeUInt16LE(1, 4) // count: 1 entry
+  buf.writeUInt16LE(0, 0)
+  buf.writeUInt16LE(1, 2)
+  buf.writeUInt16LE(1, 4)
   buf.writeUInt8(icoW, 6)
   buf.writeUInt8(icoH, 7)
-  buf.writeUInt8(0, 8) // color count
-  buf.writeUInt8(0, 9) // reserved
-  buf.writeUInt16LE(1, 10) // planes
-  buf.writeUInt16LE(32, 12) // bit count
+  buf.writeUInt8(0, 8)
+  buf.writeUInt8(0, 9)
+  buf.writeUInt16LE(1, 10)
+  buf.writeUInt16LE(32, 12)
   buf.writeUInt32LE(pngBytes.length, 14)
   buf.writeUInt32LE(dataOffset, 18)
   pngBytes.copy(buf, dataOffset)
   return buf
 }
 
-/**
- * Embed an icon into a Windows PE binary using `resedit` (pure JS/TS).
- * Works cross-platform (but only useful for .exe targets of course).
- *
- * Accepts PNG (auto-wrapped in ICO) or ICO.
- * Non-fatal on any error.
- */
+/** Embed an icon into a Windows PE binary. Non-fatal on error. */
 export async function setWindowsExeIcon(
   exePath: string,
   iconPath: string,
@@ -145,37 +114,26 @@ export async function setWindowsExeIcon(
   try {
     const ResEdit = await import("resedit")
 
-    // Resolve ICO data
     const ext = path.extname(iconPath).toLowerCase()
-    let icoData: Buffer
-    if (ext === ".ico") {
-      icoData = readFileSync(iconPath)
-    } else {
-      // PNG / JPG / etc. → wrap in ICO container
-      icoData = pngToIco(readFileSync(iconPath))
-    }
+    const icoData = ext === ".ico" ? readFileSync(iconPath) : pngToIco(readFileSync(iconPath))
 
-    // Parse the PE executable (ignoreCert needed for signed binaries like Bun's)
+    // ignoreCert is required for signed binaries (Bun ships signed).
     const exeData = readFileSync(exePath)
     const exe = ResEdit.NtExecutable.from(exeData, { ignoreCert: true })
     const res = ResEdit.NtExecutableResource.from(exe)
-
-    // Parse the ICO file into individual icon images
     const iconFile = ResEdit.Data.IconFile.from(icoData)
 
-    // Find existing icon group ID or use 1
     const existing = ResEdit.Resource.IconGroupEntry.fromEntries(res.entries)
     const iconGroupID = existing[0]?.id ?? 1
 
-    // Replace (or create) icon group in the resource section
     ResEdit.Resource.IconGroupEntry.replaceIconsForResource(
       res.entries,
       iconGroupID,
-      0, // language
+      0,
       iconFile.icons.map((item) => item.data),
     )
 
-    // Patch version info so Task Manager shows appName instead of "bun"
+    // Rewrite VERSIONINFO so Task Manager shows appName instead of "bun".
     if (appName) {
       const versionInfos = ResEdit.Resource.VersionInfo.fromEntries(res.entries)
       for (const vi of versionInfos) {
@@ -192,8 +150,7 @@ export async function setWindowsExeIcon(
     }
 
     res.outputResource(exe)
-    const updated = Buffer.from(exe.generate())
-    writeFileSync(exePath, updated)
+    writeFileSync(exePath, Buffer.from(exe.generate()))
   } catch (e) {
     log.warn(`.exe icon update failed: ${e}`)
   }

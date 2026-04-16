@@ -41,8 +41,7 @@ enum BunMsg {
     Event { name: String, payload: Value },
 }
 
-/// Handle for dev-mode hot-reload of the Bun subprocess without tearing down
-/// the host process or the WebView window.
+/// Dev-mode handle: swap the Bun subprocess in place while the host and WebView stay alive.
 #[derive(Clone)]
 pub(crate) struct ReloadHandle {
     entry_path: String,
@@ -52,25 +51,18 @@ pub(crate) struct ReloadHandle {
 }
 
 impl ReloadHandle {
-    /// Kill the current Bun subprocess and spawn a new one. The WebView stays
-    /// alive — after the new backend is ready, `BackendEvent::Reload` is sent
-    /// so the host soft-reloads the page.
     pub(crate) fn reload(&self) {
-        // 1. Kill the old child — this closes its stdout, unblocking the reader thread.
+        // Killing the child closes stdout which unblocks the reader thread.
         if let Some(mut child) = self.child_slot.lock().unwrap().take() {
             let _ = child.kill();
             let _ = child.wait();
         }
-        // 2. Drop old stdin — forwarder will hold the mutex and see None.
         *self.stdin_slot.lock().unwrap() = None;
 
-        // 3. Spawn a fresh Bun. Reader thread for the new stdout is spawned inside.
         match spawn_bun(&self.entry_path, self.event_tx.clone()) {
             Ok((child, stdin, _config)) => {
                 *self.child_slot.lock().unwrap() = Some(child);
                 *self.stdin_slot.lock().unwrap() = Some(stdin);
-                // Tell the host to soft-reload the WebView — preserves window
-                // position, size, and the wry webview instance itself.
                 let _ = self.event_tx.send(BackendEvent::Reload);
             },
             Err(e) => {
@@ -82,12 +74,9 @@ impl ReloadHandle {
     }
 }
 
-/// Spawn a Bun subprocess, read the initial config, and return a `BackendBridge`
-/// plus a `ReloadHandle` for dev-mode hot reload.
-///
-/// When running as a compiled standalone binary (vorn build), the launcher sets
-/// `VORN_BUN_PATH` to its own executable path so vorn-full uses the embedded
-/// Bun runtime instead of searching the system PATH.
+/// Spawn a Bun subprocess, wait for the initial config, and return the bridge
+/// plus a reload handle. When launched by a packed binary, VORN_BUN_PATH points
+/// to the embedded runtime instead of the system bun.
 pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     let (call_tx, call_rx) = mpsc::channel::<BackendCall>();
     let (event_tx, event_rx) = mpsc::channel::<BackendEvent>();
