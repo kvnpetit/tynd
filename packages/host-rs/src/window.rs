@@ -80,8 +80,12 @@ pub fn center_window(window: &Window) {
     };
     let screen = monitor.size();
     let win_size = window.outer_size();
-    let x = (screen.width as i32 - win_size.width as i32) / 2 + monitor.position().x;
-    let y = (screen.height as i32 - win_size.height as i32) / 2 + monitor.position().y;
+    let screen_w = i32::try_from(screen.width).unwrap_or(i32::MAX);
+    let screen_h = i32::try_from(screen.height).unwrap_or(i32::MAX);
+    let win_w = i32::try_from(win_size.width).unwrap_or(i32::MAX);
+    let win_h = i32::try_from(win_size.height).unwrap_or(i32::MAX);
+    let x = (screen_w - win_w) / 2 + monitor.position().x;
+    let y = (screen_h - win_h) / 2 + monitor.position().y;
     window.set_outer_position(tao::dpi::PhysicalPosition::new(x, y));
 }
 

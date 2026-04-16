@@ -27,8 +27,8 @@ import type { AppConfig, Emitter, EmitterMap } from "./types.js"
 // cases where the bundle is run without the CLI bundler's define.
 const _g = globalThis as Record<string, unknown>
 const IS_LITE: boolean =
-  _g.__VORN_RUNTIME__ === "lite" ||
-  (_g.__VORN_RUNTIME__ === undefined && _g.__vorn_lite__ !== undefined)
+  _g["__VORN_RUNTIME__"] === "lite" ||
+  (_g["__VORN_RUNTIME__"] === undefined && _g["__vorn_lite__"] !== undefined)
 
 // ── Emit function ─────────────────────────────────────────────────────────────
 
@@ -115,8 +115,8 @@ function _startFull(config: AppConfig): void {
   const configMsg = JSON.stringify({
     type: "vorn:config",
     window: config.window ?? {},
-    devUrl: config.devUrl ?? process.env.VORN_DEV_URL,
-    frontendDir: process.env.VORN_FRONTEND_DIR ?? config.frontendDir,
+    devUrl: config.devUrl ?? process.env["VORN_DEV_URL"],
+    frontendDir: process.env["VORN_FRONTEND_DIR"] ?? config.frontendDir,
     menu: config.menu ?? [],
     tray: config.tray ?? null,
   })
@@ -130,7 +130,7 @@ function _startFull(config: AppConfig): void {
   // 3. Start reading IPC calls from Rust (stdin)
   // Entry path: injected by CLI via VORN_ENTRY env var (preferred),
   // or falling back to the current module's URL (works when run directly).
-  const entry = process.env.VORN_ENTRY ?? import.meta.path
+  const entry = process.env["VORN_ENTRY"] ?? import.meta.path
   _startListener(entry)
 }
 
@@ -139,7 +139,7 @@ function _startFull(config: AppConfig): void {
 function _startLite(config: AppConfig): void {
   // Write window config — Rust reads globalThis.__vorn_config__ after eval
   const g = globalThis as Record<string, unknown>
-  g.__vorn_config__ = JSON.stringify({
+  g["__vorn_config__"] = JSON.stringify({
     window: config.window ?? {},
     menu: config.menu ?? [],
     tray: config.tray ?? null,
@@ -149,7 +149,7 @@ function _startLite(config: AppConfig): void {
   })
 
   // Wire up emit — calls __vorn_emit__(name, payloadJson) injected by Rust
-  const nativeEmit = g.__vorn_emit__ as ((name: string, payload: string) => void) | undefined
+  const nativeEmit = g["__vorn_emit__"] as ((name: string, payload: string) => void) | undefined
 
   _emitFn = (name, payload) => {
     if (nativeEmit) {
@@ -160,18 +160,22 @@ function _startLite(config: AppConfig): void {
   // Export lifecycle hooks — Rust calls __vorn_on_ready__ / __vorn_on_close__
   // These will be picked up from __vorn_mod__ if exported, but we also store
   // them on globalThis so main.rs can call them even without module awareness.
-  g.__vorn_on_ready__ = () => {
+  g["__vorn_on_ready__"] = () => {
     for (const fn of _onReadyFns) {
       try {
         fn()
-      } catch {}
+      } catch {
+        /* intentional: best-effort cleanup */
+      }
     }
   }
-  g.__vorn_on_close__ = () => {
+  g["__vorn_on_close__"] = () => {
     for (const fn of _onCloseFns) {
       try {
         fn()
-      } catch {}
+      } catch {
+        /* intentional: best-effort cleanup */
+      }
     }
   }
 }
@@ -207,7 +211,9 @@ function _startListener(entryPath: string): void {
     _onCloseFns.forEach((fn) => {
       try {
         fn()
-      } catch {}
+      } catch {
+        /* intentional: best-effort cleanup */
+      }
     })
     process.exit(0)
   })
@@ -265,7 +271,7 @@ async function _handleLine(line: string, entryPath: string): Promise<void> {
     return
   }
 
-  switch (msg.type) {
+  switch (msg["type"]) {
     case "call": {
       const { id, fn, args } = msg as {
         id: string
@@ -293,7 +299,9 @@ async function _handleLine(line: string, entryPath: string): Promise<void> {
       for (const fn of _onReadyFns) {
         try {
           fn()
-        } catch {}
+        } catch {
+          /* intentional: best-effort cleanup */
+        }
       }
       break
 
@@ -302,7 +310,9 @@ async function _handleLine(line: string, entryPath: string): Promise<void> {
       for (const fn of _onCloseFns) {
         try {
           fn()
-        } catch {}
+        } catch {
+          /* intentional: best-effort cleanup */
+        }
       }
       process.exit(0)
       break

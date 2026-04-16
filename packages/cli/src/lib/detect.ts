@@ -179,21 +179,21 @@ async function resolveOutDir(cwd: string, tool: BuildTool): Promise<string> {
     if (existsSync(f)) {
       try {
         const json = JSON.parse(await Bun.file(f).text()) as Record<string, unknown>
-        const projects = json.projects as Record<string, unknown> | undefined
+        const projects = json["projects"] as Record<string, unknown> | undefined
         if (projects) {
           // Prefer the first project with projectType "application" over a library
           const projectName =
             Object.keys(projects).find(
-              (k) => (projects[k] as Record<string, unknown>)?.projectType === "application",
+              (k) => (projects[k] as Record<string, unknown>)?.["projectType"] === "application",
             ) ?? Object.keys(projects)[0]
           if (projectName) {
             const proj = projects[projectName] as Record<string, unknown>
-            const build = (proj?.architect as Record<string, unknown>)?.build as Record<
+            const build = (proj?.["architect"] as Record<string, unknown>)?.["build"] as Record<
               string,
               unknown
             >
-            const builder = build?.builder as string | undefined
-            const outPath = (build?.options as Record<string, unknown>)?.outputPath
+            const builder = build?.["builder"] as string | undefined
+            const outPath = (build?.["options"] as Record<string, unknown>)?.["outputPath"]
             if (typeof outPath === "string") {
               // Angular 17+ (@angular/build:application) puts browser assets in <outputPath>/browser/
               if (builder?.includes("@angular/build:application")) {
@@ -258,12 +258,12 @@ export async function detectFrontend(cwd: string): Promise<FrontendInfo> {
   }
 
   let tool: BuildTool = "none"
-  if (deps.vite || Object.keys(deps).some((k) => k.startsWith("@vitejs/"))) tool = "vite"
+  if (deps["vite"] || Object.keys(deps).some((k) => k.startsWith("@vitejs/"))) tool = "vite"
   else if (deps["react-scripts"]) tool = "cra"
   else if (deps["@angular/cli"] || deps["@angular-devkit/build-angular"]) tool = "angular"
-  else if (deps.parcel || deps["parcel-bundler"]) tool = "parcel"
+  else if (deps["parcel"] || deps["parcel-bundler"]) tool = "parcel"
   else if (deps["@rsbuild/core"]) tool = "rsbuild"
-  else if (deps.webpack || deps["webpack-cli"]) tool = "webpack"
+  else if (deps["webpack"] || deps["webpack-cli"]) tool = "webpack"
 
   const outDir = await resolveOutDir(cwd, tool)
   const cmds = TOOL_COMMANDS[tool]

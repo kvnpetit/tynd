@@ -37,19 +37,38 @@ image       = { version = "0.25", default-features = false, features = ["png", "
 rquickjs    = { version = "0.9", features = ["full"] }
 
 [workspace.lints.rust]
-unused_must_use        = "deny"
-unsafe_op_in_unsafe_fn = "deny"
-unused_lifetimes       = "warn"
-unused_qualifications  = "warn"
+unused_must_use               = "deny"
+unsafe_op_in_unsafe_fn        = "deny"
+missing_debug_implementations = "warn"
+unreachable_pub               = "warn"
+unused_lifetimes              = "warn"
+unused_qualifications         = "warn"
+rust_2018_idioms              = { level = "warn", priority = -1 }
 
 [workspace.lints.clippy]
-all = { level = "warn", priority = -1 }
+all      = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+# Pragmatic allows on top of pedantic — noise without real safety gain
+module_name_repetitions  = "allow"
+must_use_candidate       = "allow"
+missing_errors_doc       = "allow"
+missing_panics_doc       = "allow"
+return_self_not_must_use = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss           = "allow"
+cast_precision_loss      = "allow"
+cast_lossless            = "allow"
+similar_names            = "allow"
+too_many_lines           = "allow"
+doc_markdown             = "allow"
 
 # Bug-catchers — real safety gains
 dbg_macro           = "warn"
 todo                = "warn"
 unimplemented       = "warn"
 panic_in_result_fn  = "warn"
+mem_forget          = "warn"
 lossy_float_literal = "warn"
 
 [profile.release]

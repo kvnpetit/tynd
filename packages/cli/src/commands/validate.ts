@@ -8,7 +8,7 @@ type Level = "error" | "warn" | "info"
 interface Issue {
   level: Level
   message: string
-  hint?: string
+  hint?: string | undefined
 }
 
 export interface ValidateOptions {

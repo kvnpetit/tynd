@@ -252,7 +252,9 @@ async function packageLite(o: LitePackOpts): Promise<void> {
   if (tmpIconPath)
     try {
       rmSync(tmpIconPath)
-    } catch {}
+    } catch {
+      /* intentional: best-effort cleanup */
+    }
 
   // On Windows: patch PE subsystem (console → GUI) and embed icon resources
   if (o.platform === "windows") {
@@ -302,7 +304,9 @@ async function packageFull(o: FullPackOpts): Promise<void> {
   if (tmpBunDir)
     try {
       rmSync(tmpBunDir, { recursive: true })
-    } catch {}
+    } catch {
+      /* intentional: best-effort cleanup */
+    }
   log.success(`Runtime compressed (${(bunCompressed.length / 1_048_576).toFixed(0)} MB)`)
 
   log.step("Packing assets…")
@@ -340,7 +344,9 @@ async function packageFull(o: FullPackOpts): Promise<void> {
   if (tmpIconPath)
     try {
       rmSync(tmpIconPath)
-    } catch {}
+    } catch {
+      /* intentional: best-effort cleanup */
+    }
 
   // On Windows: patch PE subsystem (console → GUI) and embed icon resources
   if (o.platform === "windows") {

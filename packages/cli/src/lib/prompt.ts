@@ -23,8 +23,7 @@ export async function confirm(question: string, initialValue = false): Promise<b
 export async function text(message: string, defaultValue = ""): Promise<string> {
   const result = await clackText({
     message,
-    placeholder: defaultValue || undefined,
-    defaultValue: defaultValue || undefined,
+    ...(defaultValue && { placeholder: defaultValue, defaultValue }),
   })
   if (isCancel(result)) onCancel()
   return result as string

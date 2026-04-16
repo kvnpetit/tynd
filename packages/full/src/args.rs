@@ -1,7 +1,7 @@
 /// CLI arguments for the vorn-full host binary.
 /// Window config comes from the backend's first stdout message (vorn:config),
 /// so we only need the backend entry path here.
-pub struct Args {
+pub(crate) struct Args {
     /// Absolute path to the backend TypeScript entry file
     pub backend_entry: String,
     /// Enable WebView devtools
@@ -9,7 +9,7 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn parse() -> Self {
+    pub(crate) fn parse() -> Self {
         let raw: Vec<String> = std::env::args().collect();
         let mut backend_entry = String::new();
         let mut debug = false;
@@ -20,7 +20,7 @@ impl Args {
                 "--backend-entry" | "-e" => {
                     i += 1;
                     if i < raw.len() {
-                        backend_entry = raw[i].clone();
+                        backend_entry.clone_from(&raw[i]);
                     }
                 },
                 "--debug" | "-d" => debug = true,

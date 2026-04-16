@@ -7,7 +7,7 @@ export interface ExecOptions {
 /** Run a command, stream output, reject on non-zero exit. */
 export async function exec(cmd: string, args: string[], opts: ExecOptions = {}): Promise<void> {
   const proc = Bun.spawn([cmd, ...args], {
-    cwd: opts.cwd,
+    ...(opts.cwd !== undefined && { cwd: opts.cwd }),
     env: opts.env ? { ...process.env, ...opts.env } : process.env,
     stdout: opts.silent ? "pipe" : "inherit",
     stderr: "pipe",

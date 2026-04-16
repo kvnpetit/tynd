@@ -37,7 +37,7 @@ const MAGIC: &[u8; 8] = b"VORNPKG\0";
 /// section_size(u64) + magic(8) = 16 bytes
 const TRAILER_LEN: u64 = 16;
 
-pub struct EmbeddedAssets {
+pub(crate) struct EmbeddedAssets {
     /// Path to the cached (or fallback system) Bun binary.
     pub bun_path: String,
     /// Path to the extracted bundle.js in the temp directory.
@@ -50,7 +50,7 @@ pub struct EmbeddedAssets {
 
 /// Try to read embedded assets from the end of the running executable.
 /// Returns `None` if no assets are appended (normal dev-mode invocation).
-pub fn try_load_embedded() -> Option<EmbeddedAssets> {
+pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let exe = std::env::current_exe().ok()?;
     let mut f = fs::File::open(&exe).ok()?;
     let size = f.metadata().ok()?.len();
@@ -87,7 +87,8 @@ pub fn try_load_embedded() -> Option<EmbeddedAssets> {
     // before every process::exit (which bypasses Rust's drop machinery).
     let td = tempfile::TempDir::with_prefix("vorn-").ok()?;
     let temp_dir = td.path().to_owned();
-    std::mem::forget(td); // prevent auto-delete on drop — cleanup::run() handles it
+    #[allow(clippy::mem_forget)] // intentional: cleanup::run() handles removal across exit paths
+    std::mem::forget(td);
     vorn_host::cleanup::register_dir(temp_dir.clone());
 
     let bundle_dir = temp_dir.join("backend");
@@ -97,8 +98,7 @@ pub fn try_load_embedded() -> Option<EmbeddedAssets> {
 
     let app_name = exe
         .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "app".to_string());
+        .map_or_else(|| "app".to_string(), |s| s.to_string_lossy().into_owned());
 
     let mut bun_path_opt: Option<PathBuf> = None;
     let mut bundle_path_opt: Option<String> = None;
@@ -139,14 +139,13 @@ pub fn try_load_embedded() -> Option<EmbeddedAssets> {
             },
 
             "bun.gz" => {
-                let cache_path = match &bun_path_opt {
-                    Some(p) => p.clone(),
-                    None => {
-                        // bun.version was missing — fallback: skip and use system bun
-                        let mut skip = (&mut f).take(data_len);
-                        std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
-                        continue;
-                    },
+                let cache_path = if let Some(p) = &bun_path_opt {
+                    p.clone()
+                } else {
+                    // bun.version was missing — fallback: skip and use system bun
+                    let mut skip = (&mut f).take(data_len);
+                    std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
+                    continue;
                 };
 
                 if cache_path.exists() {

@@ -97,11 +97,11 @@ export async function dev(opts: DevOptions): Promise<void> {
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   )
-  if (devUrl) env.VORN_DEV_URL = devUrl
+  if (devUrl) env["VORN_DEV_URL"] = devUrl
   // Full mode: backend reads these env vars — no need to hardcode in app.start()
   if (cfg.runtime === "full") {
-    env.VORN_ENTRY = cfg.backend
-    env.VORN_FRONTEND_DIR = cfg.frontendDir
+    env["VORN_ENTRY"] = cfg.backend
+    env["VORN_FRONTEND_DIR"] = cfg.frontendDir
   }
 
   const makeArgs = (): string[] => {
@@ -157,7 +157,7 @@ export async function dev(opts: DevOptions): Promise<void> {
 
       // Kill current host
       hostProc.kill()
-      await hostProc.exited.catch(() => {})
+      await hostProc.exited.catch(() => undefined)
 
       // Re-bundle for lite (fast: non-minified, cached if unchanged)
       if (cfg.runtime === "lite") {
@@ -211,8 +211,8 @@ export async function dev(opts: DevOptions): Promise<void> {
     hostProc.kill()
     devServerProc?.kill()
     Promise.allSettled([
-      hostProc.exited.catch(() => {}),
-      devServerProc ? devServerProc.exited.catch(() => {}) : Promise.resolve(),
+      hostProc.exited.catch(() => undefined),
+      devServerProc ? devServerProc.exited.catch(() => undefined) : Promise.resolve(),
     ]).finally(() => process.exit(0))
   }
 

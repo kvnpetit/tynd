@@ -34,6 +34,7 @@ impl AssetCache {
     }
 }
 
+#[allow(clippy::case_sensitive_file_extension_comparisons)] // .gz suffix written by CLI, always lowercase
 fn walk(base: &PathBuf, cur: &PathBuf, map: &mut HashMap<String, Asset>) {
     let Ok(entries) = std::fs::read_dir(cur) else {
         return;
@@ -109,7 +110,7 @@ pub fn warm(static_dir: &str) {
 /// Serve static files via the `bv://` custom protocol.
 /// All files are loaded into memory on first request — subsequent requests
 /// are served from memory with zero disk I/O.
-pub fn handle(static_dir: &str, request: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
+pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
     let cache = get_cache(static_dir);
 
     let uri = request.uri().to_owned();
@@ -119,10 +120,10 @@ pub fn handle(static_dir: &str, request: Request<Vec<u8>>) -> Response<Cow<'stat
     let asset = cache.get(path).or_else(|| {
         // Only fall back for extensionless paths (HTML routes), not missing assets
         let has_extension = path.contains('.') && !path.ends_with('/');
-        if !has_extension {
-            cache.get("index.html")
-        } else {
+        if has_extension {
             None
+        } else {
+            cache.get("index.html")
         }
     });
 
@@ -162,14 +163,12 @@ fn mime_for(path: &std::path::Path) -> &'static str {
     };
 
     match ext {
-        Some("html") | Some("htm") => "text/html; charset=utf-8",
-        Some("js") | Some("mjs") => "application/javascript; charset=utf-8",
-        Some("cjs") => "application/javascript; charset=utf-8",
-        Some("ts") | Some("tsx") => "application/javascript; charset=utf-8",
+        Some("html" | "htm") => "text/html; charset=utf-8",
+        Some("js" | "mjs" | "cjs" | "ts" | "tsx") => "application/javascript; charset=utf-8",
         Some("css") => "text/css; charset=utf-8",
         Some("json") => "application/json",
         Some("png") => "image/png",
-        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("jpg" | "jpeg") => "image/jpeg",
         Some("gif") => "image/gif",
         Some("svg") => "image/svg+xml",
         Some("ico") => "image/x-icon",

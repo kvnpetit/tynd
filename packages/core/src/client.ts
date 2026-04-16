@@ -251,7 +251,7 @@ export const vornWindow = {
    */
   onMenu(id: string, handler: () => void): () => void {
     return window.__vorn__.os_on("menu:action", (data: unknown) => {
-      if (((data as Record<string, unknown>)?.id as string) === id) handler()
+      if (((data as Record<string, unknown>)?.["id"] as string) === id) handler()
     })
   },
 }
@@ -341,7 +341,7 @@ export const tray = {
    */
   onMenu(id: string, handler: () => void): () => void {
     return window.__vorn__.os_on("menu:action", (data: unknown) => {
-      if (((data as Record<string, unknown>)?.id as string) === id) handler()
+      if (((data as Record<string, unknown>)?.["id"] as string) === id) handler()
     })
   },
 }

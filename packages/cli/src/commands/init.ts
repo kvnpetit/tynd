@@ -31,7 +31,7 @@ export async function init(opts: InitOptions): Promise<void> {
   if (existsSync(pkgPath)) {
     try {
       pkg = (await Bun.file(pkgPath).json()) as Record<string, unknown>
-      if (typeof pkg.name === "string") name = pkg.name
+      if (typeof pkg["name"] === "string") name = pkg["name"]
     } catch {
       /* ignore */
     }
@@ -161,25 +161,25 @@ async function patchGitignore(cwd: string): Promise<void> {
 }
 
 async function patchPackageJson(pkgPath: string, pkg: Record<string, unknown>): Promise<void> {
-  const scripts = (pkg.scripts as Record<string, string> | undefined) ?? {}
+  const scripts = (pkg["scripts"] as Record<string, string> | undefined) ?? {}
 
   // Preserve existing scripts under a different name if they'd be overwritten
-  if (scripts.build && scripts.build !== "vorn build") {
-    scripts["build:ui"] = scripts.build
+  if (scripts["build"] && scripts["build"] !== "vorn build") {
+    scripts["build:ui"] = scripts["build"]
   }
-  if (scripts.dev && scripts.dev !== "vorn dev") {
-    scripts["dev:ui"] = scripts.dev
+  if (scripts["dev"] && scripts["dev"] !== "vorn dev") {
+    scripts["dev:ui"] = scripts["dev"]
   }
 
-  scripts.dev = "vorn dev"
-  scripts.build = "vorn build"
-  pkg.scripts = scripts
+  scripts["dev"] = "vorn dev"
+  scripts["build"] = "vorn build"
+  pkg["scripts"] = scripts
 
   // Ensure required vorn packages are listed as dependencies
-  const deps = (pkg.dependencies as Record<string, string> | undefined) ?? {}
+  const deps = (pkg["dependencies"] as Record<string, string> | undefined) ?? {}
   if (!deps["@vorn/core"]) deps["@vorn/core"] = "latest"
   if (!deps["@vorn/host"]) deps["@vorn/host"] = "latest"
-  pkg.dependencies = deps
+  pkg["dependencies"] = deps
 
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")
   log.step(

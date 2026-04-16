@@ -72,7 +72,7 @@
       "suspicious": {
         "noExplicitAny": "error",
         "noDoubleEquals": "error",
-        "noEmptyBlockStatements": "warn",
+        "noEmptyBlockStatements": "error",
         "noImplicitAnyLet": "error",
         "noArrayIndexKey": "warn",
         "noConsole": "off",
@@ -84,7 +84,7 @@
         "noUselessTypeConstraint": "error",
         "noForEach": "off",
         "useOptionalChain": "error",
-        "useLiteralKeys": "error"
+        "useLiteralKeys": "off"
       },
       "performance": {
         "noAccumulatingSpread": "error",

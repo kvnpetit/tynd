@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 
@@ -46,7 +46,7 @@ enum BunMsg {
 /// When running as a compiled standalone binary (vorn build), the launcher sets
 /// `VORN_BUN_PATH` to its own executable path so vorn-full uses the embedded
 /// Bun runtime instead of searching the system PATH.
-pub fn start(entry_path: &str) -> BackendBridge {
+pub(crate) fn start(entry_path: &str) -> BackendBridge {
     // Prefer VORN_BUN_PATH (set by the compiled launcher) over system bun
     let bun_bin = std::env::var("VORN_BUN_PATH").unwrap_or_else(|_| "bun".into());
 
@@ -160,7 +160,6 @@ pub fn start(entry_path: &str) -> BackendBridge {
                     vorn_host::cleanup::run();
                     // Broken pipe / unexpected EOF means Bun shut down cleanly
                     // (user closed window). Only use exit code 1 for real IO errors.
-                    use std::io::ErrorKind;
                     match e.kind() {
                         ErrorKind::BrokenPipe
                         | ErrorKind::ConnectionReset

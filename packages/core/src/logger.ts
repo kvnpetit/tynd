@@ -20,9 +20,9 @@ export const IS_DEV: boolean = (() => {
     /* QuickJS: import.meta is replaced with {} — no-op */
   }
   // 2. Bun subprocess (full mode) — CLI sets VORN_DEV_URL during `vorn dev`
-  if (typeof process !== "undefined" && !!process.env?.VORN_DEV_URL) return true
+  if (typeof process !== "undefined" && !!process.env?.["VORN_DEV_URL"]) return true
   // 3. QuickJS (lite mode) — CLI injects `globalThis.__VORN_DEV__ = true` at bundle time
-  if (_g.__VORN_DEV__ === true) return true
+  if (_g["__VORN_DEV__"] === true) return true
   return false
 })()
 

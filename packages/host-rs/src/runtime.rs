@@ -15,6 +15,7 @@ pub enum BackendEvent {
 
 /// Everything `run_app` needs to talk to the backend.
 /// Constructed by `vorn-full` (Bun bridge) or `vorn-lite` (QuickJS bridge).
+#[derive(Debug)]
 pub struct BackendBridge {
     /// Window and frontend config sent by the backend at startup
     pub config: BackendConfig,
@@ -26,6 +27,7 @@ pub struct BackendBridge {
 }
 
 /// A call or lifecycle signal sent to the backend runtime.
+#[derive(Debug)]
 pub enum BackendCall {
     /// Raw JSON string from the frontend — forwarded directly to Bun without
     /// re-serialization (full mode only). Skips one full JSON parse+serialize cycle.
