@@ -1,0 +1,25 @@
+[package]
+name                 = "vorn-full"
+description          = "Vorn runtime (full) — Bun subprocess backend + embedded launcher"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+
+[[bin]]
+name = "vorn-full"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+vorn-host            = { path = "../host-rs" }
+serde.workspace      = true
+serde_json.workspace = true
+mimalloc.workspace   = true
+flate2.workspace     = true
+dirs.workspace       = true
+tempfile.workspace   = true
