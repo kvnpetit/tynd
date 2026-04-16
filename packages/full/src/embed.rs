@@ -80,12 +80,11 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     f.read_exact(&mut cb).ok()?;
     let file_count = u32::from_le_bytes(cb) as usize;
 
-    // `std::mem::forget` prevents TempDir from auto-deleting on drop.
-    // Cleanup is instead registered with vorn_host::cleanup so it runs
-    // before every process::exit (which bypasses Rust's drop machinery).
+    // cleanup::run() removes the temp dir across every exit path, including
+    // process::exit which bypasses Drop — mem::forget prevents double-free.
     let td = tempfile::TempDir::with_prefix("vorn-").ok()?;
     let temp_dir = td.path().to_owned();
-    #[allow(clippy::mem_forget)] // intentional: cleanup::run() handles removal across exit paths
+    #[allow(clippy::mem_forget)]
     std::mem::forget(td);
     vorn_host::cleanup::register_dir(temp_dir.clone());
 
@@ -104,7 +103,6 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let mut icon_path_opt: Option<String> = None;
 
     for _ in 0..file_count {
-        // Read path
         let mut pl = [0u8; 2];
         f.read_exact(&mut pl).ok()?;
         let path_len = u16::from_le_bytes(pl) as usize;
@@ -112,16 +110,13 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
         f.read_exact(&mut path_buf).ok()?;
         let rel = String::from_utf8(path_buf).ok()?;
 
-        // Read data length
         let mut dl = [0u8; 4];
         f.read_exact(&mut dl).ok()?;
         let data_len = u32::from_le_bytes(dl) as u64;
 
         match rel.as_str() {
             "bun.version" => {
-                // Sanity-check: a valid version string is never longer than 256 bytes.
-                // Reject oversized entries to prevent allocating a giant buffer on
-                // a corrupted or tampered binary.
+                // Cap to 256 bytes so a corrupted binary can't trigger a giant alloc.
                 if data_len > 256 {
                     vorn_host::vorn_log!("Embedded bun.version entry is suspiciously large ({data_len} bytes) — skipping");
                     let mut skip = (&mut f).take(data_len);
@@ -147,11 +142,10 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
                 };
 
                 if cache_path.exists() {
-                    // Cache hit — skip bytes without reading them into memory
+                    // Skip past the compressed bytes without allocating.
                     let mut skip = (&mut f).take(data_len);
                     std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
                 } else {
-                    // Cache miss — decompress and write
                     eprintln!("First launch — extracting runtime…");
 
                     if let Some(parent) = cache_path.parent() {

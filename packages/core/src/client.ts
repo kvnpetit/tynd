@@ -1,8 +1,4 @@
-/**
- * @vorn/core/client — frontend API
- * Import from "@vorn/core/client" in your frontend code only (browser context).
- * For backend use: import from "@vorn/core"
- */
+// @vorn/core/client — frontend API. Backend imports from "@vorn/core".
 
 import type {
   ConfirmOptions,
@@ -84,24 +80,18 @@ declare global {
 }
 
 /**
- * Create a fully type-safe proxy to your backend.
- * Import the backend module type only — zero runtime overhead from types.
+ * Create a fully type-safe proxy to the backend.
  *
  * @example
- * import { createBackend } from "@vorn/core/client"
  * import type * as backend from "../backend/main"
- *
  * const api = createBackend<typeof backend>()
- *
- * const msg = await api.greet("Alice")         // string ✅
- * api.on("userCreated", (user) => { ... })     // typed ✅
+ * await api.greet("Alice")
  */
 export function createBackend<T>(): BackendClient<T> {
   return new Proxy({} as BackendClient<T>, {
     get(_target, prop: string | symbol) {
       if (typeof prop !== "string") return undefined
-      // Guard against Promise resolution probes — if the Proxy were thenable,
-      // `await api` would call `api.then(...)` as a backend function.
+      // A thenable Proxy would make `await api` invoke `api.then()` as a backend call.
       if (prop === "then" || prop === "catch" || prop === "finally") return undefined
 
       if (!window.__vorn__) {
