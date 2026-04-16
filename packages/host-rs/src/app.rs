@@ -251,6 +251,13 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 BackendEvent::Emit { name, payload } => {
                     let _ = webview.evaluate_script(&ipc::eval_dispatch(&name, &payload));
                 },
+                BackendEvent::Reload => {
+                    let _ = webview.evaluate_script(&ipc::eval_hide_error_overlay());
+                    let _ = webview.evaluate_script("window.location.reload();");
+                },
+                BackendEvent::Error { message } => {
+                    let _ = webview.evaluate_script(&ipc::eval_show_error_overlay(&message));
+                },
             },
 
             Event::UserEvent(UserEvent::OsResult { id, ok, value }) => {

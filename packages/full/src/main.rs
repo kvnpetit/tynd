@@ -19,12 +19,28 @@ fn main() {
         if let Some(ref icon) = embedded.icon_path {
             std::env::set_var("VORN_ICON_PATH", icon);
         }
-        let bridge = bun::start(&embedded.bundle_path);
+        let (bridge, _reload) = bun::start(&embedded.bundle_path);
         vorn_host::app::run_app(bridge, false);
     }
 
     // Dev mode — use CLI args and system Bun
     let args = Args::parse();
-    let bridge = bun::start(&args.backend_entry);
+    let (bridge, reload) = bun::start(&args.backend_entry);
+
+    // In dev mode, listen on stdin for admin commands from the CLI (`vorn dev`).
+    // A "reload\n" line restarts the Bun subprocess without tearing down the
+    // WebView, so the window keeps its position/size across HMR cycles.
+    if args.debug {
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let stdin = std::io::stdin();
+            for line in stdin.lock().lines().map_while(Result::ok) {
+                if line.trim() == "reload" {
+                    reload.reload();
+                }
+            }
+        });
+    }
+
     vorn_host::app::run_app(bridge, args.debug);
 }

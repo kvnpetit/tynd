@@ -165,3 +165,24 @@ pub fn eval_os_event(name: &str, data: &Value) -> String {
     let data_js = serde_json::to_string(data).unwrap_or_else(|_| "null".into());
     format!("window.__vorn_os_event__&&window.__vorn_os_event__({name_js},{data_js})")
 }
+
+/// Build the JS eval string that mounts a full-screen backend error overlay.
+/// Dev-only — called when the backend throws during startup or reload.
+#[inline]
+pub fn eval_show_error_overlay(message: &str) -> String {
+    let msg_js = serde_json::to_string(message).unwrap_or_else(|_| "\"\"".into());
+    format!(
+        "(function(){{var id='__vorn_error_overlay__';var old=document.getElementById(id);if(old)old.remove();\
+var d=document.createElement('div');d.id=id;\
+d.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(20,20,20,0.92);color:#fce5e5;\
+font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:32px;overflow:auto;white-space:pre-wrap;';\
+d.textContent='\u{26a0}  Backend error\\n\\n'+{msg_js};document.body?document.body.appendChild(d):document.documentElement.appendChild(d);}})();"
+    )
+}
+
+/// Build the JS eval string that removes the backend error overlay (on successful reload).
+#[inline]
+pub fn eval_hide_error_overlay() -> String {
+    "(function(){var o=document.getElementById('__vorn_error_overlay__');if(o)o.remove();})();"
+        .to_string()
+}

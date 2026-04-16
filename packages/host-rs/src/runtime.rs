@@ -11,6 +11,11 @@ pub enum BackendEvent {
     Return { id: String, ok: bool, value: Value },
     /// Event pushed by the backend to frontend subscribers
     Emit { name: String, payload: Value },
+    /// Dev-mode: backend was hot-reloaded — the host should soft-reload the webview
+    /// so the frontend picks up the new backend without losing the native window.
+    Reload,
+    /// Dev-mode: backend threw during startup/reload — show an overlay in the webview.
+    Error { message: String },
 }
 
 /// Everything `run_app` needs to talk to the backend.
