@@ -135,14 +135,26 @@ export async function dev(opts: DevOptions): Promise<void> {
   log.step(`Binary:  ${log.gray(binPath)}`)
   log.blank()
 
-  let hostProc = Bun.spawn([binPath, ...makeArgs()], {
-    cwd: opts.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env,
-  })
-  pipeWithPrefix(hostProc.stdout as ReadableStream<Uint8Array>, process.stdout, log.gray("[host]"))
-  pipeWithPrefix(hostProc.stderr as ReadableStream<Uint8Array>, process.stderr, log.gray("[host]"))
+  const spawnHost = (): ReturnType<typeof Bun.spawn> => {
+    const proc = Bun.spawn([binPath, ...makeArgs()], {
+      cwd: opts.cwd,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env,
+    })
+    pipeWithPrefix(proc.stdout as ReadableStream<Uint8Array>, process.stdout, log.gray("[host]"))
+    pipeWithPrefix(proc.stderr as ReadableStream<Uint8Array>, process.stderr, log.gray("[host]"))
+    return proc
+  }
+
+  let hostProc = spawnHost()
+
+  // Full mode + backend change = hot reload via stdin admin command. Host keeps
+  // the WebView alive, kills/respawns only the Bun subprocess, then soft-reloads
+  // the page. Lite mode (QuickJS in-process) and config changes still do a full
+  // host restart to pick up the new window configuration.
+  const canHotReload = cfg.runtime === "full"
 
   // ── Backend file watcher → restart on change ──────────────────────────────
 
@@ -166,36 +178,41 @@ export async function dev(opts: DevOptions): Promise<void> {
       reloading = true
       const t0 = Date.now()
       log.blank()
-      log.info(
-        reason === "config" ? `Config changed — restarting…` : `Backend changed — reloading…`,
-      )
 
-      hostProc.kill()
-      await hostProc.exited.catch(() => undefined)
+      const fullRestart = reason === "config" || !canHotReload
 
-      if (cfg.runtime === "lite") {
-        try {
-          await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: false })
-        } catch (err) {
-          log.error(`Bundle failed: ${err instanceof Error ? err.message : String(err)}`)
-          reloading = false
-          if (reloadPending) {
-            reloadPending = false
-            triggerReload("backend")
+      if (fullRestart) {
+        log.info(
+          reason === "config" ? `Config changed — restarting…` : `Backend changed — reloading…`,
+        )
+        hostProc.kill()
+        await hostProc.exited.catch(() => undefined)
+
+        if (cfg.runtime === "lite") {
+          try {
+            await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: false })
+          } catch (err) {
+            log.error(`Bundle failed: ${err instanceof Error ? err.message : String(err)}`)
+            reloading = false
+            if (reloadPending) {
+              reloadPending = false
+              triggerReload("backend")
+            }
+            return
           }
-          return
         }
+        hostProc = spawnHost()
+        log.success(`${reason === "config" ? "Restarted" : "Reloaded"} in ${Date.now() - t0}ms`)
+      } else {
+        // Hot reload: host stays alive, webview stays alive, only Bun restarts.
+        log.info("Backend changed — hot reloading…")
+        const stdin = hostProc.stdin
+        if (stdin && typeof stdin === "object" && "write" in stdin) {
+          ;(stdin as { write: (s: string) => void }).write("reload\n")
+        }
+        log.success(`Hot reloaded in ${Date.now() - t0}ms  ${log.dim("(window preserved)")}`)
       }
 
-      hostProc = Bun.spawn([binPath, ...makeArgs()], {
-        cwd: opts.cwd,
-        stdout: "pipe",
-        stderr: "pipe",
-        env,
-      })
-      pipeWithPrefix(hostProc.stdout, process.stdout, log.gray("[host]"))
-      pipeWithPrefix(hostProc.stderr, process.stderr, log.gray("[host]"))
-      log.success(`${reason === "config" ? "Restarted" : "Reloaded"} in ${Date.now() - t0}ms`)
       log.blank()
       reloading = false
       if (reloadPending) {

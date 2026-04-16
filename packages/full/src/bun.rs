@@ -1,6 +1,7 @@
-use std::io::{BufRead, BufReader, ErrorKind, Write};
-use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -40,14 +41,129 @@ enum BunMsg {
     Event { name: String, payload: Value },
 }
 
-/// Spawn a Bun subprocess, read the initial config, and return a `BackendBridge`.
-/// Blocks until Bun sends `vorn:config`.
+/// Handle for dev-mode hot-reload of the Bun subprocess without tearing down
+/// the host process or the WebView window.
+#[derive(Clone)]
+pub(crate) struct ReloadHandle {
+    entry_path: String,
+    stdin_slot: Arc<Mutex<Option<ChildStdin>>>,
+    child_slot: Arc<Mutex<Option<Child>>>,
+    event_tx: mpsc::Sender<BackendEvent>,
+}
+
+impl ReloadHandle {
+    /// Kill the current Bun subprocess and spawn a new one. The WebView stays
+    /// alive — after the new backend is ready, `BackendEvent::Reload` is sent
+    /// so the host soft-reloads the page.
+    pub(crate) fn reload(&self) {
+        // 1. Kill the old child — this closes its stdout, unblocking the reader thread.
+        if let Some(mut child) = self.child_slot.lock().unwrap().take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        // 2. Drop old stdin — forwarder will hold the mutex and see None.
+        *self.stdin_slot.lock().unwrap() = None;
+
+        // 3. Spawn a fresh Bun. Reader thread for the new stdout is spawned inside.
+        match spawn_bun(&self.entry_path, self.event_tx.clone()) {
+            Ok((child, stdin, _config)) => {
+                *self.child_slot.lock().unwrap() = Some(child);
+                *self.stdin_slot.lock().unwrap() = Some(stdin);
+                // Tell the host to soft-reload the WebView — preserves window
+                // position, size, and the wry webview instance itself.
+                let _ = self.event_tx.send(BackendEvent::Reload);
+            },
+            Err(e) => {
+                let _ = self.event_tx.send(BackendEvent::Error {
+                    message: format!("Failed to reload backend: {e}"),
+                });
+            },
+        }
+    }
+}
+
+/// Spawn a Bun subprocess, read the initial config, and return a `BackendBridge`
+/// plus a `ReloadHandle` for dev-mode hot reload.
 ///
 /// When running as a compiled standalone binary (vorn build), the launcher sets
 /// `VORN_BUN_PATH` to its own executable path so vorn-full uses the embedded
 /// Bun runtime instead of searching the system PATH.
-pub(crate) fn start(entry_path: &str) -> BackendBridge {
-    // Prefer VORN_BUN_PATH (set by the compiled launcher) over system bun
+pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
+    let (call_tx, call_rx) = mpsc::channel::<BackendCall>();
+    let (event_tx, event_rx) = mpsc::channel::<BackendEvent>();
+
+    let (child, stdin, config) = match spawn_bun(entry_path, event_tx.clone()) {
+        Ok(t) => t,
+        Err(e) => {
+            vorn_log!("{e}");
+            std::process::exit(1);
+        },
+    };
+
+    let stdin_slot: Arc<Mutex<Option<ChildStdin>>> = Arc::new(Mutex::new(Some(stdin)));
+    let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(Some(child)));
+
+    // Forwarder: call_rx → current Bun stdin (under mutex so reload can swap it)
+    {
+        let stdin_slot = stdin_slot.clone();
+        std::thread::spawn(move || {
+            while let Ok(call) = call_rx.recv() {
+                let line = match call {
+                    BackendCall::Raw(mut s) => {
+                        s.push('\n');
+                        s.into_bytes()
+                    },
+                    BackendCall::Typed { id, fn_name, args } => {
+                        let msg = match fn_name.as_str() {
+                            "__vorn_on_ready__" => serde_json::json!({ "type": "vorn:ready" }),
+                            "__vorn_on_close__" => serde_json::json!({ "type": "vorn:close" }),
+                            _ => serde_json::json!({
+                                "type": "call",
+                                "id":   id,
+                                "fn":   fn_name,
+                                "args": args,
+                            }),
+                        };
+                        match serde_json::to_string(&msg) {
+                            Ok(mut s) => {
+                                s.push('\n');
+                                s.into_bytes()
+                            },
+                            Err(e) => {
+                                eprintln!("[vorn] failed to serialize BackendCall: {e}");
+                                continue;
+                            },
+                        }
+                    },
+                };
+                // Drop the message if Bun is mid-reload (stdin slot is None).
+                if let Some(stdin) = stdin_slot.lock().unwrap().as_mut() {
+                    let _ = stdin.write_all(&line);
+                }
+            }
+        });
+    }
+
+    let bridge = BackendBridge {
+        config,
+        call_tx,
+        event_rx,
+    };
+    let reload = ReloadHandle {
+        entry_path: entry_path.to_string(),
+        stdin_slot,
+        child_slot,
+        event_tx,
+    };
+    (bridge, reload)
+}
+
+/// Spawn a Bun subprocess, wait for `vorn:config`, spawn the stdout reader thread,
+/// and return the child handle + stdin + parsed config.
+fn spawn_bun(
+    entry_path: &str,
+    event_tx: mpsc::Sender<BackendEvent>,
+) -> Result<(Child, ChildStdin, BackendConfig), String> {
     let bun_bin = std::env::var("VORN_BUN_PATH").unwrap_or_else(|_| "bun".into());
 
     let mut cmd = Command::new(&bun_bin);
@@ -64,65 +180,21 @@ pub(crate) fn start(entry_path: &str) -> BackendBridge {
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    #[allow(clippy::zombie_processes)]
-    let mut child = cmd.spawn().unwrap_or_else(|e| {
-        vorn_log!("Failed to start runtime: {e}");
+    let mut child = cmd.spawn().map_err(|e| {
+        let mut msg = format!("Failed to start runtime: {e}");
         if std::env::var("VORN_BUN_PATH").is_err() {
-            vorn_log!("Ensure runtime is installed and in PATH");
+            msg.push_str("\nEnsure runtime is installed and in PATH");
         }
-        std::process::exit(1);
-    });
+        msg
+    })?;
 
     let bun_stdin = child.stdin.take().expect("Bun stdin not piped");
     let bun_stdout = child.stdout.take().expect("Bun stdout not piped");
-
-    // Block-read the first line → vorn:config
     let mut reader = BufReader::with_capacity(64 * 1024, bun_stdout);
-    let config = read_config(&mut reader);
+    let config = read_config(&mut reader)?;
 
-    // call_tx is sent from the WebView IPC handler thread — unbounded so the WebView thread never blocks.
-    // event_tx is backend → main thread; unbounded so the stdout reader thread never blocks.
-    let (call_tx, call_rx) = mpsc::channel::<BackendCall>();
-    let (event_tx, event_rx) = mpsc::channel::<BackendEvent>();
-
-    // Thread: forward BackendCalls → Bun stdin
-    {
-        let mut stdin = bun_stdin;
-        std::thread::spawn(move || {
-            while let Ok(call) = call_rx.recv() {
-                match call {
-                    // Hot path: raw JSON from frontend IPC — forward directly,
-                    // no re-serialization needed (Bun expects the same format).
-                    BackendCall::Raw(json) => {
-                        let _ = stdin.write_all(json.as_bytes());
-                        let _ = stdin.write_all(b"\n");
-                    },
-                    // Lifecycle signals and any typed calls
-                    BackendCall::Typed { id, fn_name, args } => {
-                        let msg = match fn_name.as_str() {
-                            "__vorn_on_ready__" => serde_json::json!({ "type": "vorn:ready" }),
-                            "__vorn_on_close__" => serde_json::json!({ "type": "vorn:close" }),
-                            _ => serde_json::json!({
-                                "type": "call",
-                                "id":   id,
-                                "fn":   fn_name,
-                                "args": args,
-                            }),
-                        };
-                        match serde_json::to_string(&msg) {
-                            Ok(mut line) => {
-                                line.push('\n');
-                                let _ = stdin.write_all(line.as_bytes());
-                            },
-                            Err(e) => eprintln!("[vorn] failed to serialize BackendCall: {e}"),
-                        }
-                    },
-                }
-            }
-        });
-    }
-
-    // Thread: relay Bun stdout → BackendEvents
+    // Reader thread — forwards Bun stdout events. Dies when stdout closes
+    // (on Bun exit or kill during reload). A new reader is spawned by ReloadHandle.
     std::thread::spawn(move || {
         for line in reader.lines() {
             match line {
@@ -152,44 +224,26 @@ pub(crate) fn start(entry_path: &str) -> BackendBridge {
                         Ok(BunMsg::Event { name, payload }) => {
                             let _ = event_tx.send(BackendEvent::Emit { name, payload });
                         },
-                        Ok(BunMsg::Config { .. }) => {}, // already consumed
+                        Ok(BunMsg::Config { .. }) => {},
                         Err(e) => vorn_log!("Parse error ({e}): {trimmed}"),
                     }
                 },
-                Err(e) => {
-                    vorn_host::cleanup::run();
-                    // Broken pipe / unexpected EOF means Bun shut down cleanly
-                    // (user closed window). Only use exit code 1 for real IO errors.
-                    match e.kind() {
-                        ErrorKind::BrokenPipe
-                        | ErrorKind::ConnectionReset
-                        | ErrorKind::UnexpectedEof => std::process::exit(0),
-                        _ => std::process::exit(1),
-                    }
-                },
+                // Any error means Bun closed or crashed — the reader thread exits.
+                // ReloadHandle will spawn a fresh reader if/when a new Bun starts.
+                Err(_) => return,
             }
         }
-        vorn_host::cleanup::run();
-        std::process::exit(0);
     });
 
-    BackendBridge {
-        config,
-        call_tx,
-        event_rx,
-    }
+    Ok((child, bun_stdin, config))
 }
 
-fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> BackendConfig {
-    // Skip non-JSON lines (e.g. Bun deprecation warnings leaked to stdout)
-    // until we get the vorn:config message.
+fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> Result<BackendConfig, String> {
     loop {
         let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(0) | Err(_) => {
-                vorn_log!("Runtime exited before sending config");
-                vorn_log!("Make sure your backend calls app.start()");
-                std::process::exit(1);
+                return Err("Runtime exited before sending config (is app.start() called?)".into());
             },
             Ok(_) => {},
         }
@@ -208,26 +262,18 @@ fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> BackendConf
                 menu,
                 tray,
             }) => {
-                // VORN_ICON_PATH is set by the compiled launcher when it extracts
-                // the icon from the embedded assets to a temp directory.
                 let icon_path = std::env::var("VORN_ICON_PATH").ok();
-                return BackendConfig {
+                return Ok(BackendConfig {
                     window: window.unwrap_or_default(),
                     dev_url,
                     frontend_dir,
                     icon_path,
                     menu,
                     tray,
-                };
+                });
             },
-            Ok(other) => {
-                vorn_log!("Expected vorn:config, got: {other:?}");
-                std::process::exit(1);
-            },
-            Err(e) => {
-                vorn_log!("Failed to parse vorn:config: {e}\nLine: {trimmed}");
-                std::process::exit(1);
-            },
+            Ok(other) => return Err(format!("Expected vorn:config, got: {other:?}")),
+            Err(e) => return Err(format!("Failed to parse vorn:config: {e}\nLine: {trimmed}")),
         }
     }
 }
