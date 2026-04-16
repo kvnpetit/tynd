@@ -17,8 +17,6 @@ export type {
 import { vorn } from "./logger.js"
 import type { AppConfig, Emitter, EmitterMap } from "./types.js"
 
-// ── Lite mode detection ───────────────────────────────────────────────────────
-
 // __VORN_RUNTIME__ is replaced at bundle time by the CLI:
 //   buildLiteBundle → define: { "globalThis.__VORN_RUNTIME__": '"lite"' }
 //   buildFullBundle → define: { "globalThis.__VORN_RUNTIME__": '"full"' }
@@ -30,11 +28,7 @@ const IS_LITE: boolean =
   _g["__VORN_RUNTIME__"] === "lite" ||
   (_g["__VORN_RUNTIME__"] === undefined && _g["__vorn_lite__"] !== undefined)
 
-// ── Emit function ─────────────────────────────────────────────────────────────
-
 let _emitFn: ((name: string, payload: unknown) => void) | null = null
-
-// ── createEmitter ─────────────────────────────────────────────────────────────
 
 /**
  * Create a typed event emitter. Export the result from your backend module.
@@ -58,14 +52,10 @@ export function createEmitter<T extends EmitterMap>(): Emitter<T> {
   }
 }
 
-// ── Lifecycle callbacks ────────────────────────────────────────────────────────
-
 const _onReadyFns: Array<() => void> = []
 const _onCloseFns: Array<() => void> = []
 let _readyFired = false
 let _closeFired = false
-
-// ── app object ────────────────────────────────────────────────────────────────
 
 export const app = {
   /**
@@ -105,8 +95,6 @@ export const app = {
   },
 }
 
-// ── Full mode ─────────────────────────────────────────────────────────────────
-
 function _startFull(config: AppConfig): void {
   // 0. Redirect all console output to stderr so stdout stays clean for IPC JSON
   _redirectConsoleToStderr()
@@ -133,8 +121,6 @@ function _startFull(config: AppConfig): void {
   const entry = process.env["VORN_ENTRY"] ?? import.meta.path
   _startListener(entry)
 }
-
-// ── Lite mode ─────────────────────────────────────────────────────────────────
 
 function _startLite(config: AppConfig): void {
   // Write window config — Rust reads globalThis.__vorn_config__ after eval
@@ -179,8 +165,6 @@ function _startLite(config: AppConfig): void {
     }
   }
 }
-
-// ── IPC listener (full mode only) ─────────────────────────────────────────────
 
 let _moduleCache: Record<string, unknown> | null = null
 

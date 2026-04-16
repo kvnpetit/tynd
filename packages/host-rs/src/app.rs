@@ -7,9 +7,9 @@ use tao::{
 use wry::{http::Request, WebViewBuilder};
 
 use crate::{
-    ipc, os,
-    runtime::{BackendBridge, BackendCall, BackendEvent, MenuItemDef, TrayConfig},
-    scheme, window,
+    ipc, menu, os,
+    runtime::{BackendBridge, BackendCall, BackendEvent},
+    scheme, tray, window,
 };
 
 #[derive(Debug)]
@@ -80,10 +80,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let _app_menu: Option<muda::Menu> = if config.menu.is_empty() {
         None
     } else {
-        match build_muda_bar(&config.menu) {
-            Ok(menu) => {
-                init_menu_bar(&menu, &native_window);
-                Some(menu)
+        match menu::build_bar(&config.menu) {
+            Ok(m) => {
+                menu::init_bar(&m, &native_window);
+                Some(m)
             },
             Err(e) => {
                 crate::vorn_log!("Menu build failed: {e}");
@@ -93,7 +93,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     };
 
     let _system_tray: Option<tray_icon::TrayIcon> =
-        config.tray.as_ref().and_then(|tc| match build_tray(tc) {
+        config.tray.as_ref().and_then(|tc| match tray::build(tc) {
             Ok(tray) => {
                 let proxy = proxy.clone();
                 tray_icon::TrayIconEvent::set_event_handler(Some(
@@ -322,115 +322,4 @@ fn webview_data_dir(app_name: &str) -> Option<std::path::PathBuf> {
         safe = "vorn".to_string();
     }
     dirs::data_local_dir().map(|d| d.join(safe).join("WebView2"))
-}
-
-fn build_muda_bar(items: &[MenuItemDef]) -> Result<muda::Menu, String> {
-    let menu = muda::Menu::new();
-    for item in items {
-        let label = item.label.as_deref().unwrap_or("");
-        let enabled = item.enabled.unwrap_or(true);
-        let sub = muda::Submenu::new(label, enabled);
-        fill_items(
-            &|i: &dyn muda::IsMenuItem| sub.append(i),
-            item.items.as_deref().unwrap_or(&[]),
-        )?;
-        menu.append(&sub).map_err(|e| e.to_string())?;
-    }
-    Ok(menu)
-}
-
-/// Recursively fill a menu container using a caller-provided append closure.
-fn fill_items(
-    append: &dyn Fn(&dyn muda::IsMenuItem) -> muda::Result<()>,
-    items: &[MenuItemDef],
-) -> Result<(), String> {
-    for item in items {
-        match item.kind.as_deref() {
-            Some("separator") => {
-                append(&muda::PredefinedMenuItem::separator()).map_err(|e| e.to_string())?;
-            },
-            Some("submenu") => {
-                let label = item.label.as_deref().unwrap_or("");
-                let enabled = item.enabled.unwrap_or(true);
-                let sub = muda::Submenu::new(label, enabled);
-                fill_items(
-                    &|i: &dyn muda::IsMenuItem| sub.append(i),
-                    item.items.as_deref().unwrap_or(&[]),
-                )?;
-                append(&sub).map_err(|e| e.to_string())?;
-            },
-            _ => {
-                if let Some(role) = &item.role {
-                    if let Some(pi) = role_to_predefined(role) {
-                        append(&pi).map_err(|e| e.to_string())?;
-                        continue;
-                    }
-                }
-                if let Some(label) = &item.label {
-                    let id = muda::MenuId::new(item.id.as_deref().unwrap_or(label));
-                    let mi = muda::MenuItem::with_id(id, label, item.enabled.unwrap_or(true), None);
-                    append(&mi).map_err(|e| e.to_string())?;
-                }
-            },
-        }
-    }
-    Ok(())
-}
-
-fn role_to_predefined(role: &str) -> Option<muda::PredefinedMenuItem> {
-    use muda::PredefinedMenuItem as P;
-    Some(match role {
-        "separator" => P::separator(),
-        "quit" => P::quit(None),
-        "copy" => P::copy(None),
-        "cut" => P::cut(None),
-        "paste" => P::paste(None),
-        "undo" => P::undo(None),
-        "redo" => P::redo(None),
-        "selectAll" => P::select_all(None),
-        "minimize" => P::minimize(None),
-        "close" => P::close_window(None),
-        "about" => P::about(None::<&str>, None),
-        _ => return None,
-    })
-}
-
-fn init_menu_bar(menu: &muda::Menu, window: &tao::window::Window) {
-    #[cfg(target_os = "windows")]
-    {
-        use tao::platform::windows::WindowExtWindows;
-        unsafe {
-            if let Err(e) = menu.init_for_hwnd(window.hwnd()) {
-                crate::vorn_log!("menu.init_for_hwnd: {e}");
-            }
-        }
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let _ = window;
-        menu.init_for_nsapp();
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        let _ = (menu, window);
-    }
-}
-
-fn build_tray(cfg: &TrayConfig) -> Result<tray_icon::TrayIcon, String> {
-    let icon = os::icon::load_tray(&cfg.icon)?;
-
-    let tray_menu = muda::Menu::new();
-    if let Some(items) = &cfg.menu {
-        fill_items(&|i: &dyn muda::IsMenuItem| tray_menu.append(i), items)?;
-    }
-
-    let mut builder = tray_icon::TrayIconBuilder::new()
-        .with_icon(icon)
-        .with_menu(Box::new(tray_menu));
-
-    if let Some(tt) = &cfg.tooltip {
-        builder = builder.with_tooltip(tt);
-    }
-
-    builder.build().map_err(|e| e.to_string())
 }
