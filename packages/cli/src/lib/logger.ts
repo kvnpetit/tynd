@@ -1,13 +1,18 @@
+// ANSI is emitted only when stdout is a TTY and NO_COLOR is unset.
+// Respect https://no-color.org so CI logs stay greppable.
+const useColor = Boolean(process.stdout.isTTY) && !process.env["NO_COLOR"]
+
+const ansi = (code: string) => (useColor ? code : "")
 const c = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  green: "\x1b[32m",
-  cyan: "\x1b[36m",
-  yellow: "\x1b[33m",
-  red: "\x1b[31m",
-  gray: "\x1b[90m",
-  white: "\x1b[97m",
+  reset: ansi("\x1b[0m"),
+  bold: ansi("\x1b[1m"),
+  dim: ansi("\x1b[2m"),
+  green: ansi("\x1b[32m"),
+  cyan: ansi("\x1b[36m"),
+  yellow: ansi("\x1b[33m"),
+  red: ansi("\x1b[31m"),
+  gray: ansi("\x1b[90m"),
+  white: ansi("\x1b[97m"),
 }
 
 const prefix = `${c.cyan}${c.bold}vorn${c.reset}`
@@ -24,7 +29,6 @@ export function getLogLevel(): LogLevel {
   return currentLevel
 }
 
-// quiet: errors only. normal: everything except debug. verbose: everything.
 const showStep = () => currentLevel !== "quiet"
 const showInfo = () => currentLevel !== "quiet"
 const showDebug = () => currentLevel === "verbose"
@@ -41,6 +45,14 @@ export const log = {
     showDebug() && console.log(`${prefix}  ${c.dim}· ${a.join(" ")}${c.reset}`),
   blank: () => showInfo() && console.log(),
   dim: (...a: unknown[]) => showInfo() && console.log(`${c.dim}${a.join(" ")}${c.reset}`),
+  /**
+   * Print an error followed by a suggested next step. Keeps the two lines
+   * visually paired so users always see the fix after the cause.
+   */
+  hint: (message: string, next: string) => {
+    console.error(`${prefix}  ${c.red}✗${c.reset} ${message}`)
+    console.error(`${c.dim}  → ${next}${c.reset}`)
+  },
   bold: (s: string) => `${c.bold}${s}${c.reset}`,
   cyan: (s: string) => `${c.cyan}${s}${c.reset}`,
   green: (s: string) => `${c.green}${s}${c.reset}`,

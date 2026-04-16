@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { log } from "./logger.ts"
 
 export interface CacheEntry {
   hash: string
@@ -77,10 +78,16 @@ function walkSorted(dir: string, exclude: Set<string>): string[] {
 
 export function readCache(cacheDir: string, key: string): CacheEntry | null {
   const file = path.join(cacheDir, `${key}.json`)
-  if (!existsSync(file)) return null
+  if (!existsSync(file)) {
+    log.debug(`cache miss (${key}): ${file} does not exist`)
+    return null
+  }
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as CacheEntry
+    const entry = JSON.parse(readFileSync(file, "utf8")) as CacheEntry
+    log.debug(`cache hit (${key}): hash=${entry.hash.slice(0, 12)}…`)
+    return entry
   } catch {
+    log.debug(`cache miss (${key}): failed to parse ${file}`)
     return null
   }
 }
@@ -89,6 +96,7 @@ export function writeCache(cacheDir: string, key: string, entry: CacheEntry): vo
   try {
     mkdirSync(cacheDir, { recursive: true })
     writeFileSync(path.join(cacheDir, `${key}.json`), JSON.stringify(entry))
+    log.debug(`cache write (${key}): hash=${entry.hash.slice(0, 12)}…`)
   } catch {
     /* non-fatal — next build will recompute and miss cache */
   }

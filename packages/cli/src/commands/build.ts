@@ -38,8 +38,10 @@ export async function build(opts: BuildOptions): Promise<void> {
   const frontend = await detectFrontend(opts.cwd)
 
   if (frontend.blockedBy) {
-    log.error(`${frontend.blockedBy} detected — incompatible with server-side frameworks.`)
-    log.dim("  Requires a pure SPA (React, Vue, Svelte, Angular, Solid, Lit, Preact…)")
+    log.hint(
+      `${frontend.blockedBy} detected — incompatible with server-side frameworks.`,
+      "Requires a pure SPA (React, Vue, Svelte, Angular, Solid, Lit, Preact…)",
+    )
     process.exit(1)
   }
 
@@ -134,8 +136,7 @@ export async function build(opts: BuildOptions): Promise<void> {
 
   const hostBin = findBinary(cfg.runtime, opts.cwd)
   if (!hostBin) {
-    log.error(`vorn-${cfg.runtime} binary not found.`)
-    log.dim(`  Install: bun add @vorn/host`)
+    log.hint(`vorn-${cfg.runtime} binary not found.`, "Install: bun add @vorn/host")
     process.exit(1)
   }
   log.step(`Host: ${log.gray(path.relative(opts.cwd, hostBin))}`)

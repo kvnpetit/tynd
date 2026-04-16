@@ -17,8 +17,10 @@ export async function dev(opts: DevOptions): Promise<void> {
   const frontend = await detectFrontend(opts.cwd)
 
   if (frontend.blockedBy) {
-    log.error(`${frontend.blockedBy} detected — incompatible with server-side frameworks.`)
-    log.dim("  Requires a pure SPA (React, Vue, Svelte, Angular, Solid, Lit, Preact…)")
+    log.hint(
+      `${frontend.blockedBy} detected — incompatible with server-side frameworks.`,
+      "Requires a pure SPA (React, Vue, Svelte, Angular, Solid, Lit, Preact…)",
+    )
     process.exit(1)
   }
 
@@ -28,8 +30,7 @@ export async function dev(opts: DevOptions): Promise<void> {
 
   const binPath = findBinary(cfg.runtime, opts.cwd)
   if (!binPath) {
-    log.error(`vorn-${cfg.runtime} binary not found.`)
-    log.dim(`  Install: bun add @vorn/host`)
+    log.hint(`vorn-${cfg.runtime} binary not found.`, "Install: bun add @vorn/host")
     process.exit(1)
   }
 
@@ -138,6 +139,7 @@ export async function dev(opts: DevOptions): Promise<void> {
     return proc
   }
 
+  log.debug(`spawning host: ${binPath} ${makeArgs().join(" ")}`)
   let hostProc = spawnHost()
 
   // Backend change → hot reload via stdin admin command. Host keeps the WebView
@@ -227,6 +229,7 @@ export async function dev(opts: DevOptions): Promise<void> {
   const configPath = path.join(opts.cwd, "vorn.config.ts")
   const backendWatcher = watch(backendSrcDir, { recursive: true }, (_, filename) => {
     if (!filename || !WATCH_EXTS.test(filename)) return
+    log.debug(`backend file changed: ${filename}`)
     triggerReload("backend")
   })
   const configWatcher = existsSync(configPath)

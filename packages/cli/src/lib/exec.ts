@@ -1,3 +1,5 @@
+import { log } from "./logger.ts"
+
 export interface ExecOptions {
   cwd?: string
   env?: Record<string, string>
@@ -6,6 +8,7 @@ export interface ExecOptions {
 
 /** Run a command, stream output, reject on non-zero exit. */
 export async function exec(cmd: string, args: string[], opts: ExecOptions = {}): Promise<void> {
+  log.debug(`exec: ${cmd} ${args.join(" ")} ${opts.cwd ? `(cwd: ${opts.cwd})` : ""}`)
   const proc = Bun.spawn([cmd, ...args], {
     ...(opts.cwd !== undefined && { cwd: opts.cwd }),
     env: opts.env ? { ...process.env, ...opts.env } : process.env,

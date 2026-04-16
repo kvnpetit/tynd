@@ -1,9 +1,11 @@
 import {
   confirm as clackConfirm,
   select as clackSelect,
+  spinner as clackSpinner,
   text as clackText,
   isCancel,
 } from "@clack/prompts"
+import { getLogLevel } from "./logger.ts"
 
 function onCancel(): never {
   process.stdout.write("\n")
@@ -36,4 +38,25 @@ export async function select<T extends string>(
   const result = await clackSelect<T>({ message, options })
   if (isCancel(result)) onCancel()
   return result as T
+}
+
+/**
+ * Run `task` while showing an animated spinner with `label`. Disables itself in
+ * verbose mode (debug output would fight the re-drawn spinner line) and in
+ * non-TTY contexts where ANSI would bloat CI logs.
+ */
+export async function withSpinner<T>(label: string, task: () => Promise<T>): Promise<T> {
+  const canAnimate = Boolean(process.stdout.isTTY) && getLogLevel() !== "verbose"
+  if (!canAnimate) return task()
+
+  const s = clackSpinner()
+  s.start(label)
+  try {
+    const result = await task()
+    s.stop(`${label} ✓`)
+    return result
+  } catch (err) {
+    s.stop(`${label} ✗`)
+    throw err
+  }
 }

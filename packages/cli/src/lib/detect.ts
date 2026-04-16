@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
+import { log } from "./logger.ts"
 
 export type Platform = "windows" | "macos" | "linux"
 export type Arch = "x64" | "arm64"
@@ -47,14 +48,21 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
   const name = binaryName(runtime)
   const plat = getPlatform()
   const arch = getArch()
+  log.debug(`findBinary(${runtime}): searching for ${name} on ${plat}-${arch}`)
 
   // 1. Cargo workspace root (walk up from cwd) — prefer release over debug
   let dir = cwd
   for (let i = 0; i < 6; i++) {
     const release = path.join(dir, "target", "release", name)
     const debug = path.join(dir, "target", "debug", name)
-    if (existsSync(release)) return release
-    if (existsSync(debug)) return debug
+    if (existsSync(release)) {
+      log.debug(`findBinary: matched workspace release → ${release}`)
+      return release
+    }
+    if (existsSync(debug)) {
+      log.debug(`findBinary: matched workspace debug → ${debug}`)
+      return debug
+    }
     const parent = path.dirname(dir)
     if (parent === dir) break
     dir = parent
@@ -62,7 +70,10 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
 
   // 2. Published npm package (@vorn/host contains both runtimes)
   const nmBin = path.join(cwd, "node_modules", "@vorn/host", "bin", `${plat}-${arch}`, name)
-  if (existsSync(nmBin)) return nmBin
+  if (existsSync(nmBin)) {
+    log.debug(`findBinary: matched node_modules → ${nmBin}`)
+    return nmBin
+  }
 
   // 3. System PATH
   const which = process.platform === "win32" ? "where" : "which"
@@ -70,12 +81,16 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
     const result = Bun.spawnSync([which, name], { stdout: "pipe", stderr: "pipe" })
     if (result.exitCode === 0) {
       const p = new TextDecoder().decode(result.stdout).trim().split("\n")[0]!.trim()
-      if (p) return p
+      if (p) {
+        log.debug(`findBinary: matched PATH → ${p}`)
+        return p
+      }
     }
   } catch {
     /* not found */
   }
 
+  log.debug(`findBinary(${runtime}): no match found`)
   return null
 }
 
@@ -253,8 +268,10 @@ export async function detectFrontend(cwd: string): Promise<FrontendInfo> {
   else if (deps["parcel"] || deps["parcel-bundler"]) tool = "parcel"
   else if (deps["@rsbuild/core"]) tool = "rsbuild"
   else if (deps["webpack"] || deps["webpack-cli"]) tool = "webpack"
+  log.debug(`detectFrontend: ${tool}`)
 
   const outDir = await resolveOutDir(cwd, tool)
+  log.debug(`detectFrontend: outDir=${outDir}`)
   const cmds = TOOL_COMMANDS[tool]
 
   return {

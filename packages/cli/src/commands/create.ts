@@ -2,7 +2,7 @@ import { existsSync, rmSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
-import { confirm } from "../lib/prompt.ts"
+import { confirm, withSpinner } from "../lib/prompt.ts"
 import { init } from "./init.ts"
 
 export const FRAMEWORKS = [
@@ -53,31 +53,34 @@ export async function create(name: string, opts: CreateOptions): Promise<void> {
 
   try {
     if (fw.viteTemplate !== null) {
-      log.step(`Scaffolding with ${log.cyan("Vite")} (${fw.hint})…`)
-      await exec("bun", ["create", "vite@latest", name, "--template", fw.viteTemplate], {
-        cwd: process.cwd(),
-      })
-      log.success(`${fw.label} project created`)
-    } else {
-      log.step(`Scaffolding with ${log.cyan("Angular CLI")}…`)
-      await exec(
-        "bunx",
-        [
-          "@angular/cli@latest",
-          "new",
-          name,
-          "--defaults",
-          "--skip-git",
-          "--skip-install",
-          "--ssr=false",
-        ],
-        { cwd: process.cwd() },
+      await withSpinner(`Scaffolding ${fw.label} project with Vite`, () =>
+        exec("bun", ["create", "vite@latest", name, "--template", fw.viteTemplate], {
+          cwd: process.cwd(),
+          silent: true,
+        }),
       )
-      log.success("Angular project created")
+    } else {
+      await withSpinner("Scaffolding Angular project", () =>
+        exec(
+          "bunx",
+          [
+            "@angular/cli@latest",
+            "new",
+            name,
+            "--defaults",
+            "--skip-git",
+            "--skip-install",
+            "--ssr=false",
+          ],
+          { cwd: process.cwd(), silent: true },
+        ),
+      )
     }
   } catch (err) {
-    log.error(`Scaffolding failed: ${err instanceof Error ? err.message : String(err)}`)
-    log.dim("  Check your network connection and that bunx can reach the npm registry.")
+    log.hint(
+      `Scaffolding failed: ${err instanceof Error ? err.message : String(err)}`,
+      "Check your network connection and that bunx can reach the npm registry.",
+    )
     // Remove the partially-created project so a retry starts from a clean slate.
     if (existsSync(projectDir)) {
       try {
@@ -96,10 +99,10 @@ export async function create(name: string, opts: CreateOptions): Promise<void> {
   const shouldInstall = opts.noInstall ? false : await confirm("Install dependencies now?", true)
 
   if (shouldInstall) {
-    log.step("Installing dependencies…")
     try {
-      await exec("bun", ["install"], { cwd: projectDir })
-      log.success("Dependencies installed")
+      await withSpinner("Installing dependencies", () =>
+        exec("bun", ["install"], { cwd: projectDir, silent: true }),
+      )
     } catch (err) {
       log.warn(`bun install failed: ${err}`)
     }
