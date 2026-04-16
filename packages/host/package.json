@@ -4,7 +4,8 @@
   "description": "Pre-built native host binaries for Vorn (webview + QuickJS)",
   "private": false,
   "scripts": {
-    "postinstall": "bun run install.ts"
+    "postinstall": "bun run install.ts",
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "install.ts"
