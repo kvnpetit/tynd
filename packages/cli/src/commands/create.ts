@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs"
+import { existsSync, rmSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
@@ -51,28 +51,42 @@ export async function create(name: string, opts: CreateOptions): Promise<void> {
   log.info(`Creating ${log.bold(name)} — ${log.cyan(fw.label)} / ${log.cyan(opts.runtime)}`)
   log.blank()
 
-  if (fw.viteTemplate !== null) {
-    log.step(`Scaffolding with ${log.cyan("Vite")} (${fw.hint})…`)
-    await exec("bun", ["create", "vite@latest", name, "--template", fw.viteTemplate], {
-      cwd: process.cwd(),
-    })
-    log.success(`${fw.label} project created`)
-  } else {
-    log.step(`Scaffolding with ${log.cyan("Angular CLI")}…`)
-    await exec(
-      "bunx",
-      [
-        "@angular/cli@latest",
-        "new",
-        name,
-        "--defaults",
-        "--skip-git",
-        "--skip-install",
-        "--ssr=false",
-      ],
-      { cwd: process.cwd() },
-    )
-    log.success("Angular project created")
+  try {
+    if (fw.viteTemplate !== null) {
+      log.step(`Scaffolding with ${log.cyan("Vite")} (${fw.hint})…`)
+      await exec("bun", ["create", "vite@latest", name, "--template", fw.viteTemplate], {
+        cwd: process.cwd(),
+      })
+      log.success(`${fw.label} project created`)
+    } else {
+      log.step(`Scaffolding with ${log.cyan("Angular CLI")}…`)
+      await exec(
+        "bunx",
+        [
+          "@angular/cli@latest",
+          "new",
+          name,
+          "--defaults",
+          "--skip-git",
+          "--skip-install",
+          "--ssr=false",
+        ],
+        { cwd: process.cwd() },
+      )
+      log.success("Angular project created")
+    }
+  } catch (err) {
+    log.error(`Scaffolding failed: ${err instanceof Error ? err.message : String(err)}`)
+    log.dim("  Check your network connection and that bunx can reach the npm registry.")
+    // Remove the partially-created project so a retry starts from a clean slate.
+    if (existsSync(projectDir)) {
+      try {
+        rmSync(projectDir, { recursive: true, force: true })
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+    process.exit(1)
   }
 
   log.blank()

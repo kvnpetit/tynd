@@ -34,6 +34,17 @@ export async function init(opts: InitOptions): Promise<void> {
     } catch {
       /* ignore */
     }
+  } else {
+    // No package.json → generate a minimal one. Without it, `bun install`
+    // has nothing to resolve and `vorn dev` / `vorn build` would fail to
+    // wire up @vorn/core and @vorn/host.
+    pkg = {
+      name,
+      version: "0.0.0",
+      private: true,
+      type: "module",
+    }
+    log.step(`${log.cyan("create")}  package.json`)
   }
 
   const frontend = await detectFrontend(opts.cwd)
