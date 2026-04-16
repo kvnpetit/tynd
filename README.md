@@ -88,6 +88,23 @@ vorn info                    # show environment info (Bun, Rust, WebView2…)
 
 ---
 
+## Supported frameworks
+
+| Framework | Scaffold | Build | Fast Refresh (HMR) |
+|---|---|---|---|
+| React                 | ✅ Vite `react-ts`  | ✅ | ⚠ OK; breaks if React Compiler is enabled |
+| Vue / Svelte / Solid / Preact | ✅ Vite `<name>-ts` | ✅ | ✅ |
+| Lit                   | ✅ Vite `lit-ts`    | ✅ | ♻ Full reload only — Web Components by design |
+| Angular               | ✅ Angular CLI      | ✅ | ♻ Full reload by default (opt-in HMR via `ng serve --hmr`) |
+
+`vorn init` also detects existing **Vite**, **CRA**, **Angular CLI**, **Parcel**, **Rsbuild**, and **Webpack** setups.
+
+**Blocked (SSR):** Next.js, Nuxt, SvelteKit, Remix, Gatsby, Blitz.js, RedwoodJS, SolidStart, Angular Universal, Analog, Qwik City, Astro, TanStack Start, Vike. Use the SPA variant instead (plain Svelte vs SvelteKit, plain Solid vs SolidStart, …).
+
+See [`FRAMEWORKS.md`](FRAMEWORKS.md) for the full matrix, per-framework notes, output-dir rules, and the React Compiler workaround.
+
+---
+
 ## Project structure
 
 ```
