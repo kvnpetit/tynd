@@ -1,6 +1,6 @@
 # Vorn vs Tauri v2 vs Wails v3 vs Electron — Exhaustive Feature Comparison
 
-> Last updated: April 14, 2026 | Desktop only (mobile features marked 📱)
+> Last updated: April 16, 2026 | Desktop only (mobile features marked 📱)
 
 > ⚠️ **Architecture note — Electron:** Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tauri, Wails, and Vorn use the OS's native WebView (WebView2 / WKWebView / WebKitGTK). This explains both Electron's broader API surface and its larger binary footprint.
 
@@ -110,11 +110,16 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Background throttling policy | ❌ | ✅ | ❌ | ✅ |
 | Accept first mouse (macOS) | ❌ | ✅ | ❌ | ❌ |
 | Allow link preview (macOS / iOS) | ❌ | ✅ | ❌ | ❌ |
-| Multiple webviews in one window | ❌ | ⚠️ | ❌ | ✅ |
+| Multiple webviews in one window | ❌ | ✅ | ❌ | ✅ |
 | On navigation hook (intercept / cancel) | ❌ | ✅ | ❌ | ✅ |
 | On page load callback | ❌ | ✅ | ❌ | ✅ |
 | Disable input accessory view (iOS) | ❌ | ✅ 📱 | ❌ | ❌ |
 | DevTools toggle per webview | ❌ | ✅ | ✅ | ✅ |
+| Set user agent | ❌ | ✅ | ✅ | ✅ |
+| Set zoom level / zoom factor | ❌ | ✅ | ✅ | ✅ |
+| Capture page (screenshot of webview) | ❌ | ⚠️ | ❌ | ✅ |
+| Navigation history — save / restore | ❌ | ❌ | ❌ | ✅ |
+| Per-webview session | ❌ | ⚠️ | ❌ | ✅ |
 
 ---
 
@@ -215,6 +220,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Treat packages as directories (macOS) | ❌ | ❌ | ✅ | ✅ |
 | Attach dialog to window (modal) | ❌ | ❌ | ✅ | ✅ |
 | Resolve macOS aliases | ❌ | ❌ | ✅ | ❌ |
+| Native color picker | ❌ | ❌ | ❌ | ❌ |
+| Native font picker | ❌ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -240,6 +247,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Attach window to tray icon | ❌ | ❌ | ✅ | ❌ |
 | Position window near tray | ❌ | ✅ | ✅ | ❌ |
 | Remove / destroy tray | ❌ | ✅ | ✅ | ✅ |
+| Balloon tooltip (Windows) | ❌ | ❌ | ❌ | ✅ |
+| Update menu item by ID at runtime | ❌ | ✅ | ✅ | ⚠️ |
 
 ---
 
@@ -291,6 +300,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Read / write HTML | ❌ | ✅ | ❌ | ✅ |
 | Clear clipboard | ❌ | ✅ | ❌ | ✅ |
 | Clipboard change monitoring | ❌ | ✅ | ❌ | ⚠️ |
+| Read / write file paths (drag sources) | ❌ | ✅ | ❌ | ✅ |
+| Read / write custom buffer formats | ❌ | ⚠️ | ❌ | ✅ |
 
 ---
 
@@ -348,6 +359,9 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | FS: file watcher | ❌ | ✅ | ❌ | ✅ |
 | FS: file handle (seek / partial read) | ❌ | ✅ | ❌ | ✅ |
 | Scoped file access (allow / deny patterns) | ❌ | ✅ | ❌ | ❌ |
+| FS: trash / move to recycle bin | ❌ | ⚠️ | ❌ | ✅ |
+| FS: symbolic link create / read | ❌ | ✅ | ⚠️ | ✅ |
+| FS: hard link | ❌ | ✅ | ⚠️ | ✅ |
 
 ---
 
@@ -376,6 +390,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | HTTP asset server middleware | ❌ | ⚠️ | ✅ | ✅ |
 | Server mode (no GUI) | ❌ | ❌ | ✅ | ✅ |
 | Serve local files via protocol / custom scheme | ❌ | ✅ | ❌ | ✅ |
+| MessagePort / MessageChannel (transferable) | ❌ | ❌ | ❌ | ✅ |
+| `postMessage` with transferable objects | ❌ | ❌ | ❌ | ✅ |
 
 ---
 
@@ -443,6 +459,9 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | SQLite / relational DB | ❌ | ✅ | ✅ | ⚠️ |
 | Encrypted secure storage | ❌ | ✅ | ❌ | ✅ |
 | Persisted scope (runtime permission changes saved) | ❌ | ✅ | N/A | N/A |
+| Cookies API (read / set / delete) | ❌ | ⚠️ | ❌ | ✅ |
+| HTTP cache control (size, clear) | ❌ | ❌ | ❌ | ✅ |
+| Proxy configuration | ❌ | ⚠️ | ❌ | ✅ |
 
 ---
 
@@ -532,7 +551,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Biometric authentication | ❌ | ✅ 📱 | ❌ | ❌ |
 | Structural security (export = exposure surface) | ✅ | ❌ | ❌ | ❌ |
 | Context isolation (renderer ↔ preload boundary) | ❌ | ✅ | ❌ | ✅ |
-| Preload scripts | ❌ | ✅ | ❌ | ✅ |
+| Preload scripts | ❌ | ⚠️ | ❌ | ✅ |
 | contextBridge — expose selective APIs to renderer | ❌ | ❌ | ❌ | ✅ |
 | Renderer sandbox mode | ❌ | ❌ | ❌ | ✅ |
 
@@ -576,6 +595,9 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | GTK3 / WebKitGTK 4.1 | ✅ | ✅ | ✅ | N/A |
 | GTK4 / WebKitGTK 6.0 (experimental) | ❌ | ❌ | ✅ | N/A |
 | Wayland — fractional scaling + NVIDIA DMA-BUF fix | ❌ | ❌ | ✅ | ✅ |
+| Snap package (.snap) | ❌ | ❌ | ❌ | ✅ |
+| Flatpak (.flatpak) | ❌ | ⚠️ | ❌ | ✅ |
+| Microsoft Store (MSIX / APPX) | ❌ | ❌ | ❌ | ✅ |
 | **General** | | | | |
 | Build hooks (before / after) | ❌ | ✅ | ✅ | ✅ |
 | Icon embedded in binary | ✅ | ✅ | ✅ | ✅ |
@@ -624,7 +646,86 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 ---
 
-## 32. Electron-Specific APIs
+## 32. Printing & PDF Export
+
+| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+|---|---|---|---|---|
+| Programmatic print (open system dialog) | ❌ | ❌ | ✅ | ✅ |
+| Silent print (no dialog) | ❌ | ❌ | ❌ | ✅ |
+| Page range / copies / duplex options | ❌ | ❌ | ❌ | ✅ |
+| Choose printer by name | ❌ | ❌ | ❌ | ✅ |
+| Print preview | ❌ | ❌ | ❌ | ✅ |
+| `printToPDF` (webview → PDF buffer) | ❌ | ❌ | ❌ | ✅ |
+| List available printers | ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 33. Screen & Media Capture
+
+| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+|---|---|---|---|---|
+| Screen / window source enumeration | ❌ | ❌ | ❌ | ✅ |
+| `getDisplayMedia` / MediaStream | ❌ | ❌ | ❌ | ✅ |
+| macOS 15 system picker | ❌ | ❌ | ❌ | ✅ |
+| Thumbnail previews for source picker | ❌ | ❌ | ❌ | ✅ |
+| Capture own window (screenshot) | ❌ | ⚠️ | ❌ | ✅ |
+| Camera / microphone permission prompt | ❌ | ❌ | ❌ | ✅ |
+| WebRTC screen sharing | ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 34. Accessibility
+
+| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+|---|---|---|---|---|
+| Enable / disable accessibility support | ❌ | ❌ | ❌ | ✅ |
+| VoiceOver (macOS) integration | ⚠️ | ⚠️ | ⚠️ | ✅ |
+| Narrator (Windows) integration | ⚠️ | ⚠️ | ⚠️ | ✅ |
+| ARIA attribute forwarding to AT | ✅ | ✅ | ✅ | ✅ |
+| Reduced motion / high contrast detection | ❌ | ❌ | ❌ | ✅ |
+| System font-size override awareness | ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 35. Spellcheck & Find in Page
+
+| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+|---|---|---|---|---|
+| Built-in spellchecker | ❌ | ❌ | ❌ | ✅ |
+| Custom dictionary | ❌ | ❌ | ❌ | ✅ |
+| Language list / switch | ❌ | ❌ | ❌ | ✅ |
+| Context menu spelling suggestions | ❌ | ❌ | ❌ | ✅ |
+| `findInPage` (Cmd+F style) | ❌ | ❌ | ❌ | ✅ |
+| `stopFindInPage` | ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 36. Extensions, WebFrame & Service Workers
+
+| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+|---|---|---|---|---|
+| Load Chrome extension | ❌ | ❌ | ❌ | ✅ |
+| Extension manifest v3 support | ❌ | ❌ | ❌ | ✅ |
+| `webFrame` / `webFrameMain` API | ❌ | ❌ | ❌ | ✅ |
+| Service worker — register from main | ❌ | ❌ | ❌ | ✅ |
+| Service worker preload scripts | ❌ | ❌ | ❌ | ✅ |
+| SharedArrayBuffer / COOP-COEP control | ❌ | ⚠️ | ❌ | ✅ |
+
+---
+
+## 37. In-app Purchase (Storefronts)
+
+| Feature | Vorn | Tauri v2 | Wails v3 | Electron |
+|---|---|---|---|---|
+| macOS StoreKit — product lookup | ❌ | ❌ | ❌ | ✅ |
+| macOS StoreKit — purchase / restore | ❌ | ❌ | ❌ | ✅ |
+| Windows Store — Microsoft.Services.Store | ❌ | ❌ | ❌ | ❌ |
+| Receipt validation | ❌ | ❌ | ❌ | ✅ |
+| Subscription status | ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 38. Electron-Specific APIs
 
 Features available in Electron with no direct equivalent in the other frameworks.
 
@@ -652,38 +753,44 @@ Features available in Electron with no direct equivalent in the other frameworks
 |---|---|---|---|---|
 | Window — core ops | 14/39 | 38/39 | 29/39 | 37/39 |
 | Window — appearance | 4/27 | 19/27 | 18/27 | 18/27 |
-| Webview API | 0/14 | 13/14 | 0/14 | 11/14 |
+| Webview API | 0/19 | 17/19 | 2/19 | 16/19 |
 | Multi-window | 0/9 | 8/9 | 7/9 | 8/9 |
 | Window events | 0/14 | 11/14 | 12/14 | 13/14 |
 | Cursor & mouse | 0/7 | 7/7 | 2/7 | 3/7 |
 | Monitors & screens | 0/8 | 7/8 | 6/8 | 7/8 |
 | Drag & drop | 1/4 | 3/4 | 4/4 | 3/4 |
-| Dialogs | 7/16 | 13/16 | 14/16 | 14/16 |
-| System tray | 7/18 | 14/18 | 17/18 | 13/18 |
+| Dialogs | 7/18 | 13/18 | 14/18 | 14/18 |
+| System tray | 7/20 | 15/20 | 18/20 | 14/20 |
 | Menu bar (app) | 6/19 | 15/19 | 15/19 | 13/19 |
 | Context menu | 0/4 | 3/4 | 4/4 | 3/4 |
-| Clipboard | 2/7 | 7/7 | 2/7 | 6/7 |
+| Clipboard | 2/9 | 8/9 | 2/9 | 8/9 |
 | Notifications | 1/13 | 13/13 | 6/13 | 9/13 |
 | Global shortcuts | 0/6 | 6/6 | 4/6 | 4/6 |
-| Shell & FS | 2/18 | 18/18 | 6/18 | 17/18 |
-| IPC & Events | 6/21 | 17/21 | 11/21 | 15/21 |
+| Shell & FS | 2/21 | 20/21 | 6/21 | 20/21 |
+| IPC & Events | 6/23 | 17/23 | 11/23 | 17/23 |
 | HTTP & WebSocket | 0/4 | 4/4 | 1/4 | 4/4 |
 | Auto-updater | 0/10 | 10/10 | 0/10 | 10/10 |
 | Single instance & deep linking | 0/8 | 7/8 | 4/8 | 7/8 |
 | Autolaunch | 0/3 | 3/3 | 0/3 | 3/3 |
-| Persistent storage | 0/7 | 7/7 | 3/7 | 4/7 |
+| Persistent storage | 0/10 | 7/10 | 3/10 | 7/10 |
 | Logging | 0/5 | 5/5 | 4/5 | 2/5 |
 | App-level APIs | 0/14 | 11/14 | 7/14 | 11/14 |
 | OS & Environment | 0/12 | 11/12 | 5/12 | 11/12 |
 | Path utilities | 0/13 | 13/13 | 0/13 | 11/13 |
 | Security & permissions | 1/13 | 8/13 | 0/13 | 6/13 |
 | Mobile | 0/8 | 8/8 | 0/8 | 0/8 |
-| Build & distribution | 3/23 | 19/23 | 13/23 | 18/23 |
+| Build & distribution | 3/26 | 19/26 | 13/26 | 21/26 |
 | DX & CLI | 7/17 | 12/17 | 11/17 | 9/17 |
+| Printing & PDF | 0/7 | 0/7 | 1/7 | 7/7 |
+| Screen & media capture | 0/7 | 0/7 | 0/7 | 7/7 |
+| Accessibility | 1/6 | 1/6 | 1/6 | 6/6 |
+| Spellcheck & find | 0/6 | 0/6 | 0/6 | 6/6 |
+| Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
+| In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~61/444 (14%)** | **~359/444 (81%)** | **~184/444 (41%)** | **~296/444 (67%)** |
+| **Total** | **~62/503 (12%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
-> **Note on scores:** Vorn is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively. Tauri v2's breadth is driven by its 30+ official plugins and mobile platform support.
+> **Note on scores:** Vorn is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
 ---
 
@@ -703,7 +810,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Feature | Description |
 |---|---|
 | **Capability-based ACL** | Fine-grained permissions per command, file path, URL — default-deny model |
-| **30+ official plugins** | Stronghold, biometric, NFC, SQL, HTTP, WebSocket, autostart, deep-link, updater, store, persisted-scope… |
+| **31 official plugins** | Stronghold, biometric, NFC, SQL, HTTP, WebSocket, autostart, deep-link, updater, store, persisted-scope… |
 | **Mobile support** | iOS + Android with dedicated plugins (barcode, NFC, haptics, geolocation, share) |
 | **28 window visual effects** | All Mica/Acrylic/Tabbed variants + 28 NSVisualEffect macOS variants |
 | **59 native menu icons** | NSImage system symbols in menu items (macOS) |
@@ -712,7 +819,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | **Sidecar binaries** | Bundle and run native executables alongside the app |
 | **WebView2 bootstrapper** | Embedded installer for Windows machines without WebView2 |
 | **Delta updates** | Binary diff for minimal update download size |
-| **Multi-webview (unstable)** | Multiple independent webviews inside a single native window |
+| **Multi-webview** | Multiple independent webviews inside a single native window (stabilised in Tauri 2.x) |
 | **Navigation interception** | Rust-side hook to validate or block URLs before load |
 
 ## Wails v3 unique strengths
@@ -730,7 +837,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | **GTK4 / WebKitGTK 6.0** | Experimental support via `-tags gtk4` |
 | **HTTP middleware + Gin services** | Custom `http.Handler` and full Gin router integration on the asset server |
 | **macOS WebviewPanel** | Overlay / NSPanel-style windows |
-| **Built-in SQLite service** | JS bindings, prepared statements, cancellable queries |
+| **SQLite service (example)** | JS bindings, prepared statements, cancellable queries — shipped as an example service in v3 alpha |
 | **Server mode** | Run the app without a GUI window, serving over HTTP/WS only |
 | **Wayland improvements** | Fractional scaling support, auto-disable DMA-BUF on NVIDIA |
 | **HideOnFocusLost / HideOnEscape** | Built-in auto-hide behaviors |
@@ -752,3 +859,9 @@ Features available in Electron with no direct equivalent in the other frameworks
 | **Service Workers** | Native Chromium Service Worker support for offline-capable apps |
 | **safeStorage** | OS-level encryption (Keychain / DPAPI / libsecret) for secrets |
 | **Massive npm ecosystem** | Any npm package works in the main process — no plugin porting needed |
+| **Printing + printToPDF** | Silent print, page ranges, printer selection, `webContents.printToPDF` |
+| **Built-in spellchecker** | Custom dictionaries, language switching, context-menu suggestions |
+| **Find in page** | `findInPage` / `stopFindInPage` with match highlighting |
+| **Chrome extensions** | Load unpacked extensions via `session.loadExtension` (MV3) |
+| **StoreKit (inAppPurchase)** | macOS product lookup, purchase, restore, receipt validation |
+| **MessageChannelMain** | Transferable-object IPC ports between main and renderers |
