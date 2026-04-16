@@ -5,6 +5,7 @@ use rquickjs::{Context, Function, Object, Runtime};
 use serde_json::Value;
 use std::collections::{BinaryHeap, HashSet};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use vorn_host::{
     runtime::{BackendBridge, BackendCall, BackendConfig, BackendEvent, MenuItemDef, TrayConfig},
@@ -21,47 +22,110 @@ enum TimerCmd {
     Clear(u32),
 }
 
+/// Dev-mode handle to hot-reload the QuickJS backend without tearing down the
+/// host process or the WebView. Mirrors the full-mode `ReloadHandle`.
+#[derive(Clone)]
+pub(crate) struct ReloadHandle {
+    bundle_path: String,
+    /// The forwarder thread writes to this slot. On reload we swap its contents
+    /// so the next message goes to the new JS thread.
+    js_tx_slot: Arc<Mutex<mpsc::Sender<JsMsg>>>,
+    event_tx: mpsc::Sender<BackendEvent>,
+}
+
+impl ReloadHandle {
+    pub(crate) fn reload(&self) {
+        let bundle_code = match std::fs::read_to_string(&self.bundle_path) {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = self.event_tx.send(BackendEvent::Error {
+                    message: format!("Cannot read bundle '{}': {e}", self.bundle_path),
+                });
+                return;
+            },
+        };
+
+        // Create a new js channel pair. Spawning the new thread with its own
+        // receiver; we install the sender in the slot so the forwarder routes
+        // future BackendCalls to the new thread. Dropping the old sender (by
+        // overwriting it) causes the old JS thread's recv() to return Err and
+        // exit cleanly.
+        let (new_js_tx, new_js_rx) = mpsc::channel::<JsMsg>();
+        let (cfg_tx, cfg_rx) = mpsc::sync_channel::<BackendConfig>(1);
+        let js_tx_for_thread = new_js_tx.clone();
+        let event_tx = self.event_tx.clone();
+
+        std::thread::spawn(move || {
+            js_thread_main(bundle_code, js_tx_for_thread, new_js_rx, cfg_tx, event_tx);
+        });
+
+        // Block until the new bundle signals it's ready — if it fails, surface
+        // the error in the overlay and leave the old JS thread running? No:
+        // we've already dropped its sender. Accept the dead state and let the
+        // user fix the bundle.
+        match cfg_rx.recv() {
+            Ok(_) => {
+                // Swap the sender last so no message racing to the old thread.
+                *self.js_tx_slot.lock().unwrap() = new_js_tx;
+                let _ = self.event_tx.send(BackendEvent::Reload);
+            },
+            Err(_) => {
+                let _ = self.event_tx.send(BackendEvent::Error {
+                    message: "Backend reload failed: bundle did not call app.start()".into(),
+                });
+            },
+        }
+    }
+}
+
 /// Start the QuickJS backend.
 ///
 /// - Loads `bundle_code` in an embedded QuickJS runtime
 /// - Blocks until the bundle sets `globalThis.__vorn_config__`
-/// - Returns a `BackendBridge` ready for `run_app()`
+/// - Returns a `BackendBridge` plus a `ReloadHandle` for dev-mode hot reload
 pub(crate) fn start(
     bundle_path: &str,
     frontend_dir: Option<String>,
     dev_url: Option<String>,
     icon_path: Option<String>,
-) -> BackendBridge {
+) -> (BackendBridge, ReloadHandle) {
     let bundle_code = std::fs::read_to_string(bundle_path).unwrap_or_else(|e| {
         vorn_log!("Cannot read bundle '{bundle_path}': {e}");
         vorn_log!("Build first: vorn build");
         std::process::exit(1);
     });
 
-    // call_tx is sent from the WebView IPC handler — unbounded to never block the WebView thread.
-    // js_tx relays calls to the QuickJS thread — also unbounded for same reason.
-    // event_tx is QuickJS → main thread; unbounded so the JS thread never blocks.
     let (js_tx, js_rx) = mpsc::channel::<JsMsg>();
     let (cfg_tx, cfg_rx) = mpsc::sync_channel::<BackendConfig>(1);
     let (event_tx, event_rx) = mpsc::channel::<BackendEvent>();
     let (call_tx, call_rx) = mpsc::channel::<BackendCall>();
 
-    // Forward BackendCalls → JsMsg::Call
+    // The JS sender lives behind a mutex so ReloadHandle can swap it atomically.
+    let js_tx_slot: Arc<Mutex<mpsc::Sender<JsMsg>>> = Arc::new(Mutex::new(js_tx.clone()));
+
+    // Forwarder: BackendCall → current JS thread (via the slot)
     {
-        let js_tx = js_tx.clone();
+        let slot = js_tx_slot.clone();
         std::thread::spawn(move || {
             while let Ok(call) = call_rx.recv() {
-                let _ = js_tx.send(JsMsg::Call(call));
+                let tx = slot.lock().unwrap().clone();
+                let _ = tx.send(JsMsg::Call(call));
             }
         });
     }
 
     let js_tx_for_thread = js_tx.clone();
+    let event_tx_for_thread = event_tx.clone();
     std::thread::spawn(move || {
-        js_thread_main(bundle_code, js_tx_for_thread, js_rx, cfg_tx, event_tx);
+        js_thread_main(
+            bundle_code,
+            js_tx_for_thread,
+            js_rx,
+            cfg_tx,
+            event_tx_for_thread,
+        );
     });
 
-    // Block until bundle sets __vorn_config__
     let mut config = cfg_rx.recv().unwrap_or_else(|_| {
         vorn_log!("JS thread died before sending config — check your backend calls app.start()");
         std::process::exit(1);
@@ -77,11 +141,17 @@ pub(crate) fn start(
         config.icon_path = icon_path;
     }
 
-    BackendBridge {
+    let bridge = BackendBridge {
         config,
         call_tx,
         event_rx,
-    }
+    };
+    let reload = ReloadHandle {
+        bundle_path: bundle_path.to_string(),
+        js_tx_slot,
+        event_tx,
+    };
+    (bridge, reload)
 }
 
 // Thread entry fn — all channels must be owned (moved into thread scope).
@@ -159,8 +229,14 @@ fn js_thread_main(
         });
 
         if let Err(e) = result {
-            vorn_log!("Bundle evaluation failed: {e}");
-            std::process::exit(1);
+            let msg = format!("Bundle evaluation failed: {e}");
+            vorn_log!("{msg}");
+            let _ = event_tx.send(BackendEvent::Error { message: msg });
+            // Don't exit — let the outer (reload) code handle recovery.
+            // config_tx is dropped implicitly; the initial `start()` receiver
+            // will see the close and exit; ReloadHandle.reload() surfaces the
+            // error via BackendEvent::Error.
+            return;
         }
     }
 
@@ -298,179 +374,155 @@ fn start_timer_thread(cmd_rx: mpsc::Receiver<TimerCmd>, js_tx: mpsc::Sender<JsMs
 
             match cmd_rx.recv_timeout(timeout) {
                 Ok(TimerCmd::Set { id, ms, once }) => {
-                    let dur = Duration::from_millis(ms as u64);
+                    let fire_at = Instant::now() + Duration::from_millis(ms as u64);
+                    if active.contains(&id) {
+                        cancelled.insert(id);
+                    } else {
+                        active.insert(id);
+                    }
                     heap.push(Entry {
-                        fire_at: Instant::now() + dur,
+                        fire_at,
                         id,
                         ms,
                         once,
                     });
-                    active.insert(id);
                 },
                 Ok(TimerCmd::Clear(id)) => {
-                    // Only cancel if the timer is still active — prevents unbounded set growth
                     if active.contains(&id) {
                         cancelled.insert(id);
                     }
                 },
+                Err(mpsc::RecvTimeoutError::Timeout) => {},
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
-                Err(mpsc::RecvTimeoutError::Timeout) => {}, // timer deadline reached
             }
         }
     });
 }
 
-/// Call an exported function via the pre-defined `__vorn_do_call__` helper.
-///
-/// Performance: 1 global lookup + 2 rquickjs::String allocs per call.
-/// Eliminates:
-///   - `ctx.eval(...)` per call (was recompiling a JS function every time)
-///   - 5 extra property lookups (__vorn_mod__, JSON, stringify, etc.)
-fn call_module_fn(ctx: &rquickjs::Ctx<'_>, fn_name: &str, args: &[Value]) -> Result<Value, String> {
-    let do_call: Function = ctx
-        .globals()
-        .get("__vorn_do_call__")
-        .map_err(|e| format!("__vorn_do_call__ missing: {e}"))?;
-
-    let fn_js = rquickjs::String::from_str(ctx.clone(), fn_name).map_err(|e| e.to_string())?;
-    let args_json = if args.is_empty() {
-        "[]".to_string()
-    } else {
-        serde_json::to_string(args).unwrap_or_else(|_| "[]".into())
+fn call_global(ctx: &rquickjs::Ctx, fn_name: &str) -> Result<Value, String> {
+    let g = ctx.globals();
+    let f: Function = match g.get(fn_name) {
+        Ok(f) => f,
+        Err(_) => return Ok(Value::Null), // lifecycle handler not set
     };
-    let args_js = rquickjs::String::from_str(ctx.clone(), &args_json).map_err(|e| e.to_string())?;
-
-    let result_str: rquickjs::String = do_call
-        .call((fn_js, args_js))
-        .map_err(|e| format!("'{fn_name}': {e}"))?;
-
-    let s = result_str.to_string().map_err(|e| e.to_string())?;
-    serde_json::from_str(&s).map_err(|e| format!("result parse: {e}"))
+    match f.call::<_, ()>(()) {
+        Ok(()) => Ok(Value::Null),
+        Err(e) => Err(format!("{fn_name}: {e}")),
+    }
 }
 
-/// Call a no-arg lifecycle function on `globalThis` (on_ready, on_close).
-fn call_global(ctx: &rquickjs::Ctx<'_>, fn_name: &str) -> Result<Value, String> {
-    let fn_val: rquickjs::Value = ctx
-        .globals()
-        .get(fn_name)
-        .map_err(|e| format!("global '{fn_name}' not found: {e}"))?;
+fn call_module_fn(ctx: &rquickjs::Ctx, fn_name: &str, args: &[Value]) -> Result<Value, String> {
+    let g = ctx.globals();
+    let module: Option<Object> = g.get("__vorn_mod__").ok();
+    let Some(module) = module else {
+        return Err(format!("Module not loaded — cannot call '{fn_name}'"));
+    };
 
-    if fn_val.is_undefined() {
-        return Ok(Value::Null);
-    }
-    if !fn_val.is_function() {
-        return Ok(Value::Null);
+    // Existence check — dispatch happens via string-based eval below so the
+    // function can be JSON-spread-applied without per-arg type conversion.
+    if module.get::<_, Function>(fn_name).is_err() {
+        return Err(format!("Unknown function '{fn_name}'"));
     }
 
-    let func: Function = fn_val.into_function().unwrap();
-    let raw = func
-        .call::<_, rquickjs::Value>(())
+    // Convert serde_json::Value[] to rquickjs arguments via JSON round-trip
+    let args_json = serde_json::to_string(args).unwrap_or_else(|_| "[]".into());
+    let args_str: rquickjs::String = ctx
+        .eval::<rquickjs::Value, _>(format!("JSON.stringify({args_json})"))
+        .map_err(|e| e.to_string())?
+        .try_into_string()
+        .map_err(|_| "args roundtrip failed".to_string())?;
+
+    // Parse the JSON inside the ctx, then spread-call
+    let do_call: Function = ctx
+        .eval(format!(
+            "(function(m, a) {{ return JSON.stringify(m.{fn_name}.apply(m, JSON.parse(a))); }})"
+        ))
         .map_err(|e| e.to_string())?;
 
-    if raw.is_undefined() || raw.is_null() {
-        return Ok(Value::Null);
-    }
-    let json_obj: Object = ctx.globals().get("JSON").map_err(|e| e.to_string())?;
-    let stringify: Function = json_obj.get("stringify").map_err(|e| e.to_string())?;
-    let result: Option<rquickjs::String> = stringify.call((raw,)).map_err(|e| e.to_string())?;
-    let s = result
-        .and_then(|s| s.to_string().ok())
-        .unwrap_or_else(|| "null".into());
-    serde_json::from_str(&s).map_err(|e| format!("result JSON parse: {e}"))
+    let result_str: rquickjs::String = do_call
+        .call((module, args_str))
+        .map_err(|e| e.to_string())?;
+
+    let s = result_str.to_string().map_err(|e| e.to_string())?;
+    serde_json::from_str(&s).map_err(|e| e.to_string())
 }
 
-fn parse_config(s: &str) -> Option<BackendConfig> {
-    #[derive(serde::Deserialize)]
-    struct W {
-        window: Option<vorn_host::window::WindowConfig>,
-        #[serde(default)]
-        menu: Vec<MenuItemDef>,
-        tray: Option<TrayConfig>,
-        #[serde(rename = "devUrl")]
-        dev_url: Option<String>,
-        #[serde(rename = "frontendDir")]
-        frontend_dir: Option<String>,
-        #[serde(rename = "iconPath")]
-        icon_path: Option<String>,
-    }
-    let w: W = serde_json::from_str(s).ok()?;
+fn parse_config(json: &str) -> Option<BackendConfig> {
+    let v: Value = serde_json::from_str(json).ok()?;
+    let window = v
+        .get("window")
+        .and_then(|w| serde_json::from_value(w.clone()).ok())
+        .unwrap_or_default();
+    let menu: Vec<MenuItemDef> = v
+        .get("menu")
+        .and_then(|m| serde_json::from_value(m.clone()).ok())
+        .unwrap_or_default();
+    let tray: Option<TrayConfig> = v
+        .get("tray")
+        .and_then(|t| serde_json::from_value(t.clone()).ok());
+    let dev_url = v.get("devUrl").and_then(|u| u.as_str().map(String::from));
+    let frontend_dir = v
+        .get("frontendDir")
+        .and_then(|d| d.as_str().map(String::from));
     Some(BackendConfig {
-        window: w.window.unwrap_or_default(),
-        menu: w.menu,
-        tray: w.tray,
-        dev_url: w.dev_url,
-        frontend_dir: w.frontend_dir,
-        icon_path: w.icon_path,
+        window,
+        dev_url,
+        frontend_dir,
+        icon_path: None,
+        menu,
+        tray,
     })
 }
 
-const JS_GLOBALS: &str = r#"
+// JS globals installed before the user bundle runs.
+const JS_GLOBALS: &str = r"
+// ── globalThis + console ──────────────────────────────────────────────────────
+globalThis.globalThis = globalThis;
 (function () {
-  "use strict";
-
-  function __fmt__(a) {
-    if (a === null) return "null";
-    if (a === undefined) return "undefined";
-    if (typeof a === "object" || (typeof a === "function" && a !== null)) {
-      try { return JSON.stringify(a); } catch(e) { return String(a); }
-    }
-    return String(a);
+  function fmt(a) {
+    try { return typeof a === 'string' ? a : JSON.stringify(a); }
+    catch (_) { return String(a); }
+  }
+  function join(args) {
+    var out = '';
+    for (var i = 0; i < args.length; i++) { if (i) out += ' '; out += fmt(args[i]); }
+    return out;
   }
   globalThis.console = {
-    log:   function() { __vorn_log__("LOG",   Array.prototype.slice.call(arguments).map(__fmt__).join(" ")); },
-    info:  function() { __vorn_log__("INFO",  Array.prototype.slice.call(arguments).map(__fmt__).join(" ")); },
-    warn:  function() { __vorn_log__("WARN",  Array.prototype.slice.call(arguments).map(__fmt__).join(" ")); },
-    error: function() { __vorn_log__("ERROR", Array.prototype.slice.call(arguments).map(__fmt__).join(" ")); },
-    debug: function() { __vorn_log__("DEBUG", Array.prototype.slice.call(arguments).map(__fmt__).join(" ")); },
-    trace: function() { __vorn_log__("TRACE", Array.prototype.slice.call(arguments).map(__fmt__).join(" ")); },
-  };
-
-  // Safe process stub for Bun-targeting bundles running in QuickJS
-  if (typeof globalThis.process === "undefined") {
-    globalThis.process = {
-      env: {},
-      argv: [],
-      platform: "quickjs",
-      versions: {},
-      exit: function() {},
-      stdout: { write: function(s) { if (typeof __vorn_log__ !== "undefined") __vorn_log__("LOG", String(s)); } },
-      stderr: { write: function(s) { if (typeof __vorn_log__ !== "undefined") __vorn_log__("ERROR", String(s)); } },
-      stdin:  { setEncoding: function() {}, on: function() {}, off: function() {}, removeListener: function() {} },
-    };
-  }
-
-  var _timers = {}, _seq = 0;
-
-  globalThis.setInterval = function(cb, ms) {
-    var id = ++_seq; _timers[id] = cb;
-    __vorn_set_interval__(id, ms | 0, false); return id;
-  };
-  globalThis.setTimeout = function(cb, ms) {
-    var id = ++_seq; _timers[id] = function() { delete _timers[id]; cb(); };
-    __vorn_set_interval__(id, ms | 0, true); return id;
-  };
-  globalThis.clearInterval = function(id) { delete _timers[id]; __vorn_clear_interval__(id); };
-  globalThis.clearTimeout  = globalThis.clearInterval;
-
-  globalThis.__vorn_fire_timer__ = function(id) {
-    var cb = _timers[id]; if (cb) cb();
-  };
-
-  // Pre-defined call dispatcher — used by Rust instead of ctx.eval() per call.
-  // Eliminates JS recompilation overhead on every backend function call.
-  // Returns a JSON string (or throws on error), never undefined.
-  globalThis.__vorn_do_call__ = function(fn_name, args_json) {
-    var mod = globalThis.__vorn_mod__;
-    if (!mod) throw new Error("__vorn_mod__ not set — did app.start() run?");
-    var fn = mod[fn_name];
-    if (typeof fn !== "function") throw new Error('"' + fn_name + '" is not an exported function');
-    var args = JSON.parse(args_json);
-    var result = fn.apply(null, args);
-    if (result !== null && result !== undefined && typeof result === "object" && typeof result.then === "function") {
-      throw new Error('"' + fn_name + '" is async — async backend functions are not supported in lite mode. Use synchronous functions only.');
-    }
-    if (result === undefined || result === null) return "null";
-    return JSON.stringify(result);
+    log:   function () { __vorn_log__('log',   join(arguments)); },
+    info:  function () { __vorn_log__('info',  join(arguments)); },
+    warn:  function () { __vorn_log__('warn',  join(arguments)); },
+    error: function () { __vorn_log__('error', join(arguments)); },
+    debug: function () { __vorn_log__('debug', join(arguments)); },
   };
 })();
-"#;
+
+// ── setTimeout / setInterval / clearTimeout / clearInterval ───────────────────
+(function () {
+  var nextId = 1;
+  var handlers = {};
+  globalThis.setTimeout = function (fn, ms) {
+    var id = nextId++; handlers[id] = { fn: fn, once: true };
+    __vorn_set_interval__(id, ms || 0, true);
+    return id;
+  };
+  globalThis.setInterval = function (fn, ms) {
+    var id = nextId++; handlers[id] = { fn: fn, once: false };
+    __vorn_set_interval__(id, ms || 0, false);
+    return id;
+  };
+  globalThis.clearTimeout = function (id) {
+    delete handlers[id]; __vorn_clear_interval__(id);
+  };
+  globalThis.clearInterval = globalThis.clearTimeout;
+  // Fired by Rust timer thread
+  globalThis.__vorn_fire_timer__ = function (id) {
+    var h = handlers[id]; if (!h) return;
+    if (h.once) delete handlers[id];
+    try { h.fn(); } catch (e) { console.error('timer ' + id + ': ' + e); }
+  };
+})();
+
+// Store user module exports on globalThis for RPC dispatch
+globalThis.__vorn_mod__ = globalThis;
+";

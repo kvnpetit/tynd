@@ -150,11 +150,11 @@ export async function dev(opts: DevOptions): Promise<void> {
 
   let hostProc = spawnHost()
 
-  // Full mode + backend change = hot reload via stdin admin command. Host keeps
-  // the WebView alive, kills/respawns only the Bun subprocess, then soft-reloads
-  // the page. Lite mode (QuickJS in-process) and config changes still do a full
-  // host restart to pick up the new window configuration.
-  const canHotReload = cfg.runtime === "full"
+  // Backend change → hot reload via stdin admin command. Host keeps the WebView
+  // alive and respawns only the backend runtime (Bun subprocess in full mode,
+  // QuickJS thread in lite mode). Config changes still do a full host restart
+  // so window settings re-apply.
+  const canHotReload = true
 
   // ── Backend file watcher → restart on change ──────────────────────────────
 
@@ -204,8 +204,22 @@ export async function dev(opts: DevOptions): Promise<void> {
         hostProc = spawnHost()
         log.success(`${reason === "config" ? "Restarted" : "Reloaded"} in ${Date.now() - t0}ms`)
       } else {
-        // Hot reload: host stays alive, webview stays alive, only Bun restarts.
+        // Hot reload: host + webview stay alive, only the backend runtime restarts.
         log.info("Backend changed — hot reloading…")
+        // Lite mode: rebuild the bundle first so the host re-reads fresh code.
+        if (cfg.runtime === "lite") {
+          try {
+            await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: true })
+          } catch (err) {
+            log.error(`Bundle failed: ${err instanceof Error ? err.message : String(err)}`)
+            reloading = false
+            if (reloadPending) {
+              reloadPending = false
+              triggerReload("backend")
+            }
+            return
+          }
+        }
         const stdin = hostProc.stdin
         if (stdin && typeof stdin === "object" && "write" in stdin) {
           ;(stdin as { write: (s: string) => void }).write("reload\n")
