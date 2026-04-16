@@ -140,7 +140,7 @@ export async function dev(opts: DevOptions): Promise<void> {
   let reloading = false
   let reloadPending = false
 
-  const triggerReload = () => {
+  const triggerReload = (reason: "backend" | "config") => {
     if (reloading) {
       reloadPending = true
       return
@@ -152,14 +152,15 @@ export async function dev(opts: DevOptions): Promise<void> {
         return
       }
       reloading = true
+      const t0 = Date.now()
       log.blank()
-      log.info(`Backend changed — reloading…`)
+      log.info(
+        reason === "config" ? `Config changed — restarting…` : `Backend changed — reloading…`,
+      )
 
-      // Kill current host
       hostProc.kill()
       await hostProc.exited.catch(() => undefined)
 
-      // Re-bundle for lite (fast: non-minified, cached if unchanged)
       if (cfg.runtime === "lite") {
         try {
           await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: false })
@@ -168,45 +169,49 @@ export async function dev(opts: DevOptions): Promise<void> {
           reloading = false
           if (reloadPending) {
             reloadPending = false
-            triggerReload()
+            triggerReload("backend")
           }
           return
         }
       }
 
-      // Restart host
       hostProc = Bun.spawn([binPath, ...makeArgs()], {
         cwd: opts.cwd,
         stdout: "inherit",
         stderr: "inherit",
         env,
       })
-      log.success(`Backend reloaded`)
+      log.success(`${reason === "config" ? "Restarted" : "Reloaded"} in ${Date.now() - t0}ms`)
       log.blank()
       reloading = false
-      // If files changed during reload, kick off another reload
       if (reloadPending) {
         reloadPending = false
-        triggerReload()
+        triggerReload("backend")
       }
     }, 300)
   }
 
-  const watcher = watch(backendSrcDir, { recursive: true }, (_, filename) => {
+  const configPath = path.join(opts.cwd, "vorn.config.ts")
+  const backendWatcher = watch(backendSrcDir, { recursive: true }, (_, filename) => {
     if (!filename || !WATCH_EXTS.test(filename)) return
-    triggerReload()
+    triggerReload("backend")
   })
+  const configWatcher = existsSync(configPath)
+    ? watch(configPath, () => triggerReload("config"))
+    : null
 
   log.dim(
     `  Watching backend for changes… ${log.gray(`(${path.relative(opts.cwd, backendSrcDir)}/)`)}`,
   )
+  log.dim(`  Watching ${log.gray("vorn.config.ts")} for changes…`)
   if (devUrl) log.dim(`  Frontend HMR active via ${frontend.buildTool}`)
   log.blank()
 
   // ── Graceful shutdown ─────────────────────────────────────────────────────
 
   const shutdown = () => {
-    watcher.close()
+    backendWatcher.close()
+    configWatcher?.close()
     if (reloadTimer) clearTimeout(reloadTimer)
     hostProc.kill()
     devServerProc?.kill()
@@ -221,7 +226,8 @@ export async function dev(opts: DevOptions): Promise<void> {
 
   // Keep process alive until the host exits (e.g. user closes the window)
   const code = await hostProc.exited
-  watcher.close()
+  backendWatcher.close()
+  configWatcher?.close()
   devServerProc?.kill()
 
   if (code !== 0 && code !== null) {
