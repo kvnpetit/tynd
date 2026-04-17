@@ -13,11 +13,13 @@ export default {
 
 ## ⚡ Quick decision
 
-> **Start with `full`.** It gives you the complete Bun runtime — every npm package, file system, SQLite, `fetch`. Zero restrictions.
+> **Start with `lite`.** Most apps are covered: the Tynd OS APIs (`http`, `fs`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`) are Rust-backed and work identically in both runtimes. Lite ships a ~5 MB binary with no external runtime.
 
-Switch to `lite` only if:
-- You want a **tiny binary** (~5 MB, no runtime to ship)
-- Your backend doesn't need FS, network, or native packages
+Switch to `full` only if you need:
+- Direct JS access to `fetch` / `WebSocket` / `crypto.getRandomValues` / `Intl` / `Buffer` (lite doesn't expose these to JS — Tynd's equivalents cover most cases but not every corner).
+- `bun:sqlite` embedded SQL (relational data with `.query()` / `.prepare()`).
+- npm packages with **native bindings** (sharp, better-sqlite3, bcrypt, canvas).
+- Large CPU-bound workloads that benefit from JSC's JIT (QuickJS is an interpreter).
 
 ---
 
@@ -27,25 +29,34 @@ Two axes matter: the **JS runtime** features (what the VM provides) and the **Ty
 
 ### JS runtime surface
 
-| Capability | `lite` | `full` |
-|-----------|--------|--------|
-| ES2023 language (async/await, Proxy, BigInt, generators…) | ✓ | ✓ |
-| `console.log/warn/error` | ✓ | ✓ |
-| `setTimeout` / `setInterval` | ✓ | ✓ |
-| Pure-JS npm packages | ✓ | ✓ |
-| `URL` / `URLSearchParams` | ✗ | ✓ |
-| `TextEncoder` / `TextDecoder` | ✗ | ✓ |
-| `atob` / `btoa` | ✗ | ✓ |
-| `structuredClone` | ✗ | ✓ |
-| `Buffer` | ✗ | ✓ |
-| `crypto` (hashing, random, subtle) | ✗ | ✓ |
-| `fetch` / `WebSocket` | ✗ | ✓ |
-| `Bun.file()` / `Bun.write()` | ✗ | ✓ |
-| `bun:sqlite` | ✗ | ✓ |
-| `import("fs")` / `import("path")` / `import("os")` (Node modules) | ✗ | ✓ |
-| `Intl` (date/number formatting) | ✗ | ✓ |
-| `Worker` / threads | ✗ | ✓ |
-| npm packages with native bindings | ✗ | ✓ |
+Where lite is ✗, check the **Tynd equivalent** column — most gaps are closed by an OS API that works identically in both runtimes.
+
+| Capability | `lite` | `full` | Tynd equivalent |
+|-----------|--------|--------|-----------------|
+| ES2023 (async/await, Proxy, BigInt, generators…) | ✓ | ✓ | — |
+| `console.log/warn/error` | ✓ | ✓ | — |
+| `setTimeout` / `setInterval` | ✓ | ✓ | — |
+| Pure-JS npm packages | ✓ | ✓ | — |
+| `URL` / `URLSearchParams` | ✗ | ✓ | Pure-JS polyfills or use `http` API |
+| `TextEncoder` / `TextDecoder` | ✗ | ✓ | `fs` + `compute` accept `Uint8Array` directly |
+| `atob` / `btoa` | ✗ | ✓ | `@tynd/core/client` base64 helpers (internal) |
+| `structuredClone` | ✗ | ✓ | `JSON.parse(JSON.stringify(x))` |
+| `Buffer` | ✗ | ✓ | `Uint8Array` (Tynd APIs use `Uint8Array` natively) |
+| `crypto.subtle` hashing | ✗ | ✓ | `compute.hash` (blake3 / sha256 / sha512) |
+| `crypto.getRandomValues` | ✗ | ✓ | **full only** — no Tynd equivalent yet |
+| `fetch` / `WebSocket` | ✗ | ✓ | `http` API (get / post / download / progress); WS: full only |
+| `Bun.file()` / `Bun.write()` | ✗ | ✓ | `fs.readText` / `fs.writeText` / binary variants |
+| `bun:sqlite` | ✗ | ✓ | **full only** — `store` covers k/v use cases |
+| `import("fs")` / `import("child_process")` etc. | ✗ | ✓ | `fs` + `process` OS APIs |
+| `Intl` | ✗ | ✓ | Pure-JS libs like `date-fns`, `dayjs`, `i18next` |
+| `Worker` / threads | ✗ | ✓ | `workers` API (isolated QuickJS in lite, `Bun.Worker` in full) |
+| Compression | ✗ | ✓ | `compute.compress` / `decompress` (zstd) |
+| Spawn child processes | ✗ | ✓ | `process.exec` / `execShell` |
+| Run embedded binaries | ✗ | ✓ | `sidecar.path` + `process.exec` |
+| Embedded terminal | ✗ | ✓ | `terminal.spawn` (portable-pty) |
+| Crash reports | ✗ | ✓ | `crashReporter.enable` (Rust panic hook -> file) |
+| Single-instance lock | ✗ | ✓ | `singleInstance.acquire(id)` |
+| npm packages with native bindings | ✗ | ✓ | **full only** |
 
 ### Tynd OS APIs (identical in both runtimes)
 
@@ -100,13 +111,13 @@ Routed through the Rust host, so lite and full share the exact same surface:
 
 ### Crypto
 
-| Use case | Library |
+| Use case | Recommendation |
 |----------|---------|
-| SHA-256, SHA-512, BLAKE2 | [`@noble/hashes`](https://github.com/paulmillr/noble-hashes) |
-| AES, ChaCha20 | [`@noble/ciphers`](https://github.com/paulmillr/noble-ciphers) |
-| Ed25519, secp256k1 | [`@noble/curves`](https://github.com/paulmillr/noble-curves) |
-
-> Key generation requires a PRNG. `Math.random()` is not cryptographically secure — use `full` for security-sensitive key generation.
+| SHA-256, SHA-512, BLAKE3 hashing | **`compute.hash(data, { algo })`** — Rust-native, ~3x faster than JS libs |
+| Zstd compress / decompress | **`compute.compress` / `decompress`** — Rust-native |
+| HMAC, AES, ChaCha20 | [`@noble/ciphers`](https://github.com/paulmillr/noble-ciphers) (pure JS, works in lite) |
+| Ed25519, secp256k1 | [`@noble/curves`](https://github.com/paulmillr/noble-curves) (pure JS) |
+| Secure random (CSPRNG) | **full only** — lite has no `crypto.getRandomValues` and `@noble/*` needs one for key gen |
 
 ### UUID
 
@@ -120,9 +131,46 @@ function uuidv4(): string {
 }
 ```
 
+For cryptographically-random UUIDs use `full` (needs `crypto.getRandomValues`).
+
 ### Date / number formatting
 
 Use [`date-fns`](https://date-fns.org/) or [`dayjs`](https://day.js.org/) instead of `Intl`.
+
+### File reads / writes
+
+Use the **`fs` API** — same surface in lite and full (no `import("fs")` needed, no `Bun.file` needed):
+
+```ts
+import { fs } from "@tynd/core/client"
+
+const text = await fs.readText("config.json")
+await fs.writeText("state.json", JSON.stringify(state), { createDirs: true })
+const bytes = await fs.readBinary("image.png")
+```
+
+### HTTP
+
+Use the **`http` API** — replaces `fetch`, with upload + download progress events:
+
+```ts
+import { http } from "@tynd/core/client"
+
+const { body } = await http.getJson<Repo[]>("https://api.github.com/users/kvnpetit/repos")
+await http.download(url, "./downloads/ffmpeg.zip", {
+  onProgress: ({ loaded, total }) => console.log(total ? `${(loaded / total) * 100}%` : loaded),
+})
+```
+
+### Spawning processes / running sidecar binaries
+
+```ts
+import { process, sidecar } from "@tynd/core/client"
+
+const { stdout } = await process.exec("git", { args: ["status"] })
+const ffmpeg = await sidecar.path("ffmpeg.exe")
+await process.exec(ffmpeg, { args: ["-i", input, output] })
+```
 
 ### Local storage
 
@@ -139,24 +187,22 @@ For relational data in lite, serialize through `fs.writeText` + JSON. For SQL-he
 
 ---
 
-## Performance
+## Performance — expected shape
 
-Measured on Windows 11, Bun 1.3.11, release binaries. Numbers are indicative — real workloads vary.
+No measurements checked into the repo. The shape below is derived from the architecture; treat it as **qualitative guidance**, not a benchmark.
 
-| Benchmark | `lite` | `full` | Winner |
-|-----------|--------|--------|--------|
-| Startup — first call | 0.5 ms | 0.7 ms | lite +40% |
-| Startup — load 100 items | 0.5 ms | 1.7 ms | lite +240% |
-| IPC floor (warmed) | 0.3 ms | 0.3 ms | tie |
-| Filter+sort 200 items | 0.8 ms | 0.3 ms | full +167% |
-| Filter+sort 2 000 items | 3.8 ms | 0.6 ms | full +533% |
-| 100 concurrent calls | 0.031 ms/call | 0.069 ms/call | lite +123% |
-| Sustained call rate | 4 200/s | 3 200/s | lite +31% |
-| Send+receive 100 KB | 8.6 ms | 3.6 ms | full +139% |
-| Read file — 1 MB | N/A | 0.6 ms | full only |
-| SQLite aggregate | N/A | 1.6 ms | full only |
+| Workload | Expected winner | Why |
+|---|---|---|
+| Cold start, first IPC call | **lite** | No subprocess, no Bun boot; QuickJS runs in-process |
+| Sustained simple IPC calls | **lite** | In-process; full pays stdin/stdout JSON round-trip |
+| Concurrent IPC throughput | **lite** | Shorter path, no subprocess scheduling |
+| CPU-bound JS (filter/sort/parse in JS) | **full** | JSC JIT vs QuickJS interpreter — gap grows with data size |
+| Large payload transfer (100 KB+) | **full** | Bigger OS pipes, native serialisation in JSC |
+| `fs` / `http` / `compute` / `process` / `workers` | **tie** | Same Rust code runs on both — API name hits the same `os_call` dispatch |
+| SQLite / `bun:sqlite` | **full only** | Not exposed in lite |
+| Worker pool (`parallel.map`) | **tie on I/O**, **full on CPU** | Same worker spawn path; JSC JIT wins inside hot loops |
 
-Both modes feel instant for typical user interactions — all values are well under 10ms.
+Both feel instant for typical user interactions.
 
 ---
 
@@ -165,12 +211,18 @@ Both modes feel instant for typical user interactions — all values are well un
 
 ### Use `lite` when
 
-- You want a tiny self-contained binary (~5 MB, no runtime to ship)
-- OS access stays within the Tynd APIs (`process`, `fs`, `store`, `dialog`, …)
-- You need high concurrent call throughput
+- You want the smallest self-contained binary (~5 MB) — no Bun runtime to ship
+- All your OS needs fit the Tynd APIs (which now cover `fs`, `http`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`)
+- You need high concurrent-call throughput / low startup latency
+- You're comfortable with pure-JS npm packages only (no native bindings)
 
 ### Use `full` when
 
-- You need SQL (`bun:sqlite`) or HTTP/WebSockets from JS
-- You use npm packages with native bindings
-- You need `Intl`, `crypto`, `Buffer`, `fetch`, or the full Node/Bun API surface directly from JS
+- You need a **JS-level** `fetch` / `WebSocket` / `crypto.getRandomValues` / `Intl` / `Buffer` / `bun:sqlite` — not a Tynd wrapper
+- You use npm packages with **native bindings** (sharp, better-sqlite3, bcrypt, canvas)
+- You have CPU-bound JS hot paths that benefit from JSC's JIT
+- You want a WebSocket client from JS (no Tynd equivalent yet)
+
+### Rule of thumb
+
+**Start with lite. Switch to full the first time you hit an API Tynd doesn't expose.** The `tynd.config.ts` switch is a one-line edit — no code refactor needed as long as you stayed on the Tynd OS APIs.
