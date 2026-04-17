@@ -206,6 +206,14 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         wb = wb.with_initialization_script(ipc::JS_DEV_FLAG);
     }
 
+    // Binary IPC is needed in both dev and prod so `fs.readBinary` etc.
+    // keep working against the dev server. Async so disk IO and multi-MB
+    // compression run on the call pool instead of the UI thread.
+    wb = wb.with_asynchronous_custom_protocol(
+        "tynd-bin".into(),
+        |_id, req: Request<Vec<u8>>, responder| scheme_bin::handle_async(req, responder),
+    );
+
     if let Some(ref url) = config.dev_url {
         wb = wb.with_url(url);
     } else if let Some(ref dir) = config.frontend_dir {
@@ -213,9 +221,6 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         wb = wb
             .with_custom_protocol("tynd".into(), move |_id, req: Request<Vec<u8>>| {
                 scheme::handle(&dir, &req)
-            })
-            .with_custom_protocol("tynd-bin".into(), move |_id, req: Request<Vec<u8>>| {
-                scheme_bin::handle(&req)
             })
             .with_url("tynd://localhost/");
     } else {

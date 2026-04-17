@@ -22,17 +22,32 @@
 //! Only `fs.readBinary`, `fs.writeBinary`, `compute.hash`, `compute.compress`
 //! and `compute.decompress` route through here. Small or text-shaped calls
 //! stay on the JSON IPC where they're cheaper and simpler.
+//!
+//! The work runs on `os::call_pool`, not the UI thread — wry hands us an
+//! async `RequestAsyncResponder` so disk IO or multi-MB compression never
+//! blocks paint.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 
 use wry::http::{Request, Response, StatusCode};
+use wry::RequestAsyncResponder;
 
-use crate::os::compute;
+use crate::os::{call_pool, compute};
 
 type BinResponse = Response<Cow<'static, [u8]>>;
 
-pub fn handle(req: &Request<Vec<u8>>) -> BinResponse {
+/// Async entry point invoked by wry's custom-protocol callback. Parses the
+/// route off the UI thread and hands the work to `call_pool` so we never
+/// block paint on a big `fs.readBinary` or `compute.compress`.
+pub fn handle_async(req: Request<Vec<u8>>, responder: RequestAsyncResponder) {
+    call_pool::submit(move || {
+        let response = dispatch(&req);
+        responder.respond(response);
+    });
+}
+
+fn dispatch(req: &Request<Vec<u8>>) -> BinResponse {
     let uri = req.uri();
     let path = uri.path().trim_start_matches('/');
     let query = parse_query(uri.query().unwrap_or(""));
@@ -209,7 +224,7 @@ mod tests {
             .method("GET")
             .body(Vec::new())
             .unwrap();
-        handle(&req)
+        dispatch(&req)
     }
 
     fn post(url: &str, body: Vec<u8>) -> BinResponse {
@@ -218,7 +233,7 @@ mod tests {
             .method("POST")
             .body(body)
             .unwrap();
-        handle(&req)
+        dispatch(&req)
     }
 
     #[test]
