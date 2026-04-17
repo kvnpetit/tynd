@@ -1,13 +1,33 @@
 {
   "name": "@tynd/cli",
   "version": "0.0.0",
-  "description": "Tynd framework CLI — create, dev, build",
-  "private": false,
-  "type": "module",
+  "description": "Tynd framework CLI — scaffold, dev, build native TypeScript desktop apps",
+  "license": "Apache-2.0",
+  "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
+  "homepage": "https://github.com/kvnpetit/tynd#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kvnpetit/tynd"
+    "url": "git+https://github.com/kvnpetit/tynd.git",
+    "directory": "packages/cli"
   },
+  "bugs": {
+    "url": "https://github.com/kvnpetit/tynd/issues"
+  },
+  "keywords": [
+    "tynd",
+    "cli",
+    "desktop",
+    "webview",
+    "bun",
+    "typescript",
+    "tauri-alternative",
+    "electron-alternative"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "private": false,
+  "type": "module",
   "files": [
     "bin",
     "src/lib/config.ts"

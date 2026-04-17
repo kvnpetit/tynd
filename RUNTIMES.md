@@ -1,8 +1,8 @@
-# Lite vs Full — Choosing a Runtime
+# 🧬 Runtimes — `lite` vs `full`
 
-Tynd ships two backend runtimes. Both use **the same TypeScript API** — you switch with one line.
+Tynd ships **two backend runtimes**. Same TypeScript API, same frontend — one line to switch.
 
-```typescript
+```ts
 // tynd.config.ts
 export default {
   runtime: "full",  // or "lite"
@@ -11,11 +11,13 @@ export default {
 
 ---
 
-## Quick decision
+## ⚡ Quick decision
 
-**Start with `full`.** It runs your backend with the full Bun runtime — every npm package, file system, SQLite, fetch. No restrictions.
+> **Start with `full`.** It gives you the complete Bun runtime — every npm package, file system, SQLite, `fetch`. Zero restrictions.
 
-Use `lite` only if you specifically need a smaller binary with no external runtime dependency, and your backend doesn't require file I/O, network, or native packages.
+Switch to `lite` only if:
+- You want a **tiny binary** (~5 MB, no runtime to ship)
+- Your backend doesn't need FS, network, or native packages
 
 ---
 

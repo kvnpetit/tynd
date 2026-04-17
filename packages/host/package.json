@@ -1,7 +1,40 @@
 {
   "name": "@tynd/host",
   "version": "0.0.0",
-  "description": "Pre-built native host binaries for Tynd (webview + QuickJS)",
+  "description": "Pre-built native host binaries for Tynd. Downloads the right binary for the user's platform on install.",
+  "license": "Apache-2.0",
+  "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
+  "homepage": "https://github.com/kvnpetit/tynd#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
+    "directory": "packages/host"
+  },
+  "bugs": {
+    "url": "https://github.com/kvnpetit/tynd/issues"
+  },
+  "keywords": [
+    "tynd",
+    "native",
+    "binary",
+    "webview",
+    "wry",
+    "tao",
+    "quickjs",
+    "desktop"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
   "private": false,
   "scripts": {
     "postinstall": "bun run install.ts",
@@ -9,9 +42,5 @@
   },
   "files": [
     "install.ts"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kvnpetit/tynd"
-  }
+  ]
 }

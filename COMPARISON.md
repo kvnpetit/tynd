@@ -1,6 +1,7 @@
-# Tynd vs Tauri v2 vs Wails v3 vs Electron — Exhaustive Feature Comparison
+# 📊 Tynd vs Tauri v2 vs Wails v3 vs Electron
 
-> Last updated: April 16, 2026 | Desktop only (mobile features marked 📱)
+> **Exhaustive feature matrix across 38 categories — 503 rows.**
+> Last updated: April 17, 2026 · Desktop only (mobile features marked 📱)
 
 > ⚠️ **Architecture note — Electron:** Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tauri, Wails, and Tynd use the OS's native WebView (WebView2 / WKWebView / WebKitGTK). This explains both Electron's broader API surface and its larger binary footprint.
 
