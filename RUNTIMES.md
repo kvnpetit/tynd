@@ -59,12 +59,12 @@ Where lite is ✗, check the **Tynd equivalent** column — most gaps are closed
 
 ### Tynd OS APIs (identical in both runtimes)
 
-Routed through the Rust host, so lite and full share the exact same surface:
+Routed through the Rust host, so lite and full share the exact same surface. APIs marked **\*** stream raw bytes through the dedicated `tynd-bin://` custom protocol (no base64 on the wire) for multi-MB payloads; the rest use JSON IPC.
 
 | API | Methods |
 |---|---|
 | `process` | `exec`, `execShell` (run OS commands, capture stdout/stderr/code) |
-| `fs` | `readText`, `writeText`, `readBinary`, `writeBinary`, `exists`, `stat`, `readDir`, `mkdir`, `remove`, `rename`, `copy` |
+| `fs` | `readText`, `writeText`, `readBinary`\*, `writeBinary`\*, `exists`, `stat`, `readDir`, `mkdir`, `remove`, `rename`, `copy` |
 | `path` | `join`, `dirname`, `basename`, `extname`, `sep` (pure TS) |
 | `os` | `info`, `homeDir`, `tmpDir`, `configDir`, `dataDir`, `cacheDir`, `exePath`, `cwd`, `env` |
 | `store` | `createStore(ns)` -> `get`, `set`, `delete`, `clear`, `keys` (JSON-backed k/v) |
@@ -73,7 +73,7 @@ Routed through the Rust host, so lite and full share the exact same surface:
 | `sql` | `open(path)` -> `{ exec, query, queryOne, close }` — bundled SQLite via rusqlite |
 | `sidecar` | `path(name)`, `list()` — binaries bundled at build time, extracted at startup |
 | `terminal` | `spawn({ shell, cols, rows, cwd, env })` -> PTY handle with `write`, `resize`, `kill`, `onData`, `onExit` |
-| `compute` | `hash(data, { algo })` (blake3 / sha256 / sha512), `compress` / `decompress` (zstd) — Rust-native |
+| `compute` | `hash(data, { algo })`\*, `compress`\* / `decompress`\* (zstd), `randomBytes(n)` (CSPRNG) |
 | `workers` | `spawn(fn)` -> `{ run, terminate }`; `parallel.map(items, fn, { concurrency })`. Lite: isolated QuickJS on thread. Full: wraps `Bun.Worker`. |
 | `singleInstance` | `acquire(id)` -> `{ acquired, already }` — cross-OS exclusive lock (named pipe / abstract socket) held for process lifetime |
 | `crashReporter` | `enable(appId)` installs a panic hook that writes `crash-<unix-nanos>.log` files under `data_dir/<appId>/crashes/`; `listCrashes()` returns the paths |
