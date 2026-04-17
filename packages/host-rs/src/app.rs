@@ -185,11 +185,11 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     // Window commands must run on the main thread
                     let _ = proxy_for_ipc.send_event(UserEvent::WindowCmd { id, method, args });
                 } else {
-                    // Dedicated thread per OS call — NOT rayon, which is CPU-bound.
-                    // Dialogs block for seconds (user interaction); blocking a rayon
-                    // worker would starve the CPU thread pool.
+                    // Bounded pool absorbs bursts; overflow falls back to a
+                    // one-shot thread so urgent calls don't queue behind
+                    // long-running dialogs (see os::call_pool).
                     let proxy = proxy_for_ipc.clone();
-                    std::thread::spawn(move || {
+                    os::call_pool::submit(move || {
                         let result = os::dispatch(&api, &method, &args);
                         let (ok, value) = match result {
                             Ok(v) => (true, v),

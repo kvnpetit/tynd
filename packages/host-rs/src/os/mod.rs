@@ -1,3 +1,4 @@
+pub mod call_pool;
 pub mod clipboard;
 pub mod compute;
 pub mod crash;
