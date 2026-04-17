@@ -40,6 +40,9 @@ single-instance.workspace = true
 rand.workspace             = true
 tungstenite.workspace      = true
 rusqlite.workspace         = true
+parking_lot.workspace      = true
+dashmap.workspace          = true
+ahash.workspace            = true
 
 rquickjs              = { workspace = true, optional = true }
 
