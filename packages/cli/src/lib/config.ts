@@ -58,6 +58,14 @@ const ConfigSchema = v.object({
   icon: v.optional(v.pipe(v.string(), v.minLength(1))),
   binaryArgs: v.optional(v.array(v.string())),
   bundle: v.optional(BundleSchema),
+  sidecars: v.optional(
+    v.array(
+      v.object({
+        name: v.pipe(v.string(), v.minLength(1)),
+        path: v.pipe(v.string(), v.minLength(1)),
+      }),
+    ),
+  ),
 })
 
 export type BundleConfig = v.InferOutput<typeof BundleSchema>
@@ -106,6 +114,7 @@ export function resolvePaths(cfg: TyndConfig, cwd: string): TyndConfig {
     ...cfg,
     backend: path.resolve(cwd, cfg.backend),
     frontendDir: path.resolve(cwd, cfg.frontendDir),
+    sidecars: cfg.sidecars?.map((s) => ({ name: s.name, path: path.resolve(cwd, s.path) })),
   }
 }
 

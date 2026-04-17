@@ -186,6 +186,17 @@ export async function build(opts: BuildOptions): Promise<void> {
   mkdirSync(path.dirname(outFile), { recursive: true })
   log.debug(`out=${outFile} host=${hostBin}`)
 
+  const sidecars = cfg.sidecars ?? []
+  if (sidecars.length > 0) {
+    for (const s of sidecars) {
+      if (!existsSync(s.path)) {
+        log.error(`Sidecar '${s.name}' not found at ${s.path}`)
+        process.exit(1)
+      }
+    }
+    log.step(`Sidecars: ${sidecars.map((s) => s.name).join(", ")}`)
+  }
+
   if (cfg.runtime === "lite") {
     await packageLite({
       hostBin,
@@ -194,6 +205,7 @@ export async function build(opts: BuildOptions): Promise<void> {
       outFile,
       platform,
       iconPath,
+      sidecars,
     })
   } else {
     await packageFull({
@@ -203,6 +215,7 @@ export async function build(opts: BuildOptions): Promise<void> {
       outFile,
       platform,
       iconPath,
+      sidecars,
     })
   }
 
@@ -237,6 +250,7 @@ interface LitePackOpts {
   outFile: string
   platform: "windows" | "macos" | "linux"
   iconPath: string | null
+  sidecars?: Array<{ name: string; path: string }>
 }
 
 async function packageLite(o: LitePackOpts): Promise<void> {
@@ -246,6 +260,7 @@ async function packageLite(o: LitePackOpts): Promise<void> {
   const packFiles: PackEntry[] = [
     { rel: "bundle.js", data: readFileSync(o.backendBundle) },
     ...o.frontendFiles.map((f) => ({ rel: `frontend/${f.rel}`, abs: f.abs })),
+    ...(o.sidecars ?? []).map((s) => ({ rel: `sidecar/${s.name}`, abs: s.path })),
   ]
 
   // Pack icon — stored as icon.ico (converted from PNG if needed)
@@ -299,6 +314,7 @@ interface FullPackOpts {
   outFile: string
   platform: "windows" | "macos" | "linux"
   iconPath: string | null
+  sidecars?: Array<{ name: string; path: string }>
 }
 
 async function packageFull(o: FullPackOpts): Promise<void> {
@@ -335,6 +351,7 @@ async function packageFull(o: FullPackOpts): Promise<void> {
     { rel: "bun.zst", data: bunCompressed },
     { rel: "bundle.js", data: readFileSync(o.backendBundle) }, // NOT auto-compressed
     ...o.frontendFiles.map((f) => ({ rel: `frontend/${f.rel}`, abs: f.abs })),
+    ...(o.sidecars ?? []).map((s) => ({ rel: `sidecar/${s.name}`, abs: s.path })),
   ]
 
   // Pack icon — convert PNG → ICO if needed
