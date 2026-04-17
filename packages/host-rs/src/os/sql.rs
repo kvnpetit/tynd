@@ -35,12 +35,22 @@ fn open(args: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .ok_or_else(|| "sql.open: missing 'path' (':memory:' for in-memory)".to_string())?;
 
-    let conn = if path == ":memory:" || path.is_empty() {
-        Connection::open_in_memory()
-    } else {
+    let on_disk = path != ":memory:" && !path.is_empty();
+    let conn = if on_disk {
         Connection::open(path)
+    } else {
+        Connection::open_in_memory()
     }
     .map_err(|e| format!("sql.open({path}): {e}"))?;
+
+    if on_disk {
+        // WAL lets readers proceed while a writer commits; synchronous=NORMAL
+        // is the SQLite-recommended pairing (durable on commit, tolerant of
+        // OS crash — only a power-loss before fsync can lose the last txn).
+        // Errors are non-fatal: the DB is usable under default rollback mode.
+        let _ = conn.pragma_update(None, "journal_mode", "WAL");
+        let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+    }
 
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     connections()
@@ -255,5 +265,19 @@ mod tests {
             .iter()
             .any(|v| v.as_u64() == Some(id));
         assert!(!has);
+    }
+
+    #[test]
+    fn on_disk_open_enables_wal() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("wal.db");
+        let r = open(&json!({ "path": db_path.to_string_lossy() })).unwrap();
+        let id = r["id"].as_u64().unwrap();
+        let mode = query_one(&json!({ "id": id, "sql": "PRAGMA journal_mode" })).unwrap();
+        let jm = mode["journal_mode"]
+            .as_str()
+            .expect("journal_mode column present");
+        assert_eq!(jm.to_lowercase(), "wal");
+        close(&json!({ "id": id })).unwrap();
     }
 }

@@ -43,6 +43,9 @@ rusqlite.workspace         = true
 
 rquickjs              = { workspace = true, optional = true }
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [features]
 default        = []
 embedded-js    = ["dep:rquickjs"]

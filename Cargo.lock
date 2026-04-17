@@ -3723,6 +3723,7 @@ dependencies = [
  "sha2",
  "single-instance",
  "tao",
+ "tempfile",
  "tray-icon",
  "tungstenite",
  "ureq",
