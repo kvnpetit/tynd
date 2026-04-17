@@ -1,6 +1,6 @@
 # 📊 Tynd vs Tauri v2 vs Wails v3 vs Electron
 
-> **Exhaustive feature matrix across 38 categories — 503 rows.**
+> **Exhaustive feature matrix across 39 categories — 512 rows.**
 > Last updated: April 17, 2026 · Desktop only (mobile features marked 📱)
 
 > ⚠️ **Architecture note — Electron:** Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tauri, Wails, and Tynd use the OS's native WebView (WebView2 / WKWebView / WebKitGTK). This explains both Electron's broader API surface and its larger binary footprint.
@@ -747,6 +747,22 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Service Worker support | ❌ | ❌ | ❌ | ✅ |
 | Full Node.js stdlib in main process | ❌ | ❌ | ❌ | ✅ |
 | Bundled Chromium (no OS WebView dependency) | ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 39. Concurrency & Native Compute
+
+| Feature | Tynd | Tauri v2 | Wails v3 | Electron |
+|---|---|---|---|---|
+| Unified `workers` API (spawn JS on OS thread) | ✅ | ❌ | ❌ | ⚠️ |
+| `parallel.map(items, fn, { concurrency })` helper | ✅ | ❌ | ❌ | ❌ |
+| Worker pool (frontend-invokable) | ✅ | ⚠️ | ❌ | ⚠️ |
+| Native hash helpers (blake3 / sha256 / sha512) | ✅ | ⚠️ | ⚠️ | ⚠️ |
+| Native compression (zstd) | ✅ | ⚠️ | ⚠️ | ⚠️ |
+| OS calls run off JS event loop | ✅ | ✅ | ✅ | ✅ |
+| Long-running Rust ops don't block JS | ✅ | ✅ | ⚠️ | N/A |
+| `SharedArrayBuffer` / `Atomics` in backend | ⚠️ | ⚠️ | ❌ | ✅ |
+| Streaming PTY on its own thread | ✅ | ⚠️ | ❌ | ✅ |
 
 ---
 

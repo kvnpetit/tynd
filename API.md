@@ -335,6 +335,41 @@ await t.kill()
 
 Backed by `portable-pty` (ConPTY on Windows, POSIX PTY elsewhere). Pair with [xterm.js](https://xtermjs.org/) for a full interactive terminal.
 
+### `compute` — Rust-native CPU helpers
+
+```typescript
+import { compute } from "@tynd/core/client"
+
+const digest = await compute.hash("hello world", { algo: "blake3" })    // hex string
+const sha = await compute.hash(bytes, { algo: "sha256", encoding: "base64" })
+
+const squeezed = await compute.compress(payload, { algo: "zstd", level: 9 })
+const restored = await compute.decompress(squeezed)
+```
+
+Runs on a fresh Rust thread per call — never blocks the JS event loop. Works identically in lite and full.
+
+### `workers` — offload CPU-bound JS
+
+```typescript
+import { workers, parallel } from "@tynd/core/client"
+
+const w = await workers.spawn((input: number[]) => input.reduce((a, b) => a + b, 0))
+const sum = await w.run<number, number[]>([1, 2, 3, 4, 5])
+await w.terminate()
+
+const results = await parallel.map(
+  bigArray,
+  (item) => heavyCpuWork(item),
+  { concurrency: 4 },
+)
+```
+
+- **Lite**: spawns an isolated QuickJS runtime on a fresh OS thread, channels input/output as JSON.
+- **Full**: wraps `Bun.Worker` via a data-URL worker script. Same API surface.
+
+Task function must be self-contained (no closure captures). Arguments and return value marshaled as JSON.
+
 ---
 
 ## IPC architecture
