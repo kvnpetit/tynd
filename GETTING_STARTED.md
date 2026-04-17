@@ -24,7 +24,7 @@ bunx @tynd/cli create my-app
 The CLI asks for:
 - **Project name** (defaults to `my-app`)
 - **Frontend framework** — React, Vue, Svelte, Solid, Preact, Lit, or Angular
-- **Runtime** — `full` (recommended, full Bun API) or `lite` (smaller binary, ~5 MB)
+- **Runtime** — `lite` (recommended default, ~5 MB, Rust-backed OS APIs) or `full` (bundles Bun — use when you need JS-level `fetch` / `Intl` / `Buffer` or native-binding npm packages). See [RUNTIMES.md](./RUNTIMES.md).
 
 Then scaffolds the frontend via Vite / Angular CLI and drops a Tynd config on top.
 
@@ -180,7 +180,7 @@ await notification.send("Build done", { body: "0 errors" })
 ## What's next
 
 - **[RUNTIMES.md](./RUNTIMES.md)** — `lite` vs `full` detailed comparison (APIs, perf, compat)
-- **[COMPARISON.md](./COMPARISON.md)** — Tynd vs Tauri / Wails / Electron across 38 categories
+- **[COMPARISON.md](./COMPARISON.md)** — Tynd vs Tauri / Wails / Electron across 39 categories
 - **[playground/](./playground/)** — working React examples in both runtimes
 
 ## Common commands

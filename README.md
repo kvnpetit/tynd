@@ -65,14 +65,14 @@ TypeScript backend                         Native OS window
 | | `lite` | `full` |
 |---|---|---|
 | JS engine | QuickJS (embedded in Rust binary) | Bun subprocess (JSC/JIT) |
-| IPC overhead | ~0 µs (in-process) | ~0.3–1 ms (OS pipe) |
+| IPC overhead | in-process (no serialization) | stdin/stdout JSON over OS pipe |
 | JIT compilation | ✗ interpreter | ✓ JSC JIT |
 | `fs` / `http` / `websocket` / `sql` / `compute.randomBytes` | ✓ Tynd API | ✓ Tynd API |
 | JS-level `fetch` / `Bun.file` / `bun:sqlite` | ✗ (use Tynd API) | ✓ |
 | Pure-JS npm packages | ✓ (bundled) | ✓ |
 | npm with native bindings | ✗ | ✓ |
-| Binary size | ~5 MB smaller | Larger (runtime embedded) |
-| Startup | ~20 ms | ~80 ms |
+| Binary size | smaller (no embedded runtime) | larger (Bun packed + zstd) |
+| Startup | faster (no subprocess) | slower (spawns Bun) |
 
 -> See [`RUNTIMES.md`](RUNTIMES.md) for the full comparison (APIs, performance, detection, examples).
 

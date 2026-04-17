@@ -43,9 +43,20 @@ project pages.
 - dirs             (Apache-2.0 / MIT) — https://github.com/dirs-dev/dirs-rs
 - zstd             (MIT)              — https://github.com/gyscos/zstd-rs
 - mimalloc         (MIT)              — https://github.com/purpleprotocol/mimalloc_rust
+- base64           (Apache-2.0 / MIT) — https://github.com/marshallpierce/rust-base64
+- ureq             (Apache-2.0 / MIT) — https://github.com/algesten/ureq
+- portable-pty     (MIT)              — https://github.com/wez/wezterm/tree/main/pty
+- sha2             (Apache-2.0 / MIT) — https://github.com/RustCrypto/hashes
+- blake3           (Apache-2.0 / CC0-1.0) — https://github.com/BLAKE3-team/BLAKE3
+- single-instance  (MIT)              — https://github.com/jorgeatgu/single-instance
+- rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
+- tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
+- rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite
 
 QuickJS (bundled via rquickjs) is (C) Fabrice Bellard and Charlie Gordon,
 licensed under the MIT License.
+
+SQLite (bundled via rusqlite) is in the public domain — https://www.sqlite.org/copyright.html
 
 ## TypeScript CLI (@tynd/cli)
 
@@ -54,6 +65,8 @@ licensed under the MIT License.
 - @resvg/resvg-js  (MPL-2.0)          — https://github.com/yisibl/resvg-js
 - resedit          (MIT)              — https://github.com/jet2jet/resedit-js
 - valibot          (MIT)              — https://github.com/fabian-hiller/valibot
+- adm-zip          (MIT)              — https://github.com/cthackers/adm-zip
+- tar-stream       (MIT)              — https://github.com/mafintosh/tar-stream
 
 ## TypeScript core (@tynd/core)
 
