@@ -71,13 +71,16 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
         },
     };
 
-    // Non-blocking so read() returns WouldBlock when empty instead of pinning the thread.
+    // Blocking read with a short timeout: the kernel parks the thread until
+    // data arrives or the timeout fires — no busy-wait, no sleep loop.
+    // 25 ms caps outbound send latency while keeping wake-ups to ~40/s.
+    let read_timeout = Some(Duration::from_millis(25));
     match ws.get_ref() {
         tungstenite::stream::MaybeTlsStream::Plain(s) => {
-            let _ = s.set_nonblocking(true);
+            let _ = s.set_read_timeout(read_timeout);
         },
         tungstenite::stream::MaybeTlsStream::Rustls(s) => {
-            let _ = s.get_ref().set_nonblocking(true);
+            let _ = s.get_ref().set_read_timeout(read_timeout);
         },
         _ => {},
     }
@@ -85,9 +88,7 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
     events::emit("websocket:open", &json!({ "id": id }));
 
     loop {
-        let mut drained_any = false;
         while let Ok(cmd) = rx.try_recv() {
-            drained_any = true;
             let res = match cmd {
                 Cmd::SendText(s) => {
                     #[allow(clippy::useless_conversion)]
@@ -134,12 +135,7 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
                 break;
             },
             Err(tungstenite::Error::Io(e))
-                if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut =>
-            {
-                if !drained_any {
-                    std::thread::sleep(Duration::from_millis(5));
-                }
-            },
+                if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {},
             Err(tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed) => {
                 events::emit("websocket:close", &json!({ "id": id, "code": 1000 }));
                 break;
