@@ -378,6 +378,48 @@ tray.onDoubleClick(() => tyndWindow.show())
 tray.onMenu("quit", () => process.exit(0))
 ```
 
+#### `process`
+
+```typescript
+import { process } from "@tynd/core/client"
+
+const { stdout, code } = await process.exec("git", { args: ["status", "--short"] })
+const full = await process.execShell("ls -la | grep tynd")
+```
+
+#### `fs`
+
+```typescript
+import { fs } from "@tynd/core/client"
+
+await fs.writeText("data.json", JSON.stringify(state), { createDirs: true })
+const text = await fs.readText("data.json")
+const entries = await fs.readDir(".")
+const info = await fs.stat("data.json")  // { size, isFile, isDir, mtime, ... }
+```
+
+#### `store`
+
+```typescript
+import { createStore } from "@tynd/core/client"
+
+const prefs = createStore("com.example.myapp")
+await prefs.set("theme", "dark")
+const theme = await prefs.get<string>("theme")
+```
+
+JSON-backed k/v under the OS config dir. Works identically in `lite` and `full`.
+
+#### `os` / `path`
+
+```typescript
+import { os, path } from "@tynd/core/client"
+
+const { platform, arch } = await os.info()
+const home = await os.homeDir()
+const cfgFile = path.join(await os.configDir() ?? "", "myapp", "config.json")
+```
+
 ---
 
 ## IPC architecture

@@ -315,3 +315,156 @@ export const tray = {
     })
   },
 }
+
+export interface ExecOptions {
+  args?: string[]
+  cwd?: string
+  env?: Record<string, string>
+  input?: string
+}
+
+export interface ExecResult {
+  code: number | null
+  stdout: string
+  stderr: string
+}
+
+export const process = {
+  exec(cmd: string, opts?: ExecOptions): Promise<ExecResult> {
+    return _osCall("process", "exec", { cmd, ...opts })
+  },
+  execShell(cmd: string, opts?: Omit<ExecOptions, "args">): Promise<ExecResult> {
+    return _osCall("process", "execShell", { cmd, ...opts })
+  },
+}
+
+export interface FileStat {
+  size: number
+  isFile: boolean
+  isDir: boolean
+  isSymlink: boolean
+  mtime: number | null
+}
+
+export interface DirEntry {
+  name: string
+  isFile: boolean
+  isDir: boolean
+  isSymlink: boolean
+}
+
+export const fs = {
+  readText(path: string): Promise<string> {
+    return _osCall("fs", "readText", { path })
+  },
+  writeText(path: string, content: string, opts?: { createDirs?: boolean }): Promise<void> {
+    return _osCall("fs", "writeText", { path, content, ...opts })
+  },
+  exists(path: string): Promise<boolean> {
+    return _osCall("fs", "exists", { path })
+  },
+  stat(path: string): Promise<FileStat> {
+    return _osCall("fs", "stat", { path })
+  },
+  readDir(path: string): Promise<DirEntry[]> {
+    return _osCall("fs", "readDir", { path })
+  },
+  mkdir(path: string, opts?: { recursive?: boolean }): Promise<void> {
+    return _osCall("fs", "mkdir", { path, ...opts })
+  },
+  remove(path: string, opts?: { recursive?: boolean }): Promise<void> {
+    return _osCall("fs", "remove", { path, ...opts })
+  },
+  rename(from: string, to: string): Promise<void> {
+    return _osCall("fs", "rename", { from, to })
+  },
+  copy(from: string, to: string): Promise<void> {
+    return _osCall("fs", "copy", { from, to })
+  },
+}
+
+export function createStore(namespace: string) {
+  return {
+    get<T = unknown>(key: string): Promise<T | null> {
+      return _osCall("store", "get", { namespace, key }) as Promise<T | null>
+    },
+    set(key: string, value: unknown): Promise<void> {
+      return _osCall("store", "set", { namespace, key, value })
+    },
+    delete(key: string): Promise<void> {
+      return _osCall("store", "delete", { namespace, key })
+    },
+    clear(): Promise<void> {
+      return _osCall("store", "clear", { namespace })
+    },
+    keys(): Promise<string[]> {
+      return _osCall("store", "keys", { namespace })
+    },
+  }
+}
+
+export interface OsInfo {
+  platform: "linux" | "macos" | "windows" | string
+  arch: string
+  family: string
+}
+
+export const os = {
+  info(): Promise<OsInfo> {
+    return _osCall("os", "info")
+  },
+  homeDir(): Promise<string | null> {
+    return _osCall("os", "homeDir")
+  },
+  tmpDir(): Promise<string> {
+    return _osCall("os", "tmpDir") as Promise<string>
+  },
+  configDir(): Promise<string | null> {
+    return _osCall("os", "configDir")
+  },
+  dataDir(): Promise<string | null> {
+    return _osCall("os", "dataDir")
+  },
+  cacheDir(): Promise<string | null> {
+    return _osCall("os", "cacheDir")
+  },
+  exePath(): Promise<string | null> {
+    return _osCall("os", "exePath")
+  },
+  cwd(): Promise<string | null> {
+    return _osCall("os", "cwd")
+  },
+  env(key: string): Promise<string | null> {
+    return _osCall("os", "env", { key })
+  },
+}
+
+export const path = {
+  sep(): "/" | "\\" {
+    return typeof navigator !== "undefined" && /win/i.test(navigator.platform) ? "\\" : "/"
+  },
+  join(...parts: string[]): string {
+    const s = path.sep()
+    return parts
+      .filter((p) => p.length > 0)
+      .join(s)
+      .replace(/[/\\]+/g, s)
+  },
+  dirname(p: string): string {
+    const m = p.replace(/[/\\]$/, "").match(/^(.*)[/\\][^/\\]+$/)
+    return m ? m[1]! : ""
+  },
+  basename(p: string, ext?: string): string {
+    const name =
+      p
+        .replace(/[/\\]$/, "")
+        .split(/[/\\]/)
+        .pop() ?? ""
+    return ext && name.endsWith(ext) ? name.slice(0, -ext.length) : name
+  },
+  extname(p: string): string {
+    const name = path.basename(p)
+    const i = name.lastIndexOf(".")
+    return i > 0 ? name.slice(i) : ""
+  },
+}

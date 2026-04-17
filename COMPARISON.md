@@ -346,17 +346,17 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Open URL in default browser | ✅ | ✅ | ✅ | ✅ |
 | Open file / folder with default app | ✅ | ✅ | ✅ | ✅ |
 | Reveal in file manager | ❌ | ✅ | ✅ | ✅ |
-| Execute shell command | ❌ | ✅ | ⚠️ | ✅ |
-| Execute bundled sidecar binary | ❌ | ✅ | ⚠️ | ✅ |
-| Capture stdout / stderr | ❌ | ✅ | ⚠️ | ✅ |
+| Execute shell command | ✅ | ✅ | ⚠️ | ✅ |
+| Execute bundled sidecar binary | ⚠️ | ✅ | ⚠️ | ✅ |
+| Capture stdout / stderr | ✅ | ✅ | ⚠️ | ✅ |
 | Kill a spawned process | ❌ | ✅ | ❌ | ✅ |
-| FS: read file (text / binary) | ❌ | ✅ | ⚠️ | ✅ |
-| FS: write file (text / binary) | ❌ | ✅ | ⚠️ | ✅ |
-| FS: create / remove directory | ❌ | ✅ | ⚠️ | ✅ |
-| FS: remove / rename file | ❌ | ✅ | ⚠️ | ✅ |
-| FS: list directory | ❌ | ✅ | ⚠️ | ✅ |
-| FS: file metadata | ❌ | ✅ | ⚠️ | ✅ |
-| FS: copy file / directory | ❌ | ✅ | ⚠️ | ✅ |
+| FS: read file (text / binary) | ⚠️ | ✅ | ⚠️ | ✅ |
+| FS: write file (text / binary) | ⚠️ | ✅ | ⚠️ | ✅ |
+| FS: create / remove directory | ✅ | ✅ | ⚠️ | ✅ |
+| FS: remove / rename file | ✅ | ✅ | ⚠️ | ✅ |
+| FS: list directory | ✅ | ✅ | ⚠️ | ✅ |
+| FS: file metadata | ✅ | ✅ | ⚠️ | ✅ |
+| FS: copy file / directory | ✅ | ✅ | ⚠️ | ✅ |
 | FS: file watcher | ❌ | ✅ | ❌ | ✅ |
 | FS: file handle (seek / partial read) | ❌ | ✅ | ❌ | ✅ |
 | Scoped file access (allow / deny patterns) | ❌ | ✅ | ❌ | ❌ |
@@ -453,10 +453,10 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Key-value store — get / set / delete | ❌ | ✅ | ✅ | ⚠️ |
-| Store — has / keys / values / entries / length | ❌ | ✅ | ❌ | ⚠️ |
-| Store — clear / reset / reload | ❌ | ✅ | ❌ | ⚠️ |
-| Store — auto-save + events on change | ❌ | ✅ | ❌ | ⚠️ |
+| Key-value store — get / set / delete | ✅ | ✅ | ✅ | ⚠️ |
+| Store — has / keys / values / entries / length | ✅ | ✅ | ❌ | ⚠️ |
+| Store — clear / reset / reload | ✅ | ✅ | ❌ | ⚠️ |
+| Store — auto-save + events on change | ⚠️ | ✅ | ❌ | ⚠️ |
 | SQLite / relational DB | ❌ | ✅ | ✅ | ⚠️ |
 | Encrypted secure storage | ❌ | ✅ | ❌ | ✅ |
 | Persisted scope (runtime permission changes saved) | ❌ | ✅ | N/A | N/A |
@@ -522,17 +522,17 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| App data / local data dir | ❌ | ✅ | ❌ | ✅ |
-| App config / cache / log dir | ❌ | ✅ | ❌ | ✅ |
+| App data / local data dir | ✅ | ✅ | ❌ | ✅ |
+| App config / cache / log dir | ✅ | ✅ | ❌ | ✅ |
 | App resource dir | ❌ | ✅ | ❌ | ✅ |
-| Home / temp dir | ❌ | ✅ | ❌ | ✅ |
+| Home / temp dir | ✅ | ✅ | ❌ | ✅ |
 | Desktop / Downloads / Documents | ❌ | ✅ | ❌ | ✅ |
 | Pictures / Music / Video | ❌ | ✅ | ❌ | ✅ |
 | Font dir (macOS) | ❌ | ✅ | ❌ | ❌ |
 | Public / runtime dir | ❌ | ✅ | ❌ | ❌ |
-| Executable path | ❌ | ✅ | ❌ | ✅ |
-| System-level cache / config / data dirs | ❌ | ✅ | ❌ | ⚠️ |
-| Path manipulation (join / normalize / resolve…) | ❌ | ✅ | ❌ | ✅ |
+| Executable path | ✅ | ✅ | ❌ | ✅ |
+| System-level cache / config / data dirs | ✅ | ✅ | ❌ | ⚠️ |
+| Path manipulation (join / normalize / resolve…) | ✅ | ✅ | ❌ | ✅ |
 | XDG-compliant on Linux | ❌ | ✅ | N/A | ✅ |
 | Serve local file via custom scheme / protocol | ❌ | ✅ | ❌ | ✅ |
 
