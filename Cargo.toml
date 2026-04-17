@@ -55,6 +55,11 @@ blake3 = { version = "1.5", default-features = false }
 # Single-instance lock across OSes
 single-instance = "0.3"
 
+# CSPRNG + WebSocket + embedded SQL (lite parity with bun:sqlite)
+rand       = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
+tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
+rusqlite   = { version = "0.32", features = ["bundled"] }
+
 [workspace.lints.rust]
 unused_must_use               = "deny"
 unsafe_op_in_unsafe_fn        = "deny"
