@@ -31,7 +31,7 @@ export async function init(opts: InitOptions): Promise<void> {
   if (pkg) {
     if (pkg.name) name = pkg.name
   } else {
-    // No package.json → synthesize a minimal one so `bun install` and the
+    // No package.json -> synthesize a minimal one so `bun install` and the
     // generated deps (@tynd/core, @tynd/host) have somewhere to land.
     pkg = { name, version: "0.0.0" }
     log.step(`${log.cyan("create")}  package.json`)
@@ -50,12 +50,14 @@ export async function init(opts: InitOptions): Promise<void> {
 
   log.info(`Initializing in ${log.cyan(name)}`)
   if (hasFrontend) {
-    log.step(`Detected: ${log.cyan(frontend.buildTool)} → output dir: ${log.gray(frontend.outDir)}`)
+    log.step(
+      `Detected: ${log.cyan(frontend.buildTool)} -> output dir: ${log.gray(frontend.outDir)}`,
+    )
   }
   log.blank()
 
   const frontendDir = hasFrontend ? frontend.outDir : "frontend"
-  // Without a framework, Bun.build turns frontend/main.ts → frontend/main.js
+  // Without a framework, Bun.build turns frontend/main.ts -> frontend/main.js
   // on dev/build. The generated HTML references the produced .js file.
   const frontendEntry = hasFrontend ? undefined : "frontend/main.ts"
 
@@ -159,7 +161,7 @@ async function patchGitignore(cwd: string): Promise<void> {
     await writeFile(gitignorePath, newContent, "utf-8")
     log.step(`${log.cyan("patch")}   .gitignore (added ${entry})`)
   }
-  // No .gitignore → silently skip; Vite scaffold always creates one
+  // No .gitignore -> silently skip; Vite scaffold always creates one
 }
 
 async function patchPackageJson(pkgPath: string, pkg: PackageJson): Promise<void> {
@@ -186,5 +188,5 @@ async function patchPackageJson(pkgPath: string, pkg: PackageJson): Promise<void
 
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")
   log.step(`${log.cyan("patch")}   package.json`)
-  log.debug(`patchPackageJson: deps @tynd/core, @tynd/host → ${range}`)
+  log.debug(`patchPackageJson: deps @tynd/core, @tynd/host -> ${range}`)
 }

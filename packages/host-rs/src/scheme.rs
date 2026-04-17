@@ -151,7 +151,7 @@ pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'sta
 
 fn mime_for(path: &std::path::Path) -> &'static str {
     // If the extension is "gz", look at the extension before it
-    // e.g. "index.js.zst" → use "js" to determine MIME
+    // e.g. "index.js.zst" -> use "js" to determine MIME
     let ext = match path.extension().and_then(|e| e.to_str()) {
         Some("gz") => path
             .file_stem()

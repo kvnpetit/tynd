@@ -52,7 +52,7 @@ export async function bundleNsis(ctx: BundleContext): Promise<string> {
   }
 
   rmSync(workDir, { recursive: true, force: true })
-  log.success(`NSIS     → ${log.cyan(`release/${path.basename(outFile)}`)}`)
+  log.success(`NSIS     -> ${log.cyan(`release/${path.basename(outFile)}`)}`)
   return outFile
 }
 

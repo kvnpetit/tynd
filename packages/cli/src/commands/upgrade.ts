@@ -64,10 +64,10 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
   const coreCurrentStr = coreCurrent ?? VERSION
 
   log.step(
-    `@tynd/cli   ${log.gray(cliCurrent)}      → ${Bun.semver.order(cliLatest, cliCurrent) > 0 ? log.cyan(cliLatest) : log.gray(cliLatest)}`,
+    `@tynd/cli   ${log.gray(cliCurrent)}      -> ${Bun.semver.order(cliLatest, cliCurrent) > 0 ? log.cyan(cliLatest) : log.gray(cliLatest)}`,
   )
   log.step(
-    `@tynd/core  ${log.gray(coreCurrentStr)} → ${Bun.semver.order(coreLatest, coreCurrentStr) > 0 ? log.cyan(coreLatest) : log.gray(coreLatest)}`,
+    `@tynd/core  ${log.gray(coreCurrentStr)} -> ${Bun.semver.order(coreLatest, coreCurrentStr) > 0 ? log.cyan(coreLatest) : log.gray(coreLatest)}`,
   )
 
   // @tynd/host ships the pre-built native binaries for both runtimes.
@@ -77,7 +77,7 @@ export async function upgrade(opts: UpgradeOptions): Promise<void> {
     const hostLatest = await fetchLatestVersion("@tynd/host")
     if (hostLatest) {
       log.step(
-        `@tynd/host  ${log.gray(hostCurrent)} → ${Bun.semver.order(hostLatest, hostCurrent) > 0 ? log.cyan(hostLatest) : log.gray(hostLatest)}`,
+        `@tynd/host  ${log.gray(hostCurrent)} -> ${Bun.semver.order(hostLatest, hostCurrent) > 0 ? log.cyan(hostLatest) : log.gray(hostLatest)}`,
       )
       if (Bun.semver.order(hostLatest, hostCurrent) > 0) {
         runtimeResults.push({ name: "@tynd/host", current: hostCurrent, latest: hostLatest })

@@ -77,7 +77,7 @@ export async function bundleDeb(ctx: BundleContext): Promise<string> {
   ])
 
   writeFileSync(outFile, deb)
-  log.success(`Deb      → ${log.cyan(`release/${path.basename(outFile)}`)}`)
+  log.success(`Deb      -> ${log.cyan(`release/${path.basename(outFile)}`)}`)
   return outFile
 }
 

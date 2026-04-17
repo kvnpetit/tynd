@@ -82,7 +82,7 @@ export async function bundleAppImage(ctx: BundleContext): Promise<string> {
 
   rmSync(appDir, { recursive: true, force: true })
 
-  log.success(`AppImage → ${log.cyan(`release/${path.basename(outFile)}`)}`)
+  log.success(`AppImage -> ${log.cyan(`release/${path.basename(outFile)}`)}`)
   return outFile
 }
 

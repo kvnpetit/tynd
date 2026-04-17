@@ -43,7 +43,7 @@ export function binaryName(runtime: "full" | "lite"): string {
 
 /**
  * Locate tynd-full / tynd-lite binary.
- * Search order: Cargo workspace target/release → target/debug → node_modules/@tynd/{runtime}/bin → PATH
+ * Search order: Cargo workspace target/release -> target/debug -> node_modules/@tynd/{runtime}/bin -> PATH
  */
 export function findBinary(runtime: "full" | "lite", cwd: string): string | null {
   const name = binaryName(runtime)
@@ -57,11 +57,11 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
     const release = path.join(dir, "target", "release", name)
     const debug = path.join(dir, "target", "debug", name)
     if (existsSync(release)) {
-      log.debug(`findBinary: matched workspace release → ${release}`)
+      log.debug(`findBinary: matched workspace release -> ${release}`)
       return release
     }
     if (existsSync(debug)) {
-      log.debug(`findBinary: matched workspace debug → ${debug}`)
+      log.debug(`findBinary: matched workspace debug -> ${debug}`)
       return debug
     }
     const parent = path.dirname(dir)
@@ -72,7 +72,7 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
   // 2. Published npm package (@tynd/host contains both runtimes)
   const nmBin = path.join(cwd, "node_modules", "@tynd/host", "bin", `${plat}-${arch}`, name)
   if (existsSync(nmBin)) {
-    log.debug(`findBinary: matched node_modules → ${nmBin}`)
+    log.debug(`findBinary: matched node_modules -> ${nmBin}`)
     return nmBin
   }
 
@@ -83,7 +83,7 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
     if (result.exitCode === 0) {
       const p = new TextDecoder().decode(result.stdout).trim().split("\n")[0]!.trim()
       if (p) {
-        log.debug(`findBinary: matched PATH → ${p}`)
+        log.debug(`findBinary: matched PATH -> ${p}`)
         return p
       }
     }

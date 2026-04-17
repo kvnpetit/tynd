@@ -199,7 +199,7 @@ try {
     for (const issue of err.issues) log.dim(`  • ${issue}`)
     process.exit(1)
   }
-  // CACError = missing required args, unknown command, etc. → show command help
+  // CACError = missing required args, unknown command, etc. -> show command help
   if (err instanceof Error && err.constructor.name === "CACError") {
     const subcmd = process.argv[2]
     if (subcmd) {

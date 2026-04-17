@@ -22,7 +22,7 @@ const ICON_CANDIDATES = [
 const RASTER_EXTS = new Set([".ico", ".png", ".jpg", ".jpeg", ".webp"])
 
 /**
- * Find the best icon for the project, auto-converting SVG → PNG if needed.
+ * Find the best icon for the project, auto-converting SVG -> PNG if needed.
  * Converted PNGs go to `.tynd/cache/` so bundlers like Vite don't pick them up.
  */
 export async function detectIcon(cwd: string, configIcon?: string): Promise<string | null> {
@@ -54,14 +54,14 @@ export async function detectIcon(cwd: string, configIcon?: string): Promise<stri
     if (converted) return converted
     log.warn(
       `Icon: ${path.basename(svgCandidate)} found but could not convert.\n` +
-        `         → Add public/favicon.png (256×256 recommended)`,
+        `         -> Add public/favicon.png (256×256 recommended)`,
     )
   }
 
   return null
 }
 
-/** Convert SVG → PNG via @resvg/resvg-js (WASM). Returns outPath on success. */
+/** Convert SVG -> PNG via @resvg/resvg-js (WASM). Returns outPath on success. */
 export async function svgToPng(svgPath: string, outPath: string): Promise<string | null> {
   try {
     const { Resvg } = await import("@resvg/resvg-js")

@@ -67,7 +67,7 @@ export async function bundleMsi(ctx: BundleContext): Promise<string> {
   }
 
   rmSync(workDir, { recursive: true, force: true })
-  log.success(`MSI      → ${log.cyan(`release/${path.basename(outFile)}`)}`)
+  log.success(`MSI      -> ${log.cyan(`release/${path.basename(outFile)}`)}`)
   return outFile
 }
 

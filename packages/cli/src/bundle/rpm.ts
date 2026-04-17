@@ -15,8 +15,8 @@ export async function bundleRpm(ctx: BundleContext): Promise<string> {
   if (!(await hasRpmbuild())) {
     throw new Error(
       "`rpmbuild` not found on PATH.\n" +
-        "         → Debian/Ubuntu: sudo apt install rpm\n" +
-        "         → Fedora/RHEL:   sudo dnf install rpm-build",
+        "         -> Debian/Ubuntu: sudo apt install rpm\n" +
+        "         -> Fedora/RHEL:   sudo dnf install rpm-build",
     )
   }
 
@@ -65,7 +65,7 @@ export async function bundleRpm(ctx: BundleContext): Promise<string> {
   writeFileSync(outFile, readFileSync(rpmSrc))
   rmSync(workDir, { recursive: true, force: true })
 
-  log.success(`RPM      → ${log.cyan(`release/${path.basename(outFile)}`)}`)
+  log.success(`RPM      -> ${log.cyan(`release/${path.basename(outFile)}`)}`)
   return outFile
 }
 

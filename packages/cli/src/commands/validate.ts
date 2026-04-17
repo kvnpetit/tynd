@@ -97,7 +97,7 @@ function output(issues: Issue[], opts: ValidateOptions): void {
     } else {
       log.success(issue.message)
     }
-    if (issue.hint) log.dim(`           → ${issue.hint}`)
+    if (issue.hint) log.dim(`           -> ${issue.hint}`)
   }
 
   log.blank()

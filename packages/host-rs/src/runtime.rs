@@ -86,7 +86,7 @@ pub struct BackendConfig {
 /// Flat struct covers all variants (missing fields are `None`).
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct MenuItemDef {
-    /// "separator" | "submenu" | "item" (or omitted → action item)
+    /// "separator" | "submenu" | "item" (or omitted -> action item)
     #[serde(rename = "type")]
     pub kind: Option<String>,
     /// User-defined ID — emitted as `{ id }` on click

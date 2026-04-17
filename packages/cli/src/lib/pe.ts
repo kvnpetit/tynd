@@ -28,7 +28,7 @@ export function patchPeSubsystem(filePath: string): void {
     return
   }
 
-  // e_lfanew at offset 0x3C → offset to PE signature
+  // e_lfanew at offset 0x3C -> offset to PE signature
   const peOffset = buf.readUInt32LE(0x3c)
   if (peOffset + 26 > buf.length) {
     console.error(`patchPeSubsystem: PE offset out of bounds in "${filePath}", skipping patch`)

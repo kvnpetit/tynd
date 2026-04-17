@@ -98,7 +98,7 @@ export default function App() {
 }
 ```
 
-Types come from `typeof backend`. Rename a function in the backend → compiler catches the frontend call.
+Types come from `typeof backend`. Rename a function in the backend -> compiler catches the frontend call.
 
 ## Build a production binary
 

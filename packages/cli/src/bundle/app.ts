@@ -30,7 +30,7 @@ export async function bundleApp(ctx: BundleContext): Promise<string> {
 
   writeFileSync(path.join(contents, "Info.plist"), renderInfoPlist(ctx, exeName, iconFile))
 
-  log.success(`App bundle → ${log.cyan(`release/${path.basename(appPath)}`)}`)
+  log.success(`App bundle -> ${log.cyan(`release/${path.basename(appPath)}`)}`)
   return appPath
 }
 

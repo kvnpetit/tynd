@@ -15,7 +15,7 @@ import { log } from "./logger.ts"
  * Output goes to `outDir/<basename>.js`.
  */
 export async function buildFrontendEntry(entryPath: string, outDir: string): Promise<void> {
-  log.debug(`Bun.build frontend: ${entryPath} → ${outDir}`)
+  log.debug(`Bun.build frontend: ${entryPath} -> ${outDir}`)
   const result = await Bun.build({
     entrypoints: [entryPath],
     outdir: outDir,
@@ -33,7 +33,7 @@ export async function buildFrontendEntry(entryPath: string, outDir: string): Pro
  * Target: "bun" — produces a self-contained JS file runnable by `bun run`.
  */
 export async function buildFullBundle(entryPath: string, outPath: string): Promise<void> {
-  log.debug(`Bun.build full: ${entryPath} → ${outPath} (minify=true)`)
+  log.debug(`Bun.build full: ${entryPath} -> ${outPath} (minify=true)`)
   const result = await Bun.build({
     entrypoints: [entryPath],
     target: "bun",
@@ -60,7 +60,7 @@ export async function buildLiteBundle(
   minify: boolean,
   dev = false,
 ): Promise<void> {
-  log.debug(`Bun.build lite: ${entryPath} → ${outPath} (minify=${minify}, dev=${dev})`)
+  log.debug(`Bun.build lite: ${entryPath} -> ${outPath} (minify=${minify}, dev=${dev})`)
   const result = await Bun.build({
     entrypoints: [entryPath],
     target: "browser",

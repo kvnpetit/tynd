@@ -51,7 +51,7 @@ export const log = {
    */
   hint: (message: string, next: string) => {
     console.error(`${prefix}  ${c.red}✗${c.reset} ${message}`)
-    console.error(`${c.dim}  → ${next}${c.reset}`)
+    console.error(`${c.dim}  -> ${next}${c.reset}`)
   },
   bold: (s: string) => `${c.bold}${s}${c.reset}`,
   cyan: (s: string) => `${c.cyan}${s}${c.reset}`,

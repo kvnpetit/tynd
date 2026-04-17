@@ -24,6 +24,6 @@ export async function bundleDmg(ctx: BundleContext, appPath: string): Promise<st
     { silent: true },
   )
 
-  log.success(`DMG      → ${log.cyan(`release/${path.basename(dmgPath)}`)}`)
+  log.success(`DMG      -> ${log.cyan(`release/${path.basename(dmgPath)}`)}`)
   return dmgPath
 }
