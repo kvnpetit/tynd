@@ -155,7 +155,17 @@ Cross-compilation isn't supported — each host produces installers only for its
 Tynd exposes dialogs, window control, clipboard, shell, notifications, and tray **directly from the frontend** — no IPC round-trip through your backend:
 
 ```ts
-import { dialog, tyndWindow, clipboard, notification } from "@tynd/core/client"
+import { dialog, tyndWindow, clipboard, notification, singleInstance, crashReporter } from "@tynd/core/client"
+
+// Prevent a second launch from spawning a duplicate window.
+const { acquired } = await singleInstance.acquire("com.example.myapp")
+if (!acquired) {
+  await tyndWindow.show()
+  process.exit(0)
+}
+
+// Opt-in: write panic logs to data_dir/<id>/crashes/
+await crashReporter.enable("com.example.myapp")
 
 const file = await dialog.openFile({
   title: "Open image",
