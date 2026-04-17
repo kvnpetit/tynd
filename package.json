@@ -31,8 +31,11 @@
     "fmt:rust:check": "cargo fmt --all -- --check",
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
     "check:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo check --workspace --all-targets",
-    "check:all": "bun run check:ts && bun run check:rust",
-    "fix:all": "biome check --write && cargo fmt --all"
+    "check:all": "bun run check:ts && bun run check:rust && bun run test",
+    "fix:all": "biome check --write && cargo fmt --all",
+    "test": "bun test && cargo test --workspace --quiet",
+    "test:ts": "bun test",
+    "test:rust": "cargo test --workspace"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
