@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { buildFrontendEntry, buildLiteBundle } from "../lib/bundle.ts"
-import { hashSources, readCache, writeCache } from "../lib/cache.ts"
+import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
 import { exec } from "../lib/exec.ts"
@@ -16,6 +16,7 @@ export interface StartOptions {
 export async function start(opts: StartOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
   const cacheDir = path.join(opts.cwd, ".tynd", "cache")
+  wipeIfStaleVersion(cacheDir)
 
   const frontend = await detectFrontend(opts.cwd)
 

@@ -1,8 +1,17 @@
 import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs"
 import path from "node:path"
 import * as v from "valibot"
 import { log } from "./logger.ts"
+import { VERSION } from "./version.ts"
 
 const CacheEntrySchema = v.object({
   hash: v.pipe(v.string(), v.minLength(1)),
@@ -105,5 +114,35 @@ export function writeCache(cacheDir: string, key: string, entry: CacheEntry): vo
     log.debug(`cache write (${key}): hash=${entry.hash.slice(0, 12)}…`)
   } catch {
     /* non-fatal — next build will recompute and miss cache */
+  }
+}
+
+/**
+ * Wipe every cached artifact when the installed CLI version changes.
+ * Protects against stale bundles surviving a `bun update` of `@tynd/cli`.
+ * Preserves `tools/` (auto-downloaded installer tooling keyed by its own version).
+ */
+export function wipeIfStaleVersion(cacheDir: string): void {
+  const stampFile = path.join(cacheDir, ".cli-version")
+
+  const stored = existsSync(stampFile) ? readFileSync(stampFile, "utf8").trim() : null
+
+  if (stored === VERSION) return
+
+  if (existsSync(cacheDir)) {
+    for (const entry of readdirSync(cacheDir)) {
+      if (entry === "tools") continue
+      rmSync(path.join(cacheDir, entry), { recursive: true, force: true })
+    }
+    if (stored) {
+      log.debug(`cache invalidated: CLI ${stored} -> ${VERSION}`)
+    }
+  }
+
+  mkdirSync(cacheDir, { recursive: true })
+  try {
+    writeFileSync(stampFile, VERSION)
+  } catch {
+    /* non-fatal — next run will retry */
   }
 }

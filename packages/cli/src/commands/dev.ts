@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, watch } from "node:fs"
 import path from "node:path"
 import { buildFrontendEntry, buildLiteBundle } from "../lib/bundle.ts"
-import { hashSources, readCache, writeCache } from "../lib/cache.ts"
+import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
@@ -14,6 +14,7 @@ export interface DevOptions {
 export async function dev(opts: DevOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
   const cacheDir = path.join(opts.cwd, ".tynd", "cache")
+  wipeIfStaleVersion(cacheDir)
 
   const frontend = await detectFrontend(opts.cwd)
 
@@ -221,6 +222,8 @@ export async function dev(opts: DevOptions): Promise<void> {
   }
 
   const configPath = path.join(opts.cwd, "tynd.config.ts")
+  const pkgPath = path.join(opts.cwd, "package.json")
+
   const backendWatcher = watch(backendSrcDir, { recursive: true }, (_, filename) => {
     if (!filename || !WATCH_EXTS.test(filename)) return
     log.debug(`backend file changed: ${filename}`)
@@ -229,10 +232,13 @@ export async function dev(opts: DevOptions): Promise<void> {
   const configWatcher = existsSync(configPath)
     ? watch(configPath, () => triggerReload("config"))
     : null
+  // package.json changes affect deps / version / scripts — full restart.
+  const pkgWatcher = existsSync(pkgPath) ? watch(pkgPath, () => triggerReload("config")) : null
 
   const watchTargets = [
     log.gray(`${path.relative(opts.cwd, backendSrcDir)}/`),
     log.gray("tynd.config.ts"),
+    log.gray("package.json"),
     ...(devUrl ? [`frontend HMR (${frontend.buildTool})`] : []),
   ]
   log.step(`Watching: ${watchTargets.join(", ")}`)
@@ -241,6 +247,7 @@ export async function dev(opts: DevOptions): Promise<void> {
   const shutdown = () => {
     backendWatcher.close()
     configWatcher?.close()
+    pkgWatcher?.close()
     if (reloadTimer) clearTimeout(reloadTimer)
     hostProc.kill()
     devServerProc?.kill()
@@ -257,6 +264,7 @@ export async function dev(opts: DevOptions): Promise<void> {
   const code = await hostProc.exited
   backendWatcher.close()
   configWatcher?.close()
+  pkgWatcher?.close()
   devServerProc?.kill()
 
   if (code !== 0 && code !== null) {

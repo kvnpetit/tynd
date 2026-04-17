@@ -6,7 +6,7 @@ import { parseBundleFlag, resolveTargets, runBundle } from "../bundle/index.ts"
 import { collectFiles, packageFull, packageLite } from "../bundle/pack.ts"
 import type { BundleTarget } from "../bundle/types.ts"
 import { buildFrontendEntry, buildFullBundle, buildLiteBundle } from "../lib/bundle.ts"
-import { hashSources, readCache, writeCache } from "../lib/cache.ts"
+import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
 import { detectFrontend, findBinary, getPlatform } from "../lib/detect.ts"
 import { exec } from "../lib/exec.ts"
@@ -26,6 +26,7 @@ export async function build(opts: BuildOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
   // Absolute path — Bun's mkdirSync recursive has a Windows bug with ../ paths.
   const cacheDir = path.resolve(opts.cwd, ".tynd", "cache")
+  wipeIfStaleVersion(cacheDir)
 
   // Validate --bundle before doing any work so config errors surface fast.
   let bundleTargets: readonly BundleTarget[] = []
