@@ -1,4 +1,4 @@
-# Code signing & notarization
+# 🔏 Code signing & notarization
 
 Tynd produces raw binaries and installers via `tynd build [--bundle]`, but **does not sign them for you**. This doc covers the standard post-build signing workflows for each host OS so you can ship apps that users (and their OSes) trust.
 
@@ -6,7 +6,7 @@ Tynd produces raw binaries and installers via `tynd build [--bundle]`, but **doe
 
 ---
 
-## Windows — Authenticode signing
+## 🪟 Windows — Authenticode signing
 
 ### 1. Get a certificate
 
@@ -68,7 +68,7 @@ For EV certs, use a cloud-signing service (DigiCert KeyLocker, SSL.com eSigner) 
 
 ---
 
-## macOS — codesign + notarize + staple
+## 🍎 macOS — codesign + notarize + staple
 
 ### 1. Get an Apple Developer ID
 
@@ -126,7 +126,7 @@ xcrun stapler staple release/MyApp-1.0.0.dmg
 xcrun stapler staple release/MyApp.app
 ```
 
-Generate an **app-specific password** at [appleid.apple.com](https://appleid.apple.com) → Sign-in and security → App-specific passwords.
+Generate an **app-specific password** at [appleid.apple.com](https://appleid.apple.com) -> Sign-in and security -> App-specific passwords.
 
 ### 4. Verify
 
@@ -179,7 +179,7 @@ codesign --verify --deep --strict --verbose=2 release/MyApp.app
 
 ---
 
-## Linux — GPG signing + repository trust
+## 🐧 Linux — GPG signing + repository trust
 
 Linux has no centralized signature-verification model like Gatekeeper. The two practical paths are:
 

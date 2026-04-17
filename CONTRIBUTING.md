@@ -1,4 +1,4 @@
-# Contributing to Tynd
+# 🤝 Contributing to Tynd
 
 Thanks for helping!
 

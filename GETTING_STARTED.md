@@ -1,8 +1,12 @@
-# Getting started with Tynd
+# 🚀 Getting started with Tynd
 
-Build a native desktop app in TypeScript in under 5 minutes.
+Build a native desktop app in TypeScript in under 5 minutes. By the end of this doc you'll have:
 
-## Prerequisites
+- a running dev window with HMR on both the frontend and the backend,
+- a typed RPC boundary — rename a function in `backend/main.ts` and the TypeScript compiler catches every stale frontend call,
+- a single-file `.exe` / binary in `release/`, around 6.6 MB for lite or 44 MB for full, that you can ship as-is.
+
+## 📋 Prerequisites
 
 - **[Bun](https://bun.sh)** — `curl -fsSL https://bun.sh/install | bash`
 - **A C compiler toolchain** — needed if `@tynd/host` can't find a pre-built binary for your OS/arch. On macOS it's Xcode CLT, on Linux it's `build-essential`, on Windows it's MSVC build tools.
@@ -15,7 +19,7 @@ sudo apt-get install -y \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
 ```
 
-## Scaffold a project
+## 🪴 Scaffold a project
 
 ```bash
 bunx @tynd/cli create my-app
@@ -35,7 +39,7 @@ tynd dev
 
 A native window opens with your frontend + Vite HMR. Save `backend/main.ts` — hot reloads without tearing down the window.
 
-## Project layout
+## 📁 Project layout
 
 ```
 my-app/
@@ -47,7 +51,7 @@ my-app/
     └── main.tsx
 ```
 
-## Backend — your TypeScript functions
+## 🧠 Backend — your TypeScript functions
 
 ```ts
 // backend/main.ts
@@ -77,7 +81,7 @@ app.start({
 
 Every exported function and emitter is **automatically callable from the frontend** — no codegen, no glue.
 
-## Frontend — typed client
+## 🎨 Frontend — typed client
 
 ```tsx
 // src/App.tsx
@@ -100,7 +104,7 @@ export default function App() {
 
 Types come from `typeof backend`. Rename a function in the backend -> compiler catches the frontend call.
 
-## Build a production binary
+## 📦 Build a production binary
 
 ```bash
 tynd build
@@ -113,7 +117,7 @@ Output: a single self-contained `.exe` / binary under `release/`.
 
 Ship that file. The user double-clicks it. No installer, no framework to install, no Node/Bun on their machine.
 
-### Platform installers
+### 🏗️ Platform installers
 
 Need a real installer (icon in Applications, Start Menu entry, apt/dnf compatible)? Add a `bundle` block to `tynd.config.ts`:
 
@@ -150,7 +154,7 @@ Build tools (NSIS, WiX v3, appimagetool) are auto-downloaded once into `.tynd/ca
 
 Cross-compilation isn't supported — each host produces installers only for its own OS. Use GitHub Actions with a matrix to cover all three (see `.github/workflows/build-host.yml` in the Tynd repo for a reference).
 
-## Native OS APIs from the frontend
+## 🧰 Native OS APIs from the frontend
 
 Tynd exposes dialogs, window control, clipboard, shell, notifications, and tray **directly from the frontend** — no IPC round-trip through your backend:
 
@@ -177,14 +181,14 @@ await clipboard.writeText("hello")
 await notification.send("Build done", { body: "0 errors" })
 ```
 
-## What's next
+## 📚 What's next
 
 - **[RUNTIMES.md](./RUNTIMES.md)** — `lite` vs `full` detailed comparison (APIs, perf, compat)
 - **[COMPARISON.md](./COMPARISON.md)** — Tynd vs Tauri / Wails / Electron across 39 categories
 - **[SIGNING.md](./SIGNING.md)** — code signing + notarization workflows for Windows, macOS, Linux
 - **[playground/](./playground/)** — working React examples in both runtimes
 
-## Common commands
+## ⚡ Common commands
 
 ```bash
 tynd dev                  # dev mode with HMR
@@ -198,7 +202,7 @@ tynd upgrade              # bump @tynd/* deps to latest
 tynd --verbose <cmd>      # debug-level logs
 ```
 
-## Stuck?
+## 🆘 Stuck?
 
 - Run `tynd info --verbose` to see what Tynd sees about your environment
 - Run `tynd validate` to check your config + binary availability
