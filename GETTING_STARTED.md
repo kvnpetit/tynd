@@ -24,7 +24,7 @@ bunx @tynd/cli create my-app
 The CLI asks for:
 - **Project name** (defaults to `my-app`)
 - **Frontend framework** — React, Vue, Svelte, Solid, Preact, Lit, or Angular
-- **Runtime** — `lite` (recommended default, ~5 MB, Rust-backed OS APIs) or `full` (bundles Bun — use when you need JS-level `fetch` / `Intl` / `Buffer` or native-binding npm packages). See [RUNTIMES.md](./RUNTIMES.md).
+- **Runtime** — `lite` (recommended default, ~6.5 MB, Rust-backed OS APIs) or `full` (bundles Bun — use when you need JS-level `fetch` / `Intl` / `Buffer` or native-binding npm packages). See [RUNTIMES.md](./RUNTIMES.md).
 
 Then scaffolds the frontend via Vite / Angular CLI and drops a Tynd config on top.
 
@@ -109,7 +109,7 @@ tynd build
 Output: a single self-contained `.exe` / binary under `release/`.
 
 - **full** runtime: ~40 MB (Bun bundled)
-- **lite** runtime: ~5 MB (QuickJS embedded)
+- **lite** runtime: ~6.5 MB (embedded JS engine, no external runtime)
 
 Ship that file. The user double-clicks it. No installer, no framework to install, no Node/Bun on their machine.
 

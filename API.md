@@ -439,7 +439,7 @@ const results = await parallel.map(
 )
 ```
 
-- **Lite**: spawns an isolated QuickJS runtime on a fresh OS thread, channels input/output as JSON.
+- **Lite**: spawns an isolated copy of the embedded JS engine on a fresh OS thread, channels input/output as JSON.
 - **Full**: wraps `Bun.Worker` via a data-URL worker script. Same API surface.
 
 Task function must be self-contained (no closure captures). Arguments and return value marshaled as JSON.
