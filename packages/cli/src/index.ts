@@ -50,11 +50,15 @@ cli
         opts.runtime === "full" || opts.runtime === "lite"
           ? opts.runtime
           : await select<"full" | "lite">("Backend runtime", [
-              { value: "full", label: "full", hint: "full — Node.js APIs, npm ecosystem" },
               {
                 value: "lite",
                 label: "lite",
-                hint: "smaller binary (~10 MB), no file system or SQLite",
+                hint: "~5 MB, QuickJS + all Tynd OS APIs (recommended)",
+              },
+              {
+                value: "full",
+                label: "full",
+                hint: "bundles Bun — use for fetch/Intl/Buffer or native npm bindings",
               },
             ])
 
@@ -106,8 +110,16 @@ cli
       // Interactive: ask for runtime
       const { select } = await import("./lib/prompt.ts")
       runtime = await select("Runtime", [
-        { value: "full", label: "full", hint: "full — Node.js APIs" },
-        { value: "lite", label: "lite", hint: "smaller binary (~10 MB), no file system or SQLite" },
+        {
+          value: "lite",
+          label: "lite",
+          hint: "~5 MB, QuickJS + all Tynd OS APIs (recommended)",
+        },
+        {
+          value: "full",
+          label: "full",
+          hint: "bundles Bun — use for fetch/Intl/Buffer or native npm bindings",
+        },
       ] as const)
     }
     await init({ cwd: opts.cwd, runtime, force: opts.force })
