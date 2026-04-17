@@ -3,6 +3,7 @@
 export { type BackendClient, createBackend } from "./client/backend.js"
 export { clipboard } from "./client/clipboard.js"
 export { type CompressAlgo, compute, type HashAlgo } from "./client/compute.js"
+export { type CrashReporterEnableResult, crashReporter } from "./client/crash-reporter.js"
 export {
   type ConfirmOptions,
   dialog,

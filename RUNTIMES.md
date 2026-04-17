@@ -64,6 +64,7 @@ Routed through the Rust host, so lite and full share the exact same surface:
 | `compute` | `hash(data, { algo })` (blake3 / sha256 / sha512), `compress` / `decompress` (zstd) — Rust-native |
 | `workers` | `spawn(fn)` -> `{ run, terminate }`; `parallel.map(items, fn, { concurrency })`. Lite: isolated QuickJS on thread. Full: wraps `Bun.Worker`. |
 | `singleInstance` | `acquire(id)` -> `{ acquired, already }` — cross-OS exclusive lock (named pipe / abstract socket) held for process lifetime |
+| `crashReporter` | `enable(appId)` installs a panic hook that writes `crash-<unix-nanos>.log` files under `data_dir/<appId>/crashes/`; `listCrashes()` returns the paths |
 | `dialog` | `openFile`, `openFiles`, `saveFile`, `message`, `confirm` |
 | `clipboard` | `readText`, `writeText` |
 | `shell` | `openExternal`, `openPath` |
