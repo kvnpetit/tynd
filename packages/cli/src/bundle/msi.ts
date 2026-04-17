@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
@@ -80,7 +79,9 @@ function toMsiVersion(semver: string): string {
 
 // Stable GUID from a string — used for UpgradeCode when the user doesn't pin one.
 function deterministicGuid(input: string): string {
-  const h = createHash("sha1").update(`tynd:${input}`).digest("hex")
+  const hasher = new Bun.CryptoHasher("sha1")
+  hasher.update(`tynd:${input}`)
+  const h = hasher.digest("hex")
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(12, 15)}-a${h.slice(15, 18)}-${h.slice(18, 30)}`.toUpperCase()
 }
 

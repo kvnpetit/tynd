@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import {
   existsSync,
   mkdirSync,
@@ -42,24 +41,38 @@ export function hashSources(
   files: string[],
   excludeDirNames: Set<string> = new Set(),
 ): string {
-  const h = createHash("sha256")
+  // wyhash is non-crypto but orders of magnitude faster than SHA-256 and
+  // perfectly collision-safe for cache invalidation on a project's file set.
+  const chunks: Uint8Array[] = []
   const exclude = new Set([...ALWAYS_EXCLUDE, ...excludeDirNames])
+  const enc = new TextEncoder()
+
+  const push = (abs: string) => {
+    chunks.push(enc.encode(abs))
+    chunks.push(readFileSync(abs))
+  }
 
   for (const dir of dirs) {
     if (!existsSync(dir)) continue
     for (const file of walkSorted(dir, exclude)) {
-      h.update(file) // path contributes — catches renames
-      h.update(readFileSync(file)) // content
+      push(file)
     }
   }
-
   for (const file of files) {
     if (!existsSync(file)) continue
-    h.update(file)
-    h.update(readFileSync(file))
+    push(file)
   }
 
-  return h.digest("hex")
+  let total = 0
+  for (const c of chunks) total += c.byteLength
+  const buf = new Uint8Array(total)
+  let off = 0
+  for (const c of chunks) {
+    buf.set(c, off)
+    off += c.byteLength
+  }
+
+  return Bun.hash.wyhash(buf).toString(16).padStart(16, "0")
 }
 
 function walkSorted(dir: string, exclude: Set<string>): string[] {
