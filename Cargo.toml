@@ -41,8 +41,8 @@ image       = { version = "0.25.10", default-features = false, features = ["png"
 # Embedded JS runtime (lite)
 rquickjs    = { version = "0.11.0", features = ["full"] }
 
-# HTTP + binary encoding
-ureq   = { version = "2.12", default-features = false, features = ["tls", "json", "gzip", "brotli"] }
+# HTTP + binary encoding. `json` dropped — we parse via serde_json directly.
+ureq   = { version = "2.12", default-features = false, features = ["tls", "gzip", "brotli"] }
 base64 = "0.22"
 
 # Cross-platform pseudo-terminal for the embedded terminal API
@@ -59,6 +59,11 @@ single-instance = "0.3"
 rand       = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
 tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
 rusqlite   = { version = "0.32", features = ["bundled"] }
+
+# Performance primitives
+parking_lot = "0.12"   # lock-free fast path + no poison handling (saves a branch per lock)
+dashmap     = "6"      # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
+ahash       = "0.8"    # faster non-crypto hasher for small keys (sessions, routes)
 
 [workspace.lints.rust]
 unused_must_use               = "deny"
