@@ -111,6 +111,7 @@ tynd create [name]           # scaffold a new project (interactive if no args)
 
 tynd dev                     # start app in development mode (HMR)
 tynd build                   # bundle backend + frontend → single binary
+  --bundle [targets]         # + installers: app, dmg, deb, rpm, appimage, nsis, msi (or "all")
 tynd init                    # add tynd to an existing project
 tynd clean                   # remove build artifacts (.tynd/cache, release/)
 tynd validate                # check config and project structure
