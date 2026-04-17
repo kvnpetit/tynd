@@ -1,69 +1,39 @@
-# React + TypeScript + Vite
+# playground/lite
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Reference app for Tynd's **`lite`** runtime (embedded JS engine, no Bun subprocess). Same feature set as [`playground/full`](../full/README.md) so the two runtimes stay at parity.
 
-Currently, two official plugins are available:
+```bash
+# From the repo root
+cargo build --release -p tynd-lite          # one-time: build the host
+bun install
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Then from this directory
+bun run dev          # tynd dev — HMR frontend + hot-reload backend bundle
+bun run build        # tynd build — single ~6.6 MB binary in release/
+bun run start        # tynd start — run cached bundles, no rebuild
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Why lite?
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- **~6.5 MB** host, ~6.6 MB final binary with this playground's assets packed in.
+- No Bun subprocess — backend runs in-process inside the Rust binary.
+- Fastest cold start.
+- Same OS APIs as `full` (Rust-backed): `fs`, `http`, `websocket`, `sql`, `compute`, `terminal`, and the rest.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+When **not** to pick lite — if you need Bun's JIT for hot CPU-bound JS, direct `fetch`/`Intl`/`Buffer` in backend code, or native-binding npm packages. See [RUNTIMES.md](../../RUNTIMES.md).
+
+## Layout
+
+Mirrors `playground/full/`:
+
 ```
+playground/lite/
+├── backend/main.ts       ← exported RPC fns + app.start()
+├── src/                  ← React + Vite frontend (shared pattern)
+├── tynd.config.ts        ← runtime: "lite"
+└── vite.config.ts
+```
+
+## Running against a local host build
+
+The CLI prefers `target/release` inside the workspace. Rebuild the lite host with `cargo build --release -p tynd-lite` and the next `tynd dev` / `tynd start` picks it up.

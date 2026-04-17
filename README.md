@@ -31,7 +31,19 @@ bunx @tynd/cli create my-app
 
 ---
 
-## Why Tynd
+## ✨ At a glance
+
+- 🦀 **TypeScript all the way down.** Backend, frontend, IPC, config — no Rust, no Go, no codegen step.
+- 🧬 **Two runtimes, one API.** Start with `lite` (~6.5 MB, no external runtime). Swap to `full` with a one-line config change when you need Bun's JIT or native-binding npm packages.
+- 🔒 **Native window, zero network.** Frontend served over a custom scheme (`tynd://`). RPC via `webview_bind`. No HTTP server, no firewall prompt, no reachable TCP port.
+- 🧰 **21 OS APIs, same surface in both runtimes** — `fs`, `sql` (embedded SQLite), `http`, `websocket`, `terminal` (real PTY), `compute` (blake3/sha/zstd/CSPRNG), `dialog`, `tray`, `notification`, `clipboard`, `shell`, `process`, `sidecar`, `singleInstance`, `crashReporter`, `store`, `workers`, `os`, `path`, `tyndWindow`, plus typed emitters.
+- ⚡ **Zero-copy binary IPC.** Multi-MB payloads (`fs.readBinary`, `compute.compress`) bypass JSON base64 through a second custom protocol — roughly **5-10x faster** than any other wry-based framework's binary calls.
+- 📦 **First-class installers.** `tynd build --bundle` emits `.app`/`.dmg`/`.deb`/`.rpm`/`.AppImage`/NSIS `.exe`/`.msi` — build tools (NSIS, WiX, appimagetool) auto-download, no manual install.
+- 🎨 **Framework-agnostic.** React, Vue, Svelte, Solid, Preact, Lit, Angular — anything that produces a pure SPA.
+
+---
+
+## 🧭 Why Tynd
 
 |  | Tauri v2 | Wails v3 | **Tynd** |
 |---|---|---|---|
@@ -44,7 +56,7 @@ bunx @tynd/cli create my-app
 
 ---
 
-## How it works
+## 🧪 How it works
 
 ```
 TypeScript backend                         Native OS window
@@ -78,7 +90,7 @@ TypeScript backend                         Native OS window
 
 ---
 
-## Requirements
+## 📋 Requirements
 
 **[Bun](https://bun.sh) is required.** Tynd is a Bun-first framework — the CLI, the dev server, and the full runtime all run on Bun.
 
@@ -86,7 +98,7 @@ End users who install your app need nothing — the runtime is embedded in the d
 
 ---
 
-## Quick start
+## 🚀 Quick start
 
 ```bash
 bunx tynd create my-app
@@ -103,7 +115,7 @@ bunx tynd create my-app --framework vue   --runtime lite
 
 ---
 
-## CLI
+## 🛠️ CLI
 
 ```bash
 tynd create [name]           # scaffold a new project (interactive if no args)
@@ -123,7 +135,7 @@ tynd info                    # show environment info (Bun, Rust, WebView2…)
 
 ---
 
-## Supported frameworks
+## 🎨 Supported frameworks
 
 | Framework | Scaffold | Build | Fast Refresh (HMR) |
 |---|---|---|---|
@@ -140,7 +152,7 @@ See [`FRAMEWORKS.md`](FRAMEWORKS.md) for the full matrix, per-framework notes, o
 
 ---
 
-## Project structure
+## 📁 Project structure
 
 ```
 my-app/
@@ -154,7 +166,7 @@ my-app/
 
 ---
 
-## API
+## 🧩 API
 
 Tynd exposes three surfaces — backend module, typed frontend RPC, and direct OS APIs:
 
@@ -195,7 +207,7 @@ const { stdout } = await process.exec("git", { args: ["status"] })
 
 ---
 
-## tynd.config.ts
+## ⚙️ tynd.config.ts
 
 ```typescript
 import type { TyndConfig } from "@tynd/cli"
@@ -232,7 +244,7 @@ export default {
 
 ---
 
-## WebView runtime
+## 🪟 WebView runtime
 
 | OS | WebView | Pre-installed? |
 |---|---|---|
@@ -242,7 +254,7 @@ export default {
 
 ---
 
-## Building from source
+## 🏗️ Building from source
 
 The `tynd-full` and `tynd-lite` binaries are Rust crates.
 
@@ -270,3 +282,20 @@ packages/
 ├── core/        ← @tynd/core (TypeScript: app, createEmitter, client API)
 └── cli/         ← @tynd/cli  (TypeScript: tynd create/dev/build/info)
 ```
+
+---
+
+## 📚 Documentation
+
+| Doc | When to read it |
+|---|---|
+| [GETTING_STARTED.md](./GETTING_STARTED.md) | First project — scaffold, dev, build, ship in 5 min |
+| [API.md](./API.md) | Every backend / frontend / OS API with signatures + examples |
+| [RUNTIMES.md](./RUNTIMES.md) | `lite` vs `full` — what each exposes, when to pick which |
+| [FRAMEWORKS.md](./FRAMEWORKS.md) | Per-framework matrix (React, Vue, Svelte, Solid, Angular, Preact, Lit) |
+| [COMPARISON.md](./COMPARISON.md) | Tynd vs Tauri / Wails / Electron across 39 categories |
+| [SIGNING.md](./SIGNING.md) | Code signing + notarization workflows per OS |
+| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common errors: missing binary, WebView2, GTK deps, Gatekeeper, etc. |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | Dev loop, commit style, PR process |
+| Per-package READMEs | [@tynd/core](./packages/core/README.md) · [@tynd/cli](./packages/cli/README.md) · [@tynd/host](./packages/host/README.md) |
+| Working examples | [playground/full](./playground/full/README.md) · [playground/lite](./playground/lite/README.md) |
