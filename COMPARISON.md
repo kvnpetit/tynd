@@ -3,6 +3,8 @@
 > **Exhaustive feature matrix across 39 categories — 512 rows.**
 > Last updated: April 17, 2026 · Desktop only (mobile features marked 📱)
 
+> **Note:** Tynd's `websocket` and `sql` APIs (and `compute.randomBytes`) land in both `lite` and `full` — no feature disparity between runtimes for these rows.
+
 > ⚠️ **Architecture note — Electron:** Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tauri, Wails, and Tynd use the OS's native WebView (WebView2 / WKWebView / WebKitGTK). This explains both Electron's broader API surface and its larger binary footprint.
 
 ## Legend
@@ -402,7 +404,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | HTTP requests from frontend | ✅ | ✅ | ⚠️ | ✅ |
-| WebSocket client | ❌ | ✅ | ❌ | ✅ |
+| WebSocket client | ✅ | ✅ | ❌ | ✅ |
 | File upload with progress | ✅ | ✅ | ❌ | ✅ |
 | File download with progress | ✅ | ✅ | ❌ | ✅ |
 
@@ -458,7 +460,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Store — has / keys / values / entries / length | ✅ | ✅ | ❌ | ⚠️ |
 | Store — clear / reset / reload | ✅ | ✅ | ❌ | ⚠️ |
 | Store — auto-save + events on change | ⚠️ | ✅ | ❌ | ⚠️ |
-| SQLite / relational DB | ❌ | ✅ | ✅ | ⚠️ |
+| SQLite / relational DB | ✅ | ✅ | ✅ | ⚠️ |
 | Encrypted secure storage | ❌ | ✅ | ❌ | ✅ |
 | Persisted scope (runtime permission changes saved) | ❌ | ✅ | N/A | N/A |
 | Cookies API (read / set / delete) | ❌ | ⚠️ | ❌ | ✅ |
@@ -789,11 +791,11 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Global shortcuts | 0/6 | 6/6 | 4/6 | 4/6 |
 | Shell & FS | 2/21 | 20/21 | 6/21 | 20/21 |
 | IPC & Events | 6/23 | 17/23 | 11/23 | 17/23 |
-| HTTP & WebSocket | 0/4 | 4/4 | 1/4 | 4/4 |
+| HTTP & WebSocket | 4/4 | 4/4 | 1/4 | 4/4 |
 | Auto-updater | 0/10 | 10/10 | 0/10 | 10/10 |
 | Single instance & deep linking | 0/8 | 7/8 | 4/8 | 7/8 |
 | Autolaunch | 0/3 | 3/3 | 0/3 | 3/3 |
-| Persistent storage | 0/10 | 7/10 | 3/10 | 7/10 |
+| Persistent storage | 4/10 | 7/10 | 3/10 | 7/10 |
 | Logging | 0/5 | 5/5 | 4/5 | 2/5 |
 | App-level APIs | 0/14 | 11/14 | 7/14 | 11/14 |
 | OS & Environment | 0/12 | 11/12 | 5/12 | 11/12 |
@@ -809,7 +811,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~62/503 (12%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~67/503 (13%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 

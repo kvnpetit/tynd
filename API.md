@@ -4,7 +4,7 @@ Every Tynd app has three surfaces:
 
 - **Backend** (`@tynd/core`) — imported by `backend/main.ts`, exposes `app.start`, emitters, lifecycle hooks.
 - **Frontend RPC** (`@tynd/core/client`) — typed proxy to your backend functions (`createBackend<typeof backend>()`).
-- **OS APIs** (`@tynd/core/client`) — direct bridge from the frontend to Rust: dialog, window, clipboard, shell, notification, tray, process, fs, http, sidecar, terminal, store, os, path.
+- **OS APIs** (`@tynd/core/client`) — direct bridge from the frontend to Rust: dialog, window, clipboard, shell, notification, tray, process, fs, http, websocket, sql, sidecar, terminal, store, os, path, compute.
 
 > **Lite vs full parity:** all OS APIs live in Rust (`packages/host-rs/src/os/`) so both runtimes expose the exact same surface. See [`RUNTIMES.md`](./RUNTIMES.md) for JS-runtime differences.
 
@@ -299,6 +299,49 @@ await http.download("https://…/ffmpeg.zip", "./downloads/ffmpeg.zip", {
 
 `onProgress` fires for both upload (when `body` is set) and download (when reading the response body). Throttled to ~50ms max. Pure-Rust TLS (rustls) — no OpenSSL runtime dep.
 
+### `websocket` — full-duplex client
+
+```typescript
+import { websocket } from "@tynd/core/client"
+
+const ws = await websocket.connect("wss://echo.websocket.events")
+ws.onOpen(() => ws.send("hello"))
+ws.onMessage((msg) => {
+  if (msg.kind === "text") console.log(msg.data)
+  else console.log("binary bytes:", msg.data.byteLength)
+})
+ws.onClose(({ code }) => console.log("closed:", code))
+ws.onError(({ message }) => console.error(message))
+
+await ws.send("text frame")
+await ws.send(new Uint8Array([1, 2, 3]))   // binary
+await ws.ping()
+await ws.close(1000, "bye")
+```
+
+Backed by `tungstenite` with rustls TLS (`wss://` out of the box). Each connection runs on a dedicated OS thread that polls the socket non-blocking and drains an outbound queue.
+
+### `sql` — embedded SQLite
+
+```typescript
+import { sql } from "@tynd/core/client"
+
+const db = await sql.open("./data.db")       // or ":memory:"
+await db.exec("CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, name TEXT)")
+
+const { changes, lastInsertId } = await db.exec(
+  "INSERT INTO users(name) VALUES (?1)",
+  ["Alice"],
+)
+
+const rows = await db.query<{ id: number; name: string }>("SELECT * FROM users")
+const one  = await db.queryOne<{ name: string }>("SELECT name FROM users WHERE id = ?1", [1])
+
+await db.close()
+```
+
+Bundled SQLite via `rusqlite` — no system dependency. Params accept strings, numbers, booleans, nulls; arrays/objects are stored as JSON text. Blob columns come back as base64 strings.
+
 ### `sidecar` — bundled binaries
 
 Declare side-loaded binaries in `tynd.config.ts`:
@@ -345,9 +388,11 @@ const sha = await compute.hash(bytes, { algo: "sha256", encoding: "base64" })
 
 const squeezed = await compute.compress(payload, { algo: "zstd", level: 9 })
 const restored = await compute.decompress(squeezed)
+
+const token = await compute.randomBytes(32)   // CSPRNG, Uint8Array
 ```
 
-Runs on a fresh Rust thread per call — never blocks the JS event loop. Works identically in lite and full.
+Runs on a fresh Rust thread per call — never blocks the JS event loop. Works identically in lite and full. `randomBytes` is backed by `rand::rngs::OsRng` and caps at 1 MiB per call.
 
 ### `singleInstance` — prevent dual launch
 

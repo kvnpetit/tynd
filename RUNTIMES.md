@@ -13,11 +13,10 @@ export default {
 
 ## ⚡ Quick decision
 
-> **Start with `lite`.** Most apps are covered: the Tynd OS APIs (`http`, `fs`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`) are Rust-backed and work identically in both runtimes. Lite ships a ~5 MB binary with no external runtime.
+> **Start with `lite`.** Most apps are covered: the Tynd OS APIs (`http`, `websocket`, `sql`, `fs`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`) are Rust-backed and work identically in both runtimes. Lite ships a ~5 MB binary with no external runtime.
 
 Switch to `full` only if you need:
-- Direct JS access to `fetch` / `WebSocket` / `crypto.getRandomValues` / `Intl` / `Buffer` (lite doesn't expose these to JS — Tynd's equivalents cover most cases but not every corner).
-- `bun:sqlite` embedded SQL (relational data with `.query()` / `.prepare()`).
+- Direct JS access to `fetch` / `Intl` / `Buffer` (lite doesn't expose these to JS — Tynd's equivalents cover most cases but not every corner).
 - npm packages with **native bindings** (sharp, better-sqlite3, bcrypt, canvas).
 - Large CPU-bound workloads that benefit from JSC's JIT (QuickJS is an interpreter).
 
@@ -43,10 +42,10 @@ Where lite is ✗, check the **Tynd equivalent** column — most gaps are closed
 | `structuredClone` | ✗ | ✓ | `JSON.parse(JSON.stringify(x))` |
 | `Buffer` | ✗ | ✓ | `Uint8Array` (Tynd APIs use `Uint8Array` natively) |
 | `crypto.subtle` hashing | ✗ | ✓ | `compute.hash` (blake3 / sha256 / sha512) |
-| `crypto.getRandomValues` | ✗ | ✓ | **full only** — no Tynd equivalent yet |
-| `fetch` / `WebSocket` | ✗ | ✓ | `http` API (get / post / download / progress); WS: full only |
+| `crypto.getRandomValues` | ✗ | ✓ | `compute.randomBytes(n)` (Rust `OsRng`) |
+| `fetch` / `WebSocket` | ✗ | ✓ | `http` API for HTTP; `websocket` API for WS |
 | `Bun.file()` / `Bun.write()` | ✗ | ✓ | `fs.readText` / `fs.writeText` / binary variants |
-| `bun:sqlite` | ✗ | ✓ | **full only** — `store` covers k/v use cases |
+| `bun:sqlite` | ✗ | ✓ | `sql` API (embedded SQLite via rusqlite) |
 | `import("fs")` / `import("child_process")` etc. | ✗ | ✓ | `fs` + `process` OS APIs |
 | `Intl` | ✗ | ✓ | Pure-JS libs like `date-fns`, `dayjs`, `i18next` |
 | `Worker` / threads | ✗ | ✓ | `workers` API (isolated QuickJS in lite, `Bun.Worker` in full) |
@@ -70,6 +69,8 @@ Routed through the Rust host, so lite and full share the exact same surface:
 | `os` | `info`, `homeDir`, `tmpDir`, `configDir`, `dataDir`, `cacheDir`, `exePath`, `cwd`, `env` |
 | `store` | `createStore(ns)` -> `get`, `set`, `delete`, `clear`, `keys` (JSON-backed k/v) |
 | `http` | `get`, `getJson`, `getBinary`, `post`, `request`, `download` (TLS via rustls) |
+| `websocket` | `connect(url)` -> `{ send, ping, close, onOpen, onMessage, onClose, onError }` — tungstenite + rustls |
+| `sql` | `open(path)` -> `{ exec, query, queryOne, close }` — bundled SQLite via rusqlite |
 | `sidecar` | `path(name)`, `list()` — binaries bundled at build time, extracted at startup |
 | `terminal` | `spawn({ shell, cols, rows, cwd, env })` -> PTY handle with `write`, `resize`, `kill`, `onData`, `onExit` |
 | `compute` | `hash(data, { algo })` (blake3 / sha256 / sha512), `compress` / `decompress` (zstd) — Rust-native |
@@ -96,9 +97,9 @@ Routed through the Rust host, so lite and full share the exact same surface:
 | `lodash-es` | ✓ | Pure-JS utilities |
 | `fflate` | ✓ | Pure-JS compression |
 | `@noble/hashes` | ✓ | SHA-256, BLAKE2, etc. — no random needed |
-| `tweetnacl` | ⚠️ | Deterministic ops ✓ — key generation needs manual PRNG |
-| `nanoid` | ⚠️ | Works with `Math.random`-based generator |
-| `uuid` v9+ | ✗ | Requires `crypto.getRandomValues` |
+| `tweetnacl` | ✓ | Seed with `compute.randomBytes` for key generation |
+| `nanoid` | ✓ | Feed `compute.randomBytes` or use the `Math.random`-based generator |
+| `uuid` v9+ | ⚠️ | Provide a getRandomValues shim backed by `compute.randomBytes` |
 | `axios` | ✗ | Requires network stack |
 | `sharp` | ✗ | Native binding |
 | `better-sqlite3` | ✗ | Native binding |
@@ -117,21 +118,22 @@ Routed through the Rust host, so lite and full share the exact same surface:
 | Zstd compress / decompress | **`compute.compress` / `decompress`** — Rust-native |
 | HMAC, AES, ChaCha20 | [`@noble/ciphers`](https://github.com/paulmillr/noble-ciphers) (pure JS, works in lite) |
 | Ed25519, secp256k1 | [`@noble/curves`](https://github.com/paulmillr/noble-curves) (pure JS) |
-| Secure random (CSPRNG) | **full only** — lite has no `crypto.getRandomValues` and `@noble/*` needs one for key gen |
+| Secure random (CSPRNG) | **`compute.randomBytes(n)`** — Rust `OsRng`, works in both runtimes |
 
 ### UUID
 
 ```typescript
-// Non-security UUID — no crypto needed
-function uuidv4(): string {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0
-    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16)
-  })
+import { compute } from "@tynd/core/client"
+
+// Cryptographically-random UUID v4, works in both runtimes
+async function uuidv4(): Promise<string> {
+  const b = await compute.randomBytes(16)
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const hex = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("")
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 ```
-
-For cryptographically-random UUIDs use `full` (needs `crypto.getRandomValues`).
 
 ### Date / number formatting
 
@@ -183,7 +185,25 @@ await prefs.set("theme", "dark")
 const theme = await prefs.get<string>("theme")
 ```
 
-For relational data in lite, serialize through `fs.writeText` + JSON. For SQL-heavy apps, use `full` with `bun:sqlite`.
+For relational data, use the **`sql` API** — bundled SQLite, identical in lite and full:
+
+```ts
+import { sql } from "@tynd/core/client"
+const db = await sql.open("./data.db")
+await db.exec("CREATE TABLE IF NOT EXISTS t(k TEXT PRIMARY KEY, v TEXT)")
+await db.exec("INSERT INTO t VALUES (?1, ?2)", ["theme", "dark"])
+```
+
+### WebSocket
+
+Use the **`websocket` API** — full-duplex client, works in both runtimes:
+
+```ts
+import { websocket } from "@tynd/core/client"
+const ws = await websocket.connect("wss://echo.websocket.events")
+ws.onMessage((m) => m.kind === "text" && console.log(m.data))
+await ws.send("hello")
+```
 
 ---
 
@@ -198,8 +218,8 @@ No measurements checked into the repo. The shape below is derived from the archi
 | Concurrent IPC throughput | **lite** | Shorter path, no subprocess scheduling |
 | CPU-bound JS (filter/sort/parse in JS) | **full** | JSC JIT vs QuickJS interpreter — gap grows with data size |
 | Large payload transfer (100 KB+) | **full** | Bigger OS pipes, native serialisation in JSC |
-| `fs` / `http` / `compute` / `process` / `workers` | **tie** | Same Rust code runs on both — API name hits the same `os_call` dispatch |
-| SQLite / `bun:sqlite` | **full only** | Not exposed in lite |
+| `fs` / `http` / `websocket` / `sql` / `compute` / `process` / `workers` | **tie** | Same Rust code runs on both — API name hits the same `os_call` dispatch |
+| Raw JS-level `bun:sqlite` (no IPC) | **full only** | Lite exposes SQLite through the `sql` API, which round-trips via IPC |
 | Worker pool (`parallel.map`) | **tie on I/O**, **full on CPU** | Same worker spawn path; JSC JIT wins inside hot loops |
 
 Both feel instant for typical user interactions.
@@ -212,16 +232,15 @@ Both feel instant for typical user interactions.
 ### Use `lite` when
 
 - You want the smallest self-contained binary (~5 MB) — no Bun runtime to ship
-- All your OS needs fit the Tynd APIs (which now cover `fs`, `http`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`)
+- All your OS needs fit the Tynd APIs (which now cover `fs`, `http`, `websocket`, `sql`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`)
 - You need high concurrent-call throughput / low startup latency
 - You're comfortable with pure-JS npm packages only (no native bindings)
 
 ### Use `full` when
 
-- You need a **JS-level** `fetch` / `WebSocket` / `crypto.getRandomValues` / `Intl` / `Buffer` / `bun:sqlite` — not a Tynd wrapper
+- You need a **JS-level** `fetch` / `Intl` / `Buffer` — not a Tynd wrapper
 - You use npm packages with **native bindings** (sharp, better-sqlite3, bcrypt, canvas)
 - You have CPU-bound JS hot paths that benefit from JSC's JIT
-- You want a WebSocket client from JS (no Tynd equivalent yet)
 
 ### Rule of thumb
 

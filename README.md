@@ -67,7 +67,8 @@ TypeScript backend                         Native OS window
 | JS engine | QuickJS (embedded in Rust binary) | Bun subprocess (JSC/JIT) |
 | IPC overhead | ~0 µs (in-process) | ~0.3–1 ms (OS pipe) |
 | JIT compilation | ✗ interpreter | ✓ JSC JIT |
-| File system / SQLite / `fetch` | ✗ | ✓ |
+| `fs` / `http` / `websocket` / `sql` / `compute.randomBytes` | ✓ Tynd API | ✓ Tynd API |
+| JS-level `fetch` / `Bun.file` / `bun:sqlite` | ✗ (use Tynd API) | ✓ |
 | Pure-JS npm packages | ✓ (bundled) | ✓ |
 | npm with native bindings | ✗ | ✓ |
 | Binary size | ~5 MB smaller | Larger (runtime embedded) |
@@ -161,7 +162,7 @@ Tynd exposes three surfaces — backend module, typed frontend RPC, and direct O
 |---|---|---|
 | **Backend** | `@tynd/core` | `app.start`, `app.onReady`, `app.onClose`, `createEmitter` |
 | **Frontend RPC** | `@tynd/core/client` | `createBackend<typeof backend>()` — typed proxy |
-| **OS APIs** | `@tynd/core/client` | `dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `sidecar`, `terminal`, `compute`, `workers`, `parallel`, `singleInstance`, `crashReporter` |
+| **OS APIs** | `@tynd/core/client` | `dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `parallel`, `singleInstance`, `crashReporter` |
 
 Short example:
 
