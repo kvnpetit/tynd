@@ -181,6 +181,7 @@ await notification.send("Build done", { body: "0 errors" })
 
 - **[RUNTIMES.md](./RUNTIMES.md)** — `lite` vs `full` detailed comparison (APIs, perf, compat)
 - **[COMPARISON.md](./COMPARISON.md)** — Tynd vs Tauri / Wails / Electron across 39 categories
+- **[SIGNING.md](./SIGNING.md)** — code signing + notarization workflows for Windows, macOS, Linux
 - **[playground/](./playground/)** — working React examples in both runtimes
 
 ## Common commands
