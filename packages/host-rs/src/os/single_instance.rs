@@ -1,6 +1,7 @@
+use parking_lot::Mutex;
 use serde_json::{json, Value};
 use single_instance::SingleInstance;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 // Lock must outlive the process; keep it in a static so the OS release
 // only happens on real exit.
@@ -21,7 +22,7 @@ fn acquire(args: &Value) -> Result<Value, String> {
         .ok_or_else(|| "singleInstance.acquire: missing 'id'".to_string())?;
 
     let cell = LOCK.get_or_init(|| Mutex::new(None));
-    let mut guard = cell.lock().map_err(|e| e.to_string())?;
+    let mut guard = cell.lock();
     if guard.is_some() {
         return Ok(json!({ "acquired": true, "already": true }));
     }
@@ -34,7 +35,5 @@ fn acquire(args: &Value) -> Result<Value, String> {
 }
 
 fn is_held() -> bool {
-    LOCK.get()
-        .and_then(|c| c.lock().ok())
-        .is_some_and(|g| g.is_some())
+    LOCK.get().is_some_and(|c| c.lock().is_some())
 }
