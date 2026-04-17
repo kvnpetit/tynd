@@ -29,7 +29,7 @@ The Rust toolchain auto-installs on first `cargo` run (pinned via `rust-toolchai
 ## Dev loop
 
 ```bash
-bun run check:all            # biome + typecheck + rustfmt + clippy + cargo check
+bun run check:all            # biome + typecheck + rustfmt + clippy + cargo check + bun test + cargo test
 bun run check                # biome auto-fix
 
 cargo build -p tynd-full --release
