@@ -5,6 +5,7 @@ import { hashSources, readCache, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
+import { pipeWithPrefix, waitForServer } from "../lib/spawn-helpers.ts"
 
 export interface DevOptions {
   cwd: string
@@ -40,7 +41,7 @@ export async function dev(opts: DevOptions): Promise<void> {
   let devServerProc: ReturnType<typeof Bun.spawn> | null = null
 
   if (devUrl && devCommand) {
-    log.step(`Frontend: ${log.cyan(frontend.buildTool)} dev server → ${devUrl}`)
+    log.step(`Frontend: ${log.cyan(frontend.buildTool)} dev server -> ${devUrl}`)
     const devParts = devCommand.split(/\s+/).filter(Boolean)
     devServerProc = Bun.spawn(devParts, {
       cwd: opts.cwd,
@@ -64,7 +65,7 @@ export async function dev(opts: DevOptions): Promise<void> {
       devServerProc.kill()
       process.exit(1)
     }
-    log.success(`Dev server ready → ${devUrl}  ${log.dim("(HMR via Vite)")}`)
+    log.success(`Dev server ready -> ${devUrl}  ${log.dim("(HMR via Vite)")}`)
   } else if (cfg.frontendEntry) {
     const entry = path.resolve(opts.cwd, cfg.frontendEntry)
     const frontendHash = hashSources([path.dirname(entry)], [entry])
@@ -79,7 +80,7 @@ export async function dev(opts: DevOptions): Promise<void> {
       log.success("Frontend ready")
     }
   } else {
-    log.step(`Frontend: static → ${log.gray(cfg.frontendDir)}`)
+    log.step(`Frontend: static -> ${log.gray(cfg.frontendDir)}`)
   }
 
   const backendSrcDir = path.dirname(cfg.backend)
@@ -137,7 +138,7 @@ export async function dev(opts: DevOptions): Promise<void> {
   log.debug(`spawning host: ${binPath} ${makeArgs().join(" ")}`)
   let hostProc = spawnHost()
 
-  // Backend change → hot reload via stdin admin command. Host keeps the WebView
+  // Backend change -> hot reload via stdin admin command. Host keeps the WebView
   // alive and respawns only the backend runtime (Bun subprocess in full mode,
   // QuickJS thread in lite mode). Config changes still do a full host restart
   // so window settings re-apply.
@@ -291,46 +292,4 @@ async function buildBackendDev(o: {
   if (!o.silent) log.success("Bundle ready")
 }
 
-// Forward a child stream to our own, prefixing each line. Line-buffered so prefix
-// attaches once per line even when chunks split mid-line.
-export function pipeWithPrefix(
-  src: ReadableStream<Uint8Array>,
-  dest: NodeJS.WriteStream,
-  prefix: string,
-): void {
-  const decoder = new TextDecoder()
-  let buf = ""
-  ;(async () => {
-    const reader = src.getReader()
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        let idx = buf.indexOf("\n")
-        while (idx !== -1) {
-          dest.write(`${prefix} ${buf.slice(0, idx)}\n`)
-          buf = buf.slice(idx + 1)
-          idx = buf.indexOf("\n")
-        }
-      }
-      if (buf) dest.write(`${prefix} ${buf}\n`)
-    } catch {
-      /* stream closed mid-read — child exited */
-    }
-  })()
-}
-
-export async function waitForServer(url: string, timeout = 30_000): Promise<boolean> {
-  const start = Date.now()
-  while (Date.now() - start < timeout) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(1000) })
-      if (res.ok || res.status < 500) return true
-    } catch {
-      /* not ready yet */
-    }
-    await Bun.sleep(500)
-  }
-  return false
-}
+export { pipeWithPrefix, waitForServer } from "../lib/spawn-helpers.ts"

@@ -6,8 +6,8 @@ import { loadConfig, resolvePaths } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
+import { pipeWithPrefix } from "../lib/spawn-helpers.ts"
 import { collectFiles } from "./build.ts"
-import { pipeWithPrefix } from "./dev.ts"
 
 export interface StartOptions {
   cwd: string
@@ -67,7 +67,7 @@ export async function start(opts: StartOptions): Promise<void> {
       const parts = frontend.buildCommand.split(/\s+/).filter(Boolean)
       await exec(parts[0]!, parts.slice(1), { cwd: opts.cwd })
       writeCache(cacheDir, "frontend", { hash: frontendHash, updatedAt: Date.now() })
-      log.success(`Frontend → ${log.gray(frontend.outDir)}`)
+      log.success(`Frontend -> ${log.gray(frontend.outDir)}`)
     }
   } else if (cfg.frontendEntry) {
     const entry = path.resolve(opts.cwd, cfg.frontendEntry)
@@ -80,10 +80,10 @@ export async function start(opts: StartOptions): Promise<void> {
       log.step(`Building frontend entry ${log.gray(cfg.frontendEntry)}…`)
       await buildFrontendEntry(entry, cfg.frontendDir)
       writeCache(cacheDir, "frontend", { hash: frontendHash, updatedAt: Date.now() })
-      log.success(`Frontend → ${log.gray(cfg.frontendDir)}`)
+      log.success(`Frontend -> ${log.gray(cfg.frontendDir)}`)
     }
   } else {
-    log.step(`Frontend: static → ${log.gray(cfg.frontendDir)}`)
+    log.step(`Frontend: static -> ${log.gray(cfg.frontendDir)}`)
   }
 
   // Backend (lite only): production bundle, cached by source hash.
