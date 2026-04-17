@@ -363,6 +363,21 @@ if (!acquired) {
 
 Backed by `single-instance` (named pipe on Windows, abstract socket on Linux, CFMessagePort on macOS). The lock is released when the process exits. Use a stable reverse-DNS id — it doubles as the OS lock name.
 
+### `crashReporter` — panic -> file
+
+```typescript
+import { crashReporter } from "@tynd/core/client"
+
+await crashReporter.enable("com.example.myapp")
+
+const pending = await crashReporter.listCrashes()
+if (pending.length > 0) {
+  // upload them to your backend, then delete once confirmed
+}
+```
+
+Installs a Rust `std::panic` hook that writes `crash-<unix-nanos>.log` under `data_dir/<appId>/crashes/`. No telemetry, no network — you decide what to do with the files (upload to Sentry, email yourself, open a GitHub issue, etc.).
+
 ### `workers` — offload CPU-bound JS
 
 ```typescript
