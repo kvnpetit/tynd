@@ -19,8 +19,8 @@ import { tynd } from "./logger.js"
 import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types.js"
 
 // __TYND_RUNTIME__ is replaced at bundle time by the CLI:
-//   buildLiteBundle → define: { "globalThis.__TYND_RUNTIME__": '"lite"' }
-//   buildFullBundle → define: { "globalThis.__TYND_RUNTIME__": '"full"' }
+//   buildLiteBundle -> define: { "globalThis.__TYND_RUNTIME__": '"lite"' }
+//   buildFullBundle -> define: { "globalThis.__TYND_RUNTIME__": '"full"' }
 // This lets Bun's DCE eliminate the dead branch entirely from each bundle.
 // Fallback to __tynd_lite__ (injected by QuickJS host at runtime) for
 // cases where the bundle is run without the CLI bundler's define.

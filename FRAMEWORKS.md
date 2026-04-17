@@ -68,7 +68,7 @@ Tynd owns the HTTP layer (`bv://` custom protocol in prod, dev server URL in dev
 | **Nuxt**              | `nuxt`, `@nuxtjs/bridge`                                      | Use Vite + Vue |
 | **SvelteKit**         | `@sveltejs/kit`                                               | Plain Svelte (`tynd create … -f svelte`) |
 | **Remix**             | `@remix-run/react`, `@remix-run/node`, `@remix-run/cloudflare`, `@remix-run/deno` | Vite + React Router SPA |
-| **Gatsby**            | `gatsby`                                                      | Any other SSG → static `dist/` |
+| **Gatsby**            | `gatsby`                                                      | Any other SSG -> static `dist/` |
 | **Blitz.js**          | `blitz`                                                       | — |
 | **RedwoodJS**         | `@redwoodjs/core`                                             | — |
 | **SolidStart**        | `@solidjs/start`                                              | Plain Solid (`tynd create … -f solid`) |
@@ -87,7 +87,7 @@ Source of truth: `SERVER_FRAMEWORKS` in [`packages/cli/src/lib/detect.ts`](packa
 
 ### React
 
-- Scaffolded via `bun create vite@latest <name> --template react-ts` → React 19 + TypeScript.
+- Scaffolded via `bun create vite@latest <name> --template react-ts` -> React 19 + TypeScript.
 - HMR via `@vitejs/plugin-react@6` (oxc-based Fast Refresh).
 - ESLint flat config + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh` included.
 
@@ -129,7 +129,7 @@ Tradeoff: dev components are not memoized (matches every pre-Compiler React app)
 
 ### Vue
 
-- Scaffolded via `bun create vite@latest <name> --template vue-ts` → Vue 3 + TypeScript + `vue-tsc`.
+- Scaffolded via `bun create vite@latest <name> --template vue-ts` -> Vue 3 + TypeScript + `vue-tsc`.
 - HMR via `@vitejs/plugin-vue`. No known issues.
 - `build:ui` script uses `vue-tsc -b && vite build`.
 
@@ -137,7 +137,7 @@ Tradeoff: dev components are not memoized (matches every pre-Compiler React app)
 
 ### Svelte
 
-- Scaffolded via `bun create vite@latest <name> --template svelte-ts` → Svelte 5 + TypeScript + `svelte-check`.
+- Scaffolded via `bun create vite@latest <name> --template svelte-ts` -> Svelte 5 + TypeScript + `svelte-check`.
 - HMR via `@sveltejs/vite-plugin-svelte`. No known issues.
 - **Do not install `@sveltejs/kit`** — it is SSR and will be rejected by `tynd init` / `tynd dev` / `tynd build`.
 
@@ -145,7 +145,7 @@ Tradeoff: dev components are not memoized (matches every pre-Compiler React app)
 
 ### Solid
 
-- Scaffolded via `bun create vite@latest <name> --template solid-ts` → Solid 1.x + TypeScript.
+- Scaffolded via `bun create vite@latest <name> --template solid-ts` -> Solid 1.x + TypeScript.
 - HMR via `vite-plugin-solid`. No known issues.
 - **Do not install `@solidjs/start`** — SSR framework, blocked.
 
@@ -153,14 +153,14 @@ Tradeoff: dev components are not memoized (matches every pre-Compiler React app)
 
 ### Preact
 
-- Scaffolded via `bun create vite@latest <name> --template preact-ts` → Preact + TypeScript.
+- Scaffolded via `bun create vite@latest <name> --template preact-ts` -> Preact + TypeScript.
 - HMR via `@preact/preset-vite`. Uses Preact's own refresh implementation (separate from React's Fast Refresh) — the React Compiler caveat above does **not** apply here.
 
 ---
 
 ### Lit
 
-- Scaffolded via `bun create vite@latest <name> --template lit-ts` → Lit 3 + TypeScript.
+- Scaffolded via `bun create vite@latest <name> --template lit-ts` -> Lit 3 + TypeScript.
 - **No Fast Refresh.** Vite performs a full page reload on any change. This is intentional: Web Components persist state in custom element registrations and shadow DOM, and cannot be hot-swapped safely. Every framework that ships Web Components (Lit, Stencil, plain `customElements.define`) behaves this way.
 - Not a Tynd limitation — the same applies in a plain Vite + Lit project outside Tynd.
 
@@ -180,8 +180,8 @@ Tradeoff: dev components are not memoized (matches every pre-Compiler React app)
   ```
   The HMR reliability in Angular is also framework-version-dependent; test before relying on it.
 - **`frontendDir` resolution:** Tynd reads `angular.json`, finds the first `projectType: "application"`, and combines `outputPath` (default: `dist/<project>`) with the builder:
-  - `@angular/build:application` (Angular 17+) → `<outputPath>/browser`
-  - anything else → `<outputPath>`
+  - `@angular/build:application` (Angular 17+) -> `<outputPath>/browser`
+  - anything else -> `<outputPath>`
 - **Do not install `@angular/platform-server`, `@nguniversal/express-engine`, or `@analogjs/*`** — SSR variants, blocked.
 
 ---
@@ -191,6 +191,6 @@ Tradeoff: dev components are not memoized (matches every pre-Compiler React app)
 Two extension points:
 
 1. **`FRAMEWORKS` array** in [`packages/cli/src/commands/create.ts`](packages/cli/src/commands/create.ts) — controls what `tynd create` can scaffold. For Vite-backed frameworks, add an entry with `viteTemplate: "<name>-ts"`. For frameworks with their own CLI (like Angular), set `viteTemplate: null` and add a branch in `create()` that shells out to that CLI.
-2. **`detectFrontend` + `TOOL_COMMANDS` + `DEFAULT_OUT_DIR`** in [`packages/cli/src/lib/detect.ts`](packages/cli/src/lib/detect.ts) — controls what `tynd init` / `tynd dev` / `tynd build` recognize in an existing project. Add a dep → tool mapping plus the dev/build commands and default output directory. If the framework has a config file encoding a custom output directory, also extend `resolveOutDir`.
+2. **`detectFrontend` + `TOOL_COMMANDS` + `DEFAULT_OUT_DIR`** in [`packages/cli/src/lib/detect.ts`](packages/cli/src/lib/detect.ts) — controls what `tynd init` / `tynd dev` / `tynd build` recognize in an existing project. Add a dep -> tool mapping plus the dev/build commands and default output directory. If the framework has a config file encoding a custom output directory, also extend `resolveOutDir`.
 
 If the new framework is SSR (owns a server process at end-user runtime), add its entry package to `SERVER_FRAMEWORKS` instead — it will fail-fast with a clear message directing to the SPA alternative.

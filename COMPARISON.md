@@ -371,10 +371,10 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Typed RPC frontend → backend | ✅ | ✅ | ✅ | ✅ |
+| Typed RPC frontend -> backend | ✅ | ✅ | ✅ | ✅ |
 | Auto-generated TS types (zero build step) | ✅ | ⚠️ | ✅ | ⚠️ |
-| Backend → frontend events | ✅ | ✅ | ✅ | ✅ |
-| Frontend → backend events | ❌ | ✅ | ✅ | ✅ |
+| Backend -> frontend events | ✅ | ✅ | ✅ | ✅ |
+| Frontend -> backend events | ❌ | ✅ | ✅ | ✅ |
 | `once()` listener | ✅ | ✅ | ✅ | ✅ |
 | Listen N times | ❌ | ❌ | ✅ | ❌ |
 | Window-scoped event listeners | ❌ | ✅ | ❌ | ✅ |
@@ -436,7 +436,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Custom URL scheme (`myapp://`) | ❌ | ✅ | ❌ | ✅ |
 | Scheme registered at build time | ❌ | ✅ | ❌ | ✅ |
 | `onOpenUrl` handler | ❌ | ✅ | ❌ | ✅ |
-| File type associations (`.ext → app`) | ❌ | ❌ | ✅ | ✅ |
+| File type associations (`.ext -> app`) | ❌ | ❌ | ✅ | ✅ |
 
 ---
 
@@ -473,7 +473,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 |---|---|---|---|---|
 | Structured logging (debug / info / warn / error) | ❌ | ✅ | ✅ | ⚠️ |
 | Write to file with rotation | ❌ | ✅ | ✅ | ⚠️ |
-| JS → native bridge (console.log captured) | ❌ | ✅ | ❌ | ✅ |
+| JS -> native bridge (console.log captured) | ❌ | ✅ | ❌ | ✅ |
 | Multiple log targets (file / stdout / Sentry…) | ❌ | ✅ | ✅ | ⚠️ |
 | Log level per environment (dev / prod) | ❌ | ✅ | ✅ | ⚠️ |
 
@@ -603,7 +603,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | **General** | | | | |
 | Build hooks (before / after) | ❌ | ✅ | ✅ | ✅ |
 | Icon embedded in binary | ✅ | ✅ | ✅ | ✅ |
-| Icon generation (PNG → ICO / ICNS) | ✅ | ✅ | ✅ | ⚠️ |
+| Icon generation (PNG -> ICO / ICNS) | ✅ | ✅ | ✅ | ⚠️ |
 | Cross-compilation | ❌ | ✅ | ✅ | ✅ |
 | PE patch (suppress Windows console) | ✅ | ✅ | ✅ | ✅ |
 | Build tools auto-downloaded | ✅ NSIS/WiX/appimagetool | ❌ | ❌ | ✅ |
@@ -640,8 +640,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Mechanism | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| JS → native transport | ✅ wry `postMessage` | ✅ wry `postMessage` | ❌ HTTP POST | ✅ Chromium IPC |
-| Native → JS push | ✅ `evaluate_script` | ✅ `evaluate_script` | ❌ WebSocket | ✅ `webContents.send` |
+| JS -> native transport | ✅ wry `postMessage` | ✅ wry `postMessage` | ❌ HTTP POST | ✅ Chromium IPC |
+| Native -> JS push | ✅ `evaluate_script` | ✅ `evaluate_script` | ❌ WebSocket | ✅ `webContents.send` |
 | Frontend asset serving | ✅ custom scheme | ✅ custom scheme | ❌ HTTP server | ✅ loadFile / custom scheme |
 | Opens TCP port | ❌ | ❌ | ✅ | ❌ |
 | Firewall prompt possible | ❌ | ❌ | ✅ | ❌ |
@@ -658,7 +658,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Page range / copies / duplex options | ❌ | ❌ | ❌ | ✅ |
 | Choose printer by name | ❌ | ❌ | ❌ | ✅ |
 | Print preview | ❌ | ❌ | ❌ | ✅ |
-| `printToPDF` (webview → PDF buffer) | ❌ | ❌ | ❌ | ✅ |
+| `printToPDF` (webview -> PDF buffer) | ❌ | ❌ | ❌ | ✅ |
 | List available printers | ❌ | ❌ | ❌ | ✅ |
 
 ---

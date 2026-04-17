@@ -157,13 +157,13 @@ fn remove(args: &Value) -> Result<Value, String> {
 fn rename(args: &Value) -> Result<Value, String> {
     let from = path_arg(args, "from")?;
     let to = path_arg(args, "to")?;
-    fs::rename(from, to).map_err(|e| format!("fs.rename({from} → {to}): {e}"))?;
+    fs::rename(from, to).map_err(|e| format!("fs.rename({from} -> {to}): {e}"))?;
     Ok(Value::Null)
 }
 
 fn copy(args: &Value) -> Result<Value, String> {
     let from = path_arg(args, "from")?;
     let to = path_arg(args, "to")?;
-    fs::copy(from, to).map_err(|e| format!("fs.copy({from} → {to}): {e}"))?;
+    fs::copy(from, to).map_err(|e| format!("fs.copy({from} -> {to}): {e}"))?;
     Ok(Value::Null)
 }

@@ -92,7 +92,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     let stdin_slot: Arc<Mutex<Option<ChildStdin>>> = Arc::new(Mutex::new(Some(stdin)));
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(Some(child)));
 
-    // Forwarder: call_rx → current Bun stdin (under mutex so reload can swap it)
+    // Forwarder: call_rx -> current Bun stdin (under mutex so reload can swap it)
     {
         let stdin_slot = stdin_slot.clone();
         std::thread::spawn(move || {

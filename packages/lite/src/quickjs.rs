@@ -103,7 +103,7 @@ pub(crate) fn start(
     // The JS sender lives behind a mutex so ReloadHandle can swap it atomically.
     let js_tx_slot: Arc<Mutex<mpsc::Sender<JsMsg>>> = Arc::new(Mutex::new(js_tx.clone()));
 
-    // Forwarder: BackendCall → current JS thread (via the slot)
+    // Forwarder: BackendCall -> current JS thread (via the slot)
     {
         let slot = js_tx_slot.clone();
         std::thread::spawn(move || {
@@ -181,7 +181,7 @@ fn js_thread_main(
 
             g.set("__tynd_lite__", true)?;
 
-            // console → eprintln
+            // console -> eprintln
             g.set(
                 "__tynd_log__",
                 Function::new(ctx.clone(), |level: String, msg: String| {

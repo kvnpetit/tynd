@@ -52,30 +52,30 @@ app.start({
 
 ### `AppConfig`
 
-| Field | Type | Description |
-|---|---|---|
-| `window` | `WindowConfig` | Window options |
-| `frontendDir` | `string` | Path to built frontend assets |
-| `devUrl` | `string` | Dev server URL (auto-detected; overrides `frontendDir` in dev) |
-| `menu` | `MenuSubmenu[]` | Native menu bar |
-| `tray` | `TrayConfig` | System tray |
+| Field         | Type            | Description                                                    |
+| ------------- | --------------- | -------------------------------------------------------------- |
+| `window`      | `WindowConfig`  | Window options                                                 |
+| `frontendDir` | `string`        | Path to built frontend assets                                  |
+| `devUrl`      | `string`        | Dev server URL (auto-detected; overrides `frontendDir` in dev) |
+| `menu`        | `MenuSubmenu[]` | Native menu bar                                                |
+| `tray`        | `TrayConfig`    | System tray                                                    |
 
 ### `WindowConfig`
 
-| Field | Default | Description |
-|---|---|---|
-| `title` | `""` | Window title |
-| `width` | `1200` | Initial width |
-| `height` | `800` | Initial height |
-| `minWidth` / `minHeight` | — | Minimum size |
-| `maxWidth` / `maxHeight` | — | Maximum size |
-| `resizable` | `true` | Allow resize |
-| `decorations` | `true` | Show title bar |
-| `transparent` | `false` | Transparent background |
-| `alwaysOnTop` | `false` | Pin above other windows |
-| `center` | `false` | Center on screen at startup |
-| `fullscreen` | `false` | Start fullscreen |
-| `maximized` | `false` | Start maximized |
+| Field                    | Default | Description                 |
+| ------------------------ | ------- | --------------------------- |
+| `title`                  | `""`    | Window title                |
+| `width`                  | `1200`  | Initial width               |
+| `height`                 | `800`   | Initial height              |
+| `minWidth` / `minHeight` | —       | Minimum size                |
+| `maxWidth` / `maxHeight` | —       | Maximum size                |
+| `resizable`              | `true`  | Allow resize                |
+| `decorations`            | `true`  | Show title bar              |
+| `transparent`            | `false` | Transparent background      |
+| `alwaysOnTop`            | `false` | Pin above other windows     |
+| `center`                 | `false` | Center on screen at startup |
+| `fullscreen`             | `false` | Start fullscreen            |
+| `maximized`              | `false` | Start maximized             |
 
 ### `createEmitter<T>()`
 
@@ -374,14 +374,14 @@ Task function must be self-contained (no closure captures). Arguments and return
 
 ## IPC architecture
 
-| Channel | Direction | Transport |
-|---|---|---|
-| `api.<fn>()` | Frontend → Backend | wry `window.ipc.postMessage` → stdin JSON |
-| `api.on()` | Backend → Frontend | Rust `evaluate_script` |
-| `events.emit()` | Backend → Frontend | stdout JSON → Rust → `evaluate_script` |
-| `dialog` / `fs` / `http` / … | Frontend → Rust | wry `window.ipc.postMessage` (direct, no backend round-trip) |
-| `terminal:data` / `http:progress` | Rust → Frontend (stream) | tao user events → `evaluate_script` |
+| Channel                           | Direction                 | Transport                                                    |
+| --------------------------------- | ------------------------- | ------------------------------------------------------------ |
+| `api.<fn>()`                      | Frontend -> Backend       | wry `window.ipc.postMessage` -> stdin JSON                   |
+| `api.on()`                        | Backend -> Frontend       | Rust `evaluate_script`                                       |
+| `events.emit()`                   | Backend -> Frontend       | stdout JSON -> Rust -> `evaluate_script`                     |
+| `dialog` / `fs` / `http` / …      | Frontend -> Rust          | wry `window.ipc.postMessage` (direct, no backend round-trip) |
+| `terminal:data` / `http:progress` | Rust -> Frontend (stream) | tao user events -> `evaluate_script`                         |
 
 **No HTTP. No WebSocket. No firewall prompt.** Identical to Tauri v2's IPC stack.
 
-Frontend assets served via `bv://localhost/` (wry custom protocol → filesystem). `window.location.origin` is `bv://localhost`.
+Frontend assets served via `bv://localhost/` (wry custom protocol -> filesystem). `window.location.origin` is `bv://localhost`.

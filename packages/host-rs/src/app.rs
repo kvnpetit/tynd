@@ -54,7 +54,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         }));
     }
 
-    // Relay BackendEvents → tao UserEvents
+    // Relay BackendEvents -> tao UserEvents
     {
         let proxy = proxy.clone();
         std::thread::spawn(move || {

@@ -25,7 +25,7 @@ Same concept as Tauri and Wails — with a backend you already know.
 bunx @tynd/cli create my-app
 ```
 
-**→ [Getting Started in 5 minutes](./GETTING_STARTED.md)**
+**-> [Getting Started in 5 minutes](./GETTING_STARTED.md)**
 
 </div>
 
@@ -36,7 +36,7 @@ bunx @tynd/cli create my-app
 |  | Tauri v2 | Wails v3 | **Tynd** |
 |---|---|---|---|
 | Backend language | Rust | Go | **TypeScript** |
-| Typed RPC | Rust → TS codegen | Go → TS codegen | **zero codegen** (`typeof backend`) |
+| Typed RPC | Rust -> TS codegen | Go -> TS codegen | **zero codegen** (`typeof backend`) |
 | Webview | wry (native OS) | native OS | **wry (native OS)** |
 | IPC | `webview_bind` | HTTP / WebSocket | **`webview_bind` + `evaluate_script`** |
 | Runtimes | single | single | **full (Bun) + lite (QuickJS)** |
@@ -73,7 +73,7 @@ TypeScript backend                         Native OS window
 | Binary size | ~5 MB smaller | Larger (runtime embedded) |
 | Startup | ~20 ms | ~80 ms |
 
-→ See [`RUNTIMES.md`](RUNTIMES.md) for the full comparison (APIs, performance, detection, examples).
+-> See [`RUNTIMES.md`](RUNTIMES.md) for the full comparison (APIs, performance, detection, examples).
 
 ---
 
@@ -111,7 +111,7 @@ tynd create [name]           # scaffold a new project (interactive if no args)
 
 tynd dev                     # start app in development mode (HMR)
 tynd start                   # classic JS build (frontend + backend) then run (no HMR)
-tynd build                   # bundle backend + frontend → single binary
+tynd build                   # bundle backend + frontend -> single binary
   --bundle [targets]         # + installers: app, dmg, deb, rpm, appimage, nsis, msi (or "all")
 tynd init                    # add tynd to an existing project
 tynd clean                   # remove build artifacts (.tynd/cache, release/)
@@ -227,7 +227,7 @@ export default {
 | `binaryArgs` | — | Extra args passed to the `tynd-full` / `tynd-lite` binary |
 | `window` | — | Default window options (title, width, height, center) |
 
-**Icon auto-detection order:** `public/favicon.ico` → `public/favicon.png` → `public/icon.ico` → `public/icon.png` → `public/logo.ico` → `public/logo.png` → SVG variants (`public/favicon.svg`, `public/icon.svg`, `public/logo.svg`) → `assets/icon.{ico,png}` → `icon.{ico,png}`. SVG icons are auto-converted to PNG via WASM. Set `icon` explicitly to override.
+**Icon auto-detection order:** `public/favicon.ico` -> `public/favicon.png` -> `public/icon.ico` -> `public/icon.png` -> `public/logo.ico` -> `public/logo.png` -> SVG variants (`public/favicon.svg`, `public/icon.svg`, `public/logo.svg`) -> `assets/icon.{ico,png}` -> `icon.{ico,png}`. SVG icons are auto-converted to PNG via WASM. Set `icon` explicitly to override.
 
 ---
 

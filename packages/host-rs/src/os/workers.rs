@@ -1,8 +1,5 @@
 //! Lite-only: isolated QuickJS runtime per worker on its own OS thread.
-//! Full runtime uses `Bun.Worker` directly from TS and never calls this API.
-//!
-//! Protocol: backend evals the user's function source, then each `run` ships
-//! a JSON input to the worker thread and blocks on the JSON output.
+//! Full uses `Bun.Worker` from TS instead. Input/output ship as JSON.
 
 use rquickjs::{Context, Function, Runtime};
 use serde_json::{json, Value};
