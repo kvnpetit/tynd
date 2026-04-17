@@ -39,7 +39,7 @@ bunx @tynd/cli create my-app
 | Typed RPC | Rust -> TS codegen | Go -> TS codegen | **zero codegen** (`typeof backend`) |
 | Webview | wry (native OS) | native OS | **wry (native OS)** |
 | IPC | `webview_bind` | HTTP / WebSocket | **`webview_bind` + `evaluate_script`** |
-| Runtimes | single | single | **full (Bun) + lite (QuickJS)** |
+| Runtimes | single | single | **`full` (bundles Bun) + `lite` (embedded, ~6.5 MB)** |
 | Frontend | Any | Any | **Any** |
 
 ---
@@ -55,7 +55,7 @@ TypeScript backend                         Native OS window
          │ stdin/stdout JSON
          ▼
   tynd-full  (Bun subprocess, wry + tao Rust host)
-  tynd-lite  (QuickJS embedded,  wry + tao Rust host)
+  tynd-lite  (embedded JS engine, wry + tao Rust host)
 ```
 
 **Zero network.** Frontend served via `tynd://` custom protocol (wry `with_custom_protocol`). RPC via native `webview_bind`. Events via `evaluate_script`. Multi-MB binary payloads (`fs.readBinary`, `compute.compress`, …) bypass JSON IPC via `tynd-bin://`. Identical architecture to Tauri v2.
@@ -64,9 +64,9 @@ TypeScript backend                         Native OS window
 
 | | `lite` | `full` |
 |---|---|---|
-| JS engine | QuickJS (embedded in Rust binary) | Bun subprocess (JSC/JIT) |
+| JS runtime | embedded interpreter inside the Rust binary | Bun subprocess |
+| Hot JS speed | interpreter — fine for IPC glue, slow on tight loops | **Bun JIT — often 10-100x faster on CPU-bound JS** |
 | IPC overhead | in-process (no serialization) | stdin/stdout JSON over OS pipe |
-| JIT compilation | ✗ interpreter | ✓ JSC JIT |
 | `fs` / `http` / `websocket` / `sql` / `compute.randomBytes` | ✓ Tynd API | ✓ Tynd API |
 | JS-level `fetch` / `Bun.file` / `bun:sqlite` | ✗ (use Tynd API) | ✓ |
 | Pure-JS npm packages | ✓ (bundled) | ✓ |
@@ -265,7 +265,7 @@ cargo build --release -p tynd-lite
 packages/
 ├── host-rs/     ← tynd-host (library: wry + tao event loop, OS APIs)
 ├── full/        ← tynd-full (binary: spawns Bun subprocess, links host)
-├── lite/        ← tynd-lite (binary: embeds QuickJS, links host)
+├── lite/        ← tynd-lite (binary: embeds a lightweight JS engine, links host)
 ├── host/        ← @tynd/host (npm: postinstall downloads pre-built binaries)
 ├── core/        ← @tynd/core (TypeScript: app, createEmitter, client API)
 └── cli/         ← @tynd/cli  (TypeScript: tynd create/dev/build/info)

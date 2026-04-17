@@ -13,12 +13,12 @@ export default {
 
 ## ⚡ Quick decision
 
-> **Start with `lite`.** Most apps are covered: the Tynd OS APIs (`http`, `websocket`, `sql`, `fs`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`) are Rust-backed and work identically in both runtimes. Lite ships a ~5 MB binary with no external runtime.
+> **Start with `lite`.** Most apps are covered: the Tynd OS APIs (`http`, `websocket`, `sql`, `fs`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`) are Rust-backed and work identically in both runtimes. Lite ships a ~6.5 MB binary with no external runtime.
 
 Switch to `full` only if you need:
 - Direct JS access to `fetch` / `Intl` / `Buffer` (lite doesn't expose these to JS — Tynd's equivalents cover most cases but not every corner).
 - npm packages with **native bindings** (sharp, better-sqlite3, bcrypt, canvas).
-- Large CPU-bound workloads that benefit from JSC's JIT (QuickJS is an interpreter).
+- **Bun's JIT for CPU-bound JS.** Hot loops, big JSON parses, in-JS cryptography, array-of-objects transforms, regex-heavy work — Bun compiles these to native code and runs them 10-100x faster than lite's interpreter-only engine. If your bottleneck is in Rust (via a Tynd OS API), lite wins. If it's in JS, full wins.
 
 ---
 
@@ -48,7 +48,7 @@ Where lite is ✗, check the **Tynd equivalent** column — most gaps are closed
 | `bun:sqlite` | ✗ | ✓ | `sql` API (embedded SQLite via rusqlite) |
 | `import("fs")` / `import("child_process")` etc. | ✗ | ✓ | `fs` + `process` OS APIs |
 | `Intl` | ✗ | ✓ | Pure-JS libs like `date-fns`, `dayjs`, `i18next` |
-| `Worker` / threads | ✗ | ✓ | `workers` API (isolated QuickJS in lite, `Bun.Worker` in full) |
+| `Worker` / threads | ✗ | ✓ | `workers` API (isolated engine per worker in lite, `Bun.Worker` in full) |
 | Compression | ✗ | ✓ | `compute.compress` / `decompress` (zstd) |
 | Spawn child processes | ✗ | ✓ | `process.exec` / `execShell` |
 | Run embedded binaries | ✗ | ✓ | `sidecar.path` + `process.exec` |
@@ -74,7 +74,7 @@ Routed through the Rust host, so lite and full share the exact same surface. API
 | `sidecar` | `path(name)`, `list()` — binaries bundled at build time, extracted at startup |
 | `terminal` | `spawn({ shell, cols, rows, cwd, env })` -> PTY handle with `write`, `resize`, `kill`, `onData`, `onExit` |
 | `compute` | `hash(data, { algo })`\*, `compress`\* / `decompress`\* (zstd), `randomBytes(n)` (CSPRNG) |
-| `workers` | `spawn(fn)` -> `{ run, terminate }`; `parallel.map(items, fn, { concurrency })`. Lite: isolated QuickJS on thread. Full: wraps `Bun.Worker`. |
+| `workers` | `spawn(fn)` -> `{ run, terminate }`; `parallel.map(items, fn, { concurrency })`. Lite: isolated embedded engine on thread. Full: wraps `Bun.Worker`. |
 | `singleInstance` | `acquire(id)` -> `{ acquired, already }` — cross-OS exclusive lock (named pipe / abstract socket) held for process lifetime |
 | `crashReporter` | `enable(appId)` installs a panic hook that writes `crash-<unix-nanos>.log` files under `data_dir/<appId>/crashes/`; `listCrashes()` returns the paths |
 | `dialog` | `openFile`, `openFiles`, `saveFile`, `message`, `confirm` |
@@ -213,14 +213,14 @@ No measurements checked into the repo. The shape below is derived from the archi
 
 | Workload | Expected winner | Why |
 |---|---|---|
-| Cold start, first IPC call | **lite** | No subprocess, no Bun boot; QuickJS runs in-process |
+| Cold start, first IPC call | **lite** | No subprocess, no Bun boot; the embedded engine runs in-process |
 | Sustained simple IPC calls | **lite** | In-process; full pays stdin/stdout JSON round-trip |
 | Concurrent IPC throughput | **lite** | Shorter path, no subprocess scheduling |
-| CPU-bound JS (filter/sort/parse in JS) | **full** | JSC JIT vs QuickJS interpreter — gap grows with data size |
-| Large payload transfer (100 KB+) | **full** | Bigger OS pipes, native serialisation in JSC |
+| CPU-bound JS (filter/sort/parse in JS) | **full** | Bun's JIT vs lite's interpreter — gap grows with data size |
+| Large payload transfer (100 KB+) | **full** | Bigger OS pipes, native serialisation |
 | `fs` / `http` / `websocket` / `sql` / `compute` / `process` / `workers` | **tie** | Same Rust code runs on both — API name hits the same `os_call` dispatch |
 | Raw JS-level `bun:sqlite` (no IPC) | **full only** | Lite exposes SQLite through the `sql` API, which round-trips via IPC |
-| Worker pool (`parallel.map`) | **tie on I/O**, **full on CPU** | Same worker spawn path; JSC JIT wins inside hot loops |
+| Worker pool (`parallel.map`) | **tie on I/O**, **full on CPU** | Same worker spawn path; Bun's JIT wins inside hot loops |
 
 Both feel instant for typical user interactions.
 
@@ -231,7 +231,7 @@ Both feel instant for typical user interactions.
 
 ### Use `lite` when
 
-- You want the smallest self-contained binary (~5 MB) — no Bun runtime to ship
+- You want the smallest self-contained binary (~6.5 MB) — no Bun runtime to ship
 - All your OS needs fit the Tynd APIs (which now cover `fs`, `http`, `websocket`, `sql`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `crashReporter`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`)
 - You need high concurrent-call throughput / low startup latency
 - You're comfortable with pure-JS npm packages only (no native bindings)
@@ -240,7 +240,7 @@ Both feel instant for typical user interactions.
 
 - You need a **JS-level** `fetch` / `Intl` / `Buffer` — not a Tynd wrapper
 - You use npm packages with **native bindings** (sharp, better-sqlite3, bcrypt, canvas)
-- You have CPU-bound JS hot paths that benefit from JSC's JIT
+- You have CPU-bound JS hot paths that benefit from Bun's JIT
 
 ### Rule of thumb
 
