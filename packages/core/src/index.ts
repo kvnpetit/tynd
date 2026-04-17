@@ -18,16 +18,14 @@ import * as v from "valibot"
 import { tynd } from "./logger.js"
 import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types.js"
 
-// __TYND_RUNTIME__ is replaced at bundle time by the CLI:
-//   buildLiteBundle -> define: { "globalThis.__TYND_RUNTIME__": '"lite"' }
-//   buildFullBundle -> define: { "globalThis.__TYND_RUNTIME__": '"full"' }
-// This lets Bun's DCE eliminate the dead branch entirely from each bundle.
-// Fallback to __tynd_lite__ (injected by QuickJS host at runtime) for
-// cases where the bundle is run without the CLI bundler's define.
-const _g = globalThis as Record<string, unknown>
-const IS_LITE: boolean =
-  _g["__TYND_RUNTIME__"] === "lite" ||
-  (_g["__TYND_RUNTIME__"] === undefined && _g["__tynd_lite__"] !== undefined)
+// Runtime selector. The CLI's bundler replaces `globalThis.__TYND_RUNTIME__`
+// at build time with a string literal ("lite" or "full") via Bun's `define`
+// option, turning the equality check into a compile-time boolean that Bun's
+// minifier can fully DCE — each bundle ships only one runtime's code path.
+//
+// The `__tynd_lite__` fallback is the unbundled-dev escape hatch (lite host
+// sets it before eval); DCE treats the whole `||` as a constant when the
+// first operand is a compile-time `true`.
 
 let _emitFn: ((name: string, payload: unknown) => void) | null = null
 
@@ -82,7 +80,11 @@ export const app = {
       throw new Error("Invalid app.start() config")
     }
     const validated = result.output
-    if (IS_LITE) {
+    if (
+      (globalThis as { __TYND_RUNTIME__?: string }).__TYND_RUNTIME__ === "lite" ||
+      ((globalThis as { __TYND_RUNTIME__?: string }).__TYND_RUNTIME__ === undefined &&
+        (globalThis as { __tynd_lite__?: unknown }).__tynd_lite__ !== undefined)
+    ) {
       _startLite(validated)
     } else {
       _startFull(validated)
