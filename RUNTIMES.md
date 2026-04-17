@@ -23,6 +23,10 @@ Switch to `lite` only if:
 
 ## What each mode supports
 
+Two axes matter: the **JS runtime** features (what the VM provides) and the **Tynd OS APIs** (`process`, `fs`, `os`, `store`, `path`, …) which are implemented in Rust and available to **both** runtimes identically.
+
+### JS runtime surface
+
 | Capability | `lite` | `full` |
 |-----------|--------|--------|
 | ES2023 language (async/await, Proxy, BigInt, generators…) | ✓ | ✓ |
@@ -38,10 +42,28 @@ Switch to `lite` only if:
 | `fetch` / `WebSocket` | ✗ | ✓ |
 | `Bun.file()` / `Bun.write()` | ✗ | ✓ |
 | `bun:sqlite` | ✗ | ✓ |
-| `import("fs")` / `import("path")` / `import("os")` | ✗ | ✓ |
+| `import("fs")` / `import("path")` / `import("os")` (Node modules) | ✗ | ✓ |
 | `Intl` (date/number formatting) | ✗ | ✓ |
 | `Worker` / threads | ✗ | ✓ |
 | npm packages with native bindings | ✗ | ✓ |
+
+### Tynd OS APIs (identical in both runtimes)
+
+Routed through the Rust host, so lite and full share the exact same surface:
+
+| API | Methods |
+|---|---|
+| `process` | `exec`, `execShell` (run OS commands, capture stdout/stderr/code) |
+| `fs` | `readText`, `writeText`, `exists`, `stat`, `readDir`, `mkdir`, `remove`, `rename`, `copy` |
+| `path` | `join`, `dirname`, `basename`, `extname`, `sep` (pure TS) |
+| `os` | `info`, `homeDir`, `tmpDir`, `configDir`, `dataDir`, `cacheDir`, `exePath`, `cwd`, `env` |
+| `store` | `createStore(ns)` → `get`, `set`, `delete`, `clear`, `keys` (JSON-backed k/v) |
+| `dialog` | `openFile`, `openFiles`, `saveFile`, `message`, `confirm` |
+| `clipboard` | `readText`, `writeText` |
+| `shell` | `openExternal`, `openPath` |
+| `notification` | `send` |
+| `tray` | click/menu subscriptions |
+| `tyndWindow` | title/size/visibility/fullscreen/always-on-top/decorations |
 
 ---
 
@@ -97,7 +119,16 @@ Use [`date-fns`](https://date-fns.org/) or [`dayjs`](https://day.js.org/) instea
 
 ### Local storage
 
-Lite has no persistence. Use `full` with `bun:sqlite`, or keep state in-memory with a `Map`.
+Use the built-in `store` API (JSON-backed key/value, works in both runtimes):
+
+```ts
+import { createStore } from "@tynd/core/client"
+const prefs = createStore("com.example.myapp")
+await prefs.set("theme", "dark")
+const theme = await prefs.get<string>("theme")
+```
+
+For relational data in lite, serialize through `fs.writeText` + JSON. For SQL-heavy apps, use `full` with `bun:sqlite`.
 
 ---
 
@@ -127,14 +158,12 @@ Both modes feel instant for typical user interactions — all values are well un
 
 ### Use `lite` when
 
-- Your backend does validation, routing, data transforms — no OS access needed
-- You want a self-contained binary with no external runtime
+- You want a tiny self-contained binary (~5 MB, no runtime to ship)
+- OS access stays within the Tynd APIs (`process`, `fs`, `store`, `dialog`, …)
 - You need high concurrent call throughput
 
 ### Use `full` when
 
-- Your backend reads or writes files
-- You need a local database (SQLite)
-- You make HTTP requests or use WebSockets from the backend
+- You need SQL (`bun:sqlite`) or HTTP/WebSockets from JS
 - You use npm packages with native bindings
-- You need `Intl`, `crypto`, `Buffer`, or the full Node/Bun API surface
+- You need `Intl`, `crypto`, `Buffer`, `fetch`, or the full Node/Bun API surface directly from JS
