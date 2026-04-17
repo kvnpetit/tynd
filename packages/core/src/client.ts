@@ -25,6 +25,12 @@ export { type ExecOptions, type ExecResult, process } from "./client/process.js"
 export { shell } from "./client/shell.js"
 export { sidecar } from "./client/sidecar.js"
 export { type SingleInstanceResult, singleInstance } from "./client/single-instance.js"
+export {
+  type SqlConnection,
+  type SqlExecResult,
+  type SqlParam,
+  sql,
+} from "./client/sql.js"
 export { createStore } from "./client/store.js"
 export {
   type TerminalHandle,
