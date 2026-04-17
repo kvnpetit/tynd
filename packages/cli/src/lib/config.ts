@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs"
 import path from "node:path"
 import * as v from "valibot"
 
@@ -98,7 +97,7 @@ export async function loadConfig(cwd = process.cwd()): Promise<TyndConfig> {
   const candidates = [path.resolve(cwd, "tynd.config.ts"), path.resolve(cwd, "tynd.config.js")]
 
   for (const file of candidates) {
-    if (existsSync(file)) {
+    if (await Bun.file(file).exists()) {
       const mod = (await import(file)) as { default?: unknown }
       const merged = { ...DEFAULTS, ...((mod.default ?? {}) as Partial<TyndConfig>) }
       return validateConfig(merged)

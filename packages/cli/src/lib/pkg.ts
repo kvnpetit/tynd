@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs"
 import path from "node:path"
 import * as v from "valibot"
 import { log } from "./logger.ts"
@@ -29,13 +28,13 @@ export type PackageJson = v.InferOutput<typeof PackageJsonSchema>
 /** Load and validate a `package.json`. Returns null if missing or malformed. */
 export async function loadPackageJson(cwd: string): Promise<PackageJson | null> {
   const p = path.join(cwd, "package.json")
-  if (!existsSync(p)) {
+  const file = Bun.file(p)
+  if (!(await file.exists())) {
     log.debug(`loadPackageJson: ${p} not found`)
     return null
   }
   try {
-    const raw = await Bun.file(p).json()
-    const parsed = v.safeParse(PackageJsonSchema, raw)
+    const parsed = v.safeParse(PackageJsonSchema, await file.json())
     if (!parsed.success) {
       log.debug(`loadPackageJson: schema mismatch in ${p}`)
       return null
