@@ -10,6 +10,7 @@ pub mod os_info;
 pub mod process;
 pub mod shell;
 pub mod sidecar;
+pub mod single_instance;
 pub mod store;
 pub mod terminal;
 pub mod window_cmd;
@@ -35,6 +36,7 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "sidecar" => sidecar::dispatch(method, args),
         "terminal" => terminal::dispatch(method, args),
         "compute" => compute::dispatch(method, args),
+        "singleInstance" => single_instance::dispatch(method, args),
         #[cfg(feature = "embedded-js")]
         "workers" => workers::dispatch(method, args),
         #[cfg(not(feature = "embedded-js"))]

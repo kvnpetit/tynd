@@ -349,6 +349,20 @@ const restored = await compute.decompress(squeezed)
 
 Runs on a fresh Rust thread per call — never blocks the JS event loop. Works identically in lite and full.
 
+### `singleInstance` — prevent dual launch
+
+```typescript
+import { singleInstance, tyndWindow } from "@tynd/core/client"
+
+const { acquired } = await singleInstance.acquire("com.example.myapp")
+if (!acquired) {
+  await tyndWindow.show()
+  process.exit(0)
+}
+```
+
+Backed by `single-instance` (named pipe on Windows, abstract socket on Linux, CFMessagePort on macOS). The lock is released when the process exits. Use a stable reverse-DNS id — it doubles as the OS lock name.
+
 ### `workers` — offload CPU-bound JS
 
 ```typescript

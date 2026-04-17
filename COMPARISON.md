@@ -429,7 +429,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Single instance lock | ❌ | ✅ | ✅ | ✅ |
+| Single instance lock | ✅ | ✅ | ✅ | ✅ |
 | Focus existing window on 2nd launch | ❌ | ✅ | ✅ | ✅ |
 | Pass argv / cwd to existing process | ❌ | ✅ | ✅ | ✅ |
 | Encrypted inter-instance comms | ❌ | ❌ | ✅ | ❌ |
