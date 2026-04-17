@@ -347,11 +347,12 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Open file / folder with default app | ✅ | ✅ | ✅ | ✅ |
 | Reveal in file manager | ❌ | ✅ | ✅ | ✅ |
 | Execute shell command | ✅ | ✅ | ⚠️ | ✅ |
-| Execute bundled sidecar binary | ⚠️ | ✅ | ⚠️ | ✅ |
+| Execute bundled sidecar binary | ✅ | ✅ | ⚠️ | ✅ |
 | Capture stdout / stderr | ✅ | ✅ | ⚠️ | ✅ |
-| Kill a spawned process | ❌ | ✅ | ❌ | ✅ |
-| FS: read file (text / binary) | ⚠️ | ✅ | ⚠️ | ✅ |
-| FS: write file (text / binary) | ⚠️ | ✅ | ⚠️ | ✅ |
+| Kill a spawned process | ✅ | ✅ | ❌ | ✅ |
+| Interactive PTY terminal in-app | ✅ | ⚠️ | ❌ | ✅ |
+| FS: read file (text / binary) | ✅ | ✅ | ⚠️ | ✅ |
+| FS: write file (text / binary) | ✅ | ✅ | ⚠️ | ✅ |
 | FS: create / remove directory | ✅ | ✅ | ⚠️ | ✅ |
 | FS: remove / rename file | ✅ | ✅ | ⚠️ | ✅ |
 | FS: list directory | ✅ | ✅ | ⚠️ | ✅ |
@@ -400,10 +401,10 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| HTTP requests from frontend | ❌ | ✅ | ⚠️ | ✅ |
+| HTTP requests from frontend | ✅ | ✅ | ⚠️ | ✅ |
 | WebSocket client | ❌ | ✅ | ❌ | ✅ |
-| File upload with progress | ❌ | ✅ | ❌ | ✅ |
-| File download with progress | ❌ | ✅ | ❌ | ✅ |
+| File upload with progress | ✅ | ✅ | ❌ | ✅ |
+| File download with progress | ✅ | ✅ | ❌ | ✅ |
 
 ---
 

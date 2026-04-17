@@ -54,10 +54,13 @@ Routed through the Rust host, so lite and full share the exact same surface:
 | API | Methods |
 |---|---|
 | `process` | `exec`, `execShell` (run OS commands, capture stdout/stderr/code) |
-| `fs` | `readText`, `writeText`, `exists`, `stat`, `readDir`, `mkdir`, `remove`, `rename`, `copy` |
+| `fs` | `readText`, `writeText`, `readBinary`, `writeBinary`, `exists`, `stat`, `readDir`, `mkdir`, `remove`, `rename`, `copy` |
 | `path` | `join`, `dirname`, `basename`, `extname`, `sep` (pure TS) |
 | `os` | `info`, `homeDir`, `tmpDir`, `configDir`, `dataDir`, `cacheDir`, `exePath`, `cwd`, `env` |
 | `store` | `createStore(ns)` → `get`, `set`, `delete`, `clear`, `keys` (JSON-backed k/v) |
+| `http` | `get`, `getJson`, `getBinary`, `post`, `request`, `download` (TLS via rustls) |
+| `sidecar` | `path(name)`, `list()` — binaries bundled at build time, extracted at startup |
+| `terminal` | `spawn({ shell, cols, rows, cwd, env })` → PTY handle with `write`, `resize`, `kill`, `onData`, `onExit` |
 | `dialog` | `openFile`, `openFiles`, `saveFile`, `message`, `confirm` |
 | `clipboard` | `readText`, `writeText` |
 | `shell` | `openExternal`, `openPath` |
