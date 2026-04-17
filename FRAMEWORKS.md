@@ -1,6 +1,6 @@
 # Supported frontend frameworks
 
-Tynd is framework-agnostic at runtime — the frontend is a plain folder of static assets served over `bv://` in production (or a dev server in development). This document covers **which frameworks the CLI knows how to scaffold, detect, and drive**, and **which are blocked**, with per-framework notes.
+Tynd is framework-agnostic at runtime — the frontend is a plain folder of static assets served over `tynd://` in production (or a dev server in development). This document covers **which frameworks the CLI knows how to scaffold, detect, and drive**, and **which are blocked**, with per-framework notes.
 
 > Last updated: April 16, 2026
 
@@ -60,7 +60,7 @@ Source: [`packages/cli/src/lib/detect.ts`](packages/cli/src/lib/detect.ts).
 
 ## Blocked — SSR / server-owning frameworks
 
-Tynd owns the HTTP layer (`bv://` custom protocol in prod, dev server URL in dev) and packages the app as a **pure SPA**. Server-side frameworks that need to run Node/Deno/Bun on the end-user's machine are incompatible. `tynd init` and `tynd dev` exit with an error when any of these are found in `dependencies` / `devDependencies`:
+Tynd owns the HTTP layer (`tynd://` custom protocol in prod, dev server URL in dev) and packages the app as a **pure SPA**. Server-side frameworks that need to run Node/Deno/Bun on the end-user's machine are incompatible. `tynd init` and `tynd dev` exit with an error when any of these are found in `dependencies` / `devDependencies`:
 
 | Framework | Trigger dep(s) | SPA alternative |
 |---|---|---|
