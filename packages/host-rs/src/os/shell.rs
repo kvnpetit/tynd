@@ -30,3 +30,47 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         _ => Err(format!("shell.{method}: unknown method")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn rejects_unsupported_scheme() {
+        for bad in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "ftp://example.com",
+            "vscode://open?file=x",
+            "data:text/html,<script>",
+            "no-scheme-at-all",
+        ] {
+            let err = dispatch("openExternal", &Value::String(bad.to_string())).expect_err(bad);
+            assert!(err.contains("unsupported scheme"), "{bad}: {err}");
+        }
+    }
+
+    #[test]
+    fn missing_url_is_reported() {
+        let err = dispatch("openExternal", &json!({})).unwrap_err();
+        assert!(err.contains("missing url"));
+    }
+
+    #[test]
+    fn missing_path_is_reported() {
+        let err = dispatch("openPath", &json!({})).unwrap_err();
+        assert!(err.contains("missing path"));
+    }
+
+    #[test]
+    fn unknown_method_errors() {
+        assert!(dispatch("nope", &json!({})).is_err());
+    }
+
+    #[test]
+    fn accepts_url_from_object_form() {
+        let err = dispatch("openExternal", &json!({ "url": "ftp://x" })).unwrap_err();
+        assert!(err.contains("unsupported scheme"));
+    }
+}
