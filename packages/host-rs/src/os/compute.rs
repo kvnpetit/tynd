@@ -80,3 +80,48 @@ fn hex_encode(bytes: &[u8]) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(data: &[u8], algo: &str) -> Value {
+        json!({ "data": STANDARD.encode(data), "algo": algo })
+    }
+
+    #[test]
+    fn hash_known_sha256_vector() {
+        let out = hash(&args(b"abc", "sha256")).unwrap();
+        assert_eq!(
+            out.as_str().unwrap(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn hash_blake3_deterministic() {
+        let a = hash(&args(b"hello", "blake3")).unwrap();
+        let b = hash(&args(b"hello", "blake3")).unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn hash_rejects_unknown_algo() {
+        assert!(hash(&args(b"x", "md5")).is_err());
+    }
+
+    #[test]
+    fn zstd_roundtrip_restores_bytes() {
+        let original = (0..=255u8).collect::<Vec<_>>();
+        let compressed = compress(&args(&original, "zstd")).unwrap();
+        let decompressed = decompress(&json!({
+            "data": compressed.as_str().unwrap(),
+            "algo": "zstd"
+        }))
+        .unwrap();
+        let decoded = STANDARD
+            .decode(decompressed["data"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(decoded, original);
+    }
+}

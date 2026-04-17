@@ -167,3 +167,66 @@ fn copy(args: &Value) -> Result<Value, String> {
     fs::copy(from, to).map_err(|e| format!("fs.copy({from} -> {to}): {e}"))?;
     Ok(Value::Null)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    fn tmp_path(name: &str) -> String {
+        let ts = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        env::temp_dir()
+            .join(format!("tynd-fs-test-{ts}-{name}"))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[test]
+    fn text_roundtrip() {
+        let p = tmp_path("text.txt");
+        write_text(&json!({ "path": &p, "content": "héllo" })).unwrap();
+        let v = read_text(&json!({ "path": &p })).unwrap();
+        assert_eq!(v.as_str().unwrap(), "héllo");
+        fs::remove_file(&p).unwrap();
+    }
+
+    #[test]
+    fn binary_roundtrip_base64() {
+        let p = tmp_path("bin.bin");
+        let bytes: Vec<u8> = (0..=255u8).collect();
+        write_binary(&json!({ "path": &p, "content": STANDARD.encode(&bytes) })).unwrap();
+        let v = read_binary(&json!({ "path": &p })).unwrap();
+        let back = STANDARD.decode(v.as_str().unwrap()).unwrap();
+        assert_eq!(back, bytes);
+        fs::remove_file(&p).unwrap();
+    }
+
+    #[test]
+    fn stat_reports_size_and_isfile() {
+        let p = tmp_path("stat.txt");
+        write_text(&json!({ "path": &p, "content": "abcd" })).unwrap();
+        let s = stat(&json!({ "path": &p })).unwrap();
+        assert_eq!(s["size"].as_u64().unwrap(), 4);
+        assert!(s["isFile"].as_bool().unwrap());
+        assert!(!s["isDir"].as_bool().unwrap());
+        fs::remove_file(&p).unwrap();
+    }
+
+    #[test]
+    fn mkdir_recursive_and_remove() {
+        let base = tmp_path("dirs");
+        let nested = format!("{base}/a/b/c");
+        mkdir(&json!({ "path": &nested, "recursive": true })).unwrap();
+        assert!(std::path::Path::new(&nested).exists());
+        remove(&json!({ "path": &base, "recursive": true })).unwrap();
+        assert!(!std::path::Path::new(&base).exists());
+    }
+
+    #[test]
+    fn missing_path_arg_errors() {
+        assert!(read_text(&json!({})).is_err());
+    }
+}
