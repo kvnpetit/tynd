@@ -4,12 +4,12 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use dashmap::DashMap;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 use std::time::Duration;
 use tungstenite::protocol::CloseFrame;
 use tungstenite::Message;
@@ -25,11 +25,11 @@ enum Cmd {
     Close(Option<(u16, String)>),
 }
 
-type Sessions = Mutex<HashMap<u64, mpsc::Sender<Cmd>>>;
+type Sessions = DashMap<u64, mpsc::Sender<Cmd>>;
 
 fn sessions() -> &'static Sessions {
     static S: OnceLock<Sessions> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(HashMap::new()))
+    S.get_or_init(DashMap::new)
 }
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
@@ -51,7 +51,7 @@ fn connect(args: &Value) -> Result<Value, String> {
 
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let (tx, rx) = mpsc::channel::<Cmd>();
-    sessions().lock().map_err(|e| e.to_string())?.insert(id, tx);
+    sessions().insert(id, tx);
 
     std::thread::spawn(move || run_session(id, &url, &rx));
     Ok(json!({ "id": id }))
@@ -66,7 +66,7 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
                 &json!({ "id": id, "message": format!("connect: {e}") }),
             );
             events::emit("websocket:close", &json!({ "id": id, "code": 1006 }));
-            sessions().lock().ok().map(|mut m| m.remove(&id));
+            sessions().remove(&id);
             return;
         },
     };
@@ -150,7 +150,7 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
         }
     }
 
-    sessions().lock().ok().map(|mut m| m.remove(&id));
+    sessions().remove(&id);
 }
 
 fn session_tx(args: &Value) -> Result<mpsc::Sender<Cmd>, String> {
@@ -158,9 +158,9 @@ fn session_tx(args: &Value) -> Result<mpsc::Sender<Cmd>, String> {
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "websocket: missing 'id'".to_string())?;
-    let map = sessions().lock().map_err(|e| e.to_string())?;
-    map.get(&id)
-        .cloned()
+    sessions()
+        .get(&id)
+        .map(|r| r.value().clone())
         .ok_or_else(|| format!("websocket: session {id} not found"))
 }
 
@@ -206,9 +206,12 @@ fn close(args: &Value) -> Result<Value, String> {
     Ok(Value::Null)
 }
 
+#[allow(clippy::unnecessary_wraps)] // dispatch expects Result — uniform return shape
 fn list() -> Result<Value, String> {
-    let map = sessions().lock().map_err(|e| e.to_string())?;
-    let ids: Vec<Value> = map.keys().map(|id| Value::Number((*id).into())).collect();
+    let ids: Vec<Value> = sessions()
+        .iter()
+        .map(|r| Value::Number((*r.key()).into()))
+        .collect();
     Ok(Value::Array(ids))
 }
 

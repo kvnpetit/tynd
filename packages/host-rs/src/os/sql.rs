@@ -1,20 +1,21 @@
 //! Embedded SQLite via `rusqlite` (bundled). Mirrors what `bun:sqlite` gives
 //! full so lite apps can use real SQL instead of only k/v `store`.
 
+use dashmap::DashMap;
+use parking_lot::Mutex;
 use rusqlite::types::{Value as SqlValue, ValueRef};
 use rusqlite::{params_from_iter, Connection};
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-type Connections = Mutex<HashMap<u64, Mutex<Connection>>>;
+type Connections = DashMap<u64, Mutex<Connection>>;
 
 fn connections() -> &'static Connections {
     static C: OnceLock<Connections> = OnceLock::new();
-    C.get_or_init(|| Mutex::new(HashMap::new()))
+    C.get_or_init(DashMap::new)
 }
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
@@ -50,19 +51,25 @@ fn open(args: &Value) -> Result<Value, String> {
         // Errors are non-fatal: the DB is usable under default rollback mode.
         let _ = conn.pragma_update(None, "journal_mode", "WAL");
         let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+        // 64 MiB page cache (negative = size in KiB) — huge speedup for
+        // repeated reads on typical app workloads while capping RAM growth.
+        let _ = conn.pragma_update(None, "cache_size", -65_536);
+        // Keep temp B-trees (sort/hash/group by) in RAM instead of spilling
+        // to /tmp. Typical join+order_by gets 5-20x faster.
+        let _ = conn.pragma_update(None, "temp_store", "MEMORY");
+        // Read the DB file via mmap (256 MiB cap). Avoids a second kernel
+        // buffer on top of the page cache; read-heavy queries get ~20% faster.
+        let _ = conn.pragma_update(None, "mmap_size", 268_435_456_i64);
     }
 
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    connections()
-        .lock()
-        .map_err(|e| e.to_string())?
-        .insert(id, Mutex::new(conn));
+    connections().insert(id, Mutex::new(conn));
     Ok(json!({ "id": id }))
 }
 
 fn close(args: &Value) -> Result<Value, String> {
     let id = id_arg(args, "sql.close")?;
-    connections().lock().map_err(|e| e.to_string())?.remove(&id);
+    connections().remove(&id);
     Ok(Value::Null)
 }
 
@@ -71,11 +78,10 @@ fn exec(args: &Value) -> Result<Value, String> {
     let sql = sql_arg(args)?;
     let params = params_arg(args);
 
-    let map = connections().lock().map_err(|e| e.to_string())?;
-    let conn_cell = map
+    let conn_cell = connections()
         .get(&id)
         .ok_or_else(|| format!("sql.exec: connection {id} not found"))?;
-    let conn = conn_cell.lock().map_err(|e| e.to_string())?;
+    let conn = conn_cell.lock();
 
     let changes = conn
         .execute(&sql, params_from_iter(params.iter()))
@@ -89,11 +95,10 @@ fn query(args: &Value) -> Result<Value, String> {
     let sql = sql_arg(args)?;
     let params = params_arg(args);
 
-    let map = connections().lock().map_err(|e| e.to_string())?;
-    let conn_cell = map
+    let conn_cell = connections()
         .get(&id)
         .ok_or_else(|| format!("sql.query: connection {id} not found"))?;
-    let conn = conn_cell.lock().map_err(|e| e.to_string())?;
+    let conn = conn_cell.lock();
 
     let mut stmt = conn.prepare(&sql).map_err(|e| format!("sql.query: {e}"))?;
     let col_names: Vec<String> = stmt
@@ -122,9 +127,12 @@ fn query_one(args: &Value) -> Result<Value, String> {
     }
 }
 
+#[allow(clippy::unnecessary_wraps)] // dispatch expects Result — uniform return shape
 fn list() -> Result<Value, String> {
-    let map = connections().lock().map_err(|e| e.to_string())?;
-    let ids: Vec<Value> = map.keys().map(|id| Value::Number((*id).into())).collect();
+    let ids: Vec<Value> = connections()
+        .iter()
+        .map(|r| Value::Number((*r.key()).into()))
+        .collect();
     Ok(Value::Array(ids))
 }
 

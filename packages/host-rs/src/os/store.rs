@@ -1,16 +1,16 @@
 //! JSON key/value store at `config_dir()/<ns>/store.json`. Loaded once per
 //! namespace and cached; writes flush synchronously.
 
+use dashmap::DashMap;
 use serde_json::{Map, Value};
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
-static STORES: OnceLock<Mutex<HashMap<String, Map<String, Value>>>> = OnceLock::new();
+static STORES: OnceLock<DashMap<String, Map<String, Value>>> = OnceLock::new();
 
-fn stores() -> &'static Mutex<HashMap<String, Map<String, Value>>> {
-    STORES.get_or_init(|| Mutex::new(HashMap::new()))
+fn stores() -> &'static DashMap<String, Map<String, Value>> {
+    STORES.get_or_init(DashMap::new)
 }
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
@@ -24,49 +24,39 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "get" => {
             let key = key_arg(args)?;
             load_if_needed(&namespace)?;
-            let map = stores().lock().map_err(|e| e.to_string())?;
-            Ok(map
+            Ok(stores()
                 .get(&namespace)
-                .and_then(|m| m.get(key))
-                .cloned()
+                .and_then(|m| m.get(key).cloned())
                 .unwrap_or(Value::Null))
         },
         "set" => {
             let key = key_arg(args)?;
             let value = args.get("value").cloned().unwrap_or(Value::Null);
             load_if_needed(&namespace)?;
-            {
-                let mut all = stores().lock().map_err(|e| e.to_string())?;
-                let m = all.entry(namespace.clone()).or_insert_with(Map::new);
-                m.insert(key.to_string(), value);
-            }
+            stores()
+                .entry(namespace.clone())
+                .or_default()
+                .insert(key.to_string(), value);
             persist(&namespace)?;
             Ok(Value::Null)
         },
         "delete" => {
             let key = key_arg(args)?;
             load_if_needed(&namespace)?;
-            {
-                let mut all = stores().lock().map_err(|e| e.to_string())?;
-                if let Some(m) = all.get_mut(&namespace) {
-                    m.remove(key);
-                }
+            if let Some(mut m) = stores().get_mut(&namespace) {
+                m.remove(key);
             }
             persist(&namespace)?;
             Ok(Value::Null)
         },
         "clear" => {
-            {
-                let mut all = stores().lock().map_err(|e| e.to_string())?;
-                all.insert(namespace.clone(), Map::new());
-            }
+            stores().insert(namespace.clone(), Map::new());
             persist(&namespace)?;
             Ok(Value::Null)
         },
         "keys" => {
             load_if_needed(&namespace)?;
-            let map = stores().lock().map_err(|e| e.to_string())?;
-            let keys: Vec<Value> = map
+            let keys: Vec<Value> = stores()
                 .get(&namespace)
                 .map(|m| m.keys().map(|k| Value::String(k.clone())).collect())
                 .unwrap_or_default();
@@ -90,11 +80,8 @@ fn store_path(namespace: &str) -> Result<PathBuf, String> {
 }
 
 fn load_if_needed(namespace: &str) -> Result<(), String> {
-    {
-        let all = stores().lock().map_err(|e| e.to_string())?;
-        if all.contains_key(namespace) {
-            return Ok(());
-        }
+    if stores().contains_key(namespace) {
+        return Ok(());
     }
     let path = store_path(namespace)?;
     let map = if path.exists() {
@@ -104,8 +91,7 @@ fn load_if_needed(namespace: &str) -> Result<(), String> {
     } else {
         Map::new()
     };
-    let mut all = stores().lock().map_err(|e| e.to_string())?;
-    all.insert(namespace.to_string(), map);
+    stores().insert(namespace.to_string(), map);
     Ok(())
 }
 
@@ -115,8 +101,10 @@ fn persist(namespace: &str) -> Result<(), String> {
         fs::create_dir_all(parent)
             .map_err(|e| format!("store: mkdir {}: {e}", parent.display()))?;
     }
-    let all = stores().lock().map_err(|e| e.to_string())?;
-    let data = all.get(namespace).cloned().unwrap_or_default();
+    let data = stores()
+        .get(namespace)
+        .map(|r| r.value().clone())
+        .unwrap_or_default();
     let serialized = serde_json::to_string(&data).map_err(|e| e.to_string())?;
     fs::write(&path, serialized).map_err(|e| format!("store: write {}: {e}", path.display()))?;
     Ok(())
@@ -183,7 +171,7 @@ mod tests {
         let n = ns("persist");
         dispatch("set", &json!({ "namespace": &n, "key": "k", "value": "v" })).unwrap();
         // Evict the in-memory copy so the next read has to hit disk.
-        stores().lock().unwrap().remove(&n);
+        stores().remove(&n);
         let v = dispatch("get", &json!({ "namespace": &n, "key": "k" })).unwrap();
         assert_eq!(v.as_str().unwrap(), "v");
         let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
