@@ -1,14 +1,46 @@
-# Tynd
+<div align="center">
 
-Native desktop apps with **TypeScript** — same concept as Tauri/Wails but the backend is pure TS.
+# **Tynd**
 
-| | Tauri v2 | Wails v3 | **Tynd** |
+### Desktop apps in TypeScript. No Rust. No Go. Just TS.
+
+[![CI](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/kvnpetit/tynd?color=blue)](./LICENSE)
+[![npm @tynd/cli](https://img.shields.io/npm/v/@tynd/cli?label=%40tynd%2Fcli&color=06b6d4)](https://www.npmjs.com/package/@tynd/cli)
+[![npm @tynd/core](https://img.shields.io/npm/v/@tynd/core?label=%40tynd%2Fcore&color=06b6d4)](https://www.npmjs.com/package/@tynd/core)
+[![npm downloads](https://img.shields.io/npm/dw/@tynd/cli?label=downloads&color=10b981)](https://www.npmjs.com/package/@tynd/cli)
+[![GitHub stars](https://img.shields.io/github/stars/kvnpetit/tynd?style=flat&color=yellow)](https://github.com/kvnpetit/tynd/stargazers)
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Bun](https://img.shields.io/badge/Bun-runtime-fbf0df?logo=bun&logoColor=000)](https://bun.sh)
+[![Rust](https://img.shields.io/badge/Rust-host-b7410e?logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
+[![Last commit](https://img.shields.io/github/last-commit/kvnpetit/tynd)](https://github.com/kvnpetit/tynd/commits/main)
+[![Open issues](https://img.shields.io/github/issues/kvnpetit/tynd?color=d93f0b)](https://github.com/kvnpetit/tynd/issues)
+
+**Native window. Zero network. Full TypeScript stack.**
+Same concept as Tauri and Wails — with a backend you already know.
+
+```bash
+bunx @tynd/cli create my-app
+```
+
+**→ [Getting Started in 5 minutes](./GETTING_STARTED.md)**
+
+</div>
+
+---
+
+## Why Tynd
+
+|  | Tauri v2 | Wails v3 | **Tynd** |
 |---|---|---|---|
-| Backend language | Rust | Go | **TypeScript (full or lite runtime)** |
-| Frontend | Any | Any | Any |
-| Typed RPC | Rust → TS codegen | Go → TS codegen | **zero codegen** — `typeof backend` |
+| Backend language | Rust | Go | **TypeScript** |
+| Typed RPC | Rust → TS codegen | Go → TS codegen | **zero codegen** (`typeof backend`) |
 | Webview | wry (native OS) | native OS | **wry (native OS)** |
-| IPC | `webview_bind` | HTTP/WS | **`webview_bind` + `evaluate_script`** |
+| IPC | `webview_bind` | HTTP / WebSocket | **`webview_bind` + `evaluate_script`** |
+| Runtimes | single | single | **full (Bun) + lite (QuickJS)** |
+| Frontend | Any | Any | **Any** |
 
 ---
 
