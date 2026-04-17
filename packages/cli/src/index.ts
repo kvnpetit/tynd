@@ -77,7 +77,11 @@ cli
   .command("build", "Build and package the app as a single distributable binary")
   .option("--cwd <dir>", "Project directory", { default: process.cwd() })
   .option("--outfile <path>", "Output binary path (default: release/<name>[.exe])")
-  .action(async (opts: { cwd: string; outfile?: string }) => {
+  .option(
+    "--bundle [targets]",
+    'Also emit installer bundles: "all" or comma-list (app,dmg,deb,rpm,appimage,nsis,msi)',
+  )
+  .action(async (opts: { cwd: string; outfile?: string; bundle?: string | boolean }) => {
     await build(opts)
   })
 

@@ -4,6 +4,47 @@ import * as v from "valibot"
 
 export type Runtime = "full" | "lite"
 
+// Reverse-DNS: ≥ 2 segments, each starting with a letter (MSI + CFBundleIdentifier).
+const REVERSE_DNS = /^[a-zA-Z][a-zA-Z0-9_-]*(\.[a-zA-Z][a-zA-Z0-9_-]*)+$/
+
+const BundleSchema = v.object({
+  identifier: v.pipe(
+    v.string(),
+    v.regex(REVERSE_DNS, "must be reverse-DNS (e.g. com.example.myapp)"),
+  ),
+  displayName: v.optional(v.pipe(v.string(), v.minLength(1))),
+  categories: v.optional(v.array(v.pipe(v.string(), v.minLength(1)))),
+  shortDescription: v.optional(v.string()),
+  longDescription: v.optional(v.string()),
+  copyright: v.optional(v.string()),
+  deb: v.optional(
+    v.object({
+      depends: v.optional(v.array(v.pipe(v.string(), v.minLength(1)))),
+      section: v.optional(v.pipe(v.string(), v.minLength(1))),
+      priority: v.optional(v.pipe(v.string(), v.minLength(1))),
+    }),
+  ),
+  rpm: v.optional(
+    v.object({
+      license: v.optional(v.pipe(v.string(), v.minLength(1))),
+      requires: v.optional(v.array(v.pipe(v.string(), v.minLength(1)))),
+    }),
+  ),
+  appimage: v.optional(v.object({})),
+  nsis: v.optional(
+    v.object({
+      installMode: v.optional(
+        v.union([v.literal("currentUser"), v.literal("perMachine"), v.literal("both")]),
+      ),
+    }),
+  ),
+  msi: v.optional(
+    v.object({
+      upgradeCode: v.optional(v.string()),
+    }),
+  ),
+})
+
 // Window/menu/tray config lives in the backend (app.start({ window: {...} }))
 // because each spawned window can define its own settings programmatically.
 // tynd.config.ts only covers build/CLI concerns.
@@ -16,7 +57,10 @@ const ConfigSchema = v.object({
   devCommand: v.optional(v.pipe(v.string(), v.minLength(1))),
   icon: v.optional(v.pipe(v.string(), v.minLength(1))),
   binaryArgs: v.optional(v.array(v.string())),
+  bundle: v.optional(BundleSchema),
 })
+
+export type BundleConfig = v.InferOutput<typeof BundleSchema>
 
 /**
  * Tynd configuration — runtime-validated via valibot.

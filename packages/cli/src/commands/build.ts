@@ -16,6 +16,9 @@ import { zstdCompress as zstdCompressCb, zstdCompressSync } from "node:zlib"
 
 const zstdAsync = promisify(zstdCompressCb)
 
+import { buildBundleContext } from "../bundle/context.ts"
+import { parseBundleFlag, resolveTargets, runBundle } from "../bundle/index.ts"
+import type { BundleTarget } from "../bundle/types.ts"
 import { buildFrontendEntry, buildFullBundle, buildLiteBundle } from "../lib/bundle.ts"
 import { hashSources, readCache, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
@@ -29,11 +32,30 @@ export interface BuildOptions {
   cwd: string
   /** Output binary path. Defaults to release/<name>[.exe] */
   outfile?: string
+  bundle?: string | boolean
 }
 
 export async function build(opts: BuildOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
-  const cacheDir = path.join(opts.cwd, ".tynd", "cache")
+  // Absolute path — Bun's mkdirSync recursive has a Windows bug with ../ paths.
+  const cacheDir = path.resolve(opts.cwd, ".tynd", "cache")
+
+  // Validate --bundle before doing any work so config errors surface fast.
+  let bundleTargets: readonly BundleTarget[] = []
+  try {
+    const bundleRequested = parseBundleFlag(opts.bundle)
+    if (bundleRequested && !cfg.bundle) {
+      log.hint(
+        "--bundle was passed but tynd.config.ts has no `bundle` block.",
+        'Add: bundle: { identifier: "com.example.myapp" }',
+      )
+      process.exit(1)
+    }
+    if (bundleRequested) bundleTargets = resolveTargets(bundleRequested, getPlatform())
+  } catch (e) {
+    log.error(e instanceof Error ? e.message : String(e))
+    process.exit(1)
+  }
 
   const frontend = await detectFrontend(opts.cwd)
 
@@ -160,7 +182,7 @@ export async function build(opts: BuildOptions): Promise<void> {
   const appName = path.basename(opts.cwd)
   const outFile = opts.outfile
     ? path.resolve(opts.cwd, opts.outfile)
-    : path.join(opts.cwd, "release", appName + binExt)
+    : path.resolve(opts.cwd, "release", appName + binExt)
 
   mkdirSync(path.dirname(outFile), { recursive: true })
   log.debug(`out=${outFile} host=${hostBin}`)
@@ -184,6 +206,19 @@ export async function build(opts: BuildOptions): Promise<void> {
       iconPath,
     })
   }
+
+  if (bundleTargets.length > 0) {
+    const ctx = await buildBundleContext({
+      cwd: opts.cwd,
+      cfg,
+      inputBinary: outFile,
+      outDir: path.dirname(outFile),
+      iconSource: iconPath,
+    })
+    await runBundle(ctx, bundleTargets)
+    log.blank()
+  }
+
   log.debug(`build finished in ${Date.now() - t0}ms`)
 }
 

@@ -1,7 +1,7 @@
 # 📊 Tynd vs Tauri v2 vs Wails v3 vs Electron
 
 > **Exhaustive feature matrix across 38 categories — 503 rows.**
-> Last updated: April 17, 2026 · Desktop only (mobile features marked 📱)
+> Last updated: April 18, 2026 · Desktop only (mobile features marked 📱)
 
 > ⚠️ **Architecture note — Electron:** Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tauri, Wails, and Tynd use the OS's native WebView (WebView2 / WKWebView / WebKitGTK). This explains both Electron's broader API surface and its larger binary footprint.
 
@@ -578,21 +578,21 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | **Windows** | | | | |
-| NSIS installer (.exe) | ❌ | ✅ | ✅ | ✅ |
-| MSI / WiX (.msi) | ❌ | ✅ | ❌ | ✅ |
+| NSIS installer (.exe) | ✅ | ✅ | ✅ | ✅ |
+| MSI / WiX (.msi) | ✅ WiX v3 | ✅ | ❌ | ✅ |
 | WebView2 bootstrapper embedded | ❌ | ✅ | ❌ | N/A |
 | WebView2 custom user data path | ❌ | ✅ | ✅ | N/A |
 | Code signing | ❌ | ✅ | ✅ | ✅ |
 | **macOS** | | | | |
-| .app bundle | ❌ | ✅ | ✅ | ✅ |
-| .dmg disk image | ❌ | ✅ | ✅ | ✅ |
+| .app bundle | ✅ | ✅ | ✅ | ✅ |
+| .dmg disk image | ✅ | ✅ | ✅ | ✅ |
 | codesign | ❌ | ✅ | ✅ | ✅ |
 | Notarization | ❌ | ✅ | ❌ | ✅ |
 | **Linux** | | | | |
-| .deb (Debian / Ubuntu) | ❌ | ✅ | ❌ | ✅ |
-| .AppImage | ❌ | ✅ | ✅ | ✅ |
-| .rpm (Fedora / RHEL) | ❌ | ✅ | ❌ | ✅ |
-| .desktop file generation | ❌ | ✅ | ✅ | ✅ |
+| .deb (Debian / Ubuntu) | ✅ | ✅ | ❌ | ✅ |
+| .AppImage | ✅ | ✅ | ✅ | ✅ |
+| .rpm (Fedora / RHEL) | ✅ needs rpmbuild | ✅ | ❌ | ✅ |
+| .desktop file generation | ✅ | ✅ | ✅ | ✅ |
 | GTK3 / WebKitGTK 4.1 | ✅ | ✅ | ✅ | N/A |
 | GTK4 / WebKitGTK 6.0 (experimental) | ❌ | ❌ | ✅ | N/A |
 | Wayland — fractional scaling + NVIDIA DMA-BUF fix | ❌ | ❌ | ✅ | ✅ |
@@ -602,10 +602,10 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | **General** | | | | |
 | Build hooks (before / after) | ❌ | ✅ | ✅ | ✅ |
 | Icon embedded in binary | ✅ | ✅ | ✅ | ✅ |
-| Icon generation (PNG → ICO / ICNS) | ⚠️ | ✅ | ✅ | ⚠️ |
+| Icon generation (PNG → ICO / ICNS) | ✅ | ✅ | ✅ | ⚠️ |
 | Cross-compilation | ❌ | ✅ | ✅ | ✅ |
 | PE patch (suppress Windows console) | ✅ | ✅ | ✅ | ✅ |
-| Build tools auto-downloaded | ❌ | ❌ | ❌ | ✅ |
+| Build tools auto-downloaded | ✅ NSIS/WiX/appimagetool | ❌ | ❌ | ✅ |
 | Plugin / service scaffold CLI | ❌ | ✅ | ✅ | ❌ |
 
 ---
@@ -623,7 +623,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Environment diagnostics | ✅ | ✅ | ✅ | ⚠️ |
 | Zero-codegen TS bindings | ✅ | ⚠️ | ✅ | ⚠️ |
 | Generate desktop / syso files | ❌ | ❌ | ✅ | N/A |
-| Generate AppImage | ❌ | ❌ | ✅ | ✅ |
+| Generate AppImage | ✅ | ❌ | ✅ | ✅ |
 | Task runner integration | ❌ | ❌ | ✅ | ❌ |
 | Service scaffold | ❌ | ❌ | ✅ | ❌ |
 | Plugin scaffold + add / remove | ❌ | ✅ | ❌ | ❌ |

@@ -106,12 +106,49 @@ Types come from `typeof backend`. Rename a function in the backend → compiler 
 tynd build
 ```
 
-Output: a single self-contained `.exe` / `.app` / binary under `release/`.
+Output: a single self-contained `.exe` / binary under `release/`.
 
 - **full** runtime: ~40 MB (Bun bundled)
 - **lite** runtime: ~5 MB (QuickJS embedded)
 
 Ship that file. The user double-clicks it. No installer, no framework to install, no Node/Bun on their machine.
+
+### Platform installers
+
+Need a real installer (icon in Applications, Start Menu entry, apt/dnf compatible)? Add a `bundle` block to `tynd.config.ts`:
+
+```ts
+// tynd.config.ts
+import type { TyndConfig } from "@tynd/cli"
+
+export default {
+  runtime: "full",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  bundle: {
+    identifier: "com.yourco.myapp",   // reverse-DNS, required
+    categories: ["Utility"],          // optional — XDG / Launch Services
+    shortDescription: "A tiny app",
+  },
+} satisfies TyndConfig
+```
+
+Then build with `--bundle`:
+
+```bash
+tynd build --bundle              # all formats applicable to your host OS
+tynd build --bundle app,dmg      # specific formats
+```
+
+| On… | You get |
+|---|---|
+| macOS | `MyApp.app` (double-click bundle) + `MyApp-1.0.0.dmg` (draggable installer) |
+| Linux | `.deb` (Debian/Ubuntu) + `.rpm` (Fedora/RHEL, requires `rpmbuild`) + `.AppImage` (portable) |
+| Windows | `MyApp-1.0.0-setup.exe` (NSIS wizard) + `MyApp-1.0.0-x64.msi` (MSI) |
+
+Build tools (NSIS, WiX v3, appimagetool) are auto-downloaded once into `.tynd/cache/tools/` — no manual install. `rpmbuild` is the only exception: install it via `sudo apt install rpm` or `sudo dnf install rpm-build` on the build machine.
+
+Cross-compilation isn't supported — each host produces installers only for its own OS. Use GitHub Actions with a matrix to cover all three (see `.github/workflows/build-host.yml` in the Tynd repo for a reference).
 
 ## Native OS APIs from the frontend
 
@@ -141,6 +178,7 @@ await notification.send("Build done", { body: "0 errors" })
 ```bash
 tynd dev                  # dev mode with HMR
 tynd build                # production binary
+tynd build --bundle       # + platform installers (app/dmg, deb/rpm/AppImage, exe/msi)
 tynd validate             # check config + file structure
 tynd clean [--dry-run]    # remove build artifacts
 tynd info [--json]        # environment + project info
