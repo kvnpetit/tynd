@@ -1,12 +1,12 @@
 //! Lite-only: isolated QuickJS runtime per worker on its own OS thread.
 //! Full uses `Bun.Worker` from TS instead. Input/output ship as JSON.
 
+use dashmap::DashMap;
 use rquickjs::{Context, Function, Runtime};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -18,11 +18,11 @@ enum Msg {
     Stop,
 }
 
-type Workers = Mutex<HashMap<u64, mpsc::Sender<Msg>>>;
+type Workers = DashMap<u64, mpsc::Sender<Msg>>;
 
 fn workers() -> &'static Workers {
     static W: OnceLock<Workers> = OnceLock::new();
-    W.get_or_init(|| Mutex::new(HashMap::new()))
+    W.get_or_init(DashMap::new)
 }
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
@@ -105,7 +105,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
         .recv()
         .map_err(|e| format!("workers.spawn: thread died: {e}"))??;
 
-    workers().lock().map_err(|e| e.to_string())?.insert(id, tx);
+    workers().insert(id, tx);
     Ok(json!({ "id": id }))
 }
 
@@ -117,12 +117,10 @@ fn run(args: &Value) -> Result<Value, String> {
     let input = args.get("input").cloned().unwrap_or(Value::Null);
     let input_json = serde_json::to_string(&input).map_err(|e| e.to_string())?;
 
-    let sender = {
-        let map = workers().lock().map_err(|e| e.to_string())?;
-        map.get(&id)
-            .cloned()
-            .ok_or_else(|| format!("workers.run: worker {id} not found"))?
-    };
+    let sender = workers()
+        .get(&id)
+        .map(|r| r.value().clone())
+        .ok_or_else(|| format!("workers.run: worker {id} not found"))?;
 
     let (reply_tx, reply_rx) = mpsc::channel();
     sender
@@ -144,15 +142,17 @@ fn terminate(args: &Value) -> Result<Value, String> {
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "workers.terminate: missing 'id'".to_string())?;
-    let mut map = workers().lock().map_err(|e| e.to_string())?;
-    if let Some(sender) = map.remove(&id) {
+    if let Some((_, sender)) = workers().remove(&id) {
         let _ = sender.send(Msg::Stop);
     }
     Ok(Value::Null)
 }
 
+#[allow(clippy::unnecessary_wraps)] // dispatch expects Result — uniform return shape
 fn list() -> Result<Value, String> {
-    let map = workers().lock().map_err(|e| e.to_string())?;
-    let ids: Vec<Value> = map.keys().map(|id| Value::Number((*id).into())).collect();
+    let ids: Vec<Value> = workers()
+        .iter()
+        .map(|r| Value::Number((*r.key()).into()))
+        .collect();
     Ok(Value::Array(ids))
 }

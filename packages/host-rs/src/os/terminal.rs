@@ -3,12 +3,13 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use dashmap::DashMap;
+use parking_lot::Mutex;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use super::events;
 
@@ -19,11 +20,13 @@ struct Session {
     writer: Box<dyn Write + Send>,
 }
 
-type Sessions = Mutex<HashMap<u64, Session>>;
+// PTY handles aren't Sync on their own, so each session is locked
+// individually — lookups stay lock-free, only the owning session serialises.
+type Sessions = DashMap<u64, Mutex<Session>>;
 
 fn sessions() -> &'static Sessions {
     static S: OnceLock<Sessions> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(HashMap::new()))
+    S.get_or_init(DashMap::new)
 }
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
@@ -94,12 +97,12 @@ fn spawn(args: &Value) -> Result<Value, String> {
         .take_writer()
         .map_err(|e| format!("terminal.spawn: take writer: {e}"))?;
 
-    sessions().lock().map_err(|e| e.to_string())?.insert(
+    sessions().insert(
         id,
-        Session {
+        Mutex::new(Session {
             master: pair.master,
             writer,
-        },
+        }),
     );
 
     std::thread::spawn(move || {
@@ -124,7 +127,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
                 s.exit_code().into()
             }
         });
-        sessions().lock().ok().and_then(|mut m| m.remove(&id));
+        sessions().remove(&id);
         events::emit("terminal:exit", &json!({ "id": id, "code": code }));
     });
 
@@ -144,10 +147,10 @@ fn write(args: &Value) -> Result<Value, String> {
         .decode(data_b64)
         .map_err(|e| format!("terminal.write: invalid base64: {e}"))?;
 
-    let mut map = sessions().lock().map_err(|e| e.to_string())?;
-    let session = map
-        .get_mut(&id)
+    let session_cell = sessions()
+        .get(&id)
         .ok_or_else(|| format!("terminal.write: session {id} not found"))?;
+    let mut session = session_cell.lock();
     session
         .writer
         .write_all(&bytes)
@@ -164,10 +167,10 @@ fn resize(args: &Value) -> Result<Value, String> {
     let cols = args.get("cols").and_then(Value::as_u64).unwrap_or(80) as u16;
     let rows = args.get("rows").and_then(Value::as_u64).unwrap_or(24) as u16;
 
-    let map = sessions().lock().map_err(|e| e.to_string())?;
-    let session = map
+    let session_cell = sessions()
         .get(&id)
         .ok_or_else(|| format!("terminal.resize: session {id} not found"))?;
+    let session = session_cell.lock();
     session
         .master
         .resize(PtySize {
@@ -185,14 +188,16 @@ fn kill(args: &Value) -> Result<Value, String> {
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "terminal.kill: missing 'id'".to_string())?;
-    let mut map = sessions().lock().map_err(|e| e.to_string())?;
-    map.remove(&id);
+    sessions().remove(&id);
     Ok(Value::Null)
 }
 
+#[allow(clippy::unnecessary_wraps)] // dispatch expects Result — uniform return shape
 fn list() -> Result<Value, String> {
-    let map = sessions().lock().map_err(|e| e.to_string())?;
-    let ids: Vec<Value> = map.keys().map(|id| Value::Number((*id).into())).collect();
+    let ids: Vec<Value> = sessions()
+        .iter()
+        .map(|r| Value::Number((*r.key()).into()))
+        .collect();
     Ok(Value::Array(ids))
 }
 
