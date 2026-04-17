@@ -14,6 +14,7 @@ pub mod sidecar;
 pub mod single_instance;
 pub mod store;
 pub mod terminal;
+pub mod websocket;
 pub mod window_cmd;
 
 #[cfg(feature = "embedded-js")]
@@ -39,6 +40,7 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "compute" => compute::dispatch(method, args),
         "singleInstance" => single_instance::dispatch(method, args),
         "crashReporter" => crash::dispatch(method, args),
+        "websocket" => websocket::dispatch(method, args),
         #[cfg(feature = "embedded-js")]
         "workers" => workers::dispatch(method, args),
         #[cfg(not(feature = "embedded-js"))]
