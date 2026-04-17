@@ -617,6 +617,148 @@ function makeTerminalHandle(id: number): TerminalHandle {
   }
 }
 
+export type HashAlgo = "blake3" | "sha256" | "sha512"
+export type CompressAlgo = "zstd"
+
+export const compute = {
+  async hash(
+    data: string | Uint8Array,
+    opts?: { algo?: HashAlgo; encoding?: "hex" | "base64" },
+  ): Promise<string> {
+    const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data
+    return _osCall("compute", "hash", {
+      data: _bytesToBase64(bytes),
+      algo: opts?.algo ?? "blake3",
+      encoding: opts?.encoding ?? "hex",
+    }) as Promise<string>
+  },
+  async compress(
+    data: Uint8Array,
+    opts?: { algo?: CompressAlgo; level?: number },
+  ): Promise<Uint8Array> {
+    const b64 = await _osCall<string>("compute", "compress", {
+      data: _bytesToBase64(data),
+      algo: opts?.algo ?? "zstd",
+      level: opts?.level,
+    })
+    return _base64ToBytes(b64)
+  },
+  async decompress(data: Uint8Array, opts?: { algo?: CompressAlgo }): Promise<Uint8Array> {
+    const res = await _osCall<{ data: string; bytes: number }>("compute", "decompress", {
+      data: _bytesToBase64(data),
+      algo: opts?.algo ?? "zstd",
+    })
+    return _base64ToBytes(res.data)
+  },
+}
+
+export interface WorkerHandle {
+  id: number
+  run<Out = unknown, In = unknown>(input: In): Promise<Out>
+  terminate(): Promise<void>
+}
+
+let _workerSeq = 0
+
+function _spawnBunWorker(script: string): WorkerHandle {
+  const id = ++_workerSeq
+  const wrapped = `
+    const __fn = (${script});
+    self.onmessage = async (e) => {
+      const { rid, input } = e.data
+      try {
+        const result = await __fn(input)
+        postMessage({ rid, result })
+      } catch (err) {
+        postMessage({ rid, error: String((err && err.message) || err) })
+      }
+    }
+  `
+  const url = `data:application/javascript,${encodeURIComponent(wrapped)}`
+  const w = new (globalThis as unknown as { Worker: new (u: string) => Worker }).Worker(url)
+  const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>()
+  let rseq = 0
+
+  w.onmessage = (e: MessageEvent) => {
+    const { rid, result, error } = e.data as { rid: number; result?: unknown; error?: string }
+    const p = pending.get(rid)
+    if (!p) return
+    pending.delete(rid)
+    if (error) p.reject(new Error(error))
+    else p.resolve(result)
+  }
+
+  return {
+    id,
+    run<Out, In>(input: In): Promise<Out> {
+      const rid = ++rseq
+      return new Promise<Out>((resolve, reject) => {
+        pending.set(rid, { resolve: resolve as (v: unknown) => void, reject })
+        w.postMessage({ rid, input })
+      })
+    },
+    terminate() {
+      w.terminate()
+      return Promise.resolve()
+    },
+  }
+}
+
+function _useBunWorker(): boolean {
+  return (
+    typeof (globalThis as { Worker?: unknown }).Worker === "function" &&
+    !(globalThis as { __tynd_lite__?: unknown }).__tynd_lite__
+  )
+}
+
+export const workers = {
+  async spawn(taskFn: string | ((input: unknown) => unknown)): Promise<WorkerHandle> {
+    const script = typeof taskFn === "function" ? taskFn.toString() : taskFn
+    if (_useBunWorker()) return _spawnBunWorker(script)
+    const { id } = await _osCall<{ id: number }>("workers", "spawn", { script })
+    return {
+      id,
+      run: <Out, In>(input: In) => _osCall<Out>("workers", "run", { id, input }),
+      terminate: () => _osCall<void>("workers", "terminate", { id }),
+    }
+  },
+  list(): Promise<number[]> {
+    if (_useBunWorker()) return Promise.resolve([])
+    return _osCall("workers", "list")
+  },
+}
+
+export const parallel = {
+  async map<In, Out>(
+    items: In[],
+    task: string | ((input: In) => Out),
+    opts?: { concurrency?: number },
+  ): Promise<Out[]> {
+    const concurrency = Math.max(1, Math.min(opts?.concurrency ?? 4, items.length))
+    if (items.length === 0) return []
+
+    const pool = await Promise.all(
+      Array.from({ length: concurrency }, () => workers.spawn(task as never)),
+    )
+    const out = new Array<Out>(items.length)
+    let next = 0
+    try {
+      await Promise.all(
+        pool.map(async (w) => {
+          while (true) {
+            const idx = next++
+            if (idx >= items.length) return
+            out[idx] = await w.run<Out, In>(items[idx]!)
+          }
+        }),
+      )
+    } finally {
+      await Promise.all(pool.map((w) => w.terminate().catch(() => undefined)))
+    }
+    return out
+  },
+}
+
 export const path = {
   sep(): "/" | "\\" {
     return typeof navigator !== "undefined" && /win/i.test(navigator.platform) ? "\\" : "/"
