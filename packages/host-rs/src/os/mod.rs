@@ -12,6 +12,7 @@ pub mod process;
 pub mod shell;
 pub mod sidecar;
 pub mod single_instance;
+pub mod sql;
 pub mod store;
 pub mod terminal;
 pub mod websocket;
@@ -41,6 +42,7 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "singleInstance" => single_instance::dispatch(method, args),
         "crashReporter" => crash::dispatch(method, args),
         "websocket" => websocket::dispatch(method, args),
+        "sql" => sql::dispatch(method, args),
         #[cfg(feature = "embedded-js")]
         "workers" => workers::dispatch(method, args),
         #[cfg(not(feature = "embedded-js"))]
