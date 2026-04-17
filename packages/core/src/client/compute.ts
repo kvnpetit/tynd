@@ -33,4 +33,8 @@ export const compute = {
     })
     return base64ToBytes(res.data)
   },
+  async randomBytes(n: number): Promise<Uint8Array> {
+    const b64 = await osCall<string>("compute", "randomBytes", { n })
+    return base64ToBytes(b64)
+  },
 }

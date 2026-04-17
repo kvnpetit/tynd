@@ -1,5 +1,6 @@
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use rand::RngCore;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256, Sha512};
 
@@ -8,8 +9,24 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "hash" => hash(args),
         "compress" => compress(args),
         "decompress" => decompress(args),
+        "randomBytes" => random_bytes(args),
         _ => Err(format!("compute.{method}: unknown method")),
     }
+}
+
+fn random_bytes(args: &Value) -> Result<Value, String> {
+    let n = args
+        .get("n")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "compute.randomBytes: missing 'n'".to_string())?;
+    if n == 0 || n > 1_048_576 {
+        return Err(format!(
+            "compute.randomBytes: 'n' must be 1..=1_048_576 (got {n})"
+        ));
+    }
+    let mut buf = vec![0u8; n as usize];
+    rand::rngs::OsRng.fill_bytes(&mut buf);
+    Ok(Value::String(STANDARD.encode(&buf)))
 }
 
 fn data_arg(args: &Value) -> Result<Vec<u8>, String> {
@@ -108,6 +125,25 @@ mod tests {
     #[test]
     fn hash_rejects_unknown_algo() {
         assert!(hash(&args(b"x", "md5")).is_err());
+    }
+
+    #[test]
+    fn random_bytes_respects_length_and_is_distinct() {
+        let a = random_bytes(&json!({ "n": 32 })).unwrap();
+        let b = random_bytes(&json!({ "n": 32 })).unwrap();
+        let a_bytes = STANDARD.decode(a.as_str().unwrap()).unwrap();
+        let b_bytes = STANDARD.decode(b.as_str().unwrap()).unwrap();
+        assert_eq!(a_bytes.len(), 32);
+        assert_eq!(b_bytes.len(), 32);
+        // Two separate calls must not collide (probability ~ 2^-256).
+        assert_ne!(a_bytes, b_bytes);
+    }
+
+    #[test]
+    fn random_bytes_rejects_out_of_range() {
+        assert!(random_bytes(&json!({ "n": 0 })).is_err());
+        assert!(random_bytes(&json!({ "n": 2_000_000 })).is_err());
+        assert!(random_bytes(&json!({})).is_err());
     }
 
     #[test]
