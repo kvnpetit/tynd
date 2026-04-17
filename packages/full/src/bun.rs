@@ -119,7 +119,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
                                 s.into_bytes()
                             },
                             Err(e) => {
-                                eprintln!("[tynd] failed to serialize BackendCall: {e}");
+                                tynd_host::tynd_error!("failed to serialize BackendCall: {e}");
                                 continue;
                             },
                         }
