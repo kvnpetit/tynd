@@ -1,8 +1,5 @@
-//! Persistent key/value store scoped per app.
-//!
-//! Backed by a single JSON file under `dirs::config_dir()/<namespace>/store.json`
-//! (or `dirs::data_dir()` fallback). Loaded lazily once per namespace and cached
-//! in memory for the process lifetime. Writes are sync-flushed after each mutation.
+//! JSON key/value store at `config_dir()/<ns>/store.json`. Loaded once per
+//! namespace and cached; writes flush synchronously.
 
 use serde_json::{Map, Value};
 use std::collections::HashMap;

@@ -41,6 +41,13 @@ image       = { version = "0.25.10", default-features = false, features = ["png"
 # Embedded JS runtime (lite)
 rquickjs    = { version = "0.11.0", features = ["full"] }
 
+# HTTP + binary encoding
+ureq   = { version = "2.12", default-features = false, features = ["tls", "json", "gzip", "brotli"] }
+base64 = "0.22"
+
+# Cross-platform pseudo-terminal for the embedded terminal API
+portable-pty = "0.9"
+
 [workspace.lints.rust]
 unused_must_use               = "deny"
 unsafe_op_in_unsafe_fn        = "deny"

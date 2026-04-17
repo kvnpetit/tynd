@@ -1,12 +1,16 @@
 pub mod clipboard;
 pub mod dialog;
+pub mod events;
 pub mod fs;
+pub mod http;
 pub mod icon;
 pub mod notification;
 pub mod os_info;
 pub mod process;
 pub mod shell;
+pub mod sidecar;
 pub mod store;
+pub mod terminal;
 pub mod window_cmd;
 
 use serde_json::Value;
@@ -23,6 +27,9 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "fs" => fs::dispatch(method, args),
         "store" => store::dispatch(method, args),
         "os" => os_info::dispatch(method, args),
+        "http" => http::dispatch(method, args),
+        "sidecar" => sidecar::dispatch(method, args),
+        "terminal" => terminal::dispatch(method, args),
         _ => Err(format!("Unknown OS API: '{api}'")),
     }
 }

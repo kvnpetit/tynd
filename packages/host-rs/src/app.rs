@@ -44,6 +44,16 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
 
+    {
+        let proxy = proxy.clone();
+        os::events::set_emitter(Box::new(move |name, data| {
+            let _ = proxy.send_event(UserEvent::OsEvent {
+                name: name.into(),
+                data: data.clone(),
+            });
+        }));
+    }
+
     // Relay BackendEvents → tao UserEvents
     {
         let proxy = proxy.clone();

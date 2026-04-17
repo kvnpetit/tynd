@@ -101,6 +101,7 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let mut bundle_path_opt: Option<String> = None;
     let mut frontend_dir_opt: Option<String> = None;
     let mut icon_path_opt: Option<String> = None;
+    let mut sidecars_pending: Vec<(String, PathBuf)> = Vec::new();
 
     for _ in 0..file_count {
         let mut pl = [0u8; 2];
@@ -223,6 +224,19 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
                 w.flush().ok()?;
             },
 
+            _ if rel.starts_with("sidecar/") => {
+                let rest = &rel["sidecar/".len()..];
+                let dest = temp_dir.join("sidecar").join(rest);
+                if let Some(parent) = dest.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let out = fs::File::create(&dest).ok()?;
+                let mut w = BufWriter::new(out);
+                std::io::copy(&mut (&mut f).take(data_len), &mut w).ok()?;
+                w.flush().ok()?;
+                sidecars_pending.push((rest.to_string(), dest));
+            },
+
             _ => {
                 let mut skip = (&mut f).take(data_len);
                 std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
@@ -250,6 +264,15 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
         tynd_host::cleanup::run();
         std::process::exit(1);
     });
+
+    for (name, path) in &sidecars_pending {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o755));
+        }
+        tynd_host::os::sidecar::register(name, &path.to_string_lossy());
+    }
 
     Some(EmbeddedAssets {
         bun_path,
