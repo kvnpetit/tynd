@@ -825,7 +825,8 @@ Features available in Electron with no direct equivalent in the other frameworks
 | **100% TypeScript backend** | No Rust or Go to learn or maintain |
 | **Dual runtimes** | `full` (Bun subprocess — full npm ecosystem) or `lite` (QuickJS embedded — smaller binary, ~20 ms startup) |
 | **Direct OS APIs from frontend** | `dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray` call into Rust directly — no round-trip through the TypeScript backend |
-| **Same IPC stack as Tauri v2** | wry + tao + `bv://` custom scheme — zero TCP, zero WebSocket, no firewall prompt |
+| **Same IPC stack as Tauri v2** | wry + tao + `tynd://` custom scheme — zero TCP, zero WebSocket, no firewall prompt |
+| **Zero-copy binary IPC** | dedicated `tynd-bin://` scheme for multi-MB payloads — no base64, `ArrayBuffer` end-to-end. 5-10x faster than JSON-encoded binary |
 | **Structural security model** | The exposure surface is the exported module — code and security policy cannot drift apart |
 
 ## Tauri v2 unique strengths

@@ -458,4 +458,18 @@ Task function must be self-contained (no closure captures). Arguments and return
 
 **No HTTP. No WebSocket. No firewall prompt.** Identical to Tauri v2's IPC stack.
 
-Frontend assets served via `bv://localhost/` (wry custom protocol -> filesystem). `window.location.origin` is `bv://localhost`.
+Frontend assets served via `tynd://localhost/` (wry custom protocol -> filesystem). `window.location.origin` is `tynd://localhost`.
+
+### Binary IPC — `tynd-bin://`
+
+Multi-MB payloads skip the JSON IPC. A second custom protocol, `tynd-bin://localhost/<api>/<method>?<query>`, carries raw bytes in the request and response bodies — no base64, no JSON envelope, `ArrayBuffer` on arrival. Current routes:
+
+| Route | Method | In | Out |
+|---|---|---|---|
+| `fs/readBinary?path=...` | `GET` | — | file bytes |
+| `fs/writeBinary?path=...&createDirs=0\|1` | `POST` | bytes | `204` |
+| `compute/hash?algo=blake3\|sha256\|sha512&encoding=hex\|base64` | `POST` | bytes | UTF-8 digest |
+| `compute/compress?algo=zstd&level=N` | `POST` | bytes | bytes |
+| `compute/decompress?algo=zstd` | `POST` | bytes | bytes |
+
+The TS client wraps these: `fs.readBinary(path)`, `compute.hash(bytes)`, etc. — users don't interact with the scheme directly. Small / non-binary calls (`randomBytes`, text helpers, terminal events) stay on the JSON IPC where it's simpler.

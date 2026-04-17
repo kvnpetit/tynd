@@ -58,7 +58,7 @@ TypeScript backend                         Native OS window
   tynd-lite  (QuickJS embedded,  wry + tao Rust host)
 ```
 
-**Zero network.** Frontend served via `bv://` custom protocol (wry `with_custom_protocol`). RPC via native `webview_bind`. Events via `evaluate_script`. Identical architecture to Tauri v2.
+**Zero network.** Frontend served via `tynd://` custom protocol (wry `with_custom_protocol`). RPC via native `webview_bind`. Events via `evaluate_script`. Multi-MB binary payloads (`fs.readBinary`, `compute.compress`, …) bypass JSON IPC via `tynd-bin://`. Identical architecture to Tauri v2.
 
 ### Two runtimes
 
