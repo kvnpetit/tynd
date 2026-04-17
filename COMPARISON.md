@@ -633,6 +633,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Embedded JS runtime option | ✅ | N/A | N/A | N/A |
 | Official plugin ecosystem | ❌ | ✅ | ✅ | ✅ |
 | Plugin / service development framework | ❌ | ✅ | ✅ | ❌ |
+| Built-in unit-test runner | ✅ `bun test` + `cargo test` | ❌ | ❌ | ❌ |
+| Framework-level test suite | ⚠️ core + cache + pack + OS APIs | ❌ | ⚠️ | ⚠️ |
 
 ---
 
@@ -737,7 +739,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Screen / window capture (desktopCapturer) | ❌ | ❌ | ❌ | ✅ |
 | Power monitor (sleep / wake / idle) | ❌ | ❌ | ❌ | ✅ |
 | Prevent display / app sleep (powerSaveBlocker) | ❌ | ❌ | ❌ | ✅ |
-| Crash reporting | ❌ | ❌ | ❌ | ✅ |
+| Crash reporting | ✅ | ❌ | ❌ | ✅ |
 | Touch Bar (macOS) | ❌ | ❌ | ❌ | ✅ |
 | Push notifications (macOS APNs) | ❌ | ❌ | ❌ | ✅ |
 | Session management (cookies / cache / proxy) | ❌ | ❌ | ❌ | ✅ |
