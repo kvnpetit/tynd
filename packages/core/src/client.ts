@@ -381,6 +381,31 @@ export const fs = {
   copy(from: string, to: string): Promise<void> {
     return _osCall("fs", "copy", { from, to })
   },
+  async readBinary(path: string): Promise<Uint8Array> {
+    const b64 = await _osCall<string>("fs", "readBinary", { path })
+    return _base64ToBytes(b64)
+  },
+  writeBinary(
+    path: string,
+    content: Uint8Array | ArrayBuffer,
+    opts?: { createDirs?: boolean },
+  ): Promise<void> {
+    const b64 = _bytesToBase64(content instanceof ArrayBuffer ? new Uint8Array(content) : content)
+    return _osCall("fs", "writeBinary", { path, content: b64, ...opts })
+  },
+}
+
+function _bytesToBase64(bytes: Uint8Array): string {
+  let s = ""
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!)
+  return btoa(s)
+}
+
+function _base64ToBytes(b64: string): Uint8Array {
+  const s = atob(b64)
+  const out = new Uint8Array(s.length)
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i)
+  return out
 }
 
 export function createStore(namespace: string) {
@@ -437,6 +462,159 @@ export const os = {
   env(key: string): Promise<string | null> {
     return _osCall("os", "env", { key })
   },
+}
+
+export interface HttpResponse<T = string> {
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  body: T
+}
+
+export interface HttpProgress {
+  phase: "upload" | "download"
+  loaded: number
+  total: number | null
+}
+
+export interface HttpRequestOptions {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS"
+  headers?: Record<string, string>
+  body?: string | Record<string, unknown> | unknown[]
+  timeoutMs?: number
+  onProgress?: (p: HttpProgress) => void
+}
+
+async function _httpRun<T>(
+  method: "request" | "download",
+  baseArgs: Record<string, unknown>,
+  onProgress?: (p: HttpProgress) => void,
+): Promise<T> {
+  if (!onProgress) return _osCall<T>("http", method, baseArgs)
+  const progressId = `http_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const unsub = window.__tynd__.os_on("http:progress", (payload: unknown) => {
+    const p = payload as HttpProgress & { id: string }
+    if (p?.id === progressId) onProgress({ phase: p.phase, loaded: p.loaded, total: p.total })
+  })
+  try {
+    return await _osCall<T>("http", method, { ...baseArgs, progressId })
+  } finally {
+    unsub()
+  }
+}
+
+export const http = {
+  get<T = string>(
+    url: string,
+    opts?: Omit<HttpRequestOptions, "method" | "body">,
+  ): Promise<HttpResponse<T>> {
+    const { onProgress, ...rest } = opts ?? {}
+    return _httpRun("request", { url, method: "GET", responseType: "text", ...rest }, onProgress)
+  },
+  getJson<T = unknown>(
+    url: string,
+    opts?: Omit<HttpRequestOptions, "method" | "body">,
+  ): Promise<HttpResponse<T>> {
+    const { onProgress, ...rest } = opts ?? {}
+    return _httpRun("request", { url, method: "GET", responseType: "json", ...rest }, onProgress)
+  },
+  async getBinary(
+    url: string,
+    opts?: Omit<HttpRequestOptions, "method" | "body">,
+  ): Promise<HttpResponse<Uint8Array>> {
+    const { onProgress, ...rest } = opts ?? {}
+    const res = await _httpRun<HttpResponse<string>>(
+      "request",
+      { url, method: "GET", responseType: "binary", ...rest },
+      onProgress,
+    )
+    return { ...res, body: _base64ToBytes(res.body) }
+  },
+  post<T = string>(url: string, opts?: HttpRequestOptions): Promise<HttpResponse<T>> {
+    const { onProgress, ...rest } = opts ?? {}
+    return _httpRun("request", { url, method: "POST", responseType: "text", ...rest }, onProgress)
+  },
+  request<T = string>(url: string, opts?: HttpRequestOptions): Promise<HttpResponse<T>> {
+    const { onProgress, ...rest } = opts ?? {}
+    return _httpRun("request", { url, responseType: "text", ...rest }, onProgress)
+  },
+  download(
+    url: string,
+    dest: string,
+    opts?: {
+      headers?: Record<string, string>
+      timeoutMs?: number
+      onProgress?: (p: HttpProgress) => void
+    },
+  ): Promise<{ path: string; bytes: number }> {
+    const { onProgress, ...rest } = opts ?? {}
+    return _httpRun("download", { url, dest, ...rest }, onProgress)
+  },
+}
+
+export const sidecar = {
+  path(name: string): Promise<string> {
+    return _osCall("sidecar", "path", { name }) as Promise<string>
+  },
+  list(): Promise<Array<{ name: string; path: string }>> {
+    return _osCall("sidecar", "list")
+  },
+}
+
+export interface TerminalSpawnOptions {
+  shell?: string
+  args?: string[]
+  cwd?: string
+  env?: Record<string, string>
+  cols?: number
+  rows?: number
+}
+
+export interface TerminalHandle {
+  id: number
+  write(data: string | Uint8Array): Promise<void>
+  resize(cols: number, rows: number): Promise<void>
+  kill(): Promise<void>
+  onData(handler: (chunk: Uint8Array) => void): () => void
+  onExit(handler: (code: number | null) => void): () => void
+}
+
+export const terminal = {
+  async spawn(opts?: TerminalSpawnOptions): Promise<TerminalHandle> {
+    const { id } = await _osCall<{ id: number }>("terminal", "spawn", opts ?? {})
+    return makeTerminalHandle(id)
+  },
+  list(): Promise<number[]> {
+    return _osCall("terminal", "list")
+  },
+}
+
+function makeTerminalHandle(id: number): TerminalHandle {
+  return {
+    id,
+    write(data) {
+      const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data
+      return _osCall("terminal", "write", { id, data: _bytesToBase64(bytes) })
+    },
+    resize(cols, rows) {
+      return _osCall("terminal", "resize", { id, cols, rows })
+    },
+    kill() {
+      return _osCall("terminal", "kill", { id })
+    },
+    onData(handler) {
+      return window.__tynd__.os_on("terminal:data", (payload: unknown) => {
+        const p = payload as { id: number; data: string }
+        if (p?.id === id) handler(_base64ToBytes(p.data))
+      })
+    },
+    onExit(handler) {
+      return window.__tynd__.os_on("terminal:exit", (payload: unknown) => {
+        const p = payload as { id: number; code: number | null }
+        if (p?.id === id) handler(p.code)
+      })
+    },
+  }
 }
 
 export const path = {

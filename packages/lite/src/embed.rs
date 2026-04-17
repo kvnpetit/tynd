@@ -85,6 +85,7 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let mut bundle_path_opt: Option<String> = None;
     let mut frontend_dir_opt: Option<String> = None;
     let mut icon_path_opt: Option<String> = None;
+    let mut sidecars_pending: Vec<(String, PathBuf)> = Vec::new();
 
     for _ in 0..file_count {
         // path
@@ -117,8 +118,14 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
             let p = temp_dir.join(&rel);
             icon_path_opt = Some(p.to_string_lossy().into_owned());
             p
+        } else if let Some(rest) = rel.strip_prefix("sidecar/") {
+            let p = temp_dir.join("sidecar").join(rest);
+            if let Some(parent) = p.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            sidecars_pending.push((rest.to_string(), p.clone()));
+            p
         } else {
-            // Unknown path — skip its bytes and continue
             let mut skip = (&mut f).take(data_len);
             std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
             continue;
@@ -141,6 +148,19 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
         tynd_host::cleanup::run();
         std::process::exit(1);
     });
+
+    for (name, path) in &sidecars_pending {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(meta) = fs::metadata(path) {
+                let mut perm = meta.permissions();
+                perm.set_mode(0o755);
+                let _ = fs::set_permissions(path, perm);
+            }
+        }
+        tynd_host::os::sidecar::register(name, &path.to_string_lossy());
+    }
 
     Some(EmbeddedAssets {
         bundle_path,
