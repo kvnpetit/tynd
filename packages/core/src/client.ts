@@ -32,6 +32,11 @@ export {
   terminal,
 } from "./client/terminal.js"
 export { tray } from "./client/tray.js"
+export {
+  type WebSocketHandle,
+  type WebSocketMessage,
+  websocket,
+} from "./client/websocket.js"
 export { tyndWindow } from "./client/window.js"
 export { parallel, type WorkerHandle, workers } from "./client/workers.js"
 export type { Emitter, EmitterMap } from "./types.js"
