@@ -1,12 +1,4 @@
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
@@ -47,15 +39,13 @@ export async function bundleAppImage(ctx: BundleContext): Promise<string> {
   // appimagetool looks for AppRun at the AppDir root; a symlink is enough.
   symlinkSync(path.join("usr", "bin", ctx.appName), path.join(appDir, "AppRun"))
 
-  writeFileSync(path.join(appDir, `${ctx.appName}.desktop`), renderDesktopEntry(ctx), {
-    mode: 0o644,
-  })
+  await Bun.write(path.join(appDir, `${ctx.appName}.desktop`), renderDesktopEntry(ctx))
 
   if (ctx.iconSource) {
     const iconPng = await loadIconAsPng(ctx.iconSource)
     // Top-level PNG is what appimagetool embeds as the AppImage's own icon.
-    writeFileSync(path.join(appDir, `${ctx.appName}.png`), iconPng, { mode: 0o644 })
-    writeFileSync(
+    await Bun.write(path.join(appDir, `${ctx.appName}.png`), iconPng)
+    await Bun.write(
       path.join(
         appDir,
         "usr",
@@ -67,7 +57,6 @@ export async function bundleAppImage(ctx: BundleContext): Promise<string> {
         `${ctx.appName}.png`,
       ),
       iconPng,
-      { mode: 0o644 },
     )
   }
 

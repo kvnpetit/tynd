@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs"
-import { mkdir, writeFile } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { detectFrontend } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
@@ -147,7 +147,7 @@ async function write(cwd: string, rel: string, content: string, force: boolean):
     return
   }
   await mkdir(path.dirname(abs), { recursive: true })
-  await writeFile(abs, content, "utf-8")
+  await Bun.write(abs, content)
   log.step(`${log.cyan("create")}  ${rel}`)
 }
 
@@ -155,10 +155,10 @@ async function patchGitignore(cwd: string): Promise<void> {
   const gitignorePath = path.join(cwd, ".gitignore")
   const entry = ".tynd/"
   if (existsSync(gitignorePath)) {
-    const content = readFileSync(gitignorePath, "utf-8")
+    const content = await Bun.file(gitignorePath).text()
     if (content.includes(entry)) return
     const newContent = content.endsWith("\n") ? `${content + entry}\n` : `${content}\n${entry}\n`
-    await writeFile(gitignorePath, newContent, "utf-8")
+    await Bun.write(gitignorePath, newContent)
     log.step(`${log.cyan("patch")}   .gitignore (added ${entry})`)
   }
   // No .gitignore -> silently skip; Vite scaffold always creates one
@@ -186,7 +186,7 @@ async function patchPackageJson(pkgPath: string, pkg: PackageJson): Promise<void
   if (!deps["@tynd/host"]) deps["@tynd/host"] = range
   pkg.dependencies = deps
 
-  await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")
+  await Bun.write(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
   log.step(`${log.cyan("patch")}   package.json`)
   log.debug(`patchPackageJson: deps @tynd/core, @tynd/host -> ${range}`)
 }

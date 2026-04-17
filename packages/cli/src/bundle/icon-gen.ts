@@ -1,11 +1,10 @@
-import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { squarifySvg } from "../lib/icon.ts"
 
 // ICNS format: "icns" magic + u32 BE total_size, then entries of
 // [type: 4 ASCII][entry_size: u32 BE][PNG bytes]. One entry is enough —
 // macOS rescales missing sizes. Requires a square source.
-export function generateIcns(pngBytes: Buffer, outPath: string): void {
+export async function generateIcns(pngBytes: Buffer, outPath: string): Promise<void> {
   const { width, height } = readPngSize(pngBytes)
   if (width !== height) {
     throw new Error(`icon PNG must be square (got ${width}×${height})`)
@@ -25,12 +24,12 @@ export function generateIcns(pngBytes: Buffer, outPath: string): void {
   buf.writeUInt32BE(entrySize, 12)
   pngBytes.copy(buf, 16)
 
-  writeFileSync(outPath, buf)
+  await Bun.write(outPath, buf)
 }
 
 export async function renderSvgToPng(svgPath: string, size: number): Promise<Buffer> {
   const { Resvg } = await import("@resvg/resvg-js")
-  const svg = squarifySvg(readFileSync(svgPath, "utf8"))
+  const svg = squarifySvg(await Bun.file(svgPath).text())
   const resvg = new Resvg(svg, {
     fitTo: { mode: "width", value: size },
     background: "transparent",
@@ -41,7 +40,7 @@ export async function renderSvgToPng(svgPath: string, size: number): Promise<Buf
 export async function loadIconAsPng(iconPath: string): Promise<Buffer> {
   const ext = path.extname(iconPath).toLowerCase()
   if (ext === ".svg") return renderSvgToPng(iconPath, 512)
-  if (ext === ".png") return readFileSync(iconPath)
+  if (ext === ".png") return Buffer.from(await Bun.file(iconPath).bytes())
   throw new Error(`unsupported icon source for bundling: ${ext} (use .png or .svg)`)
 }
 

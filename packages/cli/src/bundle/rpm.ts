@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, rmSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
@@ -33,18 +33,16 @@ export async function bundleRpm(ctx: BundleContext): Promise<string> {
 
   // Sources that %install copies into %{buildroot}. Named to match the
   // Source0/Source1/Source2 entries emitted by renderSpec.
-  writeFileSync(path.join(sources, ctx.appName), readFileSync(ctx.inputBinary), { mode: 0o755 })
-  writeFileSync(path.join(sources, `${ctx.appName}.desktop`), renderDesktopEntry(ctx), {
-    mode: 0o644,
-  })
+  const binDest = path.join(sources, ctx.appName)
+  await Bun.write(binDest, Bun.file(ctx.inputBinary))
+  chmodSync(binDest, 0o755)
+  await Bun.write(path.join(sources, `${ctx.appName}.desktop`), renderDesktopEntry(ctx))
   if (ctx.iconSource) {
-    writeFileSync(path.join(sources, `${ctx.appName}.png`), await loadIconAsPng(ctx.iconSource), {
-      mode: 0o644,
-    })
+    await Bun.write(path.join(sources, `${ctx.appName}.png`), await loadIconAsPng(ctx.iconSource))
   }
 
   const specPath = path.join(topdir, "SPECS", `${ctx.appName}.spec`)
-  writeFileSync(specPath, renderSpec(ctx, !!ctx.iconSource))
+  await Bun.write(specPath, renderSpec(ctx, !!ctx.iconSource))
 
   await exec("rpmbuild", ["--define", `_topdir ${topdir}`, "--target", rpmArch, "-bb", specPath], {
     silent: true,
@@ -62,7 +60,7 @@ export async function bundleRpm(ctx: BundleContext): Promise<string> {
 
   const outFile = path.join(ctx.outDir, path.basename(rpmSrc))
   if (existsSync(outFile)) rmSync(outFile, { force: true })
-  writeFileSync(outFile, readFileSync(rpmSrc))
+  await Bun.write(outFile, Bun.file(rpmSrc))
   rmSync(workDir, { recursive: true, force: true })
 
   log.success(`RPM      -> ${log.cyan(`release/${path.basename(outFile)}`)}`)

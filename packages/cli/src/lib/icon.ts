@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { log } from "./logger.ts"
 
@@ -66,12 +66,12 @@ export async function svgToPng(svgPath: string, outPath: string): Promise<string
   try {
     const { Resvg } = await import("@resvg/resvg-js")
     mkdirSync(path.dirname(outPath), { recursive: true })
-    const svg = squarifySvg(readFileSync(svgPath, "utf8"))
+    const svg = squarifySvg(await Bun.file(svgPath).text())
     const resvg = new Resvg(svg, {
       fitTo: { mode: "width", value: 256 },
       background: "transparent",
     })
-    writeFileSync(outPath, resvg.render().asPng())
+    await Bun.write(outPath, resvg.render().asPng())
     return outPath
   } catch {
     return null
@@ -166,10 +166,11 @@ export async function setWindowsExeIcon(
     const ResEdit = await import("resedit")
 
     const ext = path.extname(iconPath).toLowerCase()
-    const icoData = ext === ".ico" ? readFileSync(iconPath) : pngToIco(readFileSync(iconPath))
+    const iconBuf = Buffer.from(await Bun.file(iconPath).bytes())
+    const icoData = ext === ".ico" ? iconBuf : pngToIco(iconBuf)
 
     // ignoreCert is required for signed binaries (Bun ships signed).
-    const exeData = readFileSync(exePath)
+    const exeData = Buffer.from(await Bun.file(exePath).bytes())
     const exe = ResEdit.NtExecutable.from(exeData, { ignoreCert: true })
     const res = ResEdit.NtExecutableResource.from(exe)
     const iconFile = ResEdit.Data.IconFile.from(icoData)
@@ -201,7 +202,7 @@ export async function setWindowsExeIcon(
     }
 
     res.outputResource(exe)
-    writeFileSync(exePath, Buffer.from(exe.generate()))
+    await Bun.write(exePath, Buffer.from(exe.generate()))
   } catch (e) {
     log.warn(`.exe icon update failed: ${e}`)
   }

@@ -1,12 +1,4 @@
-import {
-  chmodSync,
-  lstatSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs"
+import { chmodSync, lstatSync, mkdtempSync, readdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -28,6 +20,10 @@ export interface PackOpts {
   sidecars?: Array<{ name: string; path: string }>
 }
 
+async function readBuf(p: string): Promise<Buffer> {
+  return Buffer.from(await Bun.file(p).bytes())
+}
+
 /**
  * Appends a TYNDPKG section to `tynd-lite`. Wire format:
  * `[file_count u32 LE]` then `[path_len u16 LE][path][data_len u32 LE][data]` per file,
@@ -38,12 +34,12 @@ export async function packageLite(o: PackOpts): Promise<void> {
 
   // bundle.js kept raw — QuickJS reads it without a decompress step.
   const packFiles: PackEntry[] = [
-    { rel: "bundle.js", data: readFileSync(o.backendBundle) },
+    { rel: "bundle.js", data: await readBuf(o.backendBundle) },
     ...o.frontendFiles.map((f) => ({ rel: `frontend/${f.rel}`, abs: f.abs })),
     ...(o.sidecars ?? []).map((s) => ({ rel: `sidecar/${s.name}`, abs: s.path })),
   ]
 
-  const tmpIconPath = addIcon(packFiles, o)
+  const tmpIconPath = await addIcon(packFiles, o)
   await writeBinary(o, packFiles)
   cleanupTmpIcon(tmpIconPath)
 
@@ -65,11 +61,11 @@ export async function packageFull(o: PackOpts): Promise<void> {
     tmpBunDir = mkdtempSync(path.join(tmpdir(), "tynd-bun-"))
     const appName = path.basename(o.outFile, ".exe")
     bunSrcPath = path.join(tmpBunDir, `${appName}.exe`)
-    writeFileSync(bunSrcPath, readFileSync(bunBin))
+    await Bun.write(bunSrcPath, await readBuf(bunBin))
     await setWindowsExeIcon(bunSrcPath, o.iconPath, appName)
   }
 
-  const bunBytes = readFileSync(bunSrcPath)
+  const bunBytes = await readBuf(bunSrcPath)
   const bunCompressed = Buffer.from(await zstdAsync(bunBytes))
   if (tmpBunDir)
     try {
@@ -85,12 +81,12 @@ export async function packageFull(o: PackOpts): Promise<void> {
   const packFiles: PackEntry[] = [
     { rel: "bun.version", data: Buffer.from(Bun.version, "utf8") },
     { rel: "bun.zst", data: bunCompressed },
-    { rel: "bundle.js", data: readFileSync(o.backendBundle) }, // NOT auto-compressed
+    { rel: "bundle.js", data: await readBuf(o.backendBundle) }, // NOT auto-compressed
     ...o.frontendFiles.map((f) => ({ rel: `frontend/${f.rel}`, abs: f.abs })),
     ...(o.sidecars ?? []).map((s) => ({ rel: `sidecar/${s.name}`, abs: s.path })),
   ]
 
-  const tmpIconPath = addIcon(packFiles, o)
+  const tmpIconPath = await addIcon(packFiles, o)
   await writeBinary(o, packFiles)
   cleanupTmpIcon(tmpIconPath)
 
@@ -100,26 +96,25 @@ export async function packageFull(o: PackOpts): Promise<void> {
   )
 }
 
-function addIcon(files: PackEntry[], o: PackOpts): string | null {
+async function addIcon(files: PackEntry[], o: PackOpts): Promise<string | null> {
   if (!o.iconPath) return null
   const ext = path.extname(o.iconPath).toLowerCase()
   if (ext === ".png") {
-    const icoBytes = pngToIco(readFileSync(o.iconPath))
+    const icoBytes = pngToIco(await readBuf(o.iconPath))
     const tmp = path.join(path.dirname(o.outFile), ".icon-tmp.ico")
-    writeFileSync(tmp, icoBytes)
-    files.push({ rel: "icon.ico", data: readFileSync(tmp) })
+    await Bun.write(tmp, icoBytes)
+    files.push({ rel: "icon.ico", data: await readBuf(tmp) })
     return tmp
   }
-  files.push({ rel: "icon.ico", data: readFileSync(o.iconPath) })
+  files.push({ rel: "icon.ico", data: await readBuf(o.iconPath) })
   return null
 }
 
 async function writeBinary(o: PackOpts, files: PackEntry[]): Promise<void> {
-  const packed = packAssets(files)
-  const hostBytes = readFileSync(o.hostBin)
+  const packed = await packAssets(files)
+  const hostBytes = await readBuf(o.hostBin)
   const out = Buffer.concat([hostBytes, packed])
 
-  // Bun.write is ~20% faster than writeFileSync on multi-MB payloads.
   await Bun.write(o.outFile, out)
   if (o.platform !== "windows") chmodSync(o.outFile, 0o755)
 
@@ -145,7 +140,7 @@ const TEXT_EXTS = /\.(html|htm|js|mjs|cjs|css|json|svg)$/i
 // `{ rel, data }` -> pre-processed buffer, packed as-is.
 type PackEntry = { rel: string; abs: string } | { rel: string; data: Buffer }
 
-function packAssets(files: PackEntry[]): Buffer {
+async function packAssets(files: PackEntry[]): Promise<Buffer> {
   const chunks: Buffer[] = []
   let sectionSize = 0
 
@@ -166,7 +161,7 @@ function packAssets(files: PackEntry[]): Buffer {
       packRel = shouldCompress ? `${entry.rel}.zst` : entry.rel
       let raw: Buffer
       try {
-        raw = readFileSync(entry.abs)
+        raw = await readBuf(entry.abs)
       } catch (e) {
         throw new Error(`Failed to read asset "${entry.rel}": ${e}`)
       }

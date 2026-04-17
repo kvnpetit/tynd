@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { pngToIco } from "../lib/icon.ts"
@@ -39,7 +39,7 @@ export async function bundleMsi(ctx: BundleContext): Promise<string> {
   if (ctx.iconSource) {
     const icoBytes = pngToIco(await loadIconAsPng(ctx.iconSource))
     iconRel = `${ctx.appName}.ico`
-    writeFileSync(path.join(workDir, iconRel), icoBytes)
+    await Bun.write(path.join(workDir, iconRel), icoBytes)
   }
 
   const msiVersion = toMsiVersion(ctx.version)
@@ -47,7 +47,7 @@ export async function bundleMsi(ctx: BundleContext): Promise<string> {
     ctx.bundleConfig.msi?.upgradeCode ?? deterministicGuid(`upgrade:${ctx.identifier}`)
 
   const wxsPath = path.join(workDir, `${ctx.appName}.wxs`)
-  writeFileSync(wxsPath, renderWxs(ctx, exeName, iconRel, msiVersion, upgradeCode))
+  await Bun.write(wxsPath, renderWxs(ctx, exeName, iconRel, msiVersion, upgradeCode))
 
   const wixObj = path.join(workDir, `${ctx.appName}.wixobj`)
   const outFile = path.join(ctx.outDir, `${ctx.appName}-${ctx.version}-${ctx.arch}.msi`)

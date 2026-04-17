@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs"
 import path from "node:path"
 import { log } from "../lib/logger.ts"
 import { generateIcns, loadIconAsPng } from "./icon-gen.ts"
@@ -19,16 +19,16 @@ export async function bundleApp(ctx: BundleContext): Promise<string> {
   copyFileSync(ctx.inputBinary, exeDest)
   chmodSync(exeDest, 0o755)
 
-  writeFileSync(path.join(contents, "PkgInfo"), "APPL????")
+  await Bun.write(path.join(contents, "PkgInfo"), "APPL????")
 
   let iconFile: string | null = null
   if (ctx.iconSource) {
     iconFile = "icon.icns"
     const pngBytes = await loadIconAsPng(ctx.iconSource)
-    generateIcns(pngBytes, path.join(resources, iconFile))
+    await generateIcns(pngBytes, path.join(resources, iconFile))
   }
 
-  writeFileSync(path.join(contents, "Info.plist"), renderInfoPlist(ctx, exeName, iconFile))
+  await Bun.write(path.join(contents, "Info.plist"), renderInfoPlist(ctx, exeName, iconFile))
 
   log.success(`App bundle -> ${log.cyan(`release/${path.basename(appPath)}`)}`)
   return appPath

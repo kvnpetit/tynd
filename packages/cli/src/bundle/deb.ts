@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, rmSync } from "node:fs"
 import path from "node:path"
 import { promisify } from "node:util"
 import { gzip as gzipCb } from "node:zlib"
@@ -27,7 +27,7 @@ export async function bundleDeb(ctx: BundleContext): Promise<string> {
     tarPack.on("error", reject)
   })
 
-  const binBytes = readFileSync(ctx.inputBinary)
+  const binBytes = Buffer.from(await Bun.file(ctx.inputBinary).bytes())
   let installedSize = binBytes.length
 
   tarPack.entry({ name: `./usr/bin/${ctx.appName}`, mode: 0o755, type: "file" }, binBytes)
@@ -76,7 +76,7 @@ export async function bundleDeb(ctx: BundleContext): Promise<string> {
     arEntry("data.tar.gz", dataTarGz),
   ])
 
-  writeFileSync(outFile, deb)
+  await Bun.write(outFile, deb)
   log.success(`Deb      -> ${log.cyan(`release/${path.basename(outFile)}`)}`)
   return outFile
 }

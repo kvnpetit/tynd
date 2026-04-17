@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { pngToIco } from "../lib/icon.ts"
@@ -35,14 +35,14 @@ export async function bundleNsis(ctx: BundleContext): Promise<string> {
   let iconRel: string | null = null
   if (ctx.iconSource) {
     iconRel = `${ctx.appName}.ico`
-    writeFileSync(path.join(workDir, iconRel), pngToIco(await loadIconAsPng(ctx.iconSource)))
+    await Bun.write(path.join(workDir, iconRel), pngToIco(await loadIconAsPng(ctx.iconSource)))
   }
 
   const outFile = path.join(ctx.outDir, `${ctx.appName}-${ctx.version}-setup.exe`)
   if (existsSync(outFile)) rmSync(outFile, { force: true })
 
   const scriptPath = path.join(workDir, `${ctx.appName}.nsi`)
-  writeFileSync(scriptPath, renderScript(ctx, exeName, iconRel, outFile))
+  await Bun.write(scriptPath, renderScript(ctx, exeName, iconRel, outFile))
 
   log.step("Running makensis…")
   await exec(tool.bin, [scriptPath], { silent: true })

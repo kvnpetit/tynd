@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs"
 import path from "node:path"
 import type { Arch, Platform } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
@@ -54,14 +54,14 @@ export async function ensureTool(
     const bytes = Buffer.from(await res.arrayBuffer())
 
     if (spec.archive === "raw") {
-      writeFileSync(bin, bytes)
+      await Bun.write(bin, bytes)
     } else if (spec.archive === "zip") {
-      writeFileSync(tmpBase, bytes)
+      await Bun.write(tmpBase, bytes)
       const AdmZip = (await import("adm-zip")).default
       new AdmZip(tmpBase).extractAllTo(root, true)
       rmSync(tmpBase, { force: true })
     } else {
-      writeFileSync(tmpBase, bytes)
+      await Bun.write(tmpBase, bytes)
       await extractTarGz(tmpBase, root)
       rmSync(tmpBase, { force: true })
     }
@@ -102,16 +102,18 @@ async function extractTarGz(src: string, destDir: string): Promise<void> {
       stream.on("data", (c: Buffer) => chunks.push(c))
       stream.on("end", () => {
         const tmp = `${outPath}.tmp`
-        writeFileSync(tmp, Buffer.concat(chunks))
-        renameSync(tmp, outPath)
-        if (header.mode) {
-          try {
-            chmodSync(outPath, header.mode & 0o777)
-          } catch {
-            /* best effort */
+        ;(async () => {
+          await Bun.write(tmp, Buffer.concat(chunks))
+          renameSync(tmp, outPath)
+          if (header.mode) {
+            try {
+              chmodSync(outPath, header.mode & 0o777)
+            } catch {
+              /* best effort */
+            }
           }
-        }
-        next()
+          next()
+        })()
       })
       stream.on("error", next)
     })
