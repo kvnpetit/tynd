@@ -28,3 +28,74 @@ export function base64ToBytes(b64: string): Uint8Array {
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i)
   return out
 }
+
+const BIN_ORIGIN = "tynd-bin://localhost"
+
+function buildBinUrl(path: string, query?: Record<string, string>): string {
+  const qs = query
+    ? "?" +
+      Object.entries(query)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&")
+    : ""
+  return `${BIN_ORIGIN}/${path}${qs}`
+}
+
+async function throwIfError(r: Response, label: string): Promise<void> {
+  if (r.ok) return
+  const text = await r.text().catch(() => r.statusText)
+  throw new Error(`${label}: ${text || r.statusText}`)
+}
+
+/** GET a binary buffer from the `tynd-bin://` IPC scheme. */
+export async function binFetch(path: string, query?: Record<string, string>): Promise<Uint8Array> {
+  const r = await fetch(buildBinUrl(path, query))
+  await throwIfError(r, path)
+  const buf = await r.arrayBuffer()
+  return new Uint8Array(buf)
+}
+
+/** POST raw bytes to the `tynd-bin://` IPC scheme and receive raw bytes back. */
+export async function binExchange(
+  path: string,
+  query: Record<string, string> | undefined,
+  body: Uint8Array | ArrayBuffer,
+): Promise<Uint8Array> {
+  const bytes = body instanceof ArrayBuffer ? new Uint8Array(body) : body
+  const r = await fetch(buildBinUrl(path, query), {
+    method: "POST",
+    body: bytes as BodyInit,
+  })
+  await throwIfError(r, path)
+  const buf = await r.arrayBuffer()
+  return new Uint8Array(buf)
+}
+
+/** POST raw bytes and receive a UTF-8 string (for APIs like `compute/hash`). */
+export async function binExchangeText(
+  path: string,
+  query: Record<string, string> | undefined,
+  body: Uint8Array | ArrayBuffer,
+): Promise<string> {
+  const bytes = body instanceof ArrayBuffer ? new Uint8Array(body) : body
+  const r = await fetch(buildBinUrl(path, query), {
+    method: "POST",
+    body: bytes as BodyInit,
+  })
+  await throwIfError(r, path)
+  return r.text()
+}
+
+/** POST raw bytes with no expected response body (writes). */
+export async function binUpload(
+  path: string,
+  query: Record<string, string> | undefined,
+  body: Uint8Array | ArrayBuffer,
+): Promise<void> {
+  const bytes = body instanceof ArrayBuffer ? new Uint8Array(body) : body
+  const r = await fetch(buildBinUrl(path, query), {
+    method: "POST",
+    body: bytes as BodyInit,
+  })
+  await throwIfError(r, path)
+}
