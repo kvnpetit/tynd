@@ -8,6 +8,10 @@ export function greet(name: string): string {
   return `Hello, ${name}! Welcome to lite.`
 }
 
+export function increment(count: number): number {
+  return count + 1
+}
+
 app.onReady(() => {
   events.emit("ready", { message: "App loaded!" })
 })

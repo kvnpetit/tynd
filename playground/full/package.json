@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tynd dev",
+    "start": "tynd start",
     "build": "tynd build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -18,8 +19,9 @@
     "@tynd/host": "workspace:*"
   },
   "devDependencies": {
-    "@tynd/cli": "workspace:*",
     "@eslint/js": "^9.39.4",
+    "@tynd/cli": "workspace:*",
+    "@types/bun": "^1.3.12",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

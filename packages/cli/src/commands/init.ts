@@ -125,9 +125,13 @@ api.on("ready", ({ message }) => {
 
   if (hasFrontend) {
     log.dim(`  ${log.cyan("tynd dev")}   — starts ${frontend.buildTool} dev server + tynd host`)
+    log.dim(
+      `  ${log.cyan("tynd start")} — runs from built dist/ + cached backend (no build, no HMR)`,
+    )
     log.dim(`  ${log.cyan("tynd build")} — runs ${frontend.buildTool} build + bundles backend`)
   } else {
     log.dim(`  ${log.cyan("tynd dev")}   — starts tynd host`)
+    log.dim(`  ${log.cyan("tynd start")} — runs from built frontend + cached backend (no build)`)
     log.dim(`  ${log.cyan("tynd build")} — bundles backend`)
   }
 
@@ -169,6 +173,7 @@ async function patchPackageJson(pkgPath: string, pkg: PackageJson): Promise<void
     scripts["dev:ui"] = scripts["dev"]
   }
   scripts["dev"] = "tynd dev"
+  scripts["start"] = "tynd start"
   scripts["build"] = "tynd build"
   pkg.scripts = scripts
 

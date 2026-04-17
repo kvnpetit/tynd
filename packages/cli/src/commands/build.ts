@@ -70,7 +70,6 @@ export async function build(opts: BuildOptions): Promise<void> {
   log.blank()
   log.info(`Building ${log.cyan(cfg.runtime)} app`)
   log.debug(`backend=${cfg.backend} frontendDir=${cfg.frontendDir}`)
-  log.blank()
   const t0 = Date.now()
 
   if (frontend.buildTool !== "none" && frontend.buildCommand) {
@@ -216,7 +215,6 @@ export async function build(opts: BuildOptions): Promise<void> {
       iconSource: iconPath,
     })
     await runBundle(ctx, bundleTargets)
-    log.blank()
   }
 
   log.debug(`build finished in ${Date.now() - t0}ms`)
@@ -286,9 +284,7 @@ async function packageLite(o: LitePackOpts): Promise<void> {
   }
 
   const sizeMb = (out.length / 1_048_576).toFixed(1)
-  log.blank()
   log.success(`Binary → ${log.cyan(`release/${path.basename(o.outFile)}`)}  (${sizeMb} MB)`)
-  log.blank()
 }
 
 //
@@ -377,9 +373,7 @@ async function packageFull(o: FullPackOpts): Promise<void> {
   }
 
   const sizeMb = (out.length / 1_048_576).toFixed(0)
-  log.blank()
   log.success(`Binary → ${log.cyan(`release/${path.basename(o.outFile)}`)}  (~${sizeMb} MB)`)
-  log.blank()
 }
 
 const TEXT_EXTS = /\.(html|htm|js|mjs|cjs|css|json|svg)$/i

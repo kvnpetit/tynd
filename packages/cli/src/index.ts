@@ -6,6 +6,7 @@ import { create, FRAMEWORKS, type Framework } from "./commands/create.ts"
 import { dev } from "./commands/dev.ts"
 import { info } from "./commands/info.ts"
 import { init } from "./commands/init.ts"
+import { start } from "./commands/start.ts"
 import { upgrade } from "./commands/upgrade.ts"
 import { validate } from "./commands/validate.ts"
 import { ConfigError } from "./lib/config.ts"
@@ -71,6 +72,13 @@ cli
   .option("--cwd <dir>", "Project directory", { default: process.cwd() })
   .action(async (opts: { cwd: string }) => {
     await dev({ cwd: opts.cwd })
+  })
+
+cli
+  .command("start", "Run the app from cached bundles without rebuild or hot reload")
+  .option("--cwd <dir>", "Project directory", { default: process.cwd() })
+  .action(async (opts: { cwd: string }) => {
+    await start({ cwd: opts.cwd })
   })
 
 cli
@@ -153,7 +161,17 @@ else if (rawArgs.includes("--quiet")) setLogLevel("quiet")
 
 // Typo suggestion: if the first positional isn't a known command, propose the
 // closest match before cac prints its generic "Unknown command" error.
-const KNOWN_COMMANDS = ["create", "dev", "build", "init", "clean", "validate", "upgrade", "info"]
+const KNOWN_COMMANDS = [
+  "create",
+  "dev",
+  "start",
+  "build",
+  "init",
+  "clean",
+  "validate",
+  "upgrade",
+  "info",
+]
 const firstArg = rawArgs.find((a) => !a.startsWith("-"))
 if (firstArg && !KNOWN_COMMANDS.includes(firstArg)) {
   const suggestion = closestCommand(firstArg, KNOWN_COMMANDS)

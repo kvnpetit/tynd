@@ -26,7 +26,6 @@ export async function dev(opts: DevOptions): Promise<void> {
 
   log.blank()
   log.info(`Starting in ${log.cyan("dev")} mode (${cfg.runtime})`)
-  log.blank()
 
   const binPath = findBinary(cfg.runtime, opts.cwd)
   if (!binPath) {
@@ -83,14 +82,11 @@ export async function dev(opts: DevOptions): Promise<void> {
     log.step(`Frontend: static → ${log.gray(cfg.frontendDir)}`)
   }
 
-  log.blank()
-
   const backendSrcDir = path.dirname(cfg.backend)
   const bundlePath = path.join(cacheDir, "bundle.dev.js")
 
   if (cfg.runtime === "lite") {
     await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: false })
-    log.blank()
   }
 
   const env: Record<string, string> = Object.fromEntries(
@@ -123,8 +119,7 @@ export async function dev(opts: DevOptions): Promise<void> {
     return args
   }
 
-  log.step(`Binary:  ${log.gray(binPath)}`)
-  log.blank()
+  log.step(`Binary: ${log.gray(binPath)}`)
 
   const spawnHost = (): ReturnType<typeof Bun.spawn> => {
     const proc = Bun.spawn([binPath, ...makeArgs()], {
@@ -167,7 +162,6 @@ export async function dev(opts: DevOptions): Promise<void> {
       }
       reloading = true
       const t0 = Date.now()
-      log.blank()
 
       const fullRestart = reason === "config" || !canHotReload
 
@@ -217,7 +211,6 @@ export async function dev(opts: DevOptions): Promise<void> {
         log.success(`Hot reloaded in ${Date.now() - t0}ms  ${log.dim("(window preserved)")}`)
       }
 
-      log.blank()
       reloading = false
       if (reloadPending) {
         reloadPending = false
@@ -236,11 +229,12 @@ export async function dev(opts: DevOptions): Promise<void> {
     ? watch(configPath, () => triggerReload("config"))
     : null
 
-  log.dim(
-    `  Watching backend for changes… ${log.gray(`(${path.relative(opts.cwd, backendSrcDir)}/)`)}`,
-  )
-  log.dim(`  Watching ${log.gray("tynd.config.ts")} for changes…`)
-  if (devUrl) log.dim(`  Frontend HMR active via ${frontend.buildTool}`)
+  const watchTargets = [
+    log.gray(`${path.relative(opts.cwd, backendSrcDir)}/`),
+    log.gray("tynd.config.ts"),
+    ...(devUrl ? [`frontend HMR (${frontend.buildTool})`] : []),
+  ]
+  log.step(`Watching: ${watchTargets.join(", ")}`)
   log.blank()
 
   const shutdown = () => {
@@ -299,7 +293,7 @@ async function buildBackendDev(o: {
 
 // Forward a child stream to our own, prefixing each line. Line-buffered so prefix
 // attaches once per line even when chunks split mid-line.
-function pipeWithPrefix(
+export function pipeWithPrefix(
   src: ReadableStream<Uint8Array>,
   dest: NodeJS.WriteStream,
   prefix: string,
@@ -327,7 +321,7 @@ function pipeWithPrefix(
   })()
 }
 
-async function waitForServer(url: string, timeout = 30_000): Promise<boolean> {
+export async function waitForServer(url: string, timeout = 30_000): Promise<boolean> {
   const start = Date.now()
   while (Date.now() - start < timeout) {
     try {

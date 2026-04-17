@@ -8,6 +8,10 @@ export async function greet(name: string): Promise<string> {
   return `Hello, ${name}! Welcome to full.`
 }
 
+export async function increment(count: number): Promise<number> {
+  return count + 1
+}
+
 app.onReady(() => {
   events.emit("ready", { message: "App loaded!" })
 })
