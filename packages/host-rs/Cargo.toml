@@ -36,6 +36,7 @@ base64.workspace      = true
 portable-pty.workspace = true
 sha2.workspace        = true
 blake3.workspace      = true
+single-instance.workspace = true
 
 rquickjs              = { workspace = true, optional = true }
 

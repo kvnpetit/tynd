@@ -161,7 +161,7 @@ Tynd exposes three surfaces — backend module, typed frontend RPC, and direct O
 |---|---|---|
 | **Backend** | `@tynd/core` | `app.start`, `app.onReady`, `app.onClose`, `createEmitter` |
 | **Frontend RPC** | `@tynd/core/client` | `createBackend<typeof backend>()` — typed proxy |
-| **OS APIs** | `@tynd/core/client` | `dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `sidecar`, `terminal`, `compute`, `workers`, `parallel` |
+| **OS APIs** | `@tynd/core/client` | `dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `sidecar`, `terminal`, `compute`, `workers`, `parallel`, `singleInstance` |
 
 Short example:
 
