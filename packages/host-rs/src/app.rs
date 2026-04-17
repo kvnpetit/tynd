@@ -21,10 +21,9 @@ enum UserEvent {
         ok: bool,
         value: Value,
     },
-    OsEvent {
-        name: String,
-        data: Value,
-    },
+    /// Pre-serialized JS snippet for an OS event — saves a `Value.clone()` per
+    /// emit on hot paths like terminal:data and websocket:message.
+    OsEventScript(String),
     WindowCmd {
         id: String,
         method: String,
@@ -47,10 +46,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     {
         let proxy = proxy.clone();
         os::events::set_emitter(Box::new(move |name, data| {
-            let _ = proxy.send_event(UserEvent::OsEvent {
-                name: name.into(),
-                data: data.clone(),
-            });
+            // Serialize once here (background thread) so the main event
+            // loop just passes the string to the WebView.
+            let script = ipc::eval_os_event(name, data);
+            let _ = proxy.send_event(UserEvent::OsEventScript(script));
         }));
     }
 
@@ -80,10 +79,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         muda::MenuEvent::set_event_handler(Some(move |evt: muda::MenuEvent| {
             let id = evt.id().0.clone();
             let data = serde_json::json!({ "id": id });
-            let _ = proxy.send_event(UserEvent::OsEvent {
-                name: "menu:action".into(),
-                data,
-            });
+            let _ = proxy.send_event(UserEvent::OsEventScript(ipc::eval_os_event(
+                "menu:action",
+                &data,
+            )));
         }));
     }
 
@@ -120,10 +119,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                             tray_icon::TrayIconEvent::DoubleClick { .. } => "tray:double-click",
                             _ => return,
                         };
-                        let _ = proxy.send_event(UserEvent::OsEvent {
-                            name: name.into(),
-                            data: Value::Null,
-                        });
+                        let _ = proxy.send_event(UserEvent::OsEventScript(ipc::eval_os_event(
+                            name,
+                            &Value::Null,
+                        )));
                     },
                 ));
                 Some(tray)
@@ -149,20 +148,21 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         .with_initialization_script(ipc::JS_PAGE_READY)
         .with_initialization_script(ipc::JS_SHIM)
         .with_ipc_handler(move |req: Request<String>| {
-            let body = req.body().trim();
-            if body.is_empty() {
+            let body = req.into_body();
+            if body.trim().is_empty() {
                 return;
             }
 
             // Fast path: the IPC shim always produces {"type":"call",...} via
             // JSON.stringify (compact, no spaces). Detect without a full parse
-            // and forward directly to Bun, skipping one parse+serialize cycle.
-            if body.starts_with(r#"{"type":"call""#) {
-                let _ = call_tx_ipc.send(BackendCall::Raw(body.to_owned()));
+            // and forward directly to Bun — owned body moves straight into the
+            // channel, no extra allocation on the hot RPC path.
+            if body.trim_start().starts_with(r#"{"type":"call""#) {
+                let _ = call_tx_ipc.send(BackendCall::Raw(body));
                 return;
             }
 
-            let Ok(v) = serde_json::from_str::<Value>(body) else {
+            let Ok(mut v) = serde_json::from_str::<Value>(&body) else {
                 return;
             };
 
@@ -176,10 +176,12 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             }
 
             if let Some("os_call") = v.get("type").and_then(|t| t.as_str()) {
-                let id = v["id"].as_str().unwrap_or("").to_string();
-                let api = v["api"].as_str().unwrap_or("").to_string();
-                let method = v["method"].as_str().unwrap_or("").to_string();
-                let args = v["args"].clone();
+                // Steal owned strings / args out of the parsed Value — avoids
+                // clone()s on every OS-API call.
+                let id = take_string(&mut v, "id");
+                let api = take_string(&mut v, "api");
+                let method = take_string(&mut v, "method");
+                let args = v.get_mut("args").map_or(Value::Null, std::mem::take);
 
                 if api == "window" {
                     // Window commands must run on the main thread
@@ -290,8 +292,8 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 let _ = webview.evaluate_script(&ipc::eval_os_result(&id, ok, &value));
             },
 
-            Event::UserEvent(UserEvent::OsEvent { name, data }) => {
-                let _ = webview.evaluate_script(&ipc::eval_os_event(&name, &data));
+            Event::UserEvent(UserEvent::OsEventScript(script)) => {
+                let _ = webview.evaluate_script(&script);
             },
 
             Event::WindowEvent {
@@ -314,6 +316,15 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             _ => {},
         }
     })
+}
+
+/// Move a string field out of a `Value` without cloning. Falls back to an
+/// empty string if the key is missing or not a string.
+fn take_string(v: &mut Value, key: &str) -> String {
+    match v.get_mut(key).map(std::mem::take) {
+        Some(Value::String(s)) => s,
+        _ => String::new(),
+    }
 }
 
 /// Return an OS-appropriate directory for WebView persistent data.
