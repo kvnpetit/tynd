@@ -1,4 +1,4 @@
-import { base64ToBytes, bytesToBase64, osCall } from "./_internal.js"
+import { binFetch, binUpload, osCall } from "./_internal.js"
 
 export interface FileStat {
   size: number
@@ -43,16 +43,17 @@ export const fs = {
   copy(from: string, to: string): Promise<void> {
     return osCall("fs", "copy", { from, to })
   },
-  async readBinary(path: string): Promise<Uint8Array> {
-    const b64 = await osCall<string>("fs", "readBinary", { path })
-    return base64ToBytes(b64)
+  readBinary(path: string): Promise<Uint8Array> {
+    return binFetch("fs/readBinary", { path })
   },
   writeBinary(
     path: string,
     content: Uint8Array | ArrayBuffer,
     opts?: { createDirs?: boolean },
   ): Promise<void> {
-    const b64 = bytesToBase64(content instanceof ArrayBuffer ? new Uint8Array(content) : content)
-    return osCall("fs", "writeBinary", { path, content: b64, ...opts })
+    const bytes = content instanceof ArrayBuffer ? new Uint8Array(content) : content
+    const query: Record<string, string> = { path }
+    if (opts?.createDirs) query["createDirs"] = "1"
+    return binUpload("fs/writeBinary", query, bytes)
   },
 }
