@@ -4,7 +4,7 @@ import { buildFrontendEntry, buildLiteBundle } from "../lib/bundle.ts"
 import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
-import { log } from "../lib/logger.ts"
+import { getLogLevel, log } from "../lib/logger.ts"
 import { pipeWithPrefix, waitForServer } from "../lib/spawn-helpers.ts"
 
 export interface DevOptions {
@@ -101,6 +101,9 @@ export async function dev(opts: DevOptions): Promise<void> {
   if (cfg.runtime === "full") {
     env["TYND_ENTRY"] = cfg.backend
     env["TYND_FRONTEND_DIR"] = cfg.frontendDir
+  }
+  if (getLogLevel() === "verbose" && !env["TYND_LOG"]) {
+    env["TYND_LOG"] = "debug"
   }
 
   const makeArgs = (): string[] => {

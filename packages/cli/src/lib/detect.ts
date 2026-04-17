@@ -95,6 +95,25 @@ export function findBinary(runtime: "full" | "lite", cwd: string): string | null
   return null
 }
 
+/**
+ * Build the appropriate hint for when `findBinary` returns null. If the user
+ * is inside the Tynd Cargo workspace (where `packages/host-rs/Cargo.toml`
+ * exists) nudge them to `cargo build`; otherwise nudge them to install
+ * `@tynd/host`.
+ */
+export function binaryMissingHint(runtime: "full" | "lite", cwd: string): string {
+  let dir = cwd
+  for (let i = 0; i < 6; i++) {
+    if (existsSync(path.join(dir, "packages", "host-rs", "Cargo.toml"))) {
+      return `Run: cargo build --release -p tynd-${runtime}`
+    }
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return `Install: bun add @tynd/host`
+}
+
 /** Server-side frameworks incompatible with tynd (they own the server). */
 const SERVER_FRAMEWORKS: Record<string, string> = {
   next: "Next.js",

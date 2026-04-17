@@ -5,7 +5,7 @@ import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/c
 import { loadConfig, resolvePaths } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
 import { exec } from "../lib/exec.ts"
-import { log } from "../lib/logger.ts"
+import { getLogLevel, log } from "../lib/logger.ts"
 import { pipeWithPrefix } from "../lib/spawn-helpers.ts"
 import { collectFiles } from "./build.ts"
 
@@ -115,6 +115,11 @@ export async function start(opts: StartOptions): Promise<void> {
   if (cfg.runtime === "full") {
     env["TYND_ENTRY"] = cfg.backend
     env["TYND_FRONTEND_DIR"] = cfg.frontendDir
+  }
+  // Surface CLI --verbose in the Rust host logger too, so one flag covers
+  // both the CLI and the host.
+  if (getLogLevel() === "verbose" && !env["TYND_LOG"]) {
+    env["TYND_LOG"] = "debug"
   }
 
   const args: string[] =
