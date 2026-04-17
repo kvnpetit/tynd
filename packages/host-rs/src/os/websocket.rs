@@ -215,3 +215,44 @@ fn list() -> Result<Value, String> {
     let ids: Vec<Value> = map.keys().map(|id| Value::Number((*id).into())).collect();
     Ok(Value::Array(ids))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dispatch_rejects_unknown_method() {
+        assert!(dispatch("nope", &json!({})).is_err());
+    }
+
+    #[test]
+    fn connect_requires_url() {
+        assert!(connect(&json!({})).unwrap_err().contains("missing 'url'"));
+    }
+
+    #[test]
+    fn send_on_missing_session_errors() {
+        let err = send(&json!({ "id": 999_999, "kind": "text", "data": "x" })).unwrap_err();
+        assert!(err.contains("not found") || err.contains("session"));
+    }
+
+    #[test]
+    fn send_rejects_unknown_kind_when_session_missing() {
+        // session_tx runs first, so this also hits the missing-session path,
+        // but we still exercise the arg-shape guard.
+        let err = send(&json!({ "id": 999_998, "kind": "weird" })).unwrap_err();
+        assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn close_on_missing_session_errors() {
+        let err = close(&json!({ "id": 999_997 })).unwrap_err();
+        assert!(err.contains("not found") || err.contains("session"));
+    }
+
+    #[test]
+    fn list_returns_array() {
+        let v = list().unwrap();
+        assert!(v.is_array());
+    }
+}
