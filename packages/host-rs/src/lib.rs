@@ -6,6 +6,7 @@ pub(crate) mod menu;
 pub mod os;
 pub mod runtime;
 pub mod scheme;
+pub mod scheme_bin;
 pub(crate) mod tray;
 pub mod window;
 

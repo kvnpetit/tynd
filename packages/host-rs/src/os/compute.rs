@@ -46,46 +46,54 @@ fn hash(args: &Value) -> Result<Value, String> {
         .get("encoding")
         .and_then(Value::as_str)
         .unwrap_or("hex");
+    Ok(Value::String(hash_raw(&data, algo, encoding)?))
+}
 
+/// Same as `hash` but takes raw bytes — used by the `tynd-bin://` scheme to
+/// skip base64 round-tripping for multi-MB inputs.
+pub fn hash_raw(data: &[u8], algo: &str, encoding: &str) -> Result<String, String> {
     let digest: Vec<u8> = match algo {
-        "blake3" => blake3::hash(&data).as_bytes().to_vec(),
-        "sha256" => Sha256::digest(&data).to_vec(),
-        "sha512" => Sha512::digest(&data).to_vec(),
+        "blake3" => blake3::hash(data).as_bytes().to_vec(),
+        "sha256" => Sha256::digest(data).to_vec(),
+        "sha512" => Sha512::digest(data).to_vec(),
         _ => return Err(format!("compute.hash: unsupported algo '{algo}'")),
     };
-
-    let out = match encoding {
-        "hex" => hex_encode(&digest),
-        "base64" => STANDARD.encode(&digest),
-        _ => return Err(format!("compute.hash: unsupported encoding '{encoding}'")),
-    };
-    Ok(Value::String(out))
+    match encoding {
+        "hex" => Ok(hex_encode(&digest)),
+        "base64" => Ok(STANDARD.encode(&digest)),
+        _ => Err(format!("compute.hash: unsupported encoding '{encoding}'")),
+    }
 }
 
 fn compress(args: &Value) -> Result<Value, String> {
     let data = data_arg(args)?;
     let algo = args.get("algo").and_then(Value::as_str).unwrap_or("zstd");
     let level = args.get("level").and_then(Value::as_i64).unwrap_or(3) as i32;
-
-    let out = match algo {
-        "zstd" => zstd::stream::encode_all(&data[..], level)
-            .map_err(|e| format!("compute.compress: {e}"))?,
-        _ => return Err(format!("compute.compress: unsupported algo '{algo}'")),
-    };
+    let out = compress_raw(&data, algo, level)?;
     Ok(Value::String(STANDARD.encode(&out)))
+}
+
+pub fn compress_raw(data: &[u8], algo: &str, level: i32) -> Result<Vec<u8>, String> {
+    match algo {
+        "zstd" => {
+            zstd::stream::encode_all(data, level).map_err(|e| format!("compute.compress: {e}"))
+        },
+        _ => Err(format!("compute.compress: unsupported algo '{algo}'")),
+    }
 }
 
 fn decompress(args: &Value) -> Result<Value, String> {
     let data = data_arg(args)?;
     let algo = args.get("algo").and_then(Value::as_str).unwrap_or("zstd");
-
-    let out = match algo {
-        "zstd" => {
-            zstd::stream::decode_all(&data[..]).map_err(|e| format!("compute.decompress: {e}"))?
-        },
-        _ => return Err(format!("compute.decompress: unsupported algo '{algo}'")),
-    };
+    let out = decompress_raw(&data, algo)?;
     Ok(json!({ "data": STANDARD.encode(&out), "bytes": out.len() }))
+}
+
+pub fn decompress_raw(data: &[u8], algo: &str) -> Result<Vec<u8>, String> {
+    match algo {
+        "zstd" => zstd::stream::decode_all(data).map_err(|e| format!("compute.decompress: {e}")),
+        _ => Err(format!("compute.decompress: unsupported algo '{algo}'")),
+    }
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
