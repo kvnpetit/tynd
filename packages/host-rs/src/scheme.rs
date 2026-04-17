@@ -106,7 +106,7 @@ pub fn warm(static_dir: &str) {
     get_cache(static_dir);
 }
 
-/// Serve static files via the `bv://` custom protocol.
+/// Serve static files via the `tynd://` custom protocol.
 /// All files are loaded into memory on first request — subsequent requests
 /// are served from memory with zero disk I/O.
 pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {

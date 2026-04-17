@@ -5,7 +5,7 @@
 pub(crate) struct Args {
     /// Path to the pre-built JS bundle (IIFE, sets globalThis.__tynd_mod__)
     pub bundle_path: String,
-    /// Optional: directory of static frontend files to serve via bv://
+    /// Optional: directory of static frontend files to serve via tynd://
     pub frontend_dir: Option<String>,
     /// Optional: dev server URL to load instead of static files
     pub dev_url: Option<String>,

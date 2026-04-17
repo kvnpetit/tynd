@@ -9,7 +9,7 @@ use wry::{http::Request, WebViewBuilder};
 use crate::{
     ipc, menu, os,
     runtime::{BackendBridge, BackendCall, BackendEvent},
-    scheme, tray, window,
+    scheme, scheme_bin, tray, window,
 };
 
 #[derive(Debug)]
@@ -211,10 +211,13 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     } else if let Some(ref dir) = config.frontend_dir {
         let dir = dir.clone();
         wb = wb
-            .with_custom_protocol("bv".into(), move |_id, req: Request<Vec<u8>>| {
+            .with_custom_protocol("tynd".into(), move |_id, req: Request<Vec<u8>>| {
                 scheme::handle(&dir, &req)
             })
-            .with_url("bv://localhost/");
+            .with_custom_protocol("tynd-bin".into(), move |_id, req: Request<Vec<u8>>| {
+                scheme_bin::handle(&req)
+            })
+            .with_url("tynd://localhost/");
     } else {
         wb = wb.with_html(window::placeholder_html(app_name));
     }
