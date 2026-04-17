@@ -110,6 +110,7 @@ tynd create [name]           # scaffold a new project (interactive if no args)
   --runtime   full|lite
 
 tynd dev                     # start app in development mode (HMR)
+tynd start                   # classic JS build (frontend + backend) then run (no HMR)
 tynd build                   # bundle backend + frontend → single binary
   --bundle [targets]         # + installers: app, dmg, deb, rpm, appimage, nsis, msi (or "all")
 tynd init                    # add tynd to an existing project

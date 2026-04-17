@@ -62,7 +62,7 @@ function renderScript(
   iconRel: string | null,
   outFile: string,
 ): string {
-  const mode = ctx.bundleConfig.nsis?.installMode ?? "perMachine"
+  const mode = ctx.bundleConfig.nsis?.installMode ?? "currentUser"
   const isUser = mode === "currentUser"
   const installRoot = isUser ? "$LOCALAPPDATA\\Programs" : "$PROGRAMFILES64"
   const execLevel = isUser ? "user" : "admin"

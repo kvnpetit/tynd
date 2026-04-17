@@ -126,13 +126,13 @@ api.on("ready", ({ message }) => {
   if (hasFrontend) {
     log.dim(`  ${log.cyan("tynd dev")}   — starts ${frontend.buildTool} dev server + tynd host`)
     log.dim(
-      `  ${log.cyan("tynd start")} — runs from built dist/ + cached backend (no build, no HMR)`,
+      `  ${log.cyan("tynd start")} — classic JS build of frontend + backend, then run (no HMR)`,
     )
-    log.dim(`  ${log.cyan("tynd build")} — runs ${frontend.buildTool} build + bundles backend`)
+    log.dim(`  ${log.cyan("tynd build")} — runs ${frontend.buildTool} build + packages .exe`)
   } else {
     log.dim(`  ${log.cyan("tynd dev")}   — starts tynd host`)
-    log.dim(`  ${log.cyan("tynd start")} — runs from built frontend + cached backend (no build)`)
-    log.dim(`  ${log.cyan("tynd build")} — bundles backend`)
+    log.dim(`  ${log.cyan("tynd start")} — classic JS build, then run (no HMR)`)
+    log.dim(`  ${log.cyan("tynd build")} — bundles + packages .exe`)
   }
 
   log.blank()

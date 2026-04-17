@@ -1,8 +1,12 @@
-import { existsSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
+import { buildFrontendEntry, buildLiteBundle } from "../lib/bundle.ts"
+import { hashSources, readCache, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
-import { findBinary } from "../lib/detect.ts"
+import { detectFrontend, findBinary } from "../lib/detect.ts"
+import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
+import { collectFiles } from "./build.ts"
 import { pipeWithPrefix } from "./dev.ts"
 
 export interface StartOptions {
@@ -13,6 +17,16 @@ export async function start(opts: StartOptions): Promise<void> {
   const cfg = resolvePaths(await loadConfig(opts.cwd), opts.cwd)
   const cacheDir = path.join(opts.cwd, ".tynd", "cache")
 
+  const frontend = await detectFrontend(opts.cwd)
+
+  if (frontend.blockedBy) {
+    log.hint(
+      `${frontend.blockedBy} detected — incompatible with server-side frameworks.`,
+      "Requires a pure SPA (React, Vue, Svelte, Angular, Solid, Lit, Preact…)",
+    )
+    process.exit(1)
+  }
+
   log.blank()
   log.info(`Starting in ${log.cyan("start")} mode (${cfg.runtime})`)
 
@@ -22,30 +36,74 @@ export async function start(opts: StartOptions): Promise<void> {
     process.exit(1)
   }
 
-  if (!existsSync(cfg.frontendDir)) {
-    log.hint(
-      `Frontend output not found: ${cfg.frontendDir}`,
-      "Build it first (e.g. `bun run build:ui`) or run `tynd build`.",
+  // Frontend: production build, cached by source hash.
+  if (frontend.buildTool !== "none" && frontend.buildCommand) {
+    const frontendHash = hashSources(
+      [path.join(opts.cwd, "src"), path.join(opts.cwd, "public")],
+      [
+        path.join(opts.cwd, "index.html"),
+        path.join(opts.cwd, "vite.config.ts"),
+        path.join(opts.cwd, "vite.config.js"),
+        path.join(opts.cwd, "vite.config.mts"),
+        path.join(opts.cwd, "vite.config.mjs"),
+        path.join(opts.cwd, "svelte.config.ts"),
+        path.join(opts.cwd, "svelte.config.js"),
+        path.join(opts.cwd, "angular.json"),
+        path.join(opts.cwd, "tsconfig.json"),
+        path.join(opts.cwd, "tsconfig.app.json"),
+        path.join(opts.cwd, "tsconfig.node.json"),
+        path.join(opts.cwd, "package.json"),
+        path.join(opts.cwd, ".env"),
+        path.join(opts.cwd, ".env.production"),
+        path.join(opts.cwd, ".env.local"),
+      ],
     )
-    process.exit(1)
+    const cached = readCache(cacheDir, "frontend")
+    const outHasFiles = existsSync(cfg.frontendDir) && collectFiles(cfg.frontendDir).length > 0
+    if (cached?.hash === frontendHash && outHasFiles) {
+      log.step(`Frontend ${log.cyan("↑ cache")}`)
+    } else {
+      log.step(`Building frontend (${frontend.buildTool})…`)
+      const parts = frontend.buildCommand.split(/\s+/).filter(Boolean)
+      await exec(parts[0]!, parts.slice(1), { cwd: opts.cwd })
+      writeCache(cacheDir, "frontend", { hash: frontendHash, updatedAt: Date.now() })
+      log.success(`Frontend → ${log.gray(frontend.outDir)}`)
+    }
+  } else if (cfg.frontendEntry) {
+    const entry = path.resolve(opts.cwd, cfg.frontendEntry)
+    const frontendHash = hashSources([path.dirname(entry)], [entry])
+    const cached = readCache(cacheDir, "frontend")
+    const outHasFiles = existsSync(cfg.frontendDir) && collectFiles(cfg.frontendDir).length > 0
+    if (cached?.hash === frontendHash && outHasFiles) {
+      log.step(`Frontend ${log.cyan("↑ cache")}`)
+    } else {
+      log.step(`Building frontend entry ${log.gray(cfg.frontendEntry)}…`)
+      await buildFrontendEntry(entry, cfg.frontendDir)
+      writeCache(cacheDir, "frontend", { hash: frontendHash, updatedAt: Date.now() })
+      log.success(`Frontend → ${log.gray(cfg.frontendDir)}`)
+    }
+  } else {
+    log.step(`Frontend: static → ${log.gray(cfg.frontendDir)}`)
   }
-  log.step(`Frontend: static → ${log.gray(cfg.frontendDir)}`)
 
+  // Backend (lite only): production bundle, cached by source hash.
   let bundlePath: string | null = null
   if (cfg.runtime === "lite") {
-    const prodBundle = path.join(cacheDir, "bundle.js")
-    const devBundle = path.join(cacheDir, "bundle.dev.js")
-    bundlePath = existsSync(prodBundle) ? prodBundle : existsSync(devBundle) ? devBundle : null
-    if (!bundlePath) {
-      log.hint(
-        "No backend bundle found in .tynd/cache/",
-        "Run `tynd build` or `tynd dev` once to produce one.",
-      )
-      process.exit(1)
+    bundlePath = path.join(cacheDir, "bundle.js")
+    const backendHash = hashSources(
+      [path.dirname(cfg.backend)],
+      [path.join(opts.cwd, "tynd.config.ts"), path.join(opts.cwd, "package.json")],
+    )
+    const cached = readCache(cacheDir, "backend")
+    if (cached?.hash === backendHash && existsSync(bundlePath)) {
+      log.step(`Backend  ${log.cyan("↑ cache")}`)
+    } else {
+      mkdirSync(cacheDir, { recursive: true })
+      log.step("Bundling backend (lite)…")
+      await buildLiteBundle(cfg.backend, bundlePath, true)
+      writeCache(cacheDir, "backend", { hash: backendHash, updatedAt: Date.now() })
+      log.success("Backend bundled")
     }
-    log.step(`Backend: ${log.gray(path.relative(opts.cwd, bundlePath))}`)
-  } else {
-    log.step(`Backend: ${log.gray(path.relative(opts.cwd, cfg.backend))}`)
   }
 
   const env: Record<string, string> = Object.fromEntries(

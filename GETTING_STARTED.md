@@ -177,6 +177,7 @@ await notification.send("Build done", { body: "0 errors" })
 
 ```bash
 tynd dev                  # dev mode with HMR
+tynd start                # classic JS build (frontend + backend) then run (no HMR)
 tynd build                # production binary
 tynd build --bundle       # + platform installers (app/dmg, deb/rpm/AppImage, exe/msi)
 tynd validate             # check config + file structure

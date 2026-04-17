@@ -66,7 +66,7 @@ export async function svgToPng(svgPath: string, outPath: string): Promise<string
   try {
     const { Resvg } = await import("@resvg/resvg-js")
     mkdirSync(path.dirname(outPath), { recursive: true })
-    const svg = readFileSync(svgPath, "utf8")
+    const svg = squarifySvg(readFileSync(svgPath, "utf8"))
     const resvg = new Resvg(svg, {
       fitTo: { mode: "width", value: 256 },
       background: "transparent",
@@ -76,6 +76,57 @@ export async function svgToPng(svgPath: string, outPath: string): Promise<string
   } catch {
     return null
   }
+}
+
+/**
+ * Rewrite a non-square SVG to a square viewBox so the rendered PNG is square
+ * (letterboxed with transparency). Windows PE icons and macOS ICNS reject or
+ * distort non-square sources.
+ */
+export function squarifySvg(svg: string): string {
+  const rootMatch = svg.match(/<svg\b[^>]*>/i)
+  if (!rootMatch) return svg
+  const rootTag = rootMatch[0]
+
+  const vbMatch = rootTag.match(/viewBox\s*=\s*"([^"]+)"/i)
+  const wMatch = rootTag.match(/\bwidth\s*=\s*"([^"]+)"/i)
+  const hMatch = rootTag.match(/\bheight\s*=\s*"([^"]+)"/i)
+
+  let vbX = 0
+  let vbY = 0
+  let vbW = 0
+  let vbH = 0
+  if (vbMatch?.[1]) {
+    const p = vbMatch[1]
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number)
+    if (p.length === 4 && p.every(Number.isFinite)) {
+      ;[vbX, vbY, vbW, vbH] = p as [number, number, number, number]
+    }
+  }
+  if (!vbW || !vbH) {
+    vbW = wMatch ? Number.parseFloat(wMatch[1]!) : 0
+    vbH = hMatch ? Number.parseFloat(hMatch[1]!) : 0
+  }
+  if (!vbW || !vbH || Math.abs(vbW - vbH) < 0.5) return svg
+
+  const size = Math.max(vbW, vbH)
+  const newVbX = vbX - (size - vbW) / 2
+  const newVbY = vbY - (size - vbH) / 2
+  const newViewBox = `${newVbX} ${newVbY} ${size} ${size}`
+
+  let newRoot = vbMatch
+    ? rootTag.replace(/viewBox\s*=\s*"[^"]+"/i, `viewBox="${newViewBox}"`)
+    : rootTag.replace(/<svg\b/i, `<svg viewBox="${newViewBox}"`)
+  newRoot = wMatch
+    ? newRoot.replace(/\bwidth\s*=\s*"[^"]+"/i, `width="${size}"`)
+    : newRoot.replace(/<svg\b/i, `<svg width="${size}"`)
+  newRoot = hMatch
+    ? newRoot.replace(/\bheight\s*=\s*"[^"]+"/i, `height="${size}"`)
+    : newRoot.replace(/<svg\b/i, `<svg height="${size}"`)
+
+  return svg.replace(rootTag, newRoot)
 }
 
 /** Wrap raw PNG bytes in a minimal ICO container (Vista+ accepts PNG payloads). */

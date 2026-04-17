@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { squarifySvg } from "../lib/icon.ts"
 
 // ICNS format: "icns" magic + u32 BE total_size, then entries of
 // [type: 4 ASCII][entry_size: u32 BE][PNG bytes]. One entry is enough —
@@ -29,7 +30,7 @@ export function generateIcns(pngBytes: Buffer, outPath: string): void {
 
 export async function renderSvgToPng(svgPath: string, size: number): Promise<Buffer> {
   const { Resvg } = await import("@resvg/resvg-js")
-  const svg = readFileSync(svgPath, "utf8")
+  const svg = squarifySvg(readFileSync(svgPath, "utf8"))
   const resvg = new Resvg(svg, {
     fitTo: { mode: "width", value: size },
     background: "transparent",

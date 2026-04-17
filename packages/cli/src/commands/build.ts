@@ -435,7 +435,7 @@ function packAssets(files: PackEntry[]): Buffer {
   return Buffer.concat(chunks)
 }
 
-function collectFiles(dir: string): Array<{ abs: string; rel: string }> {
+export function collectFiles(dir: string): Array<{ abs: string; rel: string }> {
   const results: Array<{ abs: string; rel: string }> = []
   function walk(cur: string, prefix: string) {
     for (const entry of readdirSync(cur)) {
