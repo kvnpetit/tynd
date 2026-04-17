@@ -1,4 +1,5 @@
 pub mod clipboard;
+pub mod compute;
 pub mod dialog;
 pub mod events;
 pub mod fs;
@@ -12,6 +13,9 @@ pub mod sidecar;
 pub mod store;
 pub mod terminal;
 pub mod window_cmd;
+
+#[cfg(feature = "embedded-js")]
+pub mod workers;
 
 use serde_json::Value;
 
@@ -30,6 +34,13 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "http" => http::dispatch(method, args),
         "sidecar" => sidecar::dispatch(method, args),
         "terminal" => terminal::dispatch(method, args),
+        "compute" => compute::dispatch(method, args),
+        #[cfg(feature = "embedded-js")]
+        "workers" => workers::dispatch(method, args),
+        #[cfg(not(feature = "embedded-js"))]
+        "workers" => {
+            Err("workers API is lite-only; in full runtime use Bun.Worker natively".to_string())
+        },
         _ => Err(format!("Unknown OS API: '{api}'")),
     }
 }
