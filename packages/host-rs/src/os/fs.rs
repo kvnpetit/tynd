@@ -1,5 +1,3 @@
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use serde_json::{json, Value};
 use std::fs;
 use std::time::UNIX_EPOCH;
@@ -8,8 +6,6 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "readText" => read_text(args),
         "writeText" => write_text(args),
-        "readBinary" => read_binary(args),
-        "writeBinary" => write_binary(args),
         "exists" => exists(args),
         "stat" => stat(args),
         "readDir" => read_dir(args),
@@ -17,36 +13,11 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "remove" => remove(args),
         "rename" => rename(args),
         "copy" => copy(args),
+        // readBinary / writeBinary intentionally route through the
+        // `tynd-bin://` custom protocol (see host-rs/src/scheme_bin.rs),
+        // not JSON IPC — they're zero-copy on the wire.
         _ => Err(format!("fs.{method}: unknown method")),
     }
-}
-
-fn read_binary(args: &Value) -> Result<Value, String> {
-    let path = path_arg(args, "path")?;
-    let bytes = fs::read(path).map_err(|e| format!("fs.readBinary({path}): {e}"))?;
-    Ok(Value::String(STANDARD.encode(&bytes)))
-}
-
-fn write_binary(args: &Value) -> Result<Value, String> {
-    let path = path_arg(args, "path")?;
-    let b64 = args
-        .get("content")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "fs.writeBinary: missing base64 'content'".to_string())?;
-    let bytes = STANDARD
-        .decode(b64)
-        .map_err(|e| format!("fs.writeBinary: invalid base64: {e}"))?;
-    if args
-        .get("createDirs")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        if let Some(parent) = std::path::Path::new(path).parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("fs.writeBinary: {e}"))?;
-        }
-    }
-    fs::write(path, bytes).map_err(|e| format!("fs.writeBinary({path}): {e}"))?;
-    Ok(Value::Null)
 }
 
 fn path_arg<'a>(args: &'a Value, name: &str) -> Result<&'a str, String> {
@@ -190,17 +161,6 @@ mod tests {
         write_text(&json!({ "path": &p, "content": "héllo" })).unwrap();
         let v = read_text(&json!({ "path": &p })).unwrap();
         assert_eq!(v.as_str().unwrap(), "héllo");
-        fs::remove_file(&p).unwrap();
-    }
-
-    #[test]
-    fn binary_roundtrip_base64() {
-        let p = tmp_path("bin.bin");
-        let bytes: Vec<u8> = (0..=255u8).collect();
-        write_binary(&json!({ "path": &p, "content": STANDARD.encode(&bytes) })).unwrap();
-        let v = read_binary(&json!({ "path": &p })).unwrap();
-        let back = STANDARD.decode(v.as_str().unwrap()).unwrap();
-        assert_eq!(back, bytes);
         fs::remove_file(&p).unwrap();
     }
 

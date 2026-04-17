@@ -1,15 +1,15 @@
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use rand::RngCore;
-use serde_json::{json, Value};
+use serde_json::Value;
 use sha2::{Digest, Sha256, Sha512};
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
-        "hash" => hash(args),
-        "compress" => compress(args),
-        "decompress" => decompress(args),
         "randomBytes" => random_bytes(args),
+        // hash / compress / decompress route through the `tynd-bin://`
+        // custom protocol (see host-rs/src/scheme_bin.rs) — the raw-bytes
+        // variants live below and avoid base64 for multi-MB payloads.
         _ => Err(format!("compute.{method}: unknown method")),
     }
 }
@@ -29,28 +29,8 @@ fn random_bytes(args: &Value) -> Result<Value, String> {
     Ok(Value::String(STANDARD.encode(&buf)))
 }
 
-fn data_arg(args: &Value) -> Result<Vec<u8>, String> {
-    let b64 = args
-        .get("data")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "compute: missing base64 'data'".to_string())?;
-    STANDARD
-        .decode(b64)
-        .map_err(|e| format!("compute: invalid base64: {e}"))
-}
-
-fn hash(args: &Value) -> Result<Value, String> {
-    let data = data_arg(args)?;
-    let algo = args.get("algo").and_then(Value::as_str).unwrap_or("blake3");
-    let encoding = args
-        .get("encoding")
-        .and_then(Value::as_str)
-        .unwrap_or("hex");
-    Ok(Value::String(hash_raw(&data, algo, encoding)?))
-}
-
-/// Same as `hash` but takes raw bytes — used by the `tynd-bin://` scheme to
-/// skip base64 round-tripping for multi-MB inputs.
+/// Hash raw bytes with `algo` (blake3 / sha256 / sha512) and encode the digest
+/// with `encoding` (hex / base64). Called by the `tynd-bin://` scheme handler.
 pub fn hash_raw(data: &[u8], algo: &str, encoding: &str) -> Result<String, String> {
     let digest: Vec<u8> = match algo {
         "blake3" => blake3::hash(data).as_bytes().to_vec(),
@@ -65,14 +45,6 @@ pub fn hash_raw(data: &[u8], algo: &str, encoding: &str) -> Result<String, Strin
     }
 }
 
-fn compress(args: &Value) -> Result<Value, String> {
-    let data = data_arg(args)?;
-    let algo = args.get("algo").and_then(Value::as_str).unwrap_or("zstd");
-    let level = args.get("level").and_then(Value::as_i64).unwrap_or(3) as i32;
-    let out = compress_raw(&data, algo, level)?;
-    Ok(Value::String(STANDARD.encode(&out)))
-}
-
 pub fn compress_raw(data: &[u8], algo: &str, level: i32) -> Result<Vec<u8>, String> {
     match algo {
         "zstd" => {
@@ -80,13 +52,6 @@ pub fn compress_raw(data: &[u8], algo: &str, level: i32) -> Result<Vec<u8>, Stri
         },
         _ => Err(format!("compute.compress: unsupported algo '{algo}'")),
     }
-}
-
-fn decompress(args: &Value) -> Result<Value, String> {
-    let data = data_arg(args)?;
-    let algo = args.get("algo").and_then(Value::as_str).unwrap_or("zstd");
-    let out = decompress_raw(&data, algo)?;
-    Ok(json!({ "data": STANDARD.encode(&out), "bytes": out.len() }))
 }
 
 pub fn decompress_raw(data: &[u8], algo: &str) -> Result<Vec<u8>, String> {
@@ -109,30 +74,28 @@ fn hex_encode(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn args(data: &[u8], algo: &str) -> Value {
-        json!({ "data": STANDARD.encode(data), "algo": algo })
-    }
+    use serde_json::json;
 
     #[test]
     fn hash_known_sha256_vector() {
-        let out = hash(&args(b"abc", "sha256")).unwrap();
+        let out = hash_raw(b"abc", "sha256", "hex").unwrap();
         assert_eq!(
-            out.as_str().unwrap(),
+            out,
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
     }
 
     #[test]
     fn hash_blake3_deterministic() {
-        let a = hash(&args(b"hello", "blake3")).unwrap();
-        let b = hash(&args(b"hello", "blake3")).unwrap();
-        assert_eq!(a, b);
+        assert_eq!(
+            hash_raw(b"hello", "blake3", "hex").unwrap(),
+            hash_raw(b"hello", "blake3", "hex").unwrap()
+        );
     }
 
     #[test]
     fn hash_rejects_unknown_algo() {
-        assert!(hash(&args(b"x", "md5")).is_err());
+        assert!(hash_raw(b"x", "md5", "hex").is_err());
     }
 
     #[test]
@@ -156,16 +119,9 @@ mod tests {
 
     #[test]
     fn zstd_roundtrip_restores_bytes() {
-        let original = (0..=255u8).collect::<Vec<_>>();
-        let compressed = compress(&args(&original, "zstd")).unwrap();
-        let decompressed = decompress(&json!({
-            "data": compressed.as_str().unwrap(),
-            "algo": "zstd"
-        }))
-        .unwrap();
-        let decoded = STANDARD
-            .decode(decompressed["data"].as_str().unwrap())
-            .unwrap();
-        assert_eq!(decoded, original);
+        let original: Vec<u8> = (0..=255u8).collect();
+        let compressed = compress_raw(&original, "zstd", 3).unwrap();
+        let decompressed = decompress_raw(&compressed, "zstd").unwrap();
+        assert_eq!(decompressed, original);
     }
 }
