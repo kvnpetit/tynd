@@ -121,3 +121,71 @@ fn persist(namespace: &str) -> Result<(), String> {
     fs::write(&path, serialized).map_err(|e| format!("store: write {}: {e}", path.display()))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // Each test owns a unique namespace so they never collide with each
+    // other or with a real user's stores on disk.
+    fn ns(tag: &str) -> String {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        format!("tynd-test-{tag}-{ts}")
+    }
+
+    #[test]
+    fn set_then_get_returns_value() {
+        let n = ns("sg");
+        dispatch(
+            "set",
+            &json!({ "namespace": &n, "key": "theme", "value": "dark" }),
+        )
+        .unwrap();
+        let v = dispatch("get", &json!({ "namespace": &n, "key": "theme" })).unwrap();
+        assert_eq!(v.as_str().unwrap(), "dark");
+        let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn missing_key_returns_null() {
+        let n = ns("miss");
+        let v = dispatch("get", &json!({ "namespace": &n, "key": "nope" })).unwrap();
+        assert!(v.is_null());
+    }
+
+    #[test]
+    fn delete_removes_key() {
+        let n = ns("del");
+        dispatch("set", &json!({ "namespace": &n, "key": "a", "value": 1 })).unwrap();
+        dispatch("delete", &json!({ "namespace": &n, "key": "a" })).unwrap();
+        let v = dispatch("get", &json!({ "namespace": &n, "key": "a" })).unwrap();
+        assert!(v.is_null());
+        let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn keys_lists_every_set_key() {
+        let n = ns("keys");
+        dispatch("set", &json!({ "namespace": &n, "key": "a", "value": 1 })).unwrap();
+        dispatch("set", &json!({ "namespace": &n, "key": "b", "value": 2 })).unwrap();
+        let v = dispatch("keys", &json!({ "namespace": &n })).unwrap();
+        let arr = v.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn persistence_survives_namespace_reload() {
+        let n = ns("persist");
+        dispatch("set", &json!({ "namespace": &n, "key": "k", "value": "v" })).unwrap();
+        // Evict the in-memory copy so the next read has to hit disk.
+        stores().lock().unwrap().remove(&n);
+        let v = dispatch("get", &json!({ "namespace": &n, "key": "k" })).unwrap();
+        assert_eq!(v.as_str().unwrap(), "v");
+        let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
+    }
+}

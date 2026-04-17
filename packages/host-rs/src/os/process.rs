@@ -93,3 +93,46 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
         "stderr": String::from_utf8_lossy(&output.stderr),
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn echo_captures_stdout() {
+        #[cfg(target_os = "windows")]
+        let v = exec(
+            &json!({ "cmd": "cmd", "args": ["/C", "echo hello"] }),
+            false,
+        )
+        .unwrap();
+        #[cfg(not(target_os = "windows"))]
+        let v = exec(&json!({ "cmd": "echo", "args": ["hello"] }), false).unwrap();
+        assert!(v["stdout"].as_str().unwrap().contains("hello"));
+        assert_eq!(v["code"].as_i64().unwrap(), 0);
+    }
+
+    #[test]
+    fn exec_shell_runs_pipe() {
+        #[cfg(target_os = "windows")]
+        let v = exec(&json!({ "cmd": "echo piped" }), true).unwrap();
+        #[cfg(not(target_os = "windows"))]
+        let v = exec(&json!({ "cmd": "echo piped | tr a-z A-Z" }), true).unwrap();
+        let stdout = v["stdout"].as_str().unwrap();
+        assert!(!stdout.is_empty());
+    }
+
+    #[test]
+    fn missing_cmd_errors() {
+        assert!(exec(&json!({}), false).is_err());
+    }
+
+    #[test]
+    fn nonzero_exit_preserved() {
+        #[cfg(target_os = "windows")]
+        let v = exec(&json!({ "cmd": "cmd", "args": ["/C", "exit 7"] }), false).unwrap();
+        #[cfg(not(target_os = "windows"))]
+        let v = exec(&json!({ "cmd": "sh", "args": ["-c", "exit 7"] }), false).unwrap();
+        assert_eq!(v["code"].as_i64().unwrap(), 7);
+    }
+}
