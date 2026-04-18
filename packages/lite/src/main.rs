@@ -6,6 +6,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod args;
 mod embed;
+mod polyfills;
 mod quickjs;
 
 use args::Args;

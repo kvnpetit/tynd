@@ -35,12 +35,40 @@ pub const JS_SHIM: &str = r#"
     ? function(msg) { console.error("[tynd] " + msg); }
     : function() {};
 
-  // Called by Rust: resolve/reject a pending backend call promise
+  // Called by Rust: resolve/reject a pending backend call promise + close its stream.
   window.__tynd_resolve__ = function (id, ok, value) {
     var p = _pending[id];
     if (!p) return;
     delete _pending[id];
-    if (ok) { p.resolve(value); } else { p.reject(new Error(String(value))); }
+    if (ok) {
+      p.finalValue = value;
+      p.done = true;
+      p.resolve(value);
+      // Drain any async iterator waiters with { done: true }
+      while (p.waiters.length) {
+        var w = p.waiters.shift();
+        w.resolve({ value: undefined, done: true });
+      }
+    } else {
+      p.done = true;
+      p.error = new Error(String(value));
+      p.reject(p.error);
+      while (p.waiters.length) {
+        var w2 = p.waiters.shift();
+        w2.reject(p.error);
+      }
+    }
+  };
+
+  // Called by Rust: deliver one chunk from a streaming backend call.
+  window.__tynd_yield__ = function (id, value) {
+    var p = _pending[id];
+    if (!p || p.done) return;
+    if (p.waiters.length) {
+      p.waiters.shift().resolve({ value: value, done: false });
+    } else {
+      p.yields.push(value);
+    }
   };
 
   // Called by Rust: resolve/reject a pending OS API call promise
@@ -74,15 +102,62 @@ pub const JS_SHIM: &str = r#"
   };
 
   window.__tynd__ = {
-    // Call a backend function — returns a Promise
+    // Call a backend function — returns an awaitable+iterable handle.
+    // `await call(...)` -> final return value (regular async handlers, or
+    // the generator's `return` value for async-generators).
+    // `for await (x of call(...))` -> yielded chunks.
     call: function (fn, args) {
-      return new Promise(function (resolve, reject) {
-        var id = String(++_seq);
-        _pending[id] = { resolve: resolve, reject: reject };
-        window.ipc.postMessage(
-          JSON.stringify({ type: "call", id: id, fn: fn, args: args })
-        );
+      var id = String(++_seq);
+      var p;
+      var finalPromise = new Promise(function (res, rej) {
+        p = {
+          resolve: res, reject: rej,
+          yields: [], waiters: [],
+          done: false, error: null, finalValue: undefined, cancelled: false,
+        };
       });
+      _pending[id] = p;
+
+      var iterator = {
+        next: function () {
+          return new Promise(function (resolve, reject) {
+            if (p.yields.length) {
+              resolve({ value: p.yields.shift(), done: false });
+              return;
+            }
+            if (p.done) {
+              if (p.error) reject(p.error);
+              else resolve({ value: undefined, done: true });
+              return;
+            }
+            p.waiters.push({ resolve: resolve, reject: reject });
+          });
+        },
+        "return": function (value) {
+          if (!p.done && !p.cancelled) {
+            p.cancelled = true;
+            try {
+              window.ipc.postMessage(JSON.stringify({ type: "cancel", id: id }));
+            } catch (_) {}
+          }
+          return Promise.resolve({ value: value, done: true });
+        },
+        "throw": function (err) { return Promise.reject(err); },
+      };
+      iterator[Symbol.asyncIterator] = function () { return iterator; };
+
+      var handle = {
+        then: function (onF, onR) { return finalPromise.then(onF, onR); },
+        "catch": function (onR) { return finalPromise["catch"](onR); },
+        "finally": function (onF) { return finalPromise["finally"](onF); },
+        cancel: function () { return iterator["return"](); },
+      };
+      handle[Symbol.asyncIterator] = function () { return iterator; };
+
+      window.ipc.postMessage(
+        JSON.stringify({ type: "call", id: id, fn: fn, args: args })
+      );
+      return handle;
     },
 
     // Subscribe to a native OS event (menu:action, tray:click, …)
@@ -139,6 +214,14 @@ pub fn eval_resolve(id: &str, ok: bool, value: &Value) -> String {
     let val_js = serde_json::to_string(value).unwrap_or_else(|_| "null".into());
     let id_js = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
     format!("window.__tynd_resolve__&&window.__tynd_resolve__({id_js},{ok_js},{val_js})")
+}
+
+/// Build the JS eval string that delivers one chunk from a streaming backend call.
+#[inline]
+pub fn eval_yield(id: &str, value: &Value) -> String {
+    let val_js = serde_json::to_string(value).unwrap_or_else(|_| "null".into());
+    let id_js = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
+    format!("window.__tynd_yield__&&window.__tynd_yield__({id_js},{val_js})")
 }
 
 /// Build the JS eval string that dispatches an event to frontend subscribers.

@@ -37,6 +37,8 @@ enum BunMsg {
         value: Option<Value>,
         error: Option<String>,
     },
+    #[serde(rename = "yield")]
+    Yield { id: String, value: Value },
     #[serde(rename = "event")]
     Event { name: String, payload: Value },
 }
@@ -124,6 +126,16 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
                             },
                         }
                     },
+                    BackendCall::Cancel { id } => {
+                        let msg = serde_json::json!({ "type": "cancel", "id": id });
+                        match serde_json::to_string(&msg) {
+                            Ok(mut s) => {
+                                s.push('\n');
+                                s.into_bytes()
+                            },
+                            Err(_) => continue,
+                        }
+                    },
                 };
                 // Drop the message if Bun is mid-reload (stdin slot is None).
                 if let Some(stdin) = stdin_slot.lock().unwrap().as_mut() {
@@ -209,6 +221,9 @@ fn spawn_bun(
                                 Value::String(error.unwrap_or_else(|| "unknown error".into()))
                             };
                             let _ = event_tx.send(BackendEvent::Return { id, ok, value: v });
+                        },
+                        Ok(BunMsg::Yield { id, value }) => {
+                            let _ = event_tx.send(BackendEvent::Yield { id, value });
                         },
                         Ok(BunMsg::Event { name, payload }) => {
                             let _ = event_tx.send(BackendEvent::Emit { name, payload });

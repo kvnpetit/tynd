@@ -1,7 +1,16 @@
+/**
+ * Handle returned by `window.__tynd__.call`. Awaiting it resolves with the
+ * handler's final return value (or the generator's return value for streams);
+ * iterating it yields each chunk of a streaming (async-iterable) handler.
+ */
+export interface CallHandle<Y = unknown, R = unknown> extends PromiseLike<R>, AsyncIterable<Y> {
+  cancel(): Promise<IteratorResult<Y>>
+}
+
 declare global {
   interface Window {
     __tynd__: {
-      call(fn: string, args: unknown[]): Promise<unknown>
+      call(fn: string, args: unknown[]): CallHandle
       os_call(api: string, method: string, args: unknown): Promise<unknown>
       os_on(name: string, handler: (data: unknown) => void): () => void
       on(name: string, handler: (payload: unknown) => void): () => void
@@ -9,6 +18,7 @@ declare global {
     }
     __tynd_os_result__: (id: string, ok: boolean, value: unknown) => void
     __tynd_os_event__: (name: string, data: unknown) => void
+    __tynd_yield__: (id: string, value: unknown) => void
   }
 }
 
