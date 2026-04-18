@@ -12,12 +12,27 @@ type ModuleEvents<T> = UnionToIntersection<
   { [K in keyof T]: T[K] extends Emitter<infer E> ? E : never }[keyof T]
 >
 
+/**
+ * Awaitable + async-iterable handle for a streaming backend call.
+ * - `await call(...)` -> generator's `return` value (or `undefined`)
+ * - `for await (const x of call(...))` -> each `yield`ed chunk
+ * - `handle.cancel()` -> stops the backend generator via `iterator.return()`
+ */
+export type StreamCall<Y, R> = PromiseLike<Awaited<R>> &
+  AsyncIterable<Y> & {
+    cancel(): Promise<IteratorResult<Y>>
+  }
+
 type ModuleFunctions<T> = {
   [K in keyof T as T[K] extends (...args: infer _A) => infer _R ? K : never]: T[K] extends (
     ...args: infer A
-  ) => infer R
-    ? (...args: A) => Promise<Awaited<R>>
-    : never
+  ) => AsyncGenerator<infer Y, infer R, unknown>
+    ? (...args: A) => StreamCall<Y, R>
+    : T[K] extends (...args: infer A) => AsyncIterable<infer Y>
+      ? (...args: A) => StreamCall<Y, void>
+      : T[K] extends (...args: infer A) => infer R
+        ? (...args: A) => Promise<Awaited<R>>
+        : never
 }
 
 export type BackendClient<T> = ModuleFunctions<T> & {

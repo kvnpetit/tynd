@@ -7,8 +7,11 @@ use crate::window::WindowConfig;
 /// A message coming from the backend runtime to the frontend.
 #[derive(Debug)]
 pub enum BackendEvent {
-    /// Result of a frontend function call (resolve/reject)
+    /// Result of a frontend function call (resolve/reject). For streaming calls,
+    /// marks the end of the stream; `value` is the generator's return value (or Null).
     Return { id: String, ok: bool, value: Value },
+    /// A single chunk from a streaming (async-iterable) backend call.
+    Yield { id: String, value: Value },
     /// Event pushed by the backend to frontend subscribers
     Emit { name: String, payload: Value },
     /// Dev-mode: backend was hot-reloaded — the host should soft-reload the webview
@@ -43,6 +46,9 @@ pub enum BackendCall {
         fn_name: String,
         args: Vec<Value>,
     },
+    /// Cancel an in-flight streaming call. Triggers `iterator.return()` on the
+    /// backend-side async generator and unblocks the frontend iterator.
+    Cancel { id: String },
 }
 
 impl BackendCall {

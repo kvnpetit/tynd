@@ -15,19 +15,11 @@ export type {
 } from "./types.js"
 
 import * as v from "valibot"
+import { getEmitFn, lifecycleFlags, onCloseFns, onReadyFns } from "./lifecycle.ts"
 import { tynd } from "./logger.js"
+import { startFull } from "./runtime/full.ts"
+import { startLite } from "./runtime/lite.ts"
 import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types.js"
-
-// Runtime selector. The CLI's bundler replaces `globalThis.__TYND_RUNTIME__`
-// at build time with a string literal ("lite" or "full") via Bun's `define`
-// option, turning the equality check into a compile-time boolean that Bun's
-// minifier can fully DCE — each bundle ships only one runtime's code path.
-//
-// The `__tynd_lite__` fallback is the unbundled-dev escape hatch (lite host
-// sets it before eval); DCE treats the whole `||` as a constant when the
-// first operand is a compile-time `true`.
-
-let _emitFn: ((name: string, payload: unknown) => void) | null = null
 
 /**
  * Create a typed event emitter. Export the result from your backend module.
@@ -42,19 +34,15 @@ export function createEmitter<T extends EmitterMap>(): Emitter<T> {
     __tynd_emitter__: true,
     __tynd_event_types__: undefined as unknown as T,
     emit<K extends keyof T>(event: K & string, payload: T[K]) {
-      if (!_emitFn) {
+      const fn = getEmitFn()
+      if (!fn) {
         tynd.warn(`emit("${event}") before app.start() — event dropped`)
         return
       }
-      _emitFn(event, payload)
+      fn(event, payload)
     },
   }
 }
-
-const _onReadyFns: Array<() => void> = []
-const _onCloseFns: Array<() => void> = []
-let _readyFired = false
-let _closeFired = false
 
 export const app = {
   /**
@@ -79,255 +67,36 @@ export const app = {
       tynd.error(`app.start() received invalid config:\n${issues}`)
       throw new Error("Invalid app.start() config")
     }
-    const validated = result.output
+    // The CLI's bundler replaces `globalThis.__TYND_RUNTIME__` at build
+    // time with a string literal ("lite" | "full") so the unused branch
+    // below is dead-code eliminated per runtime bundle. The `__tynd_lite__`
+    // fallback is the unbundled-dev escape hatch set by the QuickJS host.
+    const g = globalThis as { __TYND_RUNTIME__?: string; __tynd_lite__?: unknown }
     if (
-      (globalThis as { __TYND_RUNTIME__?: string }).__TYND_RUNTIME__ === "lite" ||
-      ((globalThis as { __TYND_RUNTIME__?: string }).__TYND_RUNTIME__ === undefined &&
-        (globalThis as { __tynd_lite__?: unknown }).__tynd_lite__ !== undefined)
+      g.__TYND_RUNTIME__ === "lite" ||
+      (g.__TYND_RUNTIME__ === undefined && g.__tynd_lite__ !== undefined)
     ) {
-      _startLite(validated)
+      startLite(result.output)
     } else {
-      _startFull(validated)
+      startFull(result.output)
     }
   },
 
   /** Fires when the WebView window is ready (page fully loaded) */
   onReady(fn: () => void): void {
-    if (_readyFired) {
+    if (lifecycleFlags.readyFired) {
       queueMicrotask(fn)
       return
     }
-    _onReadyFns.push(fn)
+    onReadyFns.push(fn)
   },
 
   /** Fires when the window is about to close */
   onClose(fn: () => void): void {
-    if (_closeFired) {
+    if (lifecycleFlags.closeFired) {
       queueMicrotask(fn)
       return
     }
-    _onCloseFns.push(fn)
+    onCloseFns.push(fn)
   },
-}
-
-function _startFull(config: AppConfig): void {
-  // 0. Redirect all console output to stderr so stdout stays clean for IPC JSON
-  _redirectConsoleToStderr()
-
-  // 1. Send window/frontend config to Rust (reads this as its first stdout line)
-  const configMsg = JSON.stringify({
-    type: "tynd:config",
-    window: config.window ?? {},
-    devUrl: config.devUrl ?? process.env["TYND_DEV_URL"],
-    frontendDir: process.env["TYND_FRONTEND_DIR"] ?? config.frontendDir,
-    menu: config.menu ?? [],
-    tray: config.tray ?? null,
-  })
-  process.stdout.write(`${configMsg}\n`)
-
-  // 2. Wire up the emit function (writes events to stdout for Rust to relay)
-  _emitFn = (name, payload) => {
-    process.stdout.write(`${JSON.stringify({ type: "event", name, payload })}\n`)
-  }
-
-  // 3. Start reading IPC calls from Rust (stdin)
-  // Entry path: injected by CLI via TYND_ENTRY env var (preferred),
-  // or falling back to the current module's URL (works when run directly).
-  const entry = process.env["TYND_ENTRY"] ?? import.meta.path
-  _startListener(entry)
-}
-
-function _startLite(config: AppConfig): void {
-  // Write window config — Rust reads globalThis.__tynd_config__ after eval
-  const g = globalThis as Record<string, unknown>
-  g["__tynd_config__"] = JSON.stringify({
-    window: config.window ?? {},
-    menu: config.menu ?? [],
-    tray: config.tray ?? null,
-    // devUrl / frontendDir from app.start() — CLI args take priority in quickjs::start()
-    devUrl: config.devUrl ?? null,
-    frontendDir: config.frontendDir ?? null,
-  })
-
-  // Wire up emit — calls __tynd_emit__(name, payloadJson) injected by Rust
-  const nativeEmit = g["__tynd_emit__"] as ((name: string, payload: string) => void) | undefined
-
-  _emitFn = (name, payload) => {
-    if (nativeEmit) {
-      nativeEmit(name, JSON.stringify(payload))
-    }
-  }
-
-  // Export lifecycle hooks — Rust calls __tynd_on_ready__ / __tynd_on_close__
-  // These will be picked up from __tynd_mod__ if exported, but we also store
-  // them on globalThis so main.rs can call them even without module awareness.
-  g["__tynd_on_ready__"] = () => {
-    for (const fn of _onReadyFns) {
-      try {
-        fn()
-      } catch {
-        /* intentional: best-effort cleanup */
-      }
-    }
-  }
-  g["__tynd_on_close__"] = () => {
-    for (const fn of _onCloseFns) {
-      try {
-        fn()
-      } catch {
-        /* intentional: best-effort cleanup */
-      }
-    }
-  }
-}
-
-let _moduleCache: Record<string, unknown> | null = null
-
-async function _getModule(entryPath: string): Promise<Record<string, unknown>> {
-  if (!_moduleCache) {
-    _moduleCache = (await import(entryPath)) as Record<string, unknown>
-  }
-  return _moduleCache
-}
-
-function _startListener(entryPath: string): void {
-  let buffer = ""
-
-  process.stdin.setEncoding("utf8")
-
-  process.stdin.on("data", (chunk: string) => {
-    buffer += chunk
-    const lines = buffer.split("\n")
-    buffer = lines.pop() ?? ""
-
-    for (const line of lines) {
-      if (!line.trim()) continue
-      _handleLine(line, entryPath).catch((e) => tynd.error(`IPC error: ${e}`))
-    }
-  })
-
-  process.stdin.on("end", () => {
-    _onCloseFns.forEach((fn) => {
-      try {
-        fn()
-      } catch {
-        /* intentional: best-effort cleanup */
-      }
-    })
-    process.exit(0)
-  })
-  process.stdin.on("error", () => process.exit(0))
-}
-
-function _redirectConsoleToStderr() {
-  const methods = [
-    "log",
-    "info",
-    "debug",
-    "warn",
-    "error",
-    "trace",
-    "group",
-    "groupEnd",
-    "groupCollapsed",
-    "table",
-    "time",
-    "timeEnd",
-    "timeLog",
-    "dir",
-    "count",
-    "countReset",
-    "assert",
-  ] as const
-  const con = console as unknown as Record<(typeof methods)[number], (...args: unknown[]) => void>
-
-  function formatArg(a: unknown): string {
-    if (a === null) return "null"
-    if (a === undefined) return "undefined"
-    if (typeof a === "object" || typeof a === "function") {
-      try {
-        return JSON.stringify(a, null, 0)
-      } catch {
-        return String(a)
-      }
-    }
-    return String(a)
-  }
-
-  for (const method of methods) {
-    con[method] = (...args: unknown[]) => {
-      process.stderr.write(`[${method.toUpperCase()}] ${args.map(formatArg).join(" ")}\n`)
-    }
-  }
-}
-
-const CallMsgSchema = v.object({
-  type: v.literal("call"),
-  id: v.string(),
-  fn: v.string(),
-  args: v.array(v.unknown()),
-})
-const LifecycleMsgSchema = v.object({
-  type: v.union([v.literal("tynd:ready"), v.literal("tynd:close")]),
-})
-const IpcMsgSchema = v.union([CallMsgSchema, LifecycleMsgSchema])
-
-async function _handleLine(line: string, entryPath: string): Promise<void> {
-  let raw: unknown
-  try {
-    raw = JSON.parse(line)
-  } catch {
-    tynd.error(`Invalid JSON from Rust: ${line}`)
-    return
-  }
-
-  const parsed = v.safeParse(IpcMsgSchema, raw)
-  if (!parsed.success) {
-    tynd.error(`Invalid IPC message shape: ${line}`)
-    return
-  }
-  const msg = parsed.output
-
-  switch (msg.type) {
-    case "call": {
-      const { id, fn, args } = msg
-      try {
-        const mod = await _getModule(entryPath)
-        const handler = mod[fn]
-        if (typeof handler !== "function") {
-          throw new Error(`"${fn}" is not an exported function`)
-        }
-        const value = await (handler as (...a: unknown[]) => unknown)(...args)
-        process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, value })}\n`)
-      } catch (e) {
-        process.stdout.write(
-          `${JSON.stringify({ type: "return", id, ok: false, error: String(e) })}\n`,
-        )
-      }
-      break
-    }
-
-    case "tynd:ready":
-      _readyFired = true
-      for (const fn of _onReadyFns) {
-        try {
-          fn()
-        } catch {
-          /* intentional: best-effort cleanup */
-        }
-      }
-      break
-
-    case "tynd:close":
-      _closeFired = true
-      for (const fn of _onCloseFns) {
-        try {
-          fn()
-        } catch {
-          /* intentional: best-effort cleanup */
-        }
-      }
-      process.exit(0)
-      break
-  }
 }

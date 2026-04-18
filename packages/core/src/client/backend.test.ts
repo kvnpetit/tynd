@@ -4,14 +4,81 @@ import { createBackend } from "./backend.ts"
 type Calls = Array<{ fn: string; args: unknown[] }>
 type EventHandlers = Map<string, Array<(payload: unknown) => void>>
 
+// Build a CallHandle-shaped object backed by an in-memory chunk list.
+// Simulates async delivery: chunks + final are delivered on a microtask so
+// the handle resolves even if the caller only `await`s without iterating.
+function makeStreamHandle(chunks: readonly unknown[], finalValue: unknown = undefined) {
+  const buffered: unknown[] = []
+  const waiters: Array<(r: IteratorResult<unknown>) => void> = []
+  let done = false
+  let resolveFinal!: (v: unknown) => void
+  const finalPromise = new Promise<unknown>((res) => {
+    resolveFinal = res
+  })
+
+  function deliver(value: unknown) {
+    if (waiters.length) waiters.shift()!({ value, done: false })
+    else buffered.push(value)
+  }
+  function finish(v: unknown) {
+    if (done) return
+    done = true
+    resolveFinal(v)
+    while (waiters.length) waiters.shift()!({ value: undefined, done: true })
+  }
+
+  // Deliver one chunk per microtask so a cancel between pulls can interrupt.
+  let i = 0
+  function step() {
+    if (done) return
+    if (i >= chunks.length) {
+      finish(finalValue)
+      return
+    }
+    deliver(chunks[i++])
+    queueMicrotask(step)
+  }
+  queueMicrotask(step)
+
+  const iterator = {
+    next(): Promise<IteratorResult<unknown>> {
+      if (buffered.length) {
+        return Promise.resolve({ value: buffered.shift(), done: false })
+      }
+      if (done) return Promise.resolve({ value: undefined, done: true })
+      return new Promise((resolve) => {
+        waiters.push(resolve)
+      })
+    },
+    return() {
+      finish(undefined)
+      return Promise.resolve({ value: undefined, done: true as const })
+    },
+  }
+  return {
+    // biome-ignore lint/suspicious/noThenProperty: mirrors CallHandle's intentional PromiseLike shape
+    then: finalPromise.then.bind(finalPromise),
+    catch: finalPromise.catch.bind(finalPromise),
+    finally: finalPromise.finally.bind(finalPromise),
+    cancel: () => iterator.return(),
+    [Symbol.asyncIterator]: () => iterator,
+  }
+}
+
 // Fake the `window.__tynd__` shim so the proxy has something to call into.
-function mountShim(): { calls: Calls; events: EventHandlers } {
+function mountShim(streamChunks?: Record<string, unknown[]>): {
+  calls: Calls
+  events: EventHandlers
+} {
   const calls: Calls = []
   const events: EventHandlers = new Map()
   ;(globalThis as unknown as { window: unknown }).window = {
     __tynd__: {
       call(fn: string, args: unknown[]) {
         calls.push({ fn, args })
+        if (streamChunks && fn in streamChunks) {
+          return makeStreamHandle(streamChunks[fn] ?? [], { fn, args })
+        }
         return Promise.resolve({ fn, args })
       },
       os_call() {
@@ -68,6 +135,39 @@ describe("createBackend proxy", () => {
       handler,
     )
     expect(typeof unsub).toBe("function")
+  })
+
+  test("async-iterable handle yields chunks via `for await`", async () => {
+    mountShim({ ask: ["hel", "lo ", "world"] })
+    const api = createBackend<{
+      ask: (q: string) => AsyncGenerator<string, void, unknown>
+    }>()
+    const out: string[] = []
+    for await (const tok of api.ask("hi")) out.push(tok)
+    expect(out).toEqual(["hel", "lo ", "world"])
+  })
+
+  test("awaiting a streaming handle resolves with the final return value", async () => {
+    mountShim({ ask: ["a", "b"] })
+    const api = createBackend<{
+      ask: (q: string) => AsyncGenerator<string, { fn: string }, unknown>
+    }>()
+    const final = await api.ask("hi")
+    expect(final.fn).toBe("ask")
+  })
+
+  test("handle.cancel() stops iteration", async () => {
+    mountShim({ ask: ["a", "b", "c", "d"] })
+    const api = createBackend<{
+      ask: (q: string) => AsyncGenerator<string, void, unknown>
+    }>()
+    const handle = api.ask("hi")
+    const out: string[] = []
+    for await (const tok of handle) {
+      out.push(tok)
+      if (out.length === 2) await handle.cancel()
+    }
+    expect(out).toEqual(["a", "b"])
   })
 
   test("once auto-unsubscribes after first call", () => {
