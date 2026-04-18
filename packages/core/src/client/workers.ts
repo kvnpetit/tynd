@@ -75,34 +75,3 @@ export const workers = {
     return osCall("workers", "list")
   },
 }
-
-export const parallel = {
-  async map<In, Out>(
-    items: In[],
-    task: string | ((input: In) => Out),
-    opts?: { concurrency?: number },
-  ): Promise<Out[]> {
-    const concurrency = Math.max(1, Math.min(opts?.concurrency ?? 4, items.length))
-    if (items.length === 0) return []
-
-    const pool = await Promise.all(
-      Array.from({ length: concurrency }, () => workers.spawn(task as never)),
-    )
-    const out = new Array<Out>(items.length)
-    let next = 0
-    try {
-      await Promise.all(
-        pool.map(async (w) => {
-          while (true) {
-            const idx = next++
-            if (idx >= items.length) return
-            out[idx] = await w.run<Out, In>(items[idx]!)
-          }
-        }),
-      )
-    } finally {
-      await Promise.all(pool.map((w) => w.terminate().catch(() => undefined)))
-    }
-    return out
-  },
-}

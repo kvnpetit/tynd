@@ -19,12 +19,12 @@
 //! body is the human-readable error. Successful responses carry whichever
 //! content-type the API produces (`application/octet-stream` by default).
 //!
-//! Only `fs.readBinary`, `fs.writeBinary`, `compute.hash`, `compute.compress`
-//! and `compute.decompress` route through here. Small or text-shaped calls
-//! stay on the JSON IPC where they're cheaper and simpler.
+//! Only `fs.readBinary`, `fs.writeBinary`, and `compute.hash` route through
+//! here. Small or text-shaped calls stay on the JSON IPC where they're
+//! cheaper and simpler.
 //!
 //! The work runs on `os::call_pool`, not the UI thread — wry hands us an
-//! async `RequestAsyncResponder` so disk IO or multi-MB compression never
+//! async `RequestAsyncResponder` so disk IO or multi-MB hashing never
 //! blocks paint.
 
 use std::borrow::Cow;
@@ -62,8 +62,6 @@ fn dispatch(req: &Request<Vec<u8>>) -> BinResponse {
         ("fs", "readBinary", "GET") => route_read_binary(&query),
         ("fs", "writeBinary", "POST") => route_write_binary(&query, body),
         ("compute", "hash", "POST") => route_compute_hash(&query, body),
-        ("compute", "compress", "POST") => route_compute_compress(&query, body),
-        ("compute", "decompress", "POST") => route_compute_decompress(&query, body),
         _ => err_response(
             StatusCode::NOT_FOUND,
             format!("unknown binary route: {method} /{path}"),
@@ -118,26 +116,6 @@ fn route_compute_hash(query: &HashMap<String, String>, body: &[u8]) -> BinRespon
             rsp = cache_headers(rsp);
             rsp.body(Cow::Owned(s.into_bytes())).unwrap()
         },
-        Err(e) => err_response(StatusCode::BAD_REQUEST, e),
-    }
-}
-
-fn route_compute_compress(query: &HashMap<String, String>, body: &[u8]) -> BinResponse {
-    let algo = query.get("algo").map_or("zstd", String::as_str);
-    let level = query
-        .get("level")
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(3);
-    match compute::compress_raw(body, algo, level) {
-        Ok(bytes) => ok_bytes(bytes),
-        Err(e) => err_response(StatusCode::BAD_REQUEST, e),
-    }
-}
-
-fn route_compute_decompress(query: &HashMap<String, String>, body: &[u8]) -> BinResponse {
-    let algo = query.get("algo").map_or("zstd", String::as_str);
-    match compute::decompress_raw(body, algo) {
-        Ok(bytes) => ok_bytes(bytes),
         Err(e) => err_response(StatusCode::BAD_REQUEST, e),
     }
 }
@@ -266,22 +244,6 @@ mod tests {
         let r = post(&url, body.clone());
         assert_eq!(r.status(), StatusCode::NO_CONTENT);
         assert_eq!(std::fs::read(&path).unwrap(), body);
-    }
-
-    #[test]
-    fn compute_compress_roundtrip_via_scheme() {
-        let payload: Vec<u8> = (0..=255u8).collect();
-        let c = post(
-            "tynd-bin://localhost/compute/compress?algo=zstd",
-            payload.clone(),
-        );
-        assert_eq!(c.status(), StatusCode::OK);
-        let d = post(
-            "tynd-bin://localhost/compute/decompress?algo=zstd",
-            c.body().to_vec(),
-        );
-        assert_eq!(d.status(), StatusCode::OK);
-        assert_eq!(d.body().as_ref(), payload.as_slice());
     }
 
     #[test]
