@@ -18,7 +18,11 @@ use super::events;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-enum Cmd {
+/// Commands posted to a running WebSocket session. Exposed (pub) so the
+/// lite runtime's `WebSocket` polyfill can reuse the same session runner
+/// via `run_session_with`.
+#[derive(Debug)]
+pub enum Cmd {
     SendText(String),
     SendBinary(Vec<u8>),
     Ping(Vec<u8>),
@@ -58,22 +62,38 @@ fn connect(args: &Value) -> Result<Value, String> {
 }
 
 fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
+    run_session_with(url, rx, |name, mut data| {
+        // Merge the session id into the shared payload shape.
+        if let Some(obj) = data.as_object_mut() {
+            obj.insert("id".into(), Value::Number(id.into()));
+        }
+        events::emit(name, &data);
+    });
+    sessions().remove(&id);
+}
+
+/// Drive a WebSocket session until close. The caller supplies a sink that
+/// receives normalised events: "websocket:open" | ":message" | ":close" |
+/// ":error" with `serde_json` payloads. Used by both the frontend-dispatch
+/// OS API (`run_session` above) and the lite runtime `WebSocket` polyfill.
+pub fn run_session_with<F>(url: &str, rx: &mpsc::Receiver<Cmd>, mut sink: F)
+where
+    F: FnMut(&'static str, Value),
+{
     let (mut ws, _resp) = match tungstenite::connect(url) {
         Ok(p) => p,
         Err(e) => {
-            events::emit(
+            sink(
                 "websocket:error",
-                &json!({ "id": id, "message": format!("connect: {e}") }),
+                json!({ "message": format!("connect: {e}") }),
             );
-            events::emit("websocket:close", &json!({ "id": id, "code": 1006 }));
-            sessions().remove(&id);
+            sink("websocket:close", json!({ "code": 1006 }));
             return;
         },
     };
 
-    // Blocking read with a short timeout: the kernel parks the thread until
-    // data arrives or the timeout fires — no busy-wait, no sleep loop.
-    // 25 ms caps outbound send latency while keeping wake-ups to ~40/s.
+    // Blocking read with a short timeout parks the thread between frames
+    // while keeping outbound send latency bounded (~25 ms).
     let read_timeout = Some(Duration::from_millis(25));
     match ws.get_ref() {
         tungstenite::stream::MaybeTlsStream::Plain(s) => {
@@ -85,7 +105,7 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
         _ => {},
     }
 
-    events::emit("websocket:open", &json!({ "id": id }));
+    sink("websocket:open", json!({}));
 
     loop {
         while let Ok(cmd) = rx.try_recv() {
@@ -107,50 +127,42 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
                 },
             };
             if let Err(e) = res {
-                events::emit(
-                    "websocket:error",
-                    &json!({ "id": id, "message": e.to_string() }),
-                );
+                sink("websocket:error", json!({ "message": e.to_string() }));
                 break;
             }
         }
 
         match ws.read() {
             Ok(Message::Text(s)) => {
-                events::emit(
+                sink(
                     "websocket:message",
-                    &json!({ "id": id, "kind": "text", "data": s.as_str() }),
+                    json!({ "kind": "text", "data": s.as_str() }),
                 );
             },
             Ok(Message::Binary(b)) => {
-                events::emit(
+                sink(
                     "websocket:message",
-                    &json!({ "id": id, "kind": "binary", "data": STANDARD.encode(&b) }),
+                    json!({ "kind": "binary", "data": STANDARD.encode(&b) }),
                 );
             },
             Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_)) => {},
             Ok(Message::Close(frame)) => {
                 let code = frame.as_ref().map_or(1000, |f| u16::from(f.code));
-                events::emit("websocket:close", &json!({ "id": id, "code": code }));
+                sink("websocket:close", json!({ "code": code }));
                 break;
             },
             Err(tungstenite::Error::Io(e))
                 if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {},
             Err(tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed) => {
-                events::emit("websocket:close", &json!({ "id": id, "code": 1000 }));
+                sink("websocket:close", json!({ "code": 1000 }));
                 break;
             },
             Err(e) => {
-                events::emit(
-                    "websocket:error",
-                    &json!({ "id": id, "message": e.to_string() }),
-                );
+                sink("websocket:error", json!({ "message": e.to_string() }));
                 break;
             },
         }
     }
-
-    sessions().remove(&id);
 }
 
 fn session_tx(args: &Value) -> Result<mpsc::Sender<Cmd>, String> {
