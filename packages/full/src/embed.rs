@@ -1,101 +1,28 @@
-//! Embedded-assets support for `tynd build` (full runtime).
+//! Embedded-assets loader for the full runtime.
 //!
-//! `tynd build` appends a packed section to the tynd-full binary:
-//!
-//! ```text
-//! [tynd-full binary]
-//! ┌─ packed section ──────────────────────────────────────────────────┐
-//! │  file_count : u32 LE                                              │
-//! │  for each file:                                                   │
-//! │    path_len : u16 LE                                              │
-//! │    path     : UTF-8 bytes                                         │
-//! │    data_len : u32 LE                                              │
-//! │    data     : raw bytes                                           │
-//! └───────────────────────────────────────────────────────────────────┘
-//! section_size : u64 LE   (byte count of the packed section above)
-//! magic        : "TYNDPKG\0" (8 bytes)
-//! ```
-//!
-//! Entry names (ORDER MATTERS — bun.version MUST be first):
-//!   - "bun.version"        — UTF-8 version string, used as cache key
-//!   - "bun.zst"            — zstd-compressed Bun binary
-//!   - "bundle.js"          — backend JS bundle (plain, not compressed)
-//!   - "frontend/<path>.zst" — zstd-compressed frontend assets
-//!   - "icon.ico"           — optional application icon
-//!
-//! At startup, `try_load_embedded()` checks for the magic trailer.
-//! If found it extracts assets, caching the Bun binary persistently and
-//! writing other files to a temp directory.
+//! Full pack entries (order matters — `bun.version` must precede `bun.zst`):
+//! `bun.version`, `bun.zst`, `bundle.js`, `frontend/<path>`, `icon.{png,ico}`,
+//! `sidecar/<name>`. See `tynd_host::embed` for the wire format.
 
-use std::fs;
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::fs::{self, File};
+use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 
-const MAGIC: &[u8; 8] = b"TYNDPKG\0";
-/// section_size(u64) + magic(8) = 16 bytes
-const TRAILER_LEN: u64 = 16;
+use tynd_host::embed::{exe_stem, finalize_sidecars, prepare_extract_dir, PackReader};
 
 pub(crate) struct EmbeddedAssets {
     /// Path to the cached (or fallback system) Bun binary.
     pub bun_path: String,
-    /// Path to the extracted bundle.js in the temp directory.
     pub bundle_path: String,
-    /// Path to the temp frontend directory.
     pub frontend_dir: String,
-    /// Optional extracted icon file.
     pub icon_path: Option<String>,
 }
 
-/// Try to read embedded assets from the end of the running executable.
-/// Returns `None` if no assets are appended (normal dev-mode invocation).
 pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let exe = std::env::current_exe().ok()?;
-    let mut f = fs::File::open(&exe).ok()?;
-    let size = f.metadata().ok()?.len();
-
-    if size < TRAILER_LEN {
-        return None;
-    }
-
-    f.seek(SeekFrom::End(-8)).ok()?;
-    let mut magic = [0u8; 8];
-    f.read_exact(&mut magic).ok()?;
-    if &magic != MAGIC {
-        return None;
-    }
-
-    f.seek(SeekFrom::End(-16)).ok()?;
-    let mut sz = [0u8; 8];
-    f.read_exact(&mut sz).ok()?;
-    let section_size = u64::from_le_bytes(sz);
-
-    if size < TRAILER_LEN + section_size {
-        return None;
-    }
-
-    let section_start = size - TRAILER_LEN - section_size;
-    f.seek(SeekFrom::Start(section_start)).ok()?;
-
-    let mut cb = [0u8; 4];
-    f.read_exact(&mut cb).ok()?;
-    let file_count = u32::from_le_bytes(cb) as usize;
-
-    // cleanup::run() removes the temp dir across every exit path, including
-    // process::exit which bypasses Drop — mem::forget prevents double-free.
-    let td = tempfile::TempDir::with_prefix("tynd-").ok()?;
-    let temp_dir = td.path().to_owned();
-    #[allow(clippy::mem_forget)]
-    std::mem::forget(td);
-    tynd_host::cleanup::register_dir(temp_dir.clone());
-
-    let bundle_dir = temp_dir.join("backend");
-    let frontend_dir = temp_dir.join("frontend");
-    fs::create_dir_all(&bundle_dir).ok()?;
-    fs::create_dir_all(&frontend_dir).ok()?;
-
-    let app_name = exe
-        .file_stem()
-        .map_or_else(|| "app".to_string(), |s| s.to_string_lossy().into_owned());
+    let mut pack = PackReader::open()?;
+    let paths = prepare_extract_dir()?;
+    let app_name = exe_stem(&exe);
 
     let mut bun_path_opt: Option<PathBuf> = None;
     let mut bundle_path_opt: Option<String> = None;
@@ -103,148 +30,73 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let mut icon_path_opt: Option<String> = None;
     let mut sidecars_pending: Vec<(String, PathBuf)> = Vec::new();
 
-    for _ in 0..file_count {
-        let mut pl = [0u8; 2];
-        f.read_exact(&mut pl).ok()?;
-        let path_len = u16::from_le_bytes(pl) as usize;
-        let mut path_buf = vec![0u8; path_len];
-        f.read_exact(&mut path_buf).ok()?;
-        let rel = String::from_utf8(path_buf).ok()?;
-
-        let mut dl = [0u8; 4];
-        f.read_exact(&mut dl).ok()?;
-        let data_len = u32::from_le_bytes(dl) as u64;
-
+    while let Some((rel, data_len)) = pack.next_header() {
         match rel.as_str() {
             "bun.version" => {
-                // Cap to 256 bytes so a corrupted binary can't trigger a giant alloc.
                 if data_len > 256 {
-                    tynd_host::tynd_log!("Embedded bun.version entry is suspiciously large ({data_len} bytes) — skipping");
-                    let mut skip = (&mut f).take(data_len);
-                    std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
+                    tynd_host::tynd_log!(
+                        "Embedded bun.version entry is suspiciously large ({data_len} bytes) — skipping"
+                    );
+                    pack.skip(data_len).ok()?;
                     continue;
                 }
                 let mut ver_bytes = vec![0u8; data_len as usize];
-                f.read_exact(&mut ver_bytes).ok()?;
-                let version = String::from_utf8(ver_bytes).unwrap_or_default();
-                let version = version.trim().to_string();
-                let cache_path = bun_cache_path(&app_name, &version);
-                bun_path_opt = Some(cache_path);
+                pack.reader().read_exact(&mut ver_bytes).ok()?;
+                let version = String::from_utf8(ver_bytes)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+                bun_path_opt = Some(bun_cache_path(&app_name, &version));
             },
 
             "bun.zst" => {
-                let cache_path = if let Some(p) = &bun_path_opt {
-                    p.clone()
-                } else {
-                    // bun.version was missing — fallback: skip and use system bun
-                    let mut skip = (&mut f).take(data_len);
-                    std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
+                let Some(cache_path) = bun_path_opt.clone() else {
+                    pack.skip(data_len).ok()?;
                     continue;
                 };
-
-                if cache_path.exists() {
-                    // Skip past the compressed bytes without allocating.
-                    let mut skip = (&mut f).take(data_len);
-                    std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
-                } else {
-                    eprintln!("First launch — extracting runtime…");
-
-                    if let Some(parent) = cache_path.parent() {
-                        if let Err(e) = fs::create_dir_all(parent) {
-                            tynd_host::tynd_log!("Failed to create cache dir: {e}");
-                            let mut skip = (&mut f).take(data_len);
-                            std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
-                            continue;
-                        }
-                    }
-
-                    let compressed_reader = (&mut f).take(data_len);
-                    let mut decoder = zstd::Decoder::new(compressed_reader).ok().or_else(|| {
-                        tynd_host::tynd_log!("Failed to init zstd decoder");
-                        None
-                    })?;
-                    match fs::File::create(&cache_path) {
-                        Ok(out_file) => {
-                            let mut writer = BufWriter::new(out_file);
-                            if let Err(e) = std::io::copy(&mut decoder, &mut writer) {
-                                tynd_host::tynd_log!("Failed to decompress runtime: {e}");
-                                let _ = fs::remove_file(&cache_path);
-                                std::io::copy(&mut decoder, &mut std::io::sink()).ok();
-                            } else {
-                                let _ = writer.flush();
-                                #[cfg(unix)]
-                                {
-                                    use std::os::unix::fs::PermissionsExt;
-                                    let _ = fs::set_permissions(
-                                        &cache_path,
-                                        fs::Permissions::from_mode(0o755),
-                                    );
-                                }
-                                eprintln!("Runtime ready.");
-                            }
-                        },
-                        Err(e) => {
-                            tynd_host::tynd_log!("Failed to create cache file: {e}");
-                            std::io::copy(&mut decoder, &mut std::io::sink()).ok();
-                        },
-                    }
-                }
+                extract_bun(&mut pack, data_len, &cache_path);
             },
 
             "bundle.js" => {
-                let dest = bundle_dir.join("bundle.js");
+                let dest = paths.bundle_dir.join("bundle.js");
                 bundle_path_opt = Some(dest.to_string_lossy().into_owned());
-                let out = fs::File::create(&dest).ok()?;
-                let mut w = BufWriter::new(out);
-                std::io::copy(&mut (&mut f).take(data_len), &mut w).ok()?;
-                w.flush().ok()?;
+                write_entry(&mut pack, data_len, &dest)?;
+            },
+
+            "icon.ico" | "icon.png" => {
+                let dest = paths.temp_dir.join(&rel);
+                icon_path_opt = Some(dest.to_string_lossy().into_owned());
+                write_entry(&mut pack, data_len, &dest)?;
             },
 
             _ if rel.starts_with("frontend/") => {
                 let rest = &rel["frontend/".len()..];
-                let dest = frontend_dir.join(rest);
+                let dest = paths.frontend_dir.join(rest);
                 if let Some(parent) = dest.parent() {
                     let _ = fs::create_dir_all(parent);
                 }
                 if frontend_dir_opt.is_none() {
-                    frontend_dir_opt = Some(frontend_dir.to_string_lossy().into_owned());
+                    frontend_dir_opt = Some(paths.frontend_dir.to_string_lossy().into_owned());
                 }
-                let out = fs::File::create(&dest).ok()?;
-                let mut w = BufWriter::new(out);
-                std::io::copy(&mut (&mut f).take(data_len), &mut w).ok()?;
-                w.flush().ok()?;
-            },
-
-            "icon.ico" | "icon.png" => {
-                let dest = temp_dir.join(&rel);
-                icon_path_opt = Some(dest.to_string_lossy().into_owned());
-                let out = fs::File::create(&dest).ok()?;
-                let mut w = BufWriter::new(out);
-                std::io::copy(&mut (&mut f).take(data_len), &mut w).ok()?;
-                w.flush().ok()?;
+                write_entry(&mut pack, data_len, &dest)?;
             },
 
             _ if rel.starts_with("sidecar/") => {
                 let rest = &rel["sidecar/".len()..];
-                let dest = temp_dir.join("sidecar").join(rest);
+                let dest = paths.temp_dir.join("sidecar").join(rest);
                 if let Some(parent) = dest.parent() {
                     let _ = fs::create_dir_all(parent);
                 }
-                let out = fs::File::create(&dest).ok()?;
-                let mut w = BufWriter::new(out);
-                std::io::copy(&mut (&mut f).take(data_len), &mut w).ok()?;
-                w.flush().ok()?;
+                write_entry(&mut pack, data_len, &dest)?;
                 sidecars_pending.push((rest.to_string(), dest));
             },
 
             _ => {
-                let mut skip = (&mut f).take(data_len);
-                std::io::copy(&mut skip, &mut std::io::sink()).ok()?;
+                pack.skip(data_len).ok()?;
             },
         }
     }
 
-    // Resolve Bun path — use cache path if the file now exists, else fall back
     let bun_path = match bun_path_opt {
         Some(ref p) if p.exists() => p.to_string_lossy().into_owned(),
         _ => {
@@ -265,14 +117,7 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
         std::process::exit(1);
     });
 
-    for (name, path) in &sidecars_pending {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o755));
-        }
-        tynd_host::os::sidecar::register(name, &path.to_string_lossy());
-    }
+    finalize_sidecars(&sidecars_pending);
 
     Some(EmbeddedAssets {
         bun_path,
@@ -280,6 +125,58 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
         frontend_dir,
         icon_path: icon_path_opt,
     })
+}
+
+fn write_entry(pack: &mut PackReader, data_len: u64, dest: &std::path::Path) -> Option<()> {
+    let out = File::create(dest).ok()?;
+    let mut writer = BufWriter::new(out);
+    std::io::copy(&mut pack.reader().take(data_len), &mut writer).ok()?;
+    writer.flush().ok()?;
+    Some(())
+}
+
+fn extract_bun(pack: &mut PackReader, data_len: u64, cache_path: &std::path::Path) {
+    if cache_path.exists() {
+        let _ = pack.skip(data_len);
+        return;
+    }
+
+    eprintln!("First launch — extracting runtime…");
+
+    if let Some(parent) = cache_path.parent() {
+        if let Err(e) = fs::create_dir_all(parent) {
+            tynd_host::tynd_log!("Failed to create cache dir: {e}");
+            let _ = pack.skip(data_len);
+            return;
+        }
+    }
+
+    let Ok(mut decoder) = zstd::Decoder::new(pack.reader().take(data_len)) else {
+        tynd_host::tynd_log!("Failed to init zstd decoder");
+        return;
+    };
+    match File::create(cache_path) {
+        Ok(out_file) => {
+            let mut writer = BufWriter::new(out_file);
+            if let Err(e) = std::io::copy(&mut decoder, &mut writer) {
+                tynd_host::tynd_log!("Failed to decompress runtime: {e}");
+                let _ = fs::remove_file(cache_path);
+                std::io::copy(&mut decoder, &mut std::io::sink()).ok();
+            } else {
+                let _ = writer.flush();
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = fs::set_permissions(cache_path, fs::Permissions::from_mode(0o755));
+                }
+                eprintln!("Runtime ready.");
+            }
+        },
+        Err(e) => {
+            tynd_host::tynd_log!("Failed to create cache file: {e}");
+            std::io::copy(&mut decoder, &mut std::io::sink()).ok();
+        },
+    }
 }
 
 /// Returns the persistent cache path for the Bun binary.
