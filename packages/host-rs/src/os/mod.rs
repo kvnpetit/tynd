@@ -1,7 +1,6 @@
 pub mod call_pool;
 pub mod clipboard;
 pub mod compute;
-pub mod crash;
 pub mod dialog;
 pub mod events;
 pub mod fs;
@@ -41,7 +40,6 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "terminal" => terminal::dispatch(method, args),
         "compute" => compute::dispatch(method, args),
         "singleInstance" => single_instance::dispatch(method, args),
-        "crashReporter" => crash::dispatch(method, args),
         "websocket" => websocket::dispatch(method, args),
         "sql" => sql::dispatch(method, args),
         #[cfg(feature = "embedded-js")]
