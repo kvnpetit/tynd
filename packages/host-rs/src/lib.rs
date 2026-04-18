@@ -1,5 +1,6 @@
 pub mod app;
 pub mod cleanup;
+pub mod embed;
 pub mod ipc;
 pub mod log;
 pub(crate) mod menu;

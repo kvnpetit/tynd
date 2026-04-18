@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, watch } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { buildFrontendEntry, buildLiteBundle } from "../lib/bundle.ts"
 import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/cache.ts"
@@ -6,6 +6,7 @@ import { loadConfig, resolvePaths } from "../lib/config.ts"
 import { detectFrontend, findBinary } from "../lib/detect.ts"
 import { getLogLevel, log } from "../lib/logger.ts"
 import { pipeWithPrefix, waitForServer } from "../lib/spawn-helpers.ts"
+import { installWatchers } from "./dev-reload.ts"
 
 export interface DevOptions {
   cwd: string
@@ -97,7 +98,6 @@ export async function dev(opts: DevOptions): Promise<void> {
     ),
   )
   if (devUrl) env["TYND_DEV_URL"] = devUrl
-  // Full mode: backend reads these env vars — no need to hardcode in app.start()
   if (cfg.runtime === "full") {
     env["TYND_ENTRY"] = cfg.backend
     env["TYND_FRONTEND_DIR"] = cfg.frontendDir
@@ -109,17 +109,10 @@ export async function dev(opts: DevOptions): Promise<void> {
   const makeArgs = (): string[] => {
     const args: string[] =
       cfg.runtime === "lite" ? ["--bundle", bundlePath] : ["--backend-entry", cfg.backend]
-
-    // Lite mode: QuickJS can't read env vars, so pass frontend location as CLI args.
-    // Full mode: Bun subprocess reads TYND_DEV_URL / TYND_FRONTEND_DIR from env.
     if (cfg.runtime === "lite") {
-      if (devUrl) {
-        args.push("--dev-url", devUrl)
-      } else {
-        args.push("--frontend-dir", cfg.frontendDir)
-      }
+      if (devUrl) args.push("--dev-url", devUrl)
+      else args.push("--frontend-dir", cfg.frontendDir)
     }
-
     args.push("--debug", ...(cfg.binaryArgs ?? []))
     return args
   }
@@ -142,101 +135,31 @@ export async function dev(opts: DevOptions): Promise<void> {
   log.debug(`spawning host: ${binPath} ${makeArgs().join(" ")}`)
   let hostProc = spawnHost()
 
-  // Backend change -> hot reload via stdin admin command. Host keeps the WebView
-  // alive and respawns only the backend runtime (Bun subprocess in full mode,
-  // QuickJS thread in lite mode). Config changes still do a full host restart
-  // so window settings re-apply.
-  const canHotReload = true
-
-  const WATCH_EXTS = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json)$/
-
-  let reloadTimer: ReturnType<typeof setTimeout> | null = null
-  let reloading = false
-  let reloadPending = false
-
-  const triggerReload = (reason: "backend" | "config") => {
-    if (reloading) {
-      reloadPending = true
-      return
-    }
-    if (reloadTimer) clearTimeout(reloadTimer)
-    reloadTimer = setTimeout(async () => {
-      if (reloading) {
-        reloadPending = true
-        return
+  const watchers = installWatchers({
+    runtime: cfg.runtime,
+    cwd: opts.cwd,
+    backendSrcDir,
+    fullRestart: async () => {
+      hostProc.kill()
+      await hostProc.exited.catch(() => undefined)
+      if (cfg.runtime === "lite") {
+        await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: false })
       }
-      reloading = true
-      const t0 = Date.now()
-
-      const fullRestart = reason === "config" || !canHotReload
-
-      if (fullRestart) {
-        log.info(
-          reason === "config" ? `Config changed — restarting…` : `Backend changed — reloading…`,
-        )
-        hostProc.kill()
-        await hostProc.exited.catch(() => undefined)
-
-        if (cfg.runtime === "lite") {
-          try {
-            await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: false })
-          } catch (err) {
-            log.error(`Bundle failed: ${err instanceof Error ? err.message : String(err)}`)
-            reloading = false
-            if (reloadPending) {
-              reloadPending = false
-              triggerReload("backend")
-            }
-            return
-          }
-        }
-        hostProc = spawnHost()
-        log.success(`${reason === "config" ? "Restarted" : "Reloaded"} in ${Date.now() - t0}ms`)
-      } else {
-        // Hot reload: host + webview stay alive, only the backend runtime restarts.
-        log.info("Backend changed — hot reloading…")
-        // Lite mode: rebuild the bundle first so the host re-reads fresh code.
-        if (cfg.runtime === "lite") {
-          try {
-            await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: true })
-          } catch (err) {
-            log.error(`Bundle failed: ${err instanceof Error ? err.message : String(err)}`)
-            reloading = false
-            if (reloadPending) {
-              reloadPending = false
-              triggerReload("backend")
-            }
-            return
-          }
-        }
-        const stdin = hostProc.stdin
-        if (stdin && typeof stdin === "object" && "write" in stdin) {
-          ;(stdin as { write: (s: string) => void }).write("reload\n")
-        }
-        log.success(`Hot reloaded in ${Date.now() - t0}ms  ${log.dim("(window preserved)")}`)
+      hostProc = spawnHost()
+    },
+    rebuildBundle: async () => {
+      if (cfg.runtime !== "lite") return
+      await buildBackendDev({ cfg, opts, cacheDir, bundlePath, backendSrcDir, silent: true })
+    },
+    hotReload: async () => {
+      const stdin = hostProc.stdin
+      if (stdin && typeof stdin === "object" && "write" in stdin) {
+        ;(stdin as { write: (s: string) => void }).write("reload\n")
+        return true
       }
-
-      reloading = false
-      if (reloadPending) {
-        reloadPending = false
-        triggerReload("backend")
-      }
-    }, 300)
-  }
-
-  const configPath = path.join(opts.cwd, "tynd.config.ts")
-  const pkgPath = path.join(opts.cwd, "package.json")
-
-  const backendWatcher = watch(backendSrcDir, { recursive: true }, (_, filename) => {
-    if (!filename || !WATCH_EXTS.test(filename)) return
-    log.debug(`backend file changed: ${filename}`)
-    triggerReload("backend")
+      return false
+    },
   })
-  const configWatcher = existsSync(configPath)
-    ? watch(configPath, () => triggerReload("config"))
-    : null
-  // package.json changes affect deps / version / scripts — full restart.
-  const pkgWatcher = existsSync(pkgPath) ? watch(pkgPath, () => triggerReload("config")) : null
 
   const watchTargets = [
     log.gray(`${path.relative(opts.cwd, backendSrcDir)}/`),
@@ -248,10 +171,7 @@ export async function dev(opts: DevOptions): Promise<void> {
   log.blank()
 
   const shutdown = () => {
-    backendWatcher.close()
-    configWatcher?.close()
-    pkgWatcher?.close()
-    if (reloadTimer) clearTimeout(reloadTimer)
+    watchers.close()
     hostProc.kill()
     devServerProc?.kill()
     Promise.allSettled([
@@ -263,11 +183,8 @@ export async function dev(opts: DevOptions): Promise<void> {
   process.on("SIGINT", shutdown)
   process.on("SIGTERM", shutdown)
 
-  // Keep process alive until the host exits (e.g. user closes the window)
   const code = await hostProc.exited
-  backendWatcher.close()
-  configWatcher?.close()
-  pkgWatcher?.close()
+  watchers.close()
   devServerProc?.kill()
 
   if (code !== 0 && code !== null) {
