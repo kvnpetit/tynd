@@ -49,9 +49,4 @@ export const tyndWindow = {
   isVisible(): Promise<boolean> {
     return osCall("window", "isVisible")
   },
-  onMenu(id: string, handler: () => void): () => void {
-    return window.__tynd__.os_on("menu:action", (data: unknown) => {
-      if (((data as Record<string, unknown>)?.["id"] as string) === id) handler()
-    })
-  },
 }

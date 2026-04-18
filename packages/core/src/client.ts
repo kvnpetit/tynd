@@ -2,8 +2,7 @@
 
 export { type BackendClient, createBackend } from "./client/backend.js"
 export { clipboard } from "./client/clipboard.js"
-export { type CompressAlgo, compute, type HashAlgo } from "./client/compute.js"
-export { type CrashReporterEnableResult, crashReporter } from "./client/crash-reporter.js"
+export { compute, type HashAlgo } from "./client/compute.js"
 export {
   type ConfirmOptions,
   dialog,
@@ -18,6 +17,7 @@ export {
   type HttpResponse,
   http,
 } from "./client/http.js"
+export { menu } from "./client/menu.js"
 export { type NotificationOptions, notification } from "./client/notification.js"
 export { type OsInfo, os } from "./client/os.js"
 export { path } from "./client/path.js"
@@ -38,11 +38,37 @@ export {
   terminal,
 } from "./client/terminal.js"
 export { tray } from "./client/tray.js"
+// Web-platform globals re-exported so `import * as tynd from "@tynd/core/client"`
+// gives you `tynd.fetch`, `tynd.WebSocket`, `tynd.crypto`, etc. without
+// touching the globals.
+export {
+  AbortController,
+  AbortSignal,
+  atob,
+  Blob,
+  btoa,
+  crypto,
+  EventSource,
+  File,
+  FormData,
+  fetch,
+  Headers,
+  performance,
+  ReadableStream,
+  Request,
+  Response,
+  structuredClone,
+  TextDecoder,
+  TextEncoder,
+  URL,
+  URLSearchParams,
+  WebSocket,
+} from "./client/web.js"
 export {
   type WebSocketHandle,
   type WebSocketMessage,
   websocket,
 } from "./client/websocket.js"
 export { tyndWindow } from "./client/window.js"
-export { parallel, type WorkerHandle, workers } from "./client/workers.js"
+export { type WorkerHandle, workers } from "./client/workers.js"
 export type { Emitter, EmitterMap } from "./types.js"
