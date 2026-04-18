@@ -60,20 +60,6 @@ jobs:
             full_asset: tynd-full-linux-arm64
             lite_asset: tynd-lite-linux-arm64
 
-          - runner: macos-13
-            target: macos-x64
-            full_bin: target/release/tynd-full
-            lite_bin: target/release/tynd-lite
-            full_asset: tynd-full-macos-x64
-            lite_asset: tynd-lite-macos-x64
-
-          - runner: macos-latest
-            target: macos-arm64
-            full_bin: target/release/tynd-full
-            lite_bin: target/release/tynd-lite
-            full_asset: tynd-full-macos-arm64
-            lite_asset: tynd-lite-macos-arm64
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -125,9 +111,70 @@ jobs:
             ${{ matrix.full_asset }}
             ${{ matrix.lite_asset }}
 
+  build-macos:
+    name: Build macOS (x64 + arm64)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tynd-rust-release
+          key: macos-universal
+
+      - name: cargo clippy (release, host)
+        run: cargo clippy --release --workspace --all-targets -- -D warnings
+
+      - name: Build tynd-full (x86_64-apple-darwin)
+        run: cargo build --release --target x86_64-apple-darwin -p tynd-full
+
+      - name: Build tynd-lite (x86_64-apple-darwin)
+        run: cargo build --release --target x86_64-apple-darwin -p tynd-lite
+
+      - name: Build tynd-full (aarch64-apple-darwin)
+        run: cargo build --release --target aarch64-apple-darwin -p tynd-full
+
+      - name: Build tynd-lite (aarch64-apple-darwin)
+        run: cargo build --release --target aarch64-apple-darwin -p tynd-lite
+
+      - name: Stage release assets
+        shell: bash
+        run: |
+          cp target/x86_64-apple-darwin/release/tynd-full tynd-full-macos-x64
+          cp target/x86_64-apple-darwin/release/tynd-lite tynd-lite-macos-x64
+          cp target/aarch64-apple-darwin/release/tynd-full tynd-full-macos-arm64
+          cp target/aarch64-apple-darwin/release/tynd-lite tynd-lite-macos-arm64
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            tynd-full-macos-x64
+            tynd-lite-macos-x64
+            tynd-full-macos-arm64
+            tynd-lite-macos-arm64
+
+      - name: Upload binaries to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          files: |
+            tynd-full-macos-x64
+            tynd-lite-macos-x64
+            tynd-full-macos-arm64
+            tynd-lite-macos-arm64
+
   publish:
     name: Publish @tynd/cli + @tynd/core + @tynd/host
-    needs: build
+    needs: [build, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: read
