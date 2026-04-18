@@ -72,7 +72,9 @@ const bytes = await fs.readBinary(file!)
 
 All Rust-backed — same surface in both the `full` and `lite` runtimes:
 
-`dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `parallel`, `singleInstance`, `crashReporter`.
+`dialog`, `tyndWindow`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance`.
+
+Plus Web-standard re-exports (`fetch`, `WebSocket`, `crypto`, `URL`, `Blob`, `AbortController`, `TextEncoder`, …) so `import * as tynd from "@tynd/core/client"` gives you the whole namespace at once.
 
 **Full reference:** [API.md](https://github.com/kvnpetit/tynd/blob/main/API.md).
 

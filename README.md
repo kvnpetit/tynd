@@ -19,7 +19,7 @@
 [![Open issues](https://img.shields.io/github/issues/kvnpetit/tynd?color=d93f0b)](https://github.com/kvnpetit/tynd/issues)
 
 **Native window. Zero network. Full TypeScript stack.**
-Same concept as Tauri and Wails — with a backend you already know.
+A desktop-app framework that runs your TypeScript backend next to a native OS webview — no codegen, no bridge language.
 
 ```bash
 bunx @tynd/cli create my-app
@@ -36,8 +36,8 @@ bunx @tynd/cli create my-app
 - 🦀 **TypeScript all the way down.** Backend, frontend, IPC, config — no Rust, no Go, no codegen step.
 - 🧬 **Two runtimes, one API.** Start with `lite` (~6.5 MB, no external runtime). Swap to `full` with a one-line config change when you need Bun's JIT or native-binding npm packages.
 - 🔒 **Native window, zero network.** Frontend served over a custom scheme (`tynd://`). RPC via `webview_bind`. No HTTP server, no firewall prompt, no reachable TCP port.
-- 🧰 **21 OS APIs, same surface in both runtimes** — `fs`, `sql` (embedded SQLite), `http`, `websocket`, `terminal` (real PTY), `compute` (blake3/sha/zstd/CSPRNG), `dialog`, `tray`, `notification`, `clipboard`, `shell`, `process`, `sidecar`, `singleInstance`, `crashReporter`, `store`, `workers`, `os`, `path`, `tyndWindow`, plus typed emitters.
-- ⚡ **Zero-copy binary IPC.** Multi-MB payloads (`fs.readBinary`, `compute.compress`) bypass JSON base64 through a second custom protocol — roughly **5-10x faster** than any other wry-based framework's binary calls.
+- 🧰 **20 OS APIs, same surface in both runtimes** — `fs`, `sql` (embedded SQLite), `http`, `websocket`, `terminal` (real PTY), `compute` (blake3/sha/CSPRNG), `dialog`, `tray`, `menu`, `notification`, `clipboard`, `shell`, `process`, `sidecar`, `singleInstance`, `store`, `workers`, `os`, `path`, `tyndWindow`, plus typed emitters and streaming RPC.
+- ⚡ **Zero-copy binary IPC.** Multi-MB payloads (`fs.readBinary`, `fs.writeBinary`, `compute.hash`) bypass JSON base64 through a second custom protocol — roughly **5-10x faster** than any other wry-based framework's binary calls.
 - 📦 **First-class installers.** `tynd build --bundle` emits `.app`/`.dmg`/`.deb`/`.rpm`/`.AppImage`/NSIS `.exe`/`.msi` — build tools (NSIS, WiX, appimagetool) auto-download, no manual install.
 - 🎨 **Framework-agnostic.** React, Vue, Svelte, Solid, Preact, Lit, Angular — anything that produces a pure SPA.
 
@@ -45,14 +45,12 @@ bunx @tynd/cli create my-app
 
 ## 🧭 Why Tynd
 
-|  | Tauri v2 | Wails v3 | **Tynd** |
-|---|---|---|---|
-| Backend language | Rust | Go | **TypeScript** |
-| Typed RPC | Rust -> TS codegen | Go -> TS codegen | **zero codegen** (`typeof backend`) |
-| Webview | wry (native OS) | native OS | **wry (native OS)** |
-| IPC | `webview_bind` | HTTP / WebSocket | **`webview_bind` + `evaluate_script`** |
-| Runtimes | single | single | **`full` (bundles Bun) + `lite` (embedded, ~6.5 MB)** |
-| Frontend | Any | Any | **Any** |
+- **TypeScript backend, no codegen.** The frontend types backend calls straight from `typeof backend`. No `.d.ts` generation step, no IDL.
+- **Native OS webview.** Uses the system's webview (WebView2 / WKWebView / WebKitGTK) — the final binary doesn't ship a browser. Your app inherits the OS's paint loop, font stack, and accessibility.
+- **Two runtimes, one API.** `lite` for the smallest binary (~6.5 MB, embedded JS engine). `full` when you need Bun's JIT or native-binding npm packages. Switch via one config line.
+- **Zero network IPC.** RPC and assets go through a native wry protocol — no HTTP server, no loopback port, no firewall prompt.
+
+See [COMPARISON.md](./COMPARISON.md) for the full Tynd vs Tauri / Wails / Electron matrix (39 categories, 512 rows).
 
 ---
 
@@ -70,7 +68,7 @@ TypeScript backend                         Native OS window
   tynd-lite  (embedded JS engine, wry + tao Rust host)
 ```
 
-**Zero network.** Frontend served via `tynd://` custom protocol (wry `with_custom_protocol`). RPC via native `webview_bind`. Events via `evaluate_script`. Multi-MB binary payloads (`fs.readBinary`, `compute.compress`, …) bypass JSON IPC via `tynd-bin://`. Identical architecture to Tauri v2.
+**Zero network.** Frontend served via `tynd://` custom protocol (wry `with_custom_protocol`). RPC via native `webview_bind`. Events via `evaluate_script`. Multi-MB binary payloads (`fs.readBinary`, `fs.writeBinary`, `compute.hash`, …) bypass JSON IPC via `tynd-bin://`.
 
 ### Two runtimes
 
@@ -182,7 +180,8 @@ Tynd exposes three surfaces — backend module, typed frontend RPC, and direct O
 |---|---|---|
 | **Backend** | `@tynd/core` | `app.start`, `app.onReady`, `app.onClose`, `createEmitter` |
 | **Frontend RPC** | `@tynd/core/client` | `createBackend<typeof backend>()` — typed proxy |
-| **OS APIs** | `@tynd/core/client` | `dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `parallel`, `singleInstance`, `crashReporter` |
+| **OS APIs** | `@tynd/core/client` | `dialog`, `tyndWindow`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance` |
+| **Web APIs** | `@tynd/core/client` | `fetch`, `WebSocket`, `EventSource`, `crypto`, `URL`, `Blob`, `FormData`, `AbortController`, `TextEncoder`, … (re-exports for `import * as tynd`) |
 
 Short example:
 

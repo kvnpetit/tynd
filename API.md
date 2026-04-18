@@ -10,6 +10,20 @@ Every Tynd app has three surfaces:
 
 ---
 
+## Table of contents
+
+### [Backend API](#backend-api)
+[`app.start(config)`](#appstartconfig) · [`AppConfig`](#appconfig) · [`WindowConfig`](#windowconfig) · [`createEmitter<T>()`](#createemittert) · [Native menu bar](#native-menu-bar) · [System tray](#system-tray) · [Streaming RPC](#streaming-rpc--async-generator-backend-handlers)
+
+### [Frontend RPC — `createBackend<T>()`](#frontend-rpc--createbackendt)
+
+### [OS APIs](#os-apis)
+[`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
+
+### [IPC architecture](#ipc-architecture)
+
+---
+
 ## Backend API
 
 ### `app.start(config)`
@@ -150,6 +164,36 @@ api.once("userCreated", (user) => { /* fires once */ })
 
 Types come from `typeof backend` — rename a backend function and the compiler catches the frontend call.
 
+### Streaming RPC — async-generator backend handlers
+
+If a backend export is an `async function*`, the frontend gets a
+`StreamCall<Y, R>` handle: awaitable (resolves to the generator's
+`return` value) and async-iterable (yields each chunk). Cancellation
+propagates end-to-end via `iterator.return()`.
+
+```ts
+// backend/main.ts
+export async function* processFiles(paths: string[]) {
+  let ok = 0
+  for (const [i, path] of paths.entries()) {
+    await doWork(path)
+    ok++
+    yield { path, progress: (i + 1) / paths.length }
+  }
+  return { ok, failed: paths.length - ok }
+}
+
+// frontend
+const stream = api.processFiles(["a.txt", "b.txt"])
+for await (const chunk of stream) render(chunk.progress)
+const summary = await stream            // { ok, failed }
+// or early-stop: await stream.cancel()
+```
+
+Marshalling: each `yield` sends one JSON line (full) or one
+`__tynd_yield__` native call (lite); the final `return` value is
+delivered as a single resolve on the promise side.
+
 ---
 
 ## OS APIs
@@ -190,8 +234,19 @@ const isMax  = await tyndWindow.isMaximized()
 const isMin  = await tyndWindow.isMinimized()
 const isFull = await tyndWindow.isFullscreen()
 const isVis  = await tyndWindow.isVisible()
+```
 
-tyndWindow.onMenu("file.new", () => newDocument())
+### `menu` — react to menu item clicks
+
+Menu bar items are declared in `tynd.config.ts`. This module lets the
+frontend (or backend) subscribe to clicks. The handler fires when any
+menu item (app menu bar or tray menu) with the given `id` is clicked.
+
+```typescript
+import { menu } from "@tynd/core/client"
+
+const unsub = menu.onClick("file.new", () => newDocument())
+// call unsub() to stop listening
 ```
 
 ### `clipboard`
@@ -383,16 +438,18 @@ Backed by `portable-pty` (ConPTY on Windows, POSIX PTY elsewhere). Pair with [xt
 ```typescript
 import { compute } from "@tynd/core/client"
 
-const digest = await compute.hash("hello world", { algo: "blake3" })    // hex string
-const sha = await compute.hash(bytes, { algo: "sha256", encoding: "base64" })
+// Hash raw bytes. Always returns a base64 string; hex is a one-liner
+// convert in userland if you need it.
+const digest = await compute.hash(bytes, { algo: "sha256" })
+const blake  = await compute.hash(bytes)  // default algo = blake3
 
-const squeezed = await compute.compress(payload, { algo: "zstd", level: 9 })
-const restored = await compute.decompress(squeezed)
-
-const token = await compute.randomBytes(32)   // CSPRNG, Uint8Array
+// OS CSPRNG, capped at 1 MiB per call.
+const token = await compute.randomBytes(32)   // Uint8Array
 ```
 
-Runs on a fresh Rust thread per call — never blocks the JS event loop. Works identically in lite and full. `randomBytes` is backed by `rand::rngs::OsRng` and caps at 1 MiB per call.
+Runs on a fresh Rust thread per call — never blocks the JS event loop. Works identically in lite and full. Supported `algo`: `blake3`, `sha256`, `sha384`, `sha512`.
+
+For compression, use the standard `crypto.subtle` APIs or a pure-JS lib like `fflate` — see [ALTERNATIVES.md](ALTERNATIVES.md).
 
 ### `singleInstance` — prevent dual launch
 
@@ -408,35 +465,14 @@ if (!acquired) {
 
 Backed by `single-instance` (named pipe on Windows, abstract socket on Linux, CFMessagePort on macOS). The lock is released when the process exits. Use a stable reverse-DNS id — it doubles as the OS lock name.
 
-### `crashReporter` — panic -> file
-
-```typescript
-import { crashReporter } from "@tynd/core/client"
-
-await crashReporter.enable("com.example.myapp")
-
-const pending = await crashReporter.listCrashes()
-if (pending.length > 0) {
-  // upload them to your backend, then delete once confirmed
-}
-```
-
-Installs a Rust `std::panic` hook that writes `crash-<unix-nanos>.log` under `data_dir/<appId>/crashes/`. No telemetry, no network — you decide what to do with the files (upload to Sentry, email yourself, open a GitHub issue, etc.).
-
 ### `workers` — offload CPU-bound JS
 
 ```typescript
-import { workers, parallel } from "@tynd/core/client"
+import { workers } from "@tynd/core/client"
 
 const w = await workers.spawn((input: number[]) => input.reduce((a, b) => a + b, 0))
 const sum = await w.run<number, number[]>([1, 2, 3, 4, 5])
 await w.terminate()
-
-const results = await parallel.map(
-  bigArray,
-  (item) => heavyCpuWork(item),
-  { concurrency: 4 },
-)
 ```
 
 - **Lite**: spawns an isolated copy of the embedded JS engine on a fresh OS thread, channels input/output as JSON.
@@ -456,9 +492,37 @@ Task function must be self-contained (no closure captures). Arguments and return
 | `dialog` / `fs` / `http` / …      | Frontend -> Rust          | wry `window.ipc.postMessage` (direct, no backend round-trip) |
 | `terminal:data` / `http:progress` | Rust -> Frontend (stream) | tao user events -> `evaluate_script`                         |
 
-**No HTTP. No WebSocket. No firewall prompt.** Identical to Tauri v2's IPC stack.
+**No HTTP. No WebSocket. No firewall prompt.** Everything runs over the native wry bindings.
 
 Frontend assets served via `tynd://localhost/` (wry custom protocol -> filesystem). `window.location.origin` is `tynd://localhost`.
+
+### Web-platform re-exports
+
+`@tynd/core/client` re-exports the standard Web globals as named exports
+so `import * as tynd from "@tynd/core/client"` surfaces them in one
+namespace alongside the Tynd OS APIs:
+
+```ts
+import * as tynd from "@tynd/core/client"
+
+await tynd.fetch(url)
+const ws = new tynd.WebSocket(wsUrl)
+const hash = await tynd.crypto.subtle.digest("SHA-256", bytes)
+
+// Framework APIs on the same namespace:
+await tynd.fs.readText(path)
+await tynd.sql.open(dbPath)
+```
+
+The exports are captured references to `globalThis.*`. In `lite` they
+point at the Web-standard polyfills; in `full` they point at Bun's
+native implementations — behavior matches the spec in both cases.
+
+Available re-exports: `fetch`, `Request`, `Response`, `Headers`,
+`AbortController`, `AbortSignal`, `ReadableStream`, `WebSocket`,
+`EventSource`, `crypto`, `URL`, `URLSearchParams`, `TextEncoder`,
+`TextDecoder`, `atob`, `btoa`, `Blob`, `File`, `FormData`,
+`structuredClone`, `performance`.
 
 ### Binary IPC — `tynd-bin://`
 
@@ -468,8 +532,6 @@ Multi-MB payloads skip the JSON IPC. A second custom protocol, `tynd-bin://local
 |---|---|---|---|
 | `fs/readBinary?path=...` | `GET` | — | file bytes |
 | `fs/writeBinary?path=...&createDirs=0\|1` | `POST` | bytes | `204` |
-| `compute/hash?algo=blake3\|sha256\|sha512&encoding=hex\|base64` | `POST` | bytes | UTF-8 digest |
-| `compute/compress?algo=zstd&level=N` | `POST` | bytes | bytes |
-| `compute/decompress?algo=zstd` | `POST` | bytes | bytes |
+| `compute/hash?algo=blake3\|sha256\|sha384\|sha512&encoding=base64` | `POST` | bytes | UTF-8 digest |
 
 The TS client wraps these: `fs.readBinary(path)`, `compute.hash(bytes)`, etc. — users don't interact with the scheme directly. Small / non-binary calls (`randomBytes`, text helpers, terminal events) stay on the JSON IPC where it's simpler.

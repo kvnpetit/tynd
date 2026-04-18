@@ -64,7 +64,7 @@ Tynd owns the HTTP layer (`tynd://` custom protocol in prod, dev server URL in d
 
 | Framework | Trigger dep(s) | SPA alternative |
 |---|---|---|
-| **Next.js**           | `next`                                                        | Use Vite + React (or Tauri/Electron) |
+| **Next.js**           | `next`                                                        | Use Vite + React |
 | **Nuxt**              | `nuxt`, `@nuxtjs/bridge`                                      | Use Vite + Vue |
 | **SvelteKit**         | `@sveltejs/kit`                                               | Plain Svelte (`tynd create … -f svelte`) |
 | **Remix**             | `@remix-run/react`, `@remix-run/node`, `@remix-run/cloudflare`, `@remix-run/deno` | Vite + React Router SPA |
