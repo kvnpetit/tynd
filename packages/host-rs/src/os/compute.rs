@@ -2,7 +2,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use rand::RngCore;
 use serde_json::Value;
-use sha2::{Digest, Sha256, Sha512};
+use sha2::{Digest, Sha256, Sha384, Sha512};
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -19,14 +19,21 @@ fn random_bytes(args: &Value) -> Result<Value, String> {
         .get("n")
         .and_then(Value::as_u64)
         .ok_or_else(|| "compute.randomBytes: missing 'n'".to_string())?;
+    let buf = random_bytes_raw(n as usize)?;
+    Ok(Value::String(STANDARD.encode(&buf)))
+}
+
+/// Fill `n` bytes from the OS CSPRNG. Used by both the frontend dispatch
+/// path and the lite runtime's `crypto.getRandomValues` polyfill.
+pub fn random_bytes_raw(n: usize) -> Result<Vec<u8>, String> {
     if n == 0 || n > 1_048_576 {
         return Err(format!(
             "compute.randomBytes: 'n' must be 1..=1_048_576 (got {n})"
         ));
     }
-    let mut buf = vec![0u8; n as usize];
+    let mut buf = vec![0u8; n];
     rand::rngs::OsRng.fill_bytes(&mut buf);
-    Ok(Value::String(STANDARD.encode(&buf)))
+    Ok(buf)
 }
 
 /// Hash raw bytes with `algo` (blake3 / sha256 / sha512) and encode the digest
@@ -35,6 +42,7 @@ pub fn hash_raw(data: &[u8], algo: &str, encoding: &str) -> Result<String, Strin
     let digest: Vec<u8> = match algo {
         "blake3" => blake3::hash(data).as_bytes().to_vec(),
         "sha256" => Sha256::digest(data).to_vec(),
+        "sha384" => Sha384::digest(data).to_vec(),
         "sha512" => Sha512::digest(data).to_vec(),
         _ => return Err(format!("compute.hash: unsupported algo '{algo}'")),
     };
@@ -42,22 +50,6 @@ pub fn hash_raw(data: &[u8], algo: &str, encoding: &str) -> Result<String, Strin
         "hex" => Ok(hex_encode(&digest)),
         "base64" => Ok(STANDARD.encode(&digest)),
         _ => Err(format!("compute.hash: unsupported encoding '{encoding}'")),
-    }
-}
-
-pub fn compress_raw(data: &[u8], algo: &str, level: i32) -> Result<Vec<u8>, String> {
-    match algo {
-        "zstd" => {
-            zstd::stream::encode_all(data, level).map_err(|e| format!("compute.compress: {e}"))
-        },
-        _ => Err(format!("compute.compress: unsupported algo '{algo}'")),
-    }
-}
-
-pub fn decompress_raw(data: &[u8], algo: &str) -> Result<Vec<u8>, String> {
-    match algo {
-        "zstd" => zstd::stream::decode_all(data).map_err(|e| format!("compute.decompress: {e}")),
-        _ => Err(format!("compute.decompress: unsupported algo '{algo}'")),
     }
 }
 
@@ -82,6 +74,16 @@ mod tests {
         assert_eq!(
             out,
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn hash_known_sha384_vector() {
+        let out = hash_raw(b"abc", "sha384", "hex").unwrap();
+        assert_eq!(
+            out,
+            "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed\
+             8086072ba1e7cc2358baeca134c825a7"
         );
     }
 
@@ -115,13 +117,5 @@ mod tests {
         assert!(random_bytes(&json!({ "n": 0 })).is_err());
         assert!(random_bytes(&json!({ "n": 2_000_000 })).is_err());
         assert!(random_bytes(&json!({})).is_err());
-    }
-
-    #[test]
-    fn zstd_roundtrip_restores_bytes() {
-        let original: Vec<u8> = (0..=255u8).collect();
-        let compressed = compress_raw(&original, "zstd", 3).unwrap();
-        let decompressed = decompress_raw(&compressed, "zstd").unwrap();
-        assert_eq!(decompressed, original);
     }
 }

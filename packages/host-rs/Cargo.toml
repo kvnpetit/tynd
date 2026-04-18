@@ -43,11 +43,9 @@ rusqlite.workspace         = true
 parking_lot.workspace      = true
 dashmap.workspace          = true
 ahash.workspace            = true
+tempfile.workspace         = true
 
 rquickjs              = { workspace = true, optional = true }
-
-[dev-dependencies]
-tempfile.workspace = true
 
 [features]
 default        = []

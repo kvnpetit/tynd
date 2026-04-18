@@ -14,7 +14,9 @@
       "!**/.tynd",
       "!**/bin/index.js",
       "!**/bun.lock",
-      "!**/release"
+      "!**/release",
+      "!packages/lite/src/polyfills/*.js",
+      "!packages/lite/src/quickjs/*.js"
     ]
   },
   "formatter": {
