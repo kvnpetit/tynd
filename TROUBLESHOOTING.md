@@ -124,7 +124,7 @@ React Compiler (in React 19+) conflicts with Vite's Fast Refresh. Disable the co
 
 ### `fs.readBinary` / `compute.hash` fails with "unknown binary route"
 
-You're hitting the `tynd-bin://` custom protocol and the request has a typo. Expected routes: `fs/readBinary`, `fs/writeBinary`, `compute/hash`, `compute/compress`, `compute/decompress`. If you're writing custom client code, prefer the published wrappers in `@tynd/core/client`.
+You're hitting the `tynd-bin://` custom protocol and the request has a typo. Expected routes: `fs/readBinary`, `fs/writeBinary`, `compute/hash`. If you're writing custom client code, prefer the published wrappers in `@tynd/core/client`.
 
 ### `sql.open(path)` silently uses in-memory mode
 

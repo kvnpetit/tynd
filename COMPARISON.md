@@ -1,9 +1,15 @@
 # 📊 Tynd vs Tauri v2 vs Wails v3 vs Electron
 
 > **Exhaustive feature matrix across 39 categories — 512 rows.**
-> Last updated: April 17, 2026 · Desktop only (mobile features marked 📱)
+> Last updated: April 18, 2026 · Desktop only (mobile features marked 📱)
 
-> **Note:** Tynd's `websocket` and `sql` APIs (and `compute.randomBytes`) land in both `lite` and `full` — no feature disparity between runtimes for these rows.
+## Tynd in one paragraph
+
+Tynd is a desktop-app framework with a **TypeScript backend** and a native WebView front (wry + tao). It ships **two runtimes from the same TS source**: `lite` (~6.5 MB, embedded QuickJS, Web-standards-only JS surface) and `full` (~44 MB, Bun subprocess, full Node/Bun surface). All OS APIs (`fs`, `http`, `websocket`, `sql`, `process`, `compute`, `terminal`, `tray`, `dialog`, `clipboard`, `shell`, `notification`, `tyndWindow`, `menu`, `sidecar`, `singleInstance`, `store`, `workers`) live in Rust and are identical across both runtimes — what differs is only the JS surface available inside backend code. The matrix below is ordered by category; each row compares Tynd against Tauri v2, Wails v3, and Electron.
+
+---
+
+> **Note:** Tynd's Rust-backed OS APIs (`fs`, `http`, `websocket`, `sql`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`, `menu`) land identically on `lite` and `full`. The `lite` runtime stays strictly on the Web-standards surface (`fetch`, `WebSocket`, `EventSource`, `crypto.subtle` digest+HMAC, `URL`, `Blob`/`File`/`FormData`, `structuredClone`, `AbortController`, `performance.now`, `ReadableStream` body). Anything Node-specific (`Buffer`, `process.*`, `node:*`) or Bun-specific (`Bun.*`) is intentionally **not** polyfilled — see [ALTERNATIVES.md](ALTERNATIVES.md) for pure-JS libs that fill the common gaps, or switch to `full` for a full Node/Bun environment. See [RUNTIMES.md](RUNTIMES.md) for the parity table.
 
 > ⚠️ **Architecture note — Electron:** Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tauri, Wails, and Tynd use the OS's native WebView (WebView2 / WKWebView / WebKitGTK). This explains both Electron's broader API surface and its larger binary footprint.
 
@@ -759,10 +765,9 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Unified `workers` API (spawn JS on OS thread) | ✅ | ❌ | ❌ | ⚠️ |
-| `parallel.map(items, fn, { concurrency })` helper | ✅ | ❌ | ❌ | ❌ |
+| Streaming RPC (AsyncGenerator across IPC, typed frontend handle) | ✅ | ❌ | ❌ | ⚠️ |
 | Worker pool (frontend-invokable) | ✅ | ⚠️ | ❌ | ⚠️ |
-| Native hash helpers (blake3 / sha256 / sha512) | ✅ | ⚠️ | ⚠️ | ⚠️ |
-| Native compression (zstd) | ✅ | ⚠️ | ⚠️ | ⚠️ |
+| Native hash helpers (blake3 / sha256 / sha384 / sha512) | ✅ | ⚠️ | ⚠️ | ⚠️ |
 | OS calls run off JS event loop | ✅ | ✅ | ✅ | ✅ |
 | Long-running Rust ops don't block JS | ✅ | ✅ | ⚠️ | N/A |
 | `SharedArrayBuffer` / `Atomics` in backend | ⚠️ | ⚠️ | ❌ | ✅ |

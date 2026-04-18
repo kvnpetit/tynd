@@ -47,11 +47,15 @@ project pages.
 - ureq             (Apache-2.0 / MIT) — https://github.com/algesten/ureq
 - portable-pty     (MIT)              — https://github.com/wez/wezterm/tree/main/pty
 - sha2             (Apache-2.0 / MIT) — https://github.com/RustCrypto/hashes
+- hmac             (Apache-2.0 / MIT) — https://github.com/RustCrypto/MACs
 - blake3           (Apache-2.0 / CC0-1.0) — https://github.com/BLAKE3-team/BLAKE3
 - single-instance  (MIT)              — https://github.com/jorgeatgu/single-instance
 - rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
 - tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
 - rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite
+- parking_lot      (Apache-2.0 / MIT) — https://github.com/Amanieu/parking_lot
+- dashmap          (MIT)              — https://github.com/xacrimon/dashmap
+- ahash            (Apache-2.0 / MIT) — https://github.com/tkaitchuck/ahash
 
 QuickJS (bundled via rquickjs) is (C) Fabrice Bellard and Charlie Gordon,
 licensed under the MIT License.

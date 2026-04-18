@@ -1,5 +1,7 @@
 # 🔏 Code signing & notarization
 
+> **By design:** `tynd build` and `tynd build --bundle` produce **unsigned** binaries and installers. Signing is intentionally out of scope for the CLI — it depends on your certificate, Apple ID, GPG key, and CI secrets, all of which are app-specific. Tynd's job stops at producing a reproducible `release/` directory; this doc picks up from there.
+
 Tynd produces raw binaries and installers via `tynd build [--bundle]`, but **does not sign them for you**. This doc covers the standard post-build signing workflows for each host OS so you can ship apps that users (and their OSes) trust.
 
 > **Why sign?** Unsigned binaries trigger SmartScreen warnings on Windows, are quarantined by Gatekeeper on macOS, and are flagged by Chrome/Edge on download. Signing + notarizing eliminates those prompts.
