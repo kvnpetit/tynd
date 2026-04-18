@@ -2,6 +2,22 @@
 
 The backend API and frontend client for [Tynd](https://github.com/kvnpetit/tynd) — desktop apps in TypeScript.
 
+## Prerequisites
+
+**[Bun](https://bun.sh) is required** during development. Tynd's backend runs on Bun (full mode) or an embedded JS engine via `@tynd/cli`'s bundler (lite mode); Node.js is not a supported substitute. Install Bun once:
+
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://bun.sh/install | bash
+
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+End users of built apps need nothing — the runtime ships inside the binary.
+
+## Install
+
 ```bash
 bun add @tynd/core @tynd/host
 ```

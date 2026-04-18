@@ -92,9 +92,17 @@ TypeScript backend                         Native OS window
 
 ## 📋 Requirements
 
-**[Bun](https://bun.sh) is required.** Tynd is a Bun-first framework — the CLI, the dev server, and the full runtime all run on Bun.
+**[Bun](https://bun.sh) is required for app developers.** Tynd is a Bun-first framework — the CLI, the dev server, and the full runtime all run on Bun. Node.js is not supported as a replacement.
 
-End users who install your app need nothing — the runtime is embedded in the distributed binary.
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://bun.sh/install | bash
+
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+**End users of your built app need nothing** — Bun (full mode) or the embedded JS engine (lite mode) is packed into the distributed binary.
 
 ---
 

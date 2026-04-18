@@ -2,6 +2,22 @@
 
 The CLI for [Tynd](https://github.com/kvnpetit/tynd) — scaffold, dev, build, and ship native desktop apps in TypeScript.
 
+## Prerequisites
+
+**[Bun](https://bun.sh) is required.** The CLI binary has a `#!/usr/bin/env bun` shebang and uses Bun-native APIs (`Bun.build`, `Bun.file`, `Bun.spawn`, `Bun.hash`) — it will not run under Node.js.
+
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://bun.sh/install | bash
+
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+End users of apps you ship with `tynd build` do **not** need Bun — it's packed into the final binary (full mode) or replaced by an embedded JS engine (lite mode).
+
+## Quick start
+
 ```bash
 bunx @tynd/cli create my-app
 cd my-app

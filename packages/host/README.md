@@ -2,6 +2,20 @@
 
 Prebuilt native host binaries for [Tynd](https://github.com/kvnpetit/tynd) — `tynd-full.exe` and `tynd-lite.exe` (plus the platform variants).
 
+## Prerequisites
+
+**[Bun](https://bun.sh) is required** — the `postinstall` script is `bun run install.ts` and the parent `@tynd/cli` toolchain is Bun-only. Node.js will not run it.
+
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://bun.sh/install | bash
+
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+## Install
+
 ```bash
 bun add @tynd/host
 ```
