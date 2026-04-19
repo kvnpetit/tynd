@@ -620,6 +620,30 @@ Manifest shape (Tauri-compatible — any tooling that produces Tauri manifests w
 - **Linux AppImage** (and any single-file binary): `fs::rename` + chmod +x + spawn + exit. Safe while running because Linux keeps the old inode mapped as long as the exe is live.
 - **macOS**: not yet — `.app` bundles are directories and updates ship as archives; handle the swap manually for now.
 
+#### Signing workflow
+
+The CLI ships with a matching signer so you can produce manifests without extra tools:
+
+```bash
+# Generate a keypair once — commit only the .pub, keep the .key offline.
+tynd keygen --out release/tynd-updater
+
+# For each release, sign the freshly-built artifact. Output is base64 on stdout.
+tynd sign release/MyApp-1.2.3.exe --key release/tynd-updater.key
+# Or write it straight to a file:
+tynd sign release/MyApp-1.2.3.exe --key release/tynd-updater.key \
+  --out release/MyApp-1.2.3.exe.sig
+```
+
+Bake the `.pub` contents into your app's source so the runtime can verify:
+
+```typescript
+const UPDATER_PUB_KEY = "cFpG...RVDv/RQ="
+await updater.downloadAndVerify({ url, signature, pubKey: UPDATER_PUB_KEY })
+```
+
+Under the hood the CLI uses the same WebCrypto Ed25519 primitives the runtime verifies with (`crypto.subtle.sign`) — signatures are raw 64-byte outputs, public keys are raw 32-byte exports, so the TS signer and the Rust `ed25519-dalek` verifier interop without format conversions.
+
 **Not yet handled:**
 - macOS `.app` swap (extract from `.dmg` / `.tar.gz`).
 - Periodic auto-check.
