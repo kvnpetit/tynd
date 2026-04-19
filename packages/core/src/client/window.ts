@@ -122,6 +122,15 @@ export const tyndWindow = {
     return osCall("window", "cancelClose")
   },
 
+  /** Bring this window to the foreground (keyboard focus). */
+  setFocus(): Promise<void> {
+    return osCall("window", "setFocus")
+  },
+  /** Flash the taskbar (Windows) / bounce the Dock (macOS) to get attention. */
+  requestAttention(): Promise<void> {
+    return osCall("window", "requestAttention")
+  },
+
   /** Label of the current window (`"main"` for the primary window). */
   label(): string {
     return getWindowLabel()

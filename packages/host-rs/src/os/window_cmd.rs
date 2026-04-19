@@ -106,6 +106,17 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             Ok(Value::Null)
         },
 
+        "setFocus" => {
+            win.set_focus();
+            Ok(Value::Null)
+        },
+        "requestAttention" => {
+            // Cross-OS "flash the taskbar / bounce the dock" — platform
+            // independently handled by tao's UserAttentionType::Informational.
+            win.request_user_attention(Some(tao::window::UserAttentionType::Informational));
+            Ok(Value::Null)
+        },
+
         _ => Err(format!("window.{method}: unknown method")),
     }
 }

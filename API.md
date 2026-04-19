@@ -229,6 +229,8 @@ await tyndWindow.setAlwaysOnTop(true)
 await tyndWindow.setDecorations(false)
 await tyndWindow.hide()
 await tyndWindow.show()
+await tyndWindow.setFocus()         // bring to front + keyboard focus
+await tyndWindow.requestAttention() // flash taskbar / bounce Dock
 
 const isMax  = await tyndWindow.isMaximized()
 const isMin  = await tyndWindow.isMinimized()
@@ -519,16 +521,28 @@ For compression, use the standard `crypto.subtle` APIs or a pure-JS lib like `ff
 ### `singleInstance` — prevent dual launch
 
 ```typescript
-import { singleInstance, tyndWindow } from "@tynd/core/client"
+import { singleInstance } from "@tynd/core/client"
 
 const { acquired } = await singleInstance.acquire("com.example.myapp")
 if (!acquired) {
-  await tyndWindow.show()
+  // Duplicate launch — we've already forwarded argv+cwd to the primary,
+  // which auto-focuses its window. Just exit silently.
   process.exit(0)
 }
+
+// In the primary instance: react to forwarded launches (e.g. deep links).
+singleInstance.onSecondLaunch(({ argv, cwd }) => {
+  console.log("reopened with", argv, "at", cwd)
+})
 ```
 
-Backed by `single-instance` (named pipe on Windows, abstract socket on Linux, CFMessagePort on macOS). The lock is released when the process exits. Use a stable reverse-DNS id — it doubles as the OS lock name.
+Backed by the `single-instance` crate for the OS lock (named pipe on Windows, abstract socket on Linux, CFMessagePort on macOS) plus `interprocess` for the local socket used to forward `{ argv, cwd }` from a duplicate launch to the primary. When `acquire()` returns `acquired: false`, the host has already:
+
+1. Connected to the primary instance's socket over a platform-local channel.
+2. Sent the forwarded payload as a single JSON line.
+3. Triggered the primary window's `setFocus()` + un-minimize (via the host's native event loop, no IPC round-trip needed).
+
+Use a stable reverse-DNS id — it doubles as the OS lock name and the socket name.
 
 ### `workers` — offload CPU-bound JS
 
