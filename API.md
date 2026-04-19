@@ -18,7 +18,7 @@ Every Tynd app has three surfaces:
 ### [Frontend RPC — `createBackend<T>()`](#frontend-rpc--createbackendt)
 
 ### [OS APIs](#os-apis)
-[`app`](#app--name--version--exit--relaunch) · [`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`shortcuts`](#shortcuts--system-wide-keyboard-hotkeys) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`updater`](#updater--auto-update-with-ed25519-verify) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
+[`app`](#app--name--version--exit--relaunch) · [`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`keyring`](#keyring--secure-credential-storage) · [`shortcuts`](#shortcuts--system-wide-keyboard-hotkeys) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`updater`](#updater--auto-update-with-ed25519-verify) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
 
 ### [IPC architecture](#ipc-architecture)
 
@@ -263,7 +263,15 @@ await tyndWindow.setMaxSize(1920, 1080)
 await tyndWindow.setResizable(false)
 await tyndWindow.toggleMaximize()
 const dpi = await tyndWindow.scaleFactor()      // 1.0 / 1.5 / 2.0
+
+// WebView ops.
+await tyndWindow.reload()
+await tyndWindow.setZoom(1.25)
+await tyndWindow.openDevTools()   // debug builds only
+await tyndWindow.closeDevTools()
 ```
+
+**CSP (Content Security Policy).** Every HTML response served through the `tynd://` scheme carries a baseline CSP that blocks inline scripts, disables `frame-src`/`object-src`, and restricts `connect-src` to same-origin plus HTTPS/WSS. Override per-page via a `<meta http-equiv="Content-Security-Policy">` tag if you need a custom policy.
 
 #### Monitor enumeration
 
@@ -420,6 +428,20 @@ const watcher = await fs.watch("./notes", { recursive: true }, (event) => {
 })
 // Later: await watcher.unwatch()
 ```
+
+### `keyring` — secure credential storage
+
+```typescript
+import { keyring } from "@tynd/core/client"
+
+const entry = { service: "com.example.myapp", account: "alice" }
+
+await keyring.set(entry, "s3cr3t-token")
+const token = await keyring.get(entry)   // string | null
+await keyring.delete(entry)              // true if it existed
+```
+
+Backing store per OS: Keychain (macOS), Credential Manager + DPAPI (Windows), Secret Service / GNOME Keyring / KWallet (Linux). Tokens stored via `keyring` are encrypted at rest with the user's login credentials — strictly better than `store` for anything sensitive (OAuth tokens, API keys, session cookies).
 
 ### `autolaunch` — start the app at system boot
 

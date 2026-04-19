@@ -61,10 +61,10 @@ Tynd is a desktop-app framework with a **TypeScript backend** and a native WebVi
 | Skip taskbar | ❌ | ✅ | ✅ | ✅ |
 | Content protection (screenshot block) | ❌ | ✅ | ✅ | ✅ |
 | Show / hide menu bar | ❌ | ✅ | ✅ | ✅ |
-| Set zoom factor / get zoom | ❌ | ✅ | ✅ | ✅ |
+| Set zoom factor / get zoom | ⚠️ set only | ✅ | ✅ | ✅ |
 | Navigate to URL at runtime | ❌ | ✅ | ✅ | ✅ |
 | Set HTML content at runtime | ❌ | ✅ | ✅ | ✅ |
-| Reload | ❌ | ✅ | ✅ | ✅ |
+| Reload | ✅ | ✅ | ✅ | ✅ |
 | Visible on all workspaces | ❌ | ✅ | ❌ | ✅ |
 | Prevent window overflowing monitor bounds | ❌ | ✅ | ❌ | ❌ |
 
@@ -123,7 +123,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | On navigation hook (intercept / cancel) | ❌ | ✅ | ❌ | ✅ |
 | On page load callback | ❌ | ✅ | ❌ | ✅ |
 | Disable input accessory view (iOS) | ❌ | ✅ 📱 | ❌ | ❌ |
-| DevTools toggle per webview | ❌ | ✅ | ✅ | ✅ |
+| DevTools toggle per webview | ⚠️ debug builds only | ✅ | ✅ | ✅ |
 | Set user agent | ❌ | ✅ | ✅ | ✅ |
 | Set zoom level / zoom factor | ❌ | ✅ | ✅ | ✅ |
 | Capture page (screenshot of webview) | ❌ | ⚠️ | ❌ | ✅ |
@@ -467,7 +467,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Store — clear / reset / reload | ✅ | ✅ | ❌ | ⚠️ |
 | Store — auto-save + events on change | ⚠️ | ✅ | ❌ | ⚠️ |
 | SQLite / relational DB | ✅ | ✅ | ✅ | ⚠️ |
-| Encrypted secure storage | ❌ | ✅ | ❌ | ✅ |
+| Encrypted secure storage | ✅ | ✅ | ❌ | ✅ |
 | Persisted scope (runtime permission changes saved) | ❌ | ✅ | N/A | N/A |
 | Cookies API (read / set / delete) | ❌ | ⚠️ | ❌ | ✅ |
 | HTTP cache control (size, clear) | ❌ | ❌ | ❌ | ✅ |
@@ -556,7 +556,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Command allowlist / denylist | ❌ | ✅ | ❌ | ❌ |
 | Scoped FS access (path patterns) | ❌ | ✅ | ❌ | ❌ |
 | Scoped HTTP access (URL patterns) | ❌ | ✅ | ❌ | ❌ |
-| Auto-injected CSP | ❌ | ✅ | ❌ | ❌ |
+| Auto-injected CSP | ✅ | ✅ | ❌ | ❌ |
 | Permission request handler | ❌ | ✅ | ❌ | ✅ |
 | Biometric authentication | ❌ | ✅ 📱 | ❌ | ❌ |
 | Structural security (export = exposure surface) | ✅ | ❌ | ❌ | ❌ |
@@ -779,7 +779,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 
 | Category | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Window — core ops | 27/39 | 38/39 | 29/39 | 37/39 |
+| Window — core ops | 28/39 | 38/39 | 29/39 | 37/39 |
 | Window — appearance | 4/27 | 19/27 | 18/27 | 18/27 |
 | Webview API | 0/19 | 17/19 | 2/19 | 16/19 |
 | Multi-window | 5/9 | 8/9 | 7/9 | 8/9 |
@@ -800,12 +800,12 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Auto-updater | 5/10 | 10/10 | 0/10 | 10/10 |
 | Single instance & deep linking | 6/8 | 7/8 | 4/8 | 7/8 |
 | Autolaunch | 3/3 | 3/3 | 0/3 | 3/3 |
-| Persistent storage | 4/10 | 7/10 | 3/10 | 7/10 |
+| Persistent storage | 5/10 | 7/10 | 3/10 | 7/10 |
 | Logging | 0/5 | 5/5 | 4/5 | 2/5 |
 | App-level APIs | 4/14 | 11/14 | 7/14 | 11/14 |
 | OS & Environment | 8/12 | 11/12 | 5/12 | 11/12 |
 | Path utilities | 8/13 | 13/13 | 0/13 | 11/13 |
-| Security & permissions | 1/13 | 8/13 | 0/13 | 6/13 |
+| Security & permissions | 2/13 | 8/13 | 0/13 | 6/13 |
 | Mobile | 0/8 | 8/8 | 0/8 | 0/8 |
 | Build & distribution | 3/26 | 19/26 | 13/26 | 21/26 |
 | DX & CLI | 7/17 | 12/17 | 11/17 | 9/17 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~141/503 (28%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~144/503 (29%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 

@@ -55,6 +55,7 @@ project pages.
 - notify           (CC0-1.0 / Artistic-2.0) — https://github.com/notify-rs/notify
 - global-hotkey    (Apache-2.0 / MIT) — https://github.com/tauri-apps/global-hotkey
 - auto-launch      (MIT)              — https://github.com/zzzgydi/auto-launch
+- keyring          (MIT / Apache-2.0) — https://github.com/open-source-cooperative/keyring-rs
 - rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
 - tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
 - rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite

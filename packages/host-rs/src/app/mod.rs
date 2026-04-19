@@ -370,6 +370,52 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                         labels.extend(secondaries.keys().cloned().map(Value::String));
                         (true, Value::Array(labels))
                     },
+                    // WebView-level ops (reload, zoom, devtools) need access to
+                    // the WebView handle which lives next to each Window entry.
+                    "reload" => {
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        let _ = wv.evaluate_script("window.location.reload();");
+                        (true, Value::Null)
+                    },
+                    "setZoom" => {
+                        let z = args.get("level").and_then(Value::as_f64).unwrap_or(1.0);
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        match wv.zoom(z) {
+                            Ok(()) => (true, Value::Null),
+                            Err(e) => (false, Value::String(format!("setZoom: {e}"))),
+                        }
+                    },
+                    "openDevTools" => {
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        #[cfg(debug_assertions)]
+                        {
+                            wv.open_devtools();
+                            (true, Value::Null)
+                        }
+                        #[cfg(not(debug_assertions))]
+                        {
+                            let _ = wv;
+                            (
+                                false,
+                                Value::String(
+                                    "openDevTools: only available in debug builds".into(),
+                                ),
+                            )
+                        }
+                    },
+                    "closeDevTools" => {
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        #[cfg(debug_assertions)]
+                        {
+                            wv.close_devtools();
+                            (true, Value::Null)
+                        }
+                        #[cfg(not(debug_assertions))]
+                        {
+                            let _ = wv;
+                            (true, Value::Null)
+                        }
+                    },
                     _ => {
                         let win: Option<&Window> = if label == PRIMARY_LABEL {
                             Some(&native_window)

@@ -71,6 +71,10 @@ global-hotkey = "0.5"
 # .desktop on Linux.
 auto-launch = "0.5"
 
+# Secure credential storage — Keychain (macOS), Credential Manager + DPAPI
+# (Windows), Secret Service / kwallet (Linux).
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
 # CSPRNG + WebSocket + embedded SQL (lite parity with bun:sqlite)
 rand       = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
 tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
