@@ -83,12 +83,29 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
 
     {
         // When another instance of this app forwards its argv via the
-        // single-instance socket, bring the primary window to the front.
+        // single-instance socket, bring the primary window to the front and
+        // emit `app:open-url` for any URL-looking argument.
         let proxy = proxy.clone();
-        os::single_instance::set_second_launch_hook(Box::new(move |_payload| {
+        os::single_instance::set_second_launch_hook(Box::new(move |payload| {
             let _ = proxy.send_event(UserEvent::FocusPrimary);
+            if let Some(argv) = payload.get("argv").and_then(Value::as_array) {
+                for arg in argv.iter().skip(1) {
+                    if let Some(s) = arg.as_str() {
+                        if looks_like_url(s) {
+                            os::events::emit("app:open-url", &json!({ "url": s }));
+                        }
+                    }
+                }
+            }
         }));
     }
+
+    // URLs present in argv on cold start (user double-clicked a deep link).
+    // Deferred until PageReady so frontend handlers actually exist.
+    let initial_open_urls: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|a| looks_like_url(a))
+        .collect();
 
     // Relay BackendEvents -> tao UserEvents
     {
@@ -242,6 +259,9 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             Event::UserEvent(UserEvent::PageReady) => {
                 native_window.set_visible(true);
                 let _ = call_tx.send(BackendCall::lifecycle("on_ready"));
+                for url in &initial_open_urls {
+                    os::events::emit("app:open-url", &json!({ "url": url }));
+                }
             },
 
             Event::UserEvent(UserEvent::FocusPrimary) => {
@@ -499,6 +519,25 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             _ => {},
         }
     })
+}
+
+/// Cheap deep-link detector: `<scheme>://...` where scheme begins with a
+/// letter and contains only RFC-3986 scheme characters. We don't restrict
+/// to configured protocols — app authors filter by scheme in their handler
+/// if they want to narrow.
+fn looks_like_url(s: &str) -> bool {
+    let Some((scheme, rest)) = s.split_once("://") else {
+        return false;
+    };
+    if scheme.is_empty() || rest.is_empty() {
+        return false;
+    }
+    let mut chars = scheme.chars();
+    let first = chars.next();
+    if !first.is_some_and(|c| c.is_ascii_alphabetic()) {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
 }
 
 fn webview_for<'a>(

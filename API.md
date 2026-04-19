@@ -534,7 +534,35 @@ if (!acquired) {
 singleInstance.onSecondLaunch(({ argv, cwd }) => {
   console.log("reopened with", argv, "at", cwd)
 })
+
+// Dedicated handler for custom URL schemes declared in tynd.config.ts::protocols.
+// Fires both on cold start (argv contains the URL) and on duplicate launch.
+singleInstance.onOpenUrl((url) => {
+  // e.g. "myapp://invite/abc123"
+  router.navigate(new URL(url).pathname)
+})
 ```
+
+### Registering a URL scheme
+
+Declare schemes in `tynd.config.ts` and `tynd build` wires each installer:
+
+```typescript
+// tynd.config.ts
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  protocols: ["myapp"],   // myapp:// links now launch this app
+  bundle:   { identifier: "com.example.myapp" },
+} satisfies TyndConfig
+```
+
+- macOS `.app`: `CFBundleURLTypes` written into `Info.plist`.
+- Windows NSIS/MSI: `HKCU\Software\Classes\<scheme>\shell\open\command` registry entries (currentUser — no admin prompt).
+- Linux `.deb` / `.rpm` / `.AppImage`: `MimeType=x-scheme-handler/<scheme>;` + `%U` in the `Exec=` line of the generated `.desktop` file.
+
+Reserved schemes (`http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`) are rejected at config-validation time.
 
 Backed by the `single-instance` crate for the OS lock (named pipe on Windows, abstract socket on Linux, CFMessagePort on macOS) plus `interprocess` for the local socket used to forward `{ argv, cwd }` from a duplicate launch to the primary. When `acquire()` returns `acquired: false`, the host has already:
 
