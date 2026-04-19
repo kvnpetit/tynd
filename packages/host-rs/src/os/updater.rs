@@ -37,6 +37,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "check" => check(args),
         "downloadAndVerify" => download_and_verify(args),
+        "install" => install(args),
         _ => Err(format!("updater.{method}: unknown method")),
     }
 }
@@ -291,6 +292,129 @@ impl Progress {
             }),
         );
     }
+}
+
+/// Swap the downloaded artifact for the currently running binary, then
+/// (by default) relaunch from the new version and exit the current process.
+///
+/// The running exe holds a lock on its own file on Windows, so we cannot
+/// just `fs::rename`. Platform strategies:
+/// - **Windows**: spawn `cmd.exe` with a short timeout + `move /y` + `start`.
+///   The delay lets the current process exit so the .exe unlocks; then the
+///   move succeeds and cmd relaunches the new binary.
+/// - **Linux AppImage** (and other single-file binaries): `fs::rename` is
+///   safe while the exe is running — ELF is fully loaded at exec time, the
+///   kernel keeps a private mapping of the old inode. Chmod +x defensively.
+/// - **macOS**: `.app` bundles are directories, updates ship as archives —
+///   not yet supported. Callers are expected to handle the swap themselves
+///   and just call `relaunch(false)`-style exit, which we don't expose yet.
+fn install(args: &Value) -> Result<Value, String> {
+    let new_path = args
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "updater.install: missing 'path'".to_string())?;
+    let relaunch = args
+        .get("relaunch")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    let current =
+        std::env::current_exe().map_err(|e| format!("updater.install: current_exe: {e}"))?;
+
+    if !std::path::Path::new(new_path).exists() {
+        return Err(format!(
+            "updater.install: downloaded file not found at '{new_path}'"
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    return install_windows(new_path, &current, relaunch);
+
+    #[cfg(target_os = "linux")]
+    return install_linux(new_path, &current, relaunch);
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = (new_path, current, relaunch);
+        Err(
+            "updater.install: macOS .app swap not yet implemented — handle the swap + \
+             relaunch in userland and call process.exit()."
+                .to_string(),
+        )
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    Err("updater.install: unsupported target OS".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn install_windows(
+    new_path: &str,
+    current: &std::path::Path,
+    relaunch: bool,
+) -> Result<Value, String> {
+    let current_str = current
+        .to_str()
+        .ok_or_else(|| "updater.install: current_exe path is not UTF-8".to_string())?;
+
+    // cmd escape: wrap paths in "…"; cmd itself reads %1/%2 via start-quoting.
+    // `start ""` first arg is the window title; omitting it makes cmd treat the
+    // next quoted token as the title, so the empty `""` placeholder is load-bearing.
+    let launch_tail = if relaunch {
+        format!(" & start \"\" \"{current_str}\"")
+    } else {
+        String::new()
+    };
+    let script = format!(
+        "timeout /t 2 /nobreak > nul & move /y \"{new_path}\" \"{current_str}\"{launch_tail}"
+    );
+
+    std::process::Command::new("cmd")
+        .args(["/c", &script])
+        .spawn()
+        .map_err(|e| format!("updater.install: spawn cmd: {e}"))?;
+
+    if relaunch {
+        // Give the new process a tick to take over before we exit.
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(100));
+            std::process::exit(0);
+        });
+    }
+    Ok(json!({ "installed": true, "path": current_str, "relaunch": relaunch }))
+}
+
+#[cfg(target_os = "linux")]
+fn install_linux(
+    new_path: &str,
+    current: &std::path::Path,
+    relaunch: bool,
+) -> Result<Value, String> {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    std::fs::rename(new_path, current)
+        .map_err(|e| format!("updater.install: rename to {}: {e}", current.display()))?;
+    // Make sure the replacement keeps the +x bit even if the download lost it.
+    if let Ok(meta) = std::fs::metadata(current) {
+        let mut perm = meta.permissions();
+        perm.set_mode(perm.mode() | 0o755);
+        let _ = std::fs::set_permissions(current, perm);
+    }
+
+    if relaunch {
+        std::process::Command::new(current)
+            .spawn()
+            .map_err(|e| format!("updater.install: relaunch: {e}"))?;
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(100));
+            std::process::exit(0);
+        });
+    }
+    Ok(json!({
+        "installed": true,
+        "path": current.to_string_lossy(),
+        "relaunch": relaunch,
+    }))
 }
 
 #[cfg(test)]

@@ -43,6 +43,8 @@ export {
   type UpdaterCheckOptions,
   type UpdaterDownloadOptions,
   type UpdaterDownloadResult,
+  type UpdaterInstallOptions,
+  type UpdaterInstallResult,
   type UpdaterProgress,
   updater,
 } from "./client/updater.js"
