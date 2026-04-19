@@ -51,6 +51,7 @@ project pages.
 - blake3           (Apache-2.0 / CC0-1.0) — https://github.com/BLAKE3-team/BLAKE3
 - single-instance  (MIT)              — https://github.com/jorgeatgu/single-instance
 - interprocess     (Apache-2.0 / MIT) — https://github.com/kotauskas/interprocess
+- ed25519-dalek    (BSD-3-Clause)     — https://github.com/dalek-cryptography/curve25519-dalek
 - rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
 - tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
 - rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite

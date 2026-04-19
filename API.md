@@ -18,7 +18,7 @@ Every Tynd app has three surfaces:
 ### [Frontend RPC — `createBackend<T>()`](#frontend-rpc--createbackendt)
 
 ### [OS APIs](#os-apis)
-[`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
+[`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`updater`](#updater--auto-update-with-ed25519-verify) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
 
 ### [IPC architecture](#ipc-architecture)
 
@@ -571,6 +571,55 @@ Backed by the `single-instance` crate for the OS lock (named pipe on Windows, ab
 3. Triggered the primary window's `setFocus()` + un-minimize (via the host's native event loop, no IPC round-trip needed).
 
 Use a stable reverse-DNS id — it doubles as the OS lock name and the socket name.
+
+### `updater` — auto-update with Ed25519 verify
+
+```typescript
+import { updater } from "@tynd/core/client"
+
+const info = await updater.check({
+  endpoint:       "https://releases.example.com/update.json",
+  currentVersion: "1.0.0",
+})
+
+if (info) {
+  const off = updater.onProgress(({ phase, loaded, total }) => {
+    console.log(`${phase}: ${loaded}/${total ?? "?"}`)
+  })
+  const { path } = await updater.downloadAndVerify({
+    url:       info.url,
+    signature: info.signature,
+    pubKey:    "<base64 Ed25519 pubkey baked into the app>",
+  })
+  off()
+  // Next step: hand `path` to a platform-specific installer.
+  // Install is not handled by the runtime yet (planned).
+}
+```
+
+Manifest shape (Tauri-compatible — any tooling that produces Tauri manifests works):
+
+```json
+{
+  "version":  "1.2.3",
+  "notes":    "Bug fixes & perf.",
+  "pub_date": "2026-04-19T12:00:00Z",
+  "platforms": {
+    "windows-x86_64": { "url": "https://.../MyApp-1.2.3.exe", "signature": "<base64 Ed25519>" },
+    "darwin-aarch64": { "url": "https://.../MyApp-1.2.3.dmg", "signature": "<base64 Ed25519>" },
+    "linux-x86_64":   { "url": "https://.../MyApp-1.2.3.AppImage", "signature": "<base64 Ed25519>" }
+  }
+}
+```
+
+**Trust model.** The manifest itself is served over plain HTTPS (no meta-signature). Each platform entry carries an Ed25519 signature over the raw bytes of the downloaded file. The public key is supplied by the app — typically baked in at build time via `define:` or read from a config — so a compromised manifest server can only redirect to a URL whose bytes still have to verify against the local pubkey.
+
+**Platform key.** Derived from `std::env::consts::OS` (with `macos` → `darwin` for parity with GitHub Releases / Tauri) and `std::env::consts::ARCH` (`x86_64` / `aarch64`). Manifest keys must use this `<os>-<arch>` form.
+
+**Not yet handled:**
+- Installing the downloaded file (planned: macOS `.app` swap, Linux AppImage swap, Windows helper-exe swap).
+- Periodic auto-check.
+- Delta updates.
 
 ### `workers` — offload CPU-bound JS
 

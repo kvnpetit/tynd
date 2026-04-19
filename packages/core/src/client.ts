@@ -38,6 +38,14 @@ export {
   terminal,
 } from "./client/terminal.js"
 export { tray } from "./client/tray.js"
+export {
+  type UpdateInfo,
+  type UpdaterCheckOptions,
+  type UpdaterDownloadOptions,
+  type UpdaterDownloadResult,
+  type UpdaterProgress,
+  updater,
+} from "./client/updater.js"
 // Web-platform globals re-exported so `import * as tynd from "@tynd/core/client"`
 // gives you `tynd.fetch`, `tynd.WebSocket`, `tynd.crypto`, etc. without
 // touching the globals.

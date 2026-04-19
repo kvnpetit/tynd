@@ -53,6 +53,9 @@ sha2   = { version = "0.10", default-features = false }
 blake3 = { version = "1.5", default-features = false }
 hmac   = { version = "0.12", default-features = false }
 
+# Ed25519 signatures for the auto-updater manifest + binary integrity.
+ed25519-dalek = { version = "2.2", default-features = false, features = ["std"] }
+
 # Single-instance lock across OSes
 single-instance = "0.3"
 # Cross-platform local socket for forwarding argv/cwd from a 2nd launch
