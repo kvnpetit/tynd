@@ -12,7 +12,13 @@ export {
   type OpenFileOptions,
   type SaveFileOptions,
 } from "./client/dialog.js"
-export { type DirEntry, type FileStat, fs } from "./client/fs.js"
+export {
+  type DirEntry,
+  type FileStat,
+  type FsChangeEvent,
+  fs,
+  type WatchHandle,
+} from "./client/fs.js"
 export {
   type HttpProgress,
   type HttpRequestOptions,
@@ -25,6 +31,7 @@ export { type OsInfo, os } from "./client/os.js"
 export { path } from "./client/path.js"
 export { type ExecOptions, type ExecResult, process } from "./client/process.js"
 export { shell } from "./client/shell.js"
+export { type ShortcutHandle, shortcuts } from "./client/shortcuts.js"
 export { sidecar } from "./client/sidecar.js"
 export { type SingleInstanceResult, singleInstance } from "./client/single-instance.js"
 export {

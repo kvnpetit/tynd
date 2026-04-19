@@ -62,6 +62,11 @@ single-instance = "0.3"
 # to the 1st (Windows named pipe, Unix domain socket).
 interprocess = "2.2"
 
+# FS watcher (ReadDirectoryChangesW on Windows, FSEvents on macOS, inotify
+# on Linux) + global hotkey manager for system-wide shortcuts.
+notify        = "6.1"
+global-hotkey = "0.5"
+
 # CSPRNG + WebSocket + embedded SQL (lite parity with bun:sqlite)
 rand       = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
 tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
