@@ -6,6 +6,24 @@ export type Runtime = "full" | "lite"
 // Reverse-DNS: ≥ 2 segments, each starting with a letter (MSI + CFBundleIdentifier).
 const REVERSE_DNS = /^[a-zA-Z][a-zA-Z0-9_-]*(\.[a-zA-Z][a-zA-Z0-9_-]*)+$/
 
+// URL scheme: starts with a letter, then letters / digits / +-. (RFC 3986 §3.1).
+// Must avoid reserved schemes (http/https/file/ftp) — those are rejected with
+// a clearer message than a generic regex failure.
+const URL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+\-.]*$/
+const RESERVED_SCHEMES = new Set([
+  "http",
+  "https",
+  "file",
+  "ftp",
+  "mailto",
+  "javascript",
+  "data",
+  "about",
+  "blob",
+  "tynd",
+  "tynd-bin",
+])
+
 const BundleSchema = v.object({
   identifier: v.pipe(
     v.string(),
@@ -56,6 +74,20 @@ const ConfigSchema = v.object({
   devCommand: v.optional(v.pipe(v.string(), v.minLength(1))),
   icon: v.optional(v.pipe(v.string(), v.minLength(1))),
   binaryArgs: v.optional(v.array(v.string())),
+  /**
+   * Custom URL schemes (e.g. `["myapp"]`) the built app should register with
+   * the OS. `myapp://...` links then launch the installed app and fire an
+   * `app:open-url` event. Reserved schemes (http, https, file, …) rejected.
+   */
+  protocols: v.optional(
+    v.array(
+      v.pipe(
+        v.string(),
+        v.regex(URL_SCHEME, "must be a valid URL scheme (letters, digits, +-.)"),
+        v.check((s) => !RESERVED_SCHEMES.has(s.toLowerCase()), "reserved scheme"),
+      ),
+    ),
+  ),
   bundle: v.optional(BundleSchema),
   sidecars: v.optional(
     v.array(

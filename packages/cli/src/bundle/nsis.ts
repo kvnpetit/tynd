@@ -73,12 +73,27 @@ function renderScript(
   const installRoot = isUser ? "$LOCALAPPDATA\\Programs" : "$PROGRAMFILES64"
   const execLevel = isUser ? "user" : "admin"
   const uninstallHive = isUser ? "HKCU" : "HKLM"
+  const schemeHive = isUser ? "HKCU" : "HKLM"
   const uninstallKey = `Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${ctx.identifier}`
   const publisher = ctx.author?.name ?? ""
   const iconDirective = iconRel ? `Icon "${iconRel}"\n!define MUI_ICON "${iconRel}"` : ""
 
   // NSIS string escaping: `\\` for backslash, `$\"` for embedded quote.
   const nsisStr = (s: string) => s.replace(/\\/g, "\\\\").replace(/"/g, '$\\"')
+
+  const protocolInstall = ctx.protocols
+    .map((scheme) => {
+      const base = `Software\\Classes\\${scheme}`
+      const cmd = `"$INSTDIR\\${exeName}" "%1"`
+      return `    WriteRegStr ${schemeHive} "${base}" "" "URL:${nsisStr(ctx.displayName)}"
+    WriteRegStr ${schemeHive} "${base}" "URL Protocol" ""
+    WriteRegStr ${schemeHive} "${base}\\DefaultIcon" "" "$INSTDIR\\${exeName},0"
+    WriteRegStr ${schemeHive} "${base}\\shell\\open\\command" "" \`${cmd}\``
+    })
+    .join("\n")
+  const protocolUninstall = ctx.protocols
+    .map((scheme) => `    DeleteRegKey ${schemeHive} "Software\\Classes\\${scheme}"`)
+    .join("\n")
 
   return `!include "MUI2.nsh"
 
@@ -123,6 +138,7 @@ ${iconRel ? `    File "${iconRel}"` : ""}
 ${iconRel ? `    WriteRegStr ${uninstallHive} "${uninstallKey}" "DisplayIcon" "$INSTDIR\\${iconRel}"` : ""}
     WriteRegDWORD ${uninstallHive} "${uninstallKey}" "NoModify" 1
     WriteRegDWORD ${uninstallHive} "${uninstallKey}" "NoRepair" 1
+${protocolInstall}
 SectionEnd
 
 Section "Uninstall"
@@ -134,6 +150,7 @@ ${iconRel ? `    Delete "$INSTDIR\\${iconRel}"` : ""}
     RMDir "$SMPROGRAMS\\${nsisStr(ctx.displayName)}"
     RMDir "$INSTDIR"
     DeleteRegKey ${uninstallHive} "${uninstallKey}"
+${protocolUninstall}
 SectionEnd
 `
 }

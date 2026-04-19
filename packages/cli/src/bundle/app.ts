@@ -41,6 +41,25 @@ function renderInfoPlist(ctx: BundleContext, exeName: string, iconFile: string |
   const iconKey = iconFile
     ? `    <key>CFBundleIconFile</key>\n    <string>${esc(iconFile)}</string>\n`
     : ""
+  const urlTypes =
+    ctx.protocols.length > 0
+      ? `    <key>CFBundleURLTypes</key>
+    <array>
+${ctx.protocols
+  .map(
+    (scheme) => `        <dict>
+            <key>CFBundleURLName</key>
+            <string>${esc(`${ctx.identifier}.${scheme}`)}</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>${esc(scheme)}</string>
+            </array>
+        </dict>`,
+  )
+  .join("\n")}
+    </array>
+`
+      : ""
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -72,7 +91,7 @@ function renderInfoPlist(ctx: BundleContext, exeName: string, iconFile: string |
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>${copyright}</string>
-${iconKey}</dict>
+${iconKey}${urlTypes}</dict>
 </plist>
 `
 }

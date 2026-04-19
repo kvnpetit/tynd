@@ -104,6 +104,30 @@ function renderWxs(
     : ""
   const shortcutIconAttr = iconRel ? `Icon="AppIcon.ico"` : ""
 
+  // Per-scheme registry components — installed to HKCU so we don't need admin
+  // rights. Matches NSIS currentUser default.
+  const schemeComponents = ctx.protocols
+    .map((scheme, i) => {
+      const compId = `Scheme_${i}`
+      const base = `Software\\Classes\\${scheme}`
+      return `      <Component Id="${compId}" Guid="*">
+        <RegistryKey Root="HKCU" Key="${base}">
+          <RegistryValue Type="string" Value="URL:${esc(ctx.displayName)}" KeyPath="yes"/>
+          <RegistryValue Name="URL Protocol" Type="string" Value=""/>
+        </RegistryKey>
+        <RegistryKey Root="HKCU" Key="${base}\\DefaultIcon">
+          <RegistryValue Type="string" Value="[APPLICATIONFOLDER]${esc(exeName)},0"/>
+        </RegistryKey>
+        <RegistryKey Root="HKCU" Key="${base}\\shell\\open\\command">
+          <RegistryValue Type="string" Value="&quot;[APPLICATIONFOLDER]${esc(exeName)}&quot; &quot;%1&quot;"/>
+        </RegistryKey>
+      </Component>`
+    })
+    .join("\n")
+  const schemeRefs = ctx.protocols
+    .map((_, i) => `      <ComponentRef Id="Scheme_${i}"/>`)
+    .join("\n")
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="*"
@@ -121,6 +145,7 @@ function renderWxs(
     <Feature Id="ProductFeature" Title="${displayName}" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentRef Id="ApplicationShortcuts" />
+${schemeRefs}
     </Feature>
 
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -144,6 +169,7 @@ ${
       </Component>`
     : ""
 }
+${schemeComponents}
     </ComponentGroup>
 
     <DirectoryRef Id="ApplicationProgramsFolder">

@@ -32,6 +32,8 @@ export interface BundleContext {
   identifier: string
   /** Raw icon source path (.svg, .png or .ico). Each bundler handles formats it can't use. */
   iconSource: string | null
+  /** Custom URL schemes (lowercase, no `://`) registered with the OS at install time. */
+  protocols: readonly string[]
   categories: readonly string[]
   shortDescription: string
   longDescription: string

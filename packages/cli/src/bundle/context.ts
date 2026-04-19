@@ -38,6 +38,7 @@ export async function buildBundleContext(opts: BuildContextOpts): Promise<Bundle
     version: pkg?.version ?? "0.0.0",
     identifier: bundle.identifier,
     iconSource: opts.iconSource,
+    protocols: (opts.cfg.protocols ?? []).map((s) => s.toLowerCase()),
     categories: bundle.categories ?? [],
     shortDescription,
     longDescription: bundle.longDescription ?? shortDescription,

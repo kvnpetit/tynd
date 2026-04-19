@@ -115,11 +115,14 @@ function renderDesktopEntry(ctx: BundleContext): Buffer {
     "Type=Application",
     `Name=${ctx.displayName}`,
     `Comment=${ctx.shortDescription}`,
-    `Exec=/usr/bin/${ctx.appName}`,
+    `Exec=/usr/bin/${ctx.appName} %U`,
     `Icon=${ctx.appName}`,
     "Terminal=false",
     `Categories=${cats}`,
   ]
+  if (ctx.protocols.length > 0) {
+    lines.push(`MimeType=${ctx.protocols.map((s) => `x-scheme-handler/${s}`).join(";")};`)
+  }
   return Buffer.from(`${lines.join("\n")}\n`, "utf8")
 }
 

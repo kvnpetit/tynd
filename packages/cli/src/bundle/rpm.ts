@@ -129,15 +129,19 @@ ${iconFiles}
 
 function renderDesktopEntry(ctx: BundleContext): string {
   const cats = ctx.categories.length > 0 ? `${ctx.categories.join(";")};` : "Utility;"
-  return [
+  const lines = [
     "[Desktop Entry]",
     "Type=Application",
     `Name=${ctx.displayName}`,
     `Comment=${ctx.shortDescription}`,
-    `Exec=/usr/bin/${ctx.appName}`,
+    `Exec=/usr/bin/${ctx.appName} %U`,
     `Icon=${ctx.appName}`,
     "Terminal=false",
     `Categories=${cats}`,
-    "",
-  ].join("\n")
+  ]
+  if (ctx.protocols.length > 0) {
+    lines.push(`MimeType=${ctx.protocols.map((s) => `x-scheme-handler/${s}`).join(";")};`)
+  }
+  lines.push("")
+  return lines.join("\n")
 }
