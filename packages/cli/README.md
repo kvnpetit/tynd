@@ -40,8 +40,10 @@ tynd build                   # Single-file distributable binary
 tynd init                    # Add Tynd to an existing project
 tynd clean                   # Remove build artifacts (.tynd/cache, release/)
 tynd validate                # Check config + binary availability
-tynd info [--json]           # Environment diagnostics (Bun, Rust, WebView2, paths)
+tynd info [--json]           # Environment diagnostics (Bun version, WebView, paths)
 tynd upgrade                 # Bump @tynd/* deps to latest
+tynd keygen [--out <base>]   # Generate an Ed25519 keypair for the auto-updater
+tynd sign <file> --key <k>   # Sign a file with an updater private key
 
 # Global flags
 tynd --verbose <cmd>         # Debug-level logs (also sets TYND_LOG=debug in host)

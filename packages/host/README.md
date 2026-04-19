@@ -38,10 +38,10 @@ Binaries land in `node_modules/@tynd/host/bin/<plat>-<arch>/`. The CLI's `findBi
 
 ## What's inside the binaries
 
-- `tynd-full` — spawns a Bun subprocess, talks to it over stdin/stdout JSON. Heavier but full npm / JIT.
-- `tynd-lite` — embeds a lightweight JS engine inside the Rust binary. ~6.5 MB, no external runtime.
+- `tynd-full` — packs Bun alongside the native host and runs your TypeScript on Bun's JIT. Heavier binary, full npm support (including native bindings).
+- `tynd-lite` — embeds a lightweight JS engine inside the host binary. ~6.5 MB, no external runtime, pure-JS npm packages only.
 
-Both binaries share the same Rust host (`tynd-host`): wry + tao WebView, the `tynd://` + `tynd-bin://` custom IPC schemes, and all OS APIs.
+Both share the same native host: the WebView event loop, the `tynd://` + `tynd-bin://` custom IPC schemes, and all OS APIs.
 
 See [RUNTIMES.md](https://github.com/kvnpetit/tynd/blob/main/RUNTIMES.md).
 
