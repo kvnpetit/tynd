@@ -14,12 +14,30 @@ const CancelMsgSchema = v.object({
   type: v.literal("cancel"),
   id: v.string(),
 })
+const AckMsgSchema = v.object({
+  type: v.literal("ack"),
+  id: v.string(),
+  n: v.pipe(v.number(), v.integer(), v.minValue(1)),
+})
 const LifecycleMsgSchema = v.object({
   type: v.union([v.literal("tynd:ready"), v.literal("tynd:close")]),
 })
-const IpcMsgSchema = v.union([CallMsgSchema, CancelMsgSchema, LifecycleMsgSchema])
+const IpcMsgSchema = v.union([CallMsgSchema, CancelMsgSchema, AckMsgSchema, LifecycleMsgSchema])
 
-const _activeStreams = new Map<string, AsyncIterator<unknown>>()
+/** Initial per-stream credit. Enough buffer for sub-round-trip bursts; bounded
+ * so a runaway generator can't fill frontend memory. Must match the ACK_CHUNK
+ * on the shim so credit is replenished before it hits zero under normal load. */
+const STREAM_CREDIT = 64
+
+interface StreamState {
+  iter: AsyncIterator<unknown>
+  /** How many more chunks the backend may yield before it has to wait. */
+  credit: number
+  /** Resolved by the next `ack` when credit was 0 at yield time. */
+  waiter: (() => void) | null
+}
+
+const _activeStreams = new Map<string, StreamState>()
 
 function _isAsyncIterable(x: unknown): x is AsyncIterable<unknown> {
   return (
@@ -124,13 +142,29 @@ async function handleLine(line: string, entryPath: string): Promise<void> {
       break
 
     case "cancel": {
-      const iter = _activeStreams.get(msg.id)
-      if (iter) {
+      const stream = _activeStreams.get(msg.id)
+      if (stream) {
         _activeStreams.delete(msg.id)
-        if (typeof iter.return === "function") {
-          iter.return(undefined).catch(() => {
+        // Release any pending yield so it can observe the stream is gone.
+        stream.waiter?.()
+        if (typeof stream.iter.return === "function") {
+          stream.iter.return(undefined).catch(() => {
             /* swallow: cancel is best-effort */
           })
+        }
+      }
+      break
+    }
+
+    case "ack": {
+      const stream = _activeStreams.get(msg.id)
+      if (stream) {
+        stream.credit += msg.n
+        // Wake a yield blocked on empty credit, if any.
+        if (stream.waiter) {
+          const wake = stream.waiter
+          stream.waiter = null
+          wake()
         }
       }
       break
@@ -173,7 +207,8 @@ async function handleCall(
 
 async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Promise<void> {
   const iter = iterable[Symbol.asyncIterator]()
-  _activeStreams.set(id, iter)
+  const state: StreamState = { iter, credit: STREAM_CREDIT, waiter: null }
+  _activeStreams.set(id, state)
   let final: unknown
   try {
     while (true) {
@@ -182,6 +217,16 @@ async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Pro
         final = step.value
         break
       }
+      // Block before writing if credit is exhausted — the frontend will ack
+      // past-consumed chunks and wake us. Caps memory at STREAM_CREDIT.
+      if (state.credit <= 0) {
+        await new Promise<void>((resolve) => {
+          state.waiter = resolve
+        })
+        // Cancelled while we waited — break out cleanly.
+        if (!_activeStreams.has(id)) break
+      }
+      state.credit -= 1
       process.stdout.write(`${JSON.stringify({ type: "yield", id, value: step.value })}\n`)
       if (!_activeStreams.has(id)) break
     }

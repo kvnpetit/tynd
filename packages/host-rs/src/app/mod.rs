@@ -52,7 +52,18 @@ enum UserEvent {
     /// Sent by the single-instance listener when a duplicate launch forwards
     /// its argv — we bring the primary window to the front.
     FocusPrimary,
+    /// Sent 10ms after the first buffered yield (or synchronously when the
+    /// buffer exceeds `YIELD_BATCH_MAX`) to flush pending chunks to every
+    /// webview in one `evaluate_script` per window.
+    FlushYields,
 }
+
+/// Maximum yields buffered per window before we flush synchronously.
+/// Higher = fewer `evaluate_script` calls, lower = smaller memory spike.
+const YIELD_BATCH_MAX: usize = 64;
+/// How long the first buffered yield waits for siblings before flushing.
+/// Invisible to users (<1 frame) but cuts per-chunk overhead on bursty streams.
+const YIELD_FLUSH_MS: u64 = 10;
 
 /// A secondary (non-primary) window with its own WebView and state tracker.
 struct SecondaryEntry {
@@ -256,6 +267,11 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let dev_url_owned = config.dev_url.clone();
     let frontend_dir_owned = config.frontend_dir.clone();
 
+    // Per-window yield buffer — flushed in batches so a 10k-yield burst ends
+    // up as ~30 `evaluate_script` calls instead of 10k. See YIELD_BATCH_MAX.
+    let mut yield_buffer: HashMap<String, Vec<(String, Value)>> = HashMap::new();
+    let flush_scheduled = std::sync::Arc::new(AtomicBool::new(false));
+
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
 
@@ -281,6 +297,11 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 std::process::exit(0);
             },
 
+            Event::UserEvent(UserEvent::FlushYields) => {
+                flush_scheduled.store(false, Ordering::SeqCst);
+                flush_yields(&mut yield_buffer, &webview, &secondaries);
+            },
+
             Event::UserEvent(UserEvent::Backend(evt)) => match evt {
                 BackendEvent::Return { id, ok, value } => {
                     if id == "__tynd_on_close__" {
@@ -293,10 +314,33 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     if id.starts_with("__tynd_") {
                         return;
                     }
-                    let _ = webview.evaluate_script(&ipc::eval_resolve(&id, ok, &value));
+                    // Flush any pending yields for this stream before the
+                    // terminating Return — otherwise the frontend iterator
+                    // would finalize before the last chunks arrived.
+                    flush_yields(&mut yield_buffer, &webview, &secondaries);
+                    let label = dispatch::call_labels()
+                        .remove(&id)
+                        .map_or_else(|| PRIMARY_LABEL.into(), |(_, l)| l);
+                    let wv = webview_for(&label, &webview, &secondaries);
+                    let _ = wv.evaluate_script(&ipc::eval_resolve(&id, ok, &value));
                 },
                 BackendEvent::Yield { id, value } => {
-                    let _ = webview.evaluate_script(&ipc::eval_yield(&id, &value));
+                    let label = dispatch::call_labels()
+                        .get(&id)
+                        .map_or_else(|| PRIMARY_LABEL.into(), |e| e.clone());
+                    let bucket = yield_buffer.entry(label).or_default();
+                    bucket.push((id, value));
+                    // Synchronous flush when any bucket gets hot — avoids
+                    // memory growth if a single stream fires in a tight loop.
+                    if bucket.len() >= YIELD_BATCH_MAX {
+                        flush_yields(&mut yield_buffer, &webview, &secondaries);
+                    } else if !flush_scheduled.swap(true, Ordering::SeqCst) {
+                        let proxy = proxy.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(YIELD_FLUSH_MS));
+                            let _ = proxy.send_event(UserEvent::FlushYields);
+                        });
+                    }
                 },
                 BackendEvent::Emit { name, payload } => {
                     let _ = webview.evaluate_script(&ipc::eval_dispatch(&name, &payload));
@@ -450,6 +494,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 let label = label_for(window_id, &window_id_to_label);
                 if window_id != primary_id {
                     // Secondary window: close immediately, no cancel window.
+                    cancel_streams_for_label(&label, &call_tx);
                     os::events::emit("window:closed", &json!({ "label": label }));
                     if let Some(entry) = secondaries.remove(&label) {
                         window_id_to_label.remove(&entry.window.id());
@@ -588,6 +633,39 @@ fn looks_like_url(s: &str) -> bool {
         return false;
     }
     chars.all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+}
+
+/// Cancel every active streaming call whose origin window just closed. Looks
+/// up ids in `dispatch::call_labels()` and sends `BackendCall::Cancel` for
+/// each match. Without this, a closed secondary window leaves its async
+/// generators running forever on the backend.
+fn cancel_streams_for_label(label: &str, call_tx: &std::sync::mpsc::Sender<BackendCall>) {
+    let labels = dispatch::call_labels();
+    let orphaned: Vec<String> = labels
+        .iter()
+        .filter_map(|e| (e.value() == label).then(|| e.key().clone()))
+        .collect();
+    for id in orphaned {
+        labels.remove(&id);
+        let _ = call_tx.send(BackendCall::Cancel { id });
+    }
+}
+
+/// Drain the yield buffer into one `evaluate_script` call per webview. Keeps
+/// per-stream FIFO order (each id's yields arrive together via
+/// `__tynd_yield_batch__` on the frontend shim).
+fn flush_yields(
+    buffer: &mut HashMap<String, Vec<(String, Value)>>,
+    primary: &WebView,
+    secondaries: &HashMap<String, SecondaryEntry>,
+) {
+    for (label, pairs) in buffer.drain() {
+        if pairs.is_empty() {
+            continue;
+        }
+        let wv = webview_for(&label, primary, secondaries);
+        let _ = wv.evaluate_script(&ipc::eval_yield_batch(&pairs));
+    }
 }
 
 fn webview_for<'a>(

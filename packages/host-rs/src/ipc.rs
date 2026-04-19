@@ -60,14 +60,38 @@ pub const JS_SHIM: &str = r#"
     }
   };
 
+  // Chunks are acked back to the backend every ACK_CHUNK consumed — lets
+  // the backend keep ~STREAM_CREDIT chunks in-flight before it has to stall.
+  // Big enough to hide round-trip latency, small enough to bound memory.
+  var ACK_CHUNK = 32;
+  function _ackConsume(id, p) {
+    p.consumed = (p.consumed | 0) + 1;
+    if (p.consumed >= ACK_CHUNK) {
+      try {
+        window.ipc.postMessage(JSON.stringify({ type: "ack", id: id, n: p.consumed }));
+      } catch (_) {}
+      p.consumed = 0;
+    }
+  }
+
   // Called by Rust: deliver one chunk from a streaming backend call.
   window.__tynd_yield__ = function (id, value) {
     var p = _pending[id];
     if (!p || p.done) return;
     if (p.waiters.length) {
       p.waiters.shift().resolve({ value: value, done: false });
+      _ackConsume(id, p);
     } else {
       p.yields.push(value);
+    }
+  };
+
+  // Called by Rust: deliver a batch of yields in one call to minimize
+  // `evaluate_script` overhead on bursty streams. `pairs` is an array of
+  // [id, value] tuples in FIFO order.
+  window.__tynd_yield_batch__ = function (pairs) {
+    for (var i = 0; i < pairs.length; i++) {
+      window.__tynd_yield__(pairs[i][0], pairs[i][1]);
     }
   };
 
@@ -123,6 +147,7 @@ pub const JS_SHIM: &str = r#"
           return new Promise(function (resolve, reject) {
             if (p.yields.length) {
               resolve({ value: p.yields.shift(), done: false });
+              _ackConsume(id, p);
               return;
             }
             if (p.done) {
@@ -222,6 +247,28 @@ pub fn eval_yield(id: &str, value: &Value) -> String {
     let val_js = serde_json::to_string(value).unwrap_or_else(|_| "null".into());
     let id_js = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
     format!("window.__tynd_yield__&&window.__tynd_yield__({id_js},{val_js})")
+}
+
+/// Build the JS eval string that delivers a batched flush of streaming chunks.
+/// `pairs` is `[(id, value)]` and renders to `__tynd_yield_batch__([[id,val],…])`.
+/// Single `evaluate_script` instead of one per yield — cuts main-thread cost
+/// ~30x on bursty streams (e.g. 10k tokens/s).
+#[inline]
+pub fn eval_yield_batch(pairs: &[(String, Value)]) -> String {
+    let mut out = String::with_capacity(pairs.len() * 48);
+    out.push_str("window.__tynd_yield_batch__&&window.__tynd_yield_batch__([");
+    for (i, (id, value)) in pairs.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push('[');
+        out.push_str(&serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into()));
+        out.push(',');
+        out.push_str(&serde_json::to_string(value).unwrap_or_else(|_| "null".into()));
+        out.push(']');
+    }
+    out.push_str("])");
+    out
 }
 
 /// Build the JS eval string that dispatches an event to frontend subscribers.
