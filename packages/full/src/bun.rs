@@ -136,6 +136,16 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
                             Err(_) => continue,
                         }
                     },
+                    BackendCall::Ack { id, n } => {
+                        let msg = serde_json::json!({ "type": "ack", "id": id, "n": n });
+                        match serde_json::to_string(&msg) {
+                            Ok(mut s) => {
+                                s.push('\n');
+                                s.into_bytes()
+                            },
+                            Err(_) => continue,
+                        }
+                    },
                 };
                 // Drop the message if Bun is mid-reload (stdin slot is None).
                 if let Some(stdin) = stdin_slot.lock().unwrap().as_mut() {

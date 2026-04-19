@@ -49,6 +49,10 @@ pub enum BackendCall {
     /// Cancel an in-flight streaming call. Triggers `iterator.return()` on the
     /// backend-side async generator and unblocks the frontend iterator.
     Cancel { id: String },
+    /// Credit replenishment from the frontend — the iterator has consumed `n`
+    /// chunks. Backend increments its per-stream credit and wakes any yield
+    /// awaiting on an empty credit pool. Keeps in-flight memory bounded.
+    Ack { id: String, n: u32 },
 }
 
 impl BackendCall {

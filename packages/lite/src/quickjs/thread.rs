@@ -210,6 +210,15 @@ fn handle_call(ctx: &Context, call: BackendCall, event_tx: &mpsc::Sender<Backend
                 Ok(())
             });
         },
+        BackendCall::Ack { id, n } => {
+            let _ = ctx.with(|ctx| -> rquickjs::Result<()> {
+                let g = ctx.globals();
+                if let Ok(f) = g.get::<_, Function>("__tynd_ack__") {
+                    let _ = f.call::<_, ()>((id, n));
+                }
+                Ok(())
+            });
+        },
     }
 }
 

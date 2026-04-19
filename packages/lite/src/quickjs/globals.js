@@ -67,6 +67,10 @@ globalThis.__tynd_mod__ = globalThis;
 //     the generator's return value).
 // Cancellation: __tynd_cancel__(id) calls iterator.return() on the active stream.
 (function () {
+  // Matches STREAM_CREDIT / ACK_CHUNK on the shim — enough buffer for
+  // sub-round-trip bursts, bounded so frontend memory stays capped.
+  var STREAM_CREDIT = 64;
+
   var streams = {};
   function stringify(v) { try { return JSON.stringify(v === undefined ? null : v); } catch (_) { return 'null'; } }
   function isAsyncIterable(x) {
@@ -74,7 +78,8 @@ globalThis.__tynd_mod__ = globalThis;
       && typeof x[Symbol.asyncIterator] === 'function';
   }
   function runStream(id, iter) {
-    streams[id] = iter;
+    var state = { iter: iter, credit: STREAM_CREDIT, waiter: null };
+    streams[id] = state;
     function step() {
       Promise.resolve(iter.next()).then(function (s) {
         if (!streams[id]) return; // cancelled
@@ -83,8 +88,18 @@ globalThis.__tynd_mod__ = globalThis;
           __tynd_return__(id, true, stringify(s.value));
           return;
         }
-        __tynd_yield__(id, stringify(s.value));
-        step();
+        function emit() {
+          if (!streams[id]) return;
+          state.credit -= 1;
+          __tynd_yield__(id, stringify(s.value));
+          step();
+        }
+        if (state.credit > 0) {
+          emit();
+        } else {
+          // Wait for an ack — `__tynd_ack__` replenishes credit and resumes.
+          state.waiter = emit;
+        }
       }, function (err) {
         delete streams[id];
         __tynd_return__(id, false, stringify(String(err && err.message || err)));
@@ -115,14 +130,30 @@ globalThis.__tynd_mod__ = globalThis;
     });
   };
   globalThis.__tynd_cancel__ = function (id) {
-    var iter = streams[id];
-    if (!iter) return;
+    var state = streams[id];
+    if (!state) return;
     delete streams[id];
+    var iter = state.iter;
+    // Release any yield waiting on credit so its callback observes the
+    // absent entry and exits cleanly.
+    if (typeof state.waiter === 'function') {
+      var w = state.waiter; state.waiter = null;
+      try { w(); } catch (_) {}
+    }
     try {
       if (typeof iter['return'] === 'function') {
         Promise.resolve(iter['return']()).catch(function () {});
       }
     } catch (_) {}
     __tynd_return__(id, true, 'null');
+  };
+  globalThis.__tynd_ack__ = function (id, n) {
+    var state = streams[id];
+    if (!state) return;
+    state.credit += n | 0;
+    if (state.waiter) {
+      var w = state.waiter; state.waiter = null;
+      try { w(); } catch (_) {}
+    }
   };
 })();
