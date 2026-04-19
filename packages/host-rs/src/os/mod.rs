@@ -15,6 +15,7 @@ pub mod single_instance;
 pub mod sql;
 pub mod store;
 pub mod terminal;
+pub mod updater;
 pub mod websocket;
 pub mod window_cmd;
 
@@ -42,6 +43,7 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "singleInstance" => single_instance::dispatch(method, args),
         "websocket" => websocket::dispatch(method, args),
         "sql" => sql::dispatch(method, args),
+        "updater" => updater::dispatch(method, args),
         #[cfg(feature = "embedded-js")]
         "workers" => workers::dispatch(method, args),
         #[cfg(not(feature = "embedded-js"))]
