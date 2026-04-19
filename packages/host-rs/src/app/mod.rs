@@ -1,8 +1,9 @@
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tao::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder},
+    window::Theme,
 };
 use wry::{http::Request, WebViewBuilder};
 
@@ -36,6 +37,8 @@ enum UserEvent {
     },
     /// Sent by a timeout thread when on_close takes too long
     ForceExit,
+    /// Sent 500ms after CloseRequested if `cancelClose()` wasn't called.
+    ProceedClose,
 }
 
 pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
@@ -191,6 +194,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     }
 
     let exit_started = std::sync::Arc::new(AtomicBool::new(false));
+    // tao has no dedicated minimize/maximize/fullscreen events — poll flags on
+    // each Resized (triggered by every transition on every platform) and emit
+    // synthetic events only when they actually flip.
+    let mut last_state = WindowState::capture(&native_window);
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
@@ -256,9 +263,29 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                // Frontend / backend handlers get 500ms to call
+                // `tyndWindow.cancelClose()` before we hide + exit. The
+                // existing 2s watchdog still covers backend handler timeouts.
+                os::window_cmd::reset_close_cancel();
+                os::events::emit("window:close-requested", &Value::Null);
+
+                let proxy_cancel = proxy.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if os::window_cmd::close_cancelled() {
+                        return;
+                    }
+                    let _ = proxy_cancel.send_event(UserEvent::ProceedClose);
+                });
+            },
+
+            Event::UserEvent(UserEvent::ProceedClose) => {
+                if os::window_cmd::close_cancelled() {
+                    return;
+                }
                 native_window.set_visible(false);
                 let _ = call_tx.send(BackendCall::lifecycle("on_close"));
-                // Fall back to ForceExit after 2 seconds in case the handler hangs.
+                // Watchdog: if the backend handler hangs, force-exit after 2s.
                 let proxy = proxy.clone();
                 let exit_started = exit_started.clone();
                 std::thread::spawn(move || {
@@ -269,7 +296,112 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 });
             },
 
+            Event::WindowEvent {
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                os::events::emit(
+                    "window:resized",
+                    &json!({ "width": size.width, "height": size.height }),
+                );
+                last_state.diff_and_emit(&native_window);
+            },
+
+            Event::WindowEvent {
+                event: WindowEvent::Moved(pos),
+                ..
+            } => {
+                os::events::emit("window:moved", &json!({ "x": pos.x, "y": pos.y }));
+            },
+
+            Event::WindowEvent {
+                event: WindowEvent::Focused(focused),
+                ..
+            } => {
+                os::events::emit(
+                    if focused {
+                        "window:focused"
+                    } else {
+                        "window:blurred"
+                    },
+                    &Value::Null,
+                );
+            },
+
+            Event::WindowEvent {
+                event: WindowEvent::ThemeChanged(theme),
+                ..
+            } => {
+                let name = if matches!(theme, Theme::Dark) {
+                    "dark"
+                } else {
+                    "light"
+                };
+                os::events::emit("window:theme-changed", &json!({ "theme": name }));
+            },
+
+            Event::WindowEvent {
+                event: WindowEvent::ScaleFactorChanged { scale_factor, .. },
+                ..
+            } => {
+                os::events::emit("window:dpi-changed", &json!({ "scale": scale_factor }));
+            },
+
             _ => {},
         }
     })
+}
+
+/// Last-seen minimize/maximize/fullscreen flags. Used to emit synthetic
+/// transition events since tao doesn't surface them directly.
+struct WindowState {
+    minimized: bool,
+    maximized: bool,
+    fullscreen: bool,
+}
+
+impl WindowState {
+    fn capture(win: &tao::window::Window) -> Self {
+        Self {
+            minimized: win.is_minimized(),
+            maximized: win.is_maximized(),
+            fullscreen: win.fullscreen().is_some(),
+        }
+    }
+
+    /// Compare current window flags to the last seen; emit events on flips.
+    fn diff_and_emit(&mut self, win: &tao::window::Window) {
+        let next = Self::capture(win);
+        if next.minimized != self.minimized {
+            os::events::emit(
+                if next.minimized {
+                    "window:minimized"
+                } else {
+                    "window:unminimized"
+                },
+                &Value::Null,
+            );
+        }
+        if next.maximized != self.maximized {
+            os::events::emit(
+                if next.maximized {
+                    "window:maximized"
+                } else {
+                    "window:unmaximized"
+                },
+                &Value::Null,
+            );
+        }
+        if next.fullscreen != self.fullscreen {
+            os::events::emit(
+                if next.fullscreen {
+                    "window:fullscreen"
+                } else {
+                    "window:unfullscreen"
+                },
+                &Value::Null,
+            );
+        }
+        *self = next;
+    }
 }

@@ -1,7 +1,20 @@
 use serde_json::Value;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tao::{dpi::LogicalSize, window::Window};
 
 use crate::window;
+
+/// Set by `tyndWindow.cancelClose()` during a `window:close-requested` handler.
+/// Polled 500ms later by the event loop before actually hiding / exiting.
+static CLOSE_CANCELLED: AtomicBool = AtomicBool::new(false);
+
+pub fn reset_close_cancel() {
+    CLOSE_CANCELLED.store(false, Ordering::SeqCst);
+}
+
+pub fn close_cancelled() -> bool {
+    CLOSE_CANCELLED.load(Ordering::SeqCst)
+}
 
 /// Dispatch a window command synchronously on the main (event-loop) thread.
 pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, String> {
@@ -88,6 +101,26 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
         "isFullscreen" => Ok(Value::Bool(win.fullscreen().is_some())),
         "isVisible" => Ok(Value::Bool(win.is_visible())),
 
+        "cancelClose" => {
+            CLOSE_CANCELLED.store(true, Ordering::SeqCst);
+            Ok(Value::Null)
+        },
+
         _ => Err(format!("window.{method}: unknown method")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_flag_roundtrip() {
+        reset_close_cancel();
+        assert!(!close_cancelled());
+        CLOSE_CANCELLED.store(true, Ordering::SeqCst);
+        assert!(close_cancelled());
+        reset_close_cancel();
+        assert!(!close_cancelled());
     }
 }

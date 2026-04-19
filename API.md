@@ -236,6 +236,43 @@ const isFull = await tyndWindow.isFullscreen()
 const isVis  = await tyndWindow.isVisible()
 ```
 
+#### Window events
+
+Subscribe handlers return an `unsubscribe()` function. Every handler is
+identical on `lite` and `full` — events flow through the shared Rust
+event emitter.
+
+```typescript
+import { tyndWindow } from "@tynd/core/client"
+
+const offResize = tyndWindow.onResized(({ width, height }) => { /* … */ })
+const offMove   = tyndWindow.onMoved(({ x, y }) => { /* … */ })
+const offFocus  = tyndWindow.onFocused(() => { /* regained focus */ })
+const offBlur   = tyndWindow.onBlurred(() => { /* lost focus */ })
+const offTheme  = tyndWindow.onThemeChanged(({ theme }) => { /* "light" | "dark" */ })
+const offDpi    = tyndWindow.onDpiChanged(({ scale }) => { /* e.g. 1.5 on 150% */ })
+
+// State transitions — fire only on flip (not on initial state).
+const offMin    = tyndWindow.onMinimized(() => {})
+const offUnmin  = tyndWindow.onUnminimized(() => {})
+const offMax    = tyndWindow.onMaximized(() => {})
+const offUnmax  = tyndWindow.onUnmaximized(() => {})
+const offFull   = tyndWindow.onFullscreen(() => {})
+const offUnfull = tyndWindow.onUnfullscreen(() => {})
+
+// Preventable close — call preventDefault() synchronously in the handler
+// to cancel. The close proceeds after 500ms if nothing cancels it.
+const offClose = tyndWindow.onCloseRequested((e) => {
+  if (hasUnsavedChanges()) {
+    e.preventDefault()
+    void showSavePrompt()
+  }
+})
+
+// Manual cancel (e.g. from a modal opened elsewhere during the 500ms window):
+await tyndWindow.cancelClose()
+```
+
 ### `menu` — react to menu item clicks
 
 Menu bar items are declared in `tynd.config.ts`. This module lets the
