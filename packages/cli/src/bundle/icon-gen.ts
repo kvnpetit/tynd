@@ -63,7 +63,17 @@ export async function renderIconPngSet(
 
   if (ext === ".png") {
     const data = Buffer.from(await Bun.file(source).bytes())
-    return [{ size: readPngSize(data).width, data }]
+    const { width, height } = readPngSize(data)
+    if (width !== height) {
+      // ICO + ICNS both record width == height. Accepting a rectangle would
+      // silently embed bogus dimensions; reject with a clear message so
+      // users know to re-export or pass an SVG (which squarifies itself).
+      throw new Error(
+        `renderIconPngSet: PNG must be square (got ${width}x${height}). ` +
+          `Re-export at 1:1 or use an SVG source — it auto-squarifies.`,
+      )
+    }
+    return [{ size: width, data }]
   }
 
   throw new Error(`renderIconPngSet: unsupported source "${ext}" — use .svg or .png`)

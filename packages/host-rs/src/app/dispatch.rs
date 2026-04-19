@@ -65,6 +65,9 @@ pub(super) fn handle_ipc_body(
     if let Some("cancel") = v.get("type").and_then(|t| t.as_str()) {
         let id = take_string(&mut v, "id");
         if !id.is_empty() {
+            // Drop the label mapping first — otherwise cancelled streams that
+            // the backend honours (no Return fired) leak an entry per call.
+            call_labels().remove(&id);
             let _ = call_tx.send(BackendCall::Cancel { id });
         }
         return;

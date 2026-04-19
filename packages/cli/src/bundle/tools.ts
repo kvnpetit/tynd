@@ -87,10 +87,22 @@ async function extractTarGz(src: string, destDir: string): Promise<void> {
   const { createReadStream } = await import("node:fs")
   const { createGunzip } = await import("node:zlib")
   const tar = (await import("tar-stream")).default.extract()
+  // Absolute root prefix for containment checks — rejects `../` traversal and
+  // absolute paths that would write outside `destDir` even if the archive is
+  // malicious or MITM'd.
+  const rootPrefix = path.resolve(destDir) + path.sep
 
   await new Promise<void>((resolve, reject) => {
     tar.on("entry", (header, stream, next) => {
-      const outPath = path.join(destDir, header.name)
+      const outPath = path.resolve(destDir, header.name)
+      if (!outPath.startsWith(rootPrefix) && outPath !== path.resolve(destDir)) {
+        // Skip the entry entirely — don't reject so the rest of the archive
+        // still extracts, but do warn loudly so a compromised download is visible.
+        log.warn(`skipping path-traversal entry: ${header.name}`)
+        stream.resume()
+        stream.on("end", next)
+        return
+      }
       if (header.type === "directory") {
         mkdirSync(outPath, { recursive: true })
         stream.resume()

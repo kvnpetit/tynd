@@ -755,6 +755,10 @@ fn create_secondary(
 
     let mut wvb = WebViewBuilder::new()
         .with_initialization_script(inject_window_label(&label))
+        // Parity with the primary window: page-ready fires DOMContentLoaded,
+        // keeping secondary windows on the same visibility + lifecycle path
+        // if future refactors gate any behaviour on it.
+        .with_initialization_script(ipc::JS_PAGE_READY)
         .with_initialization_script(ipc::JS_SHIM)
         .with_ipc_handler(move |req: Request<String>| {
             dispatch::handle_ipc_body(req.into_body(), &label_for_ipc, &call_tx, &proxy);

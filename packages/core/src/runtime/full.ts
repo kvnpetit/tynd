@@ -210,11 +210,13 @@ async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Pro
   const state: StreamState = { iter, credit: STREAM_CREDIT, waiter: null }
   _activeStreams.set(id, state)
   let final: unknown
+  let completed = false
   try {
     while (true) {
       const step = await iter.next()
       if (step.done) {
         final = step.value
+        completed = true
         break
       }
       // Block before writing if credit is exhausted — the frontend will ack
@@ -232,6 +234,16 @@ async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Pro
     }
   } finally {
     _activeStreams.delete(id)
+    // Run the generator's `finally` blocks on any abnormal exit — cancel or
+    // uncaught throw. Skip on normal completion where `iter` already ran its
+    // finalizer. Swallow errors from `return()` itself; the stream is dead.
+    if (!completed && typeof iter.return === "function") {
+      try {
+        await iter.return(undefined)
+      } catch {
+        /* intentional: generator cleanup is best-effort */
+      }
+    }
   }
   process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, value: final })}\n`)
 }

@@ -137,13 +137,9 @@ fn download_and_verify(args: &Value) -> Result<Value, String> {
         .header("Content-Length")
         .and_then(|v| v.parse::<u64>().ok());
 
-    let tmp = tempfile::Builder::new()
-        .prefix("tynd-update-")
-        .tempfile()
-        .map_err(|e| format!("updater.downloadAndVerify: tempfile: {e}"))?;
-    let path = tmp.path().to_path_buf();
-    let (mut file, _persist_guard) = tmp.keep().map_err(|e| format!("tempfile keep: {e}"))?;
-
+    // Buffer to RAM while downloading — Ed25519 verify needs the full message
+    // in one slice (no prehash variant). We only persist to disk AFTER verify
+    // succeeds so a failed/tampered download leaves no artifact behind.
     let mut emitter = Progress::new(progress_id.clone(), "download", total);
     let mut reader = resp.into_reader();
     let mut buf = vec![0u8; 64 * 1024];
@@ -156,8 +152,6 @@ fn download_and_verify(args: &Value) -> Result<Value, String> {
             emitter.advance(0, true);
             break;
         }
-        file.write_all(&buf[..n])
-            .map_err(|e| format!("updater.downloadAndVerify: write: {e}"))?;
         bytes_accum.extend_from_slice(&buf[..n]);
         emitter.advance(n, false);
     }
@@ -166,6 +160,17 @@ fn download_and_verify(args: &Value) -> Result<Value, String> {
     verifying_key
         .verify(&bytes_accum, &signature)
         .map_err(|e| format!("updater.downloadAndVerify: signature check failed: {e}"))?;
+
+    // Only now is it safe to write: a failed verify above produces no temp
+    // file for a caller to accidentally `install()` anyway.
+    let tmp = tempfile::Builder::new()
+        .prefix("tynd-update-")
+        .tempfile()
+        .map_err(|e| format!("updater.downloadAndVerify: tempfile: {e}"))?;
+    let path = tmp.path().to_path_buf();
+    let (mut file, _persist_guard) = tmp.keep().map_err(|e| format!("tempfile keep: {e}"))?;
+    file.write_all(&bytes_accum)
+        .map_err(|e| format!("updater.downloadAndVerify: write: {e}"))?;
 
     emitter.emit_phase("verified");
 
@@ -356,6 +361,20 @@ fn install_windows(
     let current_str = current
         .to_str()
         .ok_or_else(|| "updater.install: current_exe path is not UTF-8".to_string())?;
+
+    // Defense-in-depth: the cmd script string-interpolates both paths. tempfile
+    // names are normally safe, but an attacker-controlled path containing any
+    // of `" & | ^ > < %` could break out of the quoted token. Reject upfront
+    // instead of trying to escape every cmd.exe quirk.
+    for (label, p) in [("new_path", new_path), ("current", current_str)] {
+        if p.chars()
+            .any(|c| matches!(c, '"' | '&' | '|' | '^' | '>' | '<' | '%' | '\n' | '\r'))
+        {
+            return Err(format!(
+                "updater.install: {label} contains shell metacharacters, refusing"
+            ));
+        }
+    }
 
     // cmd escape: wrap paths in "…"; cmd itself reads %1/%2 via start-quoting.
     // `start ""` first arg is the window title; omitting it makes cmd treat the

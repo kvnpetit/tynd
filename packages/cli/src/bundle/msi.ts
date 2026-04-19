@@ -139,9 +139,11 @@ function renderWxs(
            Version="${msiVersion}"
            Manufacturer="${manufacturer}"
            UpgradeCode="${upgradeCode}">
-    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perUser" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of ${displayName} is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <Property Id="ALLUSERS" Value="" />
+    <Property Id="MSIINSTALLPERUSER" Value="1" />
 
     ${iconBlock}
 
@@ -152,8 +154,10 @@ ${schemeRefs}
     </Feature>
 
     <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="APPLICATIONFOLDER" Name="${displayName}" />
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsFolder" Name="Programs">
+          <Directory Id="APPLICATIONFOLDER" Name="${displayName}" />
+        </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
         <Directory Id="ApplicationProgramsFolder" Name="${displayName}" />

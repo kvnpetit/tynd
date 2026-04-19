@@ -83,8 +83,14 @@ function renderScript(
   const publisher = ctx.author?.name ?? ""
   const iconDirective = iconRel ? `Icon "${iconRel}"\n!define MUI_ICON "${iconRel}"` : ""
 
-  // NSIS string escaping: `\\` for backslash, `$\"` for embedded quote.
-  const nsisStr = (s: string) => s.replace(/\\/g, "\\\\").replace(/"/g, '$\\"')
+  // NSIS string escaping:
+  //   `$$`   for a literal `$` (otherwise NSIS expands $VARIABLE references)
+  //   `\\`   for backslash
+  //   `$\"` for an embedded double-quote
+  // Order matters: escape `$` first so the other escapes don't themselves
+  // introduce `$` sequences we then re-rewrite.
+  const nsisStr = (s: string) =>
+    s.replace(/\$/g, "$$$$").replace(/\\/g, "\\\\").replace(/"/g, '$\\"')
 
   const protocolInstall = ctx.protocols
     .map((scheme) => {

@@ -178,21 +178,43 @@ async function packAssets(files: PackEntry[]): Promise<Buffer> {
 }
 
 export function collectFiles(dir: string): Array<{ abs: string; rel: string }> {
+  const { statSync, realpathSync } = require("node:fs") as typeof import("node:fs")
+  const root = realpathSync(path.resolve(dir)) + path.sep
   const results: Array<{ abs: string; rel: string }> = []
+  const visited = new Set<string>()
+
   function walk(cur: string, prefix: string) {
     for (const entry of readdirSync(cur)) {
       const abs = path.join(cur, entry)
       const rel = prefix ? `${prefix}/${entry}` : entry
-      // lstat first so symlinks don't get followed — prevents loops on self-referential dirs.
       const lst = lstatSync(abs)
-      if (lst.isSymbolicLink()) continue
-      if (lst.isDirectory()) {
-        walk(abs, rel)
-      } else {
-        results.push({ abs, rel })
+
+      if (lst.isSymbolicLink()) {
+        // Follow the link if it resolves inside `dir` — Vite and friends often
+        // symlink vendor chunks or public assets. Skip + warn on anything that
+        // escapes the tree (loops or external refs we can't pack).
+        let real: string
+        try {
+          real = realpathSync(abs)
+        } catch {
+          continue
+        }
+        if (!real.startsWith(root) && real + path.sep !== root) {
+          continue
+        }
+        if (visited.has(real)) continue
+        visited.add(real)
+        const target = statSync(real)
+        if (target.isDirectory()) walk(real, rel)
+        else if (target.isFile()) results.push({ abs: real, rel })
+        continue
       }
+
+      if (lst.isDirectory()) walk(abs, rel)
+      else if (lst.isFile()) results.push({ abs, rel })
     }
   }
+
   walk(dir, "")
   return results
 }

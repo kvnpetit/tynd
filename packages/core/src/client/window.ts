@@ -57,8 +57,11 @@ function onWindow<T extends WindowEventBase | undefined>(
   return window.__tynd__.os_on(`window:${event}`, (raw) => {
     const data = raw as T
     if (!opts?.anyWindow) {
+      // Strict match: events without a label (shouldn't happen, but could if
+      // the host protocol ever changes) are treated as NOT for this window
+      // rather than broadcast to every subscriber.
       const label = (data as WindowEventBase | undefined)?.label
-      if (label !== undefined && label !== self) return
+      if (label !== self) return
     }
     handler(data)
   })
@@ -267,8 +270,10 @@ export const tyndWindow = {
   onCloseRequested(handler: (event: CloseRequestedEvent) => void): () => void {
     const self = getWindowLabel()
     return window.__tynd__.os_on("window:close-requested", (raw) => {
+      // Strict match — unlabeled events (protocol drift) don't leak to every
+      // subscriber and accidentally cancel closes that weren't theirs.
       const label = (raw as WindowEventBase | undefined)?.label
-      if (label !== undefined && label !== self) return
+      if (label !== self) return
       let prevented = false
       handler({
         preventDefault() {

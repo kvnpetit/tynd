@@ -1,4 +1,5 @@
 import { fireClose, fireReady, onCloseFns, onReadyFns, setEmitFn } from "../lifecycle.ts"
+import { tynd } from "../logger.js"
 import type { AppConfig } from "../types.js"
 
 // Silence unused-import warnings when the module is tree-shaken away in full
@@ -25,9 +26,17 @@ export function startLite(config: AppConfig): void {
     frontendDir: config.frontendDir ?? null,
   })
 
-  const nativeEmit = g["__tynd_emit__"] as ((name: string, payload: string) => void) | undefined
+  // Look up on every emit — if tests or alt hosts inject it late, events
+  // flow once the global appears instead of being silently dropped forever.
+  let warned = false
   setEmitFn((name, payload) => {
-    if (nativeEmit) nativeEmit(name, JSON.stringify(payload))
+    const nativeEmit = g["__tynd_emit__"] as ((name: string, payload: string) => void) | undefined
+    if (nativeEmit) {
+      nativeEmit(name, JSON.stringify(payload))
+    } else if (!warned) {
+      warned = true
+      tynd.warn(`emit("${name}"): __tynd_emit__ not available — event dropped`)
+    }
   })
 
   g["__tynd_on_ready__"] = fireReady
