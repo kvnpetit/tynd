@@ -136,12 +136,12 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Create secondary windows | ❌ | ✅ | ✅ | ✅ |
-| Per-window independent configuration | ❌ | ✅ | ✅ | ✅ |
-| List all open windows | ❌ | ✅ | ✅ | ✅ |
-| Get window by label / ID | ❌ | ✅ | ✅ | ⚠️ |
-| Close a specific window | ❌ | ✅ | ✅ | ✅ |
-| Emit event to specific window | ❌ | ✅ | ✅ | ✅ |
+| Create secondary windows | ✅ | ✅ | ✅ | ✅ |
+| Per-window independent configuration | ✅ | ✅ | ✅ | ✅ |
+| List all open windows | ✅ | ✅ | ✅ | ✅ |
+| Get window by label / ID | ✅ | ✅ | ✅ | ⚠️ |
+| Close a specific window | ✅ | ✅ | ✅ | ✅ |
+| Emit event to specific window | ⚠️ broadcast + label filter | ✅ | ✅ | ✅ |
 | Modal window attached to parent | ❌ | ❌ | ✅ | ✅ |
 | macOS Panel (overlay / NSPanel) | ❌ | ❌ | ✅ | ❌ |
 | Set menu for specific window | ❌ | ✅ | ✅ | ✅ |
@@ -782,7 +782,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Window — core ops | 14/39 | 38/39 | 29/39 | 37/39 |
 | Window — appearance | 4/27 | 19/27 | 18/27 | 18/27 |
 | Webview API | 0/19 | 17/19 | 2/19 | 16/19 |
-| Multi-window | 0/9 | 8/9 | 7/9 | 8/9 |
+| Multi-window | 5/9 | 8/9 | 7/9 | 8/9 |
 | Window events | 10/14 | 11/14 | 12/14 | 13/14 |
 | Cursor & mouse | 0/7 | 7/7 | 2/7 | 3/7 |
 | Monitors & screens | 0/8 | 7/8 | 6/8 | 7/8 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~77/503 (15%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~82/503 (16%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 

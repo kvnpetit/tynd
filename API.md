@@ -236,6 +236,34 @@ const isFull = await tyndWindow.isFullscreen()
 const isVis  = await tyndWindow.isVisible()
 ```
 
+#### Multi-window
+
+The primary window has label `"main"`. Additional windows are created with a
+unique label and get their own WebView + IPC channel; every `@tynd/core/client`
+API call auto-targets the window it runs in (no label arg needed).
+
+```typescript
+import { tyndWindow } from "@tynd/core/client"
+
+// Open a Settings window pointing at /settings in the same frontend.
+await tyndWindow.create({
+  label:  "settings",
+  url:    "/settings",   // optional — defaults to the primary entry
+  title:  "Settings",
+  width:  600,
+  height: 480,
+})
+
+const labels = await tyndWindow.all()  // ["main", "settings", ...]
+await tyndWindow.close("settings")     // "main" cannot be closed this way
+
+// Each window knows its own label:
+console.log(tyndWindow.label())  // "main" or "settings" depending on caller
+```
+
+Window events (below) are broadcast to every webview and auto-filtered by
+the current window's label — handlers only fire for their own window.
+
 #### Window events
 
 Subscribe handlers return an `unsubscribe()` function. Every handler is
