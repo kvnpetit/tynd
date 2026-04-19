@@ -223,7 +223,7 @@ export default {
   runtime:     "full",              // "full" | "lite"
   backend:     "backend/main.ts",   // backend entry file
   frontendDir: "dist",              // built frontend assets (relative to project root)
-  icon:        "public/favicon.png", // optional — auto-detected if omitted
+  icon:        "public/favicon.svg", // optional — auto-detected; SVG recommended
   window: {
     title:  "My App",
     width:  1200,
@@ -247,7 +247,8 @@ export default {
 | `binaryArgs` | — | Extra args passed to the `tynd-full` / `tynd-lite` binary |
 | `window` | — | Default window options (title, width, height, center) |
 
-**Icon auto-detection order:** `public/favicon.ico` -> `public/favicon.png` -> `public/icon.ico` -> `public/icon.png` -> `public/logo.ico` -> `public/logo.png` -> SVG variants (`public/favicon.svg`, `public/icon.svg`, `public/logo.svg`) -> `assets/icon.{ico,png}` -> `icon.{ico,png}`. SVG icons are auto-converted to PNG via WASM. Set `icon` explicitly to override.
+**Icon auto-detection order** (SVG first — single source of truth renders pixel-perfect at every size):
+`public/{favicon,icon,logo}.svg` -> `public/{favicon,icon,logo}.{ico,png}` -> `assets/icon.{svg,png,ico}` -> `icon.{svg,png,ico}`. One source feeds every output — each build produces a multi-size ICO (16/32/48/256) for Windows, a multi-entry ICNS (32/128/256/512/1024) for macOS `.app`, and a full hicolor PNG tree (16..512) for `.deb` / `.rpm` / `.AppImage`. PNG sources degrade to single-size; `.ico` sources pass through to Windows bundles and are skipped (with a warning) for macOS/Linux. Set `icon` explicitly to override.
 
 ---
 
