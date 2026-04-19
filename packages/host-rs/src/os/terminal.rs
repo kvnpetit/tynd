@@ -8,8 +8,8 @@ use parking_lot::Mutex;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use super::events;
 
@@ -18,6 +18,9 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
+    /// Set by `kill()` so the child-watcher thread can suppress the
+    /// synthetic `terminal:exit` event — the caller already knows.
+    killed: Arc<AtomicBool>,
 }
 
 // PTY handles aren't Sync on their own, so each session is locked
@@ -97,11 +100,13 @@ fn spawn(args: &Value) -> Result<Value, String> {
         .take_writer()
         .map_err(|e| format!("terminal.spawn: take writer: {e}"))?;
 
+    let killed = Arc::new(AtomicBool::new(false));
     sessions().insert(
         id,
         Mutex::new(Session {
             master: pair.master,
             writer,
+            killed: killed.clone(),
         }),
     );
 
@@ -128,7 +133,9 @@ fn spawn(args: &Value) -> Result<Value, String> {
             }
         });
         sessions().remove(&id);
-        events::emit("terminal:exit", &json!({ "id": id, "code": code }));
+        if !killed.load(Ordering::Acquire) {
+            events::emit("terminal:exit", &json!({ "id": id, "code": code }));
+        }
     });
 
     Ok(json!({ "id": id }))
@@ -188,6 +195,12 @@ fn kill(args: &Value) -> Result<Value, String> {
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "terminal.kill: missing 'id'".to_string())?;
+    // Flag the watcher first so the race between this remove() and the
+    // child-exit watcher doesn't emit a stray `terminal:exit` event for a
+    // session the caller explicitly tore down.
+    if let Some(entry) = sessions().get(&id) {
+        entry.lock().killed.store(true, Ordering::Release);
+    }
     sessions().remove(&id);
     Ok(Value::Null)
 }

@@ -6,6 +6,11 @@ export interface ShortcutHandle {
   unregister(): Promise<boolean>
 }
 
+// Every `register()` attaches an `os_on` listener. Track them globally so
+// `unregisterAll()` and the bare `unregister(id)` path don't leave stale
+// listeners behind that would fire if the id were ever reused.
+const offHandlers = new Map<string, () => void>()
+
 export const shortcuts = {
   /**
    * Register a system-wide keyboard shortcut. The handler fires whenever the
@@ -20,20 +25,29 @@ export const shortcuts = {
     const off = window.__tynd__.os_on("shortcut:triggered", (raw) => {
       if ((raw as { id?: string } | undefined)?.id === result.id) handler()
     })
+    // Replace any prior off for the same id (e.g. repeated register with the
+    // same custom id after a previous unregister) so we don't leak the old.
+    offHandlers.get(result.id)?.()
+    offHandlers.set(result.id, off)
     return {
       id: result.id,
       async unregister() {
-        off()
+        offHandlers.get(result.id)?.()
+        offHandlers.delete(result.id)
         return osCall<boolean>("shortcuts", "unregister", { id: result.id })
       },
     }
   },
   /** Unregister a shortcut by id. Returns `true` if it existed. */
   unregister(id: string): Promise<boolean> {
+    offHandlers.get(id)?.()
+    offHandlers.delete(id)
     return osCall("shortcuts", "unregister", { id })
   },
   /** Remove every registered shortcut. */
-  unregisterAll(): Promise<void> {
+  async unregisterAll(): Promise<void> {
+    for (const off of offHandlers.values()) off()
+    offHandlers.clear()
     return osCall("shortcuts", "unregisterAll")
   },
   /** Whether an id is currently registered. */

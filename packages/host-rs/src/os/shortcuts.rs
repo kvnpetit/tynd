@@ -14,7 +14,10 @@ use std::sync::OnceLock;
 
 use super::events;
 
-static MANAGER: OnceLock<Mutex<GlobalHotKeyManager>> = OnceLock::new();
+/// Outer `OnceLock` caches the init outcome — success or the error string —
+/// so the atomic `get_or_init` guarantees exactly one `GlobalHotKeyManager`
+/// is constructed even under concurrent `register()` calls from the pool.
+static MANAGER: OnceLock<Result<Mutex<GlobalHotKeyManager>, String>> = OnceLock::new();
 /// Maps `HotKey::id()` (u32 the OS actually fires) to the user's string id.
 static ID_MAP: OnceLock<dashmap::DashMap<u32, String>> = OnceLock::new();
 /// Maps the user's string id to the registered `HotKey` so `unregister`
@@ -32,13 +35,14 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 }
 
 fn manager() -> Result<&'static Mutex<GlobalHotKeyManager>, String> {
-    if let Some(m) = MANAGER.get() {
-        return Ok(m);
-    }
-    let mgr = GlobalHotKeyManager::new()
-        .map_err(|e| format!("shortcuts: GlobalHotKeyManager init failed: {e}"))?;
-    let _ = MANAGER.set(Mutex::new(mgr));
-    Ok(MANAGER.get().expect("MANAGER just set"))
+    MANAGER
+        .get_or_init(|| {
+            GlobalHotKeyManager::new()
+                .map(Mutex::new)
+                .map_err(|e| format!("shortcuts: GlobalHotKeyManager init failed: {e}"))
+        })
+        .as_ref()
+        .map_err(Clone::clone)
 }
 
 fn id_map() -> &'static dashmap::DashMap<u32, String> {

@@ -47,6 +47,11 @@ function spawnBunWorker(script: string): WorkerHandle {
     },
     terminate() {
       w.terminate()
+      // Without this, any awaited run() outstanding at terminate time would
+      // hang forever — the worker is dead, nothing resolves the promise.
+      const err = new Error("Worker terminated")
+      for (const p of pending.values()) p.reject(err)
+      pending.clear()
       return Promise.resolve()
     },
   }
