@@ -1,6 +1,6 @@
 {
   "name": "@tynd/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Tynd framework core — backend API (app.start, createEmitter) and typed frontend client",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
