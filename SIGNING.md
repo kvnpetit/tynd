@@ -1,10 +1,55 @@
 # 🔏 Code signing & notarization
 
-> **By design:** `tynd build` and `tynd build --bundle` produce **unsigned** binaries and installers. Signing is intentionally out of scope for the CLI — it depends on your certificate, Apple ID, GPG key, and CI secrets, all of which are app-specific. Tynd's job stops at producing a reproducible `release/` directory; this doc picks up from there.
-
-Tynd produces raw binaries and installers via `tynd build [--bundle]`, but **does not sign them for you**. This doc covers the standard post-build signing workflows for each host OS so you can ship apps that users (and their OSes) trust.
+`tynd build` signs Windows `.exe` + NSIS + MSI via `signtool` and macOS binaries + `.app` via `codesign` (+ optional notarization) **for you** when a `bundle.sign` block is present in `tynd.config.ts`. This doc covers both the built-in workflow and the manual / CI patterns that sit alongside it.
 
 > **Why sign?** Unsigned binaries trigger SmartScreen warnings on Windows, are quarantined by Gatekeeper on macOS, and are flagged by Chrome/Edge on download. Signing + notarizing eliminates those prompts.
+
+---
+
+## ⚡ Built-in signing (recommended)
+
+Declare certs once in `tynd.config.ts`; every `tynd build` signs automatically.
+
+```typescript
+// tynd.config.ts
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  bundle: {
+    identifier: "com.example.myapp",
+    sign: {
+      windows: {
+        certificate:  "./cert.pfx",                        // or "cert:subject=My Publisher"
+        password:     "env:WIN_CERT_PASSWORD",             // reads from env var
+        timestampUrl: "http://timestamp.digicert.com",
+      },
+      macos: {
+        identity:     "Developer ID Application: Name (TEAMID)",
+        entitlements: "./entitlements.plist",              // optional
+        notarize: {
+          appleId:  "env:APPLE_ID",
+          password: "env:APPLE_APP_PASSWORD",              // app-specific password
+          teamId:   "env:APPLE_TEAM_ID",
+        },
+      },
+    },
+  },
+}
+```
+
+- `env:NAME` resolves from `process.env.NAME` at build time and throws if missing — no secrets in source control.
+- The raw binary is signed first, then each installer artifact on top. Both layers need valid signatures for Gatekeeper / SmartScreen to trust the final download.
+- `notarize` is opt-in. When present, the signed `.app` is zipped and submitted with `xcrun notarytool submit --wait`, then stapled so offline launches work.
+- On Windows, `signtool.exe` is auto-discovered: `SIGNTOOL` env var → Windows SDK (`C:/Program Files (x86)/Windows Kits/10/bin/<ver>/<arch>/`) → PATH.
+
+Omit `bundle.sign` and builds stay unsigned — fine for dev and internal CI smoke tests.
+
+---
+
+## Manual signing (advanced / CI without the built-in hook)
+
+The rest of this doc covers raw command-line workflows. Useful if you sign on a separate CI host (e.g. a macOS notarization runner), use an HSM, or want to integrate signing into an existing pipeline.
 
 ---
 

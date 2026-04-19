@@ -70,9 +70,9 @@ const bytes = await fs.readBinary(file!)
 
 ## OS APIs (`@tynd/core/client`)
 
-All Rust-backed — same surface in both the `full` and `lite` runtimes:
+Native integrations — identical surface in both `full` and `lite` modes:
 
-`dialog`, `tyndWindow`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance`.
+`app`, `dialog`, `tyndWindow`, `monitors`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs` (+ watcher), `shortcuts`, `keyring`, `autolaunch`, `store`, `updater`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance`.
 
 Plus Web-standard re-exports (`fetch`, `WebSocket`, `crypto`, `URL`, `Blob`, `AbortController`, `TextEncoder`, …) so `import * as tynd from "@tynd/core/client"` gives you the whole namespace at once.
 
@@ -80,12 +80,12 @@ Plus Web-standard re-exports (`fetch`, `WebSocket`, `crypto`, `URL`, `Blob`, `Ab
 
 ## Runtime modes
 
-`@tynd/core` runs on either of Tynd's two backend hosts:
+`@tynd/core` runs on either of Tynd's two native hosts:
 
 | | `lite` | `full` |
 |---|---|---|
-| JS engine | embedded interpreter (in the Rust binary) | Bun subprocess with JIT |
-| Binary size | ~6.5 MB + assets | ~44 MB (Bun packed) |
+| JS runtime | embedded interpreter, in-process | Bun, packed into the binary |
+| Binary size | ~6.5 MB + assets | ~44 MB (Bun compressed) |
 | Best for | most desktop apps | CPU-bound JS / npm native bindings |
 
 The CLI's bundler swaps in the right module at build time via a `define`-based dead-code-elimination trick — only one runtime ships in any given binary.
@@ -95,7 +95,7 @@ See [RUNTIMES.md](https://github.com/kvnpetit/tynd/blob/main/RUNTIMES.md).
 ## Related packages
 
 - [`@tynd/cli`](https://www.npmjs.com/package/@tynd/cli) — `tynd create / dev / build / start`
-- [`@tynd/host`](https://www.npmjs.com/package/@tynd/host) — prebuilt Rust binaries (downloaded by postinstall)
+- [`@tynd/host`](https://www.npmjs.com/package/@tynd/host) — prebuilt native binaries (downloaded by postinstall)
 
 ## License
 

@@ -2,7 +2,7 @@
 
 # **Tynd**
 
-### Desktop apps in TypeScript. No Rust. No Go. Just TS.
+### Desktop apps in TypeScript. One language, native binary, no glue code.
 
 [![CI](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/kvnpetit/tynd?color=blue)](./LICENSE)
@@ -13,13 +13,12 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Bun](https://img.shields.io/badge/Bun-runtime-fbf0df?logo=bun&logoColor=000)](https://bun.sh)
-[![Rust](https://img.shields.io/badge/Rust-host-b7410e?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
 [![Last commit](https://img.shields.io/github/last-commit/kvnpetit/tynd)](https://github.com/kvnpetit/tynd/commits/main)
 [![Open issues](https://img.shields.io/github/issues/kvnpetit/tynd?color=d93f0b)](https://github.com/kvnpetit/tynd/issues)
 
-**Native window. Zero network. Full TypeScript stack.**
-A desktop-app framework that runs your TypeScript backend next to a native OS webview — no codegen, no bridge language.
+**Native window. Zero network. TypeScript end-to-end.**
+Write your backend and frontend in TypeScript, ship a small native binary — no extra language to learn, no codegen step.
 
 ```bash
 bunx @tynd/cli create my-app
@@ -33,24 +32,26 @@ bunx @tynd/cli create my-app
 
 ## ✨ At a glance
 
-- 🦀 **TypeScript all the way down.** Backend, frontend, IPC, config — no Rust, no Go, no codegen step.
-- 🧬 **Two runtimes, one API.** Start with `lite` (~6.5 MB, no external runtime). Swap to `full` with a one-line config change when you need Bun's JIT or native-binding npm packages.
-- 🔒 **Native window, zero network.** Frontend served over a custom scheme (`tynd://`). RPC via `webview_bind`. No HTTP server, no firewall prompt, no reachable TCP port.
-- 🧰 **20 OS APIs, same surface in both runtimes** — `fs`, `sql` (embedded SQLite), `http`, `websocket`, `terminal` (real PTY), `compute` (blake3/sha/CSPRNG), `dialog`, `tray`, `menu`, `notification`, `clipboard`, `shell`, `process`, `sidecar`, `singleInstance`, `store`, `workers`, `os`, `path`, `tyndWindow`, plus typed emitters and streaming RPC.
-- ⚡ **Zero-copy binary IPC.** Multi-MB payloads (`fs.readBinary`, `fs.writeBinary`, `compute.hash`) bypass JSON base64 through a second custom protocol — roughly **5-10x faster** than any other wry-based framework's binary calls.
-- 📦 **First-class installers.** `tynd build --bundle` emits `.app`/`.dmg`/`.deb`/`.rpm`/`.AppImage`/NSIS `.exe`/`.msi` — build tools (NSIS, WiX, appimagetool) auto-download, no manual install.
-- 🎨 **Framework-agnostic.** React, Vue, Svelte, Solid, Preact, Lit, Angular — anything that produces a pure SPA.
+- 🟦 **TypeScript top to bottom.** Backend, frontend, IPC, config — same language, no codegen.
+- 🧬 **Two runtime modes, one API.** Start with `lite` (~6.5 MB native binary, no extra runtime needed). Switch to `full` with one config line when you need Bun's JIT or native-binding npm packages.
+- 🔒 **Native window, zero network.** No HTTP server, no loopback TCP port, no firewall prompt. Frontend and IPC ride a native custom scheme.
+- 🧰 **27 OS APIs, identical in both modes** — `fs` (+ watcher), `sql` (embedded SQLite), `http`, `websocket`, `terminal` (real PTY), `compute` (blake3/sha/CSPRNG), `dialog`, `tray`, `menu` (accelerators + checkbox/radio), `notification`, `clipboard` (image + HTML), `shell`, `process`, `sidecar`, `singleInstance` (with argv forwarding + deep links), `shortcuts` (system-wide hotkeys), `keyring` (OS-encrypted secrets), `autolaunch` (start at boot), `store`, `updater` (signed auto-update with Ed25519), `workers`, `app` (name/version/exit/relaunch), `os` / `path`, `tyndWindow` (multi-window + events), plus typed emitters and streaming RPC.
+- ⚡ **Zero-copy binary IPC.** Multi-MB payloads (`fs.readBinary`, `compute.hash`, …) skip JSON/base64 entirely — roughly **5-10× faster** than the usual webview-framework binary path.
+- 📦 **First-class installers.** `tynd build --bundle` emits `.app` / `.dmg` / `.deb` / `.rpm` / `.AppImage` / NSIS `.exe` / `.msi`. Installer tools auto-download on first build — no manual setup. Built-in code signing (`signtool` on Windows, `codesign` + optional notarization on macOS).
+- 🛡️ **Security defaults.** Auto-injected CSP on every HTML response, OS-backed secret storage via `keyring`, Ed25519-signed auto-updater so tampered binaries are rejected.
+- 🌊 **Streaming RPC that doesn't flinch.** Async-generator backend handlers stream to the frontend with per-chunk flow control + batched DOM updates — 10k+ yields/sec without freezing the UI.
+- 🎨 **Framework-agnostic.** React, Vue, Svelte, Solid, Preact, Lit, Angular — anything that outputs a pure SPA.
 
 ---
 
 ## 🧭 Why Tynd
 
-- **TypeScript backend, no codegen.** The frontend types backend calls straight from `typeof backend`. No `.d.ts` generation step, no IDL.
-- **Native OS webview.** Uses the system's webview (WebView2 / WKWebView / WebKitGTK) — the final binary doesn't ship a browser. Your app inherits the OS's paint loop, font stack, and accessibility.
-- **Two runtimes, one API.** `lite` for the smallest binary (~6.5 MB, embedded JS engine). `full` when you need Bun's JIT or native-binding npm packages. Switch via one config line.
-- **Zero network IPC.** RPC and assets go through a native wry protocol — no HTTP server, no loopback port, no firewall prompt.
+- **TypeScript backend, no codegen.** The frontend types backend calls from `typeof backend` — no `.d.ts` generation, no IDL, no schema file.
+- **Native OS webview.** The final binary doesn't ship a browser — it uses WebView2 / WKWebView / WebKitGTK, so you inherit the OS's paint loop, font stack, and accessibility for free.
+- **Two modes, one API.** `lite` for the smallest binary (~6.5 MB, embedded JS engine). `full` when you need Bun's JIT or native-binding npm packages. Switch via one config line — every OS API works the same in both.
+- **Zero network IPC.** RPC and assets never touch TCP — no loopback port, no firewall prompt on first launch.
 
-See [COMPARISON.md](./COMPARISON.md) for the full Tynd vs Tauri / Wails / Electron matrix (39 categories, 512 rows).
+See [COMPARISON.md](./COMPARISON.md) for the full Tynd vs Tauri / Wails / Electron matrix (39 categories, 500+ rows).
 
 ---
 
@@ -62,27 +63,26 @@ TypeScript backend                         Native OS window
   export async function greet()  ◄── IPC ─ await api.greet("Alice")
   events.emit("ready", payload)  ─── push ─► api.on("ready", handler)
          │
-         │ stdin/stdout JSON
          ▼
-  tynd-full  (Bun subprocess, wry + tao Rust host)
-  tynd-lite  (embedded JS engine, wry + tao Rust host)
+  tynd-full  — your TypeScript runs on Bun, wrapped in a native host
+  tynd-lite  — your TypeScript runs inside the native host, no extra runtime
 ```
 
-**Zero network.** Frontend served via `tynd://` custom protocol (wry `with_custom_protocol`). RPC via native `webview_bind`. Events via `evaluate_script`. Multi-MB binary payloads (`fs.readBinary`, `fs.writeBinary`, `compute.hash`, …) bypass JSON IPC via `tynd-bin://`.
+**Zero network.** Frontend assets and IPC ride a native custom scheme — no HTTP server, no loopback port, no firewall prompt. Multi-MB binary payloads (`fs.readBinary`, `fs.writeBinary`, `compute.hash`, …) skip JSON entirely via a dedicated binary channel.
 
-### Two runtimes
+### Two runtime modes
 
 | | `lite` | `full` |
 |---|---|---|
-| JS runtime | embedded interpreter inside the Rust binary | Bun subprocess |
-| Hot JS speed | interpreter — fine for IPC glue, slow on tight loops | **Bun JIT — often 10-100x faster on CPU-bound JS** |
-| IPC overhead | in-process (no serialization) | stdin/stdout JSON over OS pipe |
-| `fs` / `http` / `websocket` / `sql` / `compute.randomBytes` | ✓ Tynd API | ✓ Tynd API |
-| JS-level `fetch` / `Bun.file` / `bun:sqlite` | ✗ (use Tynd API) | ✓ |
+| JS runtime | embedded interpreter — ships inside the native binary | Bun, packed into the native binary |
+| Hot JS speed | interpreter — fine for IPC glue, slower on tight loops | **Bun JIT — often 10-100× faster on CPU-bound JS** |
+| IPC overhead | in-process, no serialization hop | one serialization hop (OS pipe) |
+| `fs` / `http` / `websocket` / `sql` / `compute` / `terminal` / … | ✓ same API | ✓ same API |
+| JS-level `fetch` / `Bun.file` / `bun:sqlite` | ✗ (use the Tynd API) | ✓ |
 | Pure-JS npm packages | ✓ (bundled) | ✓ |
 | npm with native bindings | ✗ | ✓ |
-| Binary size | smaller (no embedded runtime) | larger (Bun packed + zstd) |
-| Startup | faster (no subprocess) | slower (spawns Bun) |
+| Binary size | smaller (~6.5 MB) | larger (~44 MB, Bun compressed) |
+| Startup | faster (everything in-process) | slower (spawns Bun) |
 
 -> See [`RUNTIMES.md`](RUNTIMES.md) for the full comparison (APIs, performance, detection, examples).
 
@@ -100,7 +100,7 @@ curl -fsSL https://bun.sh/install | bash
 powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
-**End users of your built app need nothing** — Bun (full mode) or the embedded JS engine (lite mode) is packed into the distributed binary.
+**End users of your built app need nothing** — whichever runtime mode you picked is already packed into the distributed binary.
 
 ---
 
@@ -136,7 +136,9 @@ tynd init                    # add tynd to an existing project
 tynd clean                   # remove build artifacts (.tynd/cache, release/)
 tynd validate                # check config and project structure
 tynd upgrade                 # upgrade @tynd/cli and @tynd/core to latest
-tynd info                    # show environment info (Bun, Rust, WebView2…)
+tynd info                    # show environment info (Bun version, WebView, paths)
+tynd keygen                  # generate an Ed25519 keypair for the auto-updater
+tynd sign <file>             # sign a file with an updater private key
 ```
 
 ---
@@ -180,7 +182,7 @@ Tynd exposes three surfaces — backend module, typed frontend RPC, and direct O
 |---|---|---|
 | **Backend** | `@tynd/core` | `app.start`, `app.onReady`, `app.onClose`, `createEmitter` |
 | **Frontend RPC** | `@tynd/core/client` | `createBackend<typeof backend>()` — typed proxy |
-| **OS APIs** | `@tynd/core/client` | `dialog`, `tyndWindow`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `store`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance` |
+| **OS APIs** | `@tynd/core/client` | `app`, `dialog`, `tyndWindow`, `monitors`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs`, `shortcuts`, `keyring`, `autolaunch`, `store`, `updater`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance` |
 | **Web APIs** | `@tynd/core/client` | `fetch`, `WebSocket`, `EventSource`, `crypto`, `URL`, `Blob`, `FormData`, `AbortController`, `TextEncoder`, … (re-exports for `import * as tynd`) |
 
 Short example:
@@ -262,9 +264,9 @@ export default {
 
 ---
 
-## 🏗️ Building from source
+## 🏗️ Building from source (contributors only)
 
-The `tynd-full` and `tynd-lite` binaries are Rust crates.
+App authors don't need this section — `@tynd/host`'s postinstall downloads pre-built binaries automatically. If you want to build the native host yourself:
 
 ```bash
 # Requirements
@@ -279,13 +281,13 @@ cargo build --release -p tynd-full
 cargo build --release -p tynd-lite
 ```
 
-### Crate layout
+### Repo layout
 
 ```
 packages/
-├── host-rs/     ← tynd-host (library: wry + tao event loop, OS APIs)
-├── full/        ← tynd-full (binary: spawns Bun subprocess, links host)
-├── lite/        ← tynd-lite (binary: embeds a lightweight JS engine, links host)
+├── host-rs/     ← native host library (window + IPC + OS APIs)
+├── full/        ← tynd-full binary (packs Bun inside the host)
+├── lite/        ← tynd-lite binary (embeds a lightweight JS engine)
 ├── host/        ← @tynd/host (npm: postinstall downloads pre-built binaries)
 ├── core/        ← @tynd/core (TypeScript: app, createEmitter, client API)
 └── cli/         ← @tynd/cli  (TypeScript: tynd create/dev/build/info)
