@@ -81,6 +81,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         }));
     }
 
+    // Global hotkeys are emitted once registered; wire the handler at startup
+    // so the app doesn't miss events registered before the first user call.
+    os::shortcuts::install_event_handler();
+
     {
         // When another instance of this app forwards its argv via the
         // single-instance socket, bring the primary window to the front and

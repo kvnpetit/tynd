@@ -52,6 +52,8 @@ project pages.
 - single-instance  (MIT)              — https://github.com/jorgeatgu/single-instance
 - interprocess     (Apache-2.0 / MIT) — https://github.com/kotauskas/interprocess
 - ed25519-dalek    (BSD-3-Clause)     — https://github.com/dalek-cryptography/curve25519-dalek
+- notify           (CC0-1.0 / Artistic-2.0) — https://github.com/notify-rs/notify
+- global-hotkey    (Apache-2.0 / MIT) — https://github.com/tauri-apps/global-hotkey
 - rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
 - tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
 - rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite

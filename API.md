@@ -18,7 +18,7 @@ Every Tynd app has three surfaces:
 ### [Frontend RPC — `createBackend<T>()`](#frontend-rpc--createbackendt)
 
 ### [OS APIs](#os-apis)
-[`app`](#app--name--version--exit--relaunch) · [`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`updater`](#updater--auto-update-with-ed25519-verify) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
+[`app`](#app--name--version--exit--relaunch) · [`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`shortcuts`](#shortcuts--system-wide-keyboard-hotkeys) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`updater`](#updater--auto-update-with-ed25519-verify) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
 
 ### [IPC architecture](#ipc-architecture)
 
@@ -391,7 +391,29 @@ const info = await fs.stat("data.json")
 
 const bytes = await fs.readBinary("image.png")
 await fs.writeBinary("copy.png", bytes)
+
+// Watch for changes (ReadDirectoryChangesW / FSEvents / inotify).
+const watcher = await fs.watch("./notes", { recursive: true }, (event) => {
+  console.log(event.kind, event.path)
+})
+// Later: await watcher.unwatch()
 ```
+
+### `shortcuts` — system-wide keyboard hotkeys
+
+```typescript
+import { shortcuts, tyndWindow } from "@tynd/core/client"
+
+const handle = await shortcuts.register("CmdOrCtrl+Shift+P", () => {
+  tyndWindow.setFocus()
+}, "open-palette")
+
+await shortcuts.isRegistered("open-palette")  // true
+await handle.unregister()
+// Or bulk: await shortcuts.unregisterAll()
+```
+
+Accelerator strings use muda's format (`CmdOrCtrl+S`, `Alt+F4`, `Shift+Space`, …). Shortcuts fire even when the app is unfocused — Windows uses `RegisterHotKey`, macOS registers an Event Tap, Linux uses `XGrabKey` / portal.
 
 ### `store`
 
