@@ -35,7 +35,7 @@ Scaffold and production build have been verified for each row. The HMR column re
 tynd create my-app --framework <react|vue|svelte|solid|preact|lit|angular> --runtime <full|lite>
 ```
 
-**End-to-end verification.** For each row above, a fresh project was scaffolded in `playground/test-<framework>/`, deps resolved via workspace links, and `tynd build` produced a runnable `lite` binary (~2.5 MB) with a valid `TYNDPKG\0` trailer. Each binary was launched and stayed alive for 2 s (no startup crash). React is additionally exercised by the long-running `playground/full` and `playground/lite` apps.
+**End-to-end verification.** For each row above, a fresh project was scaffolded in `playground/test-<framework>/`, deps resolved via workspace links, and `tynd build` produced a runnable `lite` binary (~2.5 MB) with a valid `TYNDPKG\0` trailer. Each binary was launched and stayed alive for 2 s (no startup crash). React is additionally exercised by the long-running `playground/full` and `playground/example` apps.
 
 The Fast Refresh column reflects upstream plugin behavior — the dev server is not instrumented by Tynd, it's the plain Vite / Angular CLI dev server that the framework already uses outside Tynd.
 
@@ -101,7 +101,7 @@ plugins: [react(), babel({ presets: [reactCompilerPreset()] })]
 
 **This breaks HMR in dev.** `@vitejs/plugin-react@6` uses oxc to inject Fast Refresh markers (`$RefreshReg$`, `$RefreshSig$`); `@rolldown/plugin-babel` then re-parses the output and strips them. Vite still emits `[vite] (client) hmr update`, but no refresh boundary is registered, so the WebView shows nothing until a manual reload.
 
-Playground templates in this repo (`playground/full`, `playground/lite`) **do not** enable the Compiler for this reason.
+Playground templates in this repo (`playground/full`, `playground/example`) **do not** enable the Compiler for this reason.
 
 If you want the Compiler, enable it **only in build mode** so dev HMR stays intact:
 

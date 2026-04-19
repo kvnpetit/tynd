@@ -5,7 +5,7 @@ export const events = createEmitter<{
 }>()
 
 export function greet(name: string): string {
-  return `Hello, ${name}! Welcome to lite.`
+  return `Hello, ${name}! Welcome to the example app.`
 }
 
 export function increment(count: number): number {
@@ -18,7 +18,7 @@ app.onReady(() => {
 
 app.start({
   window: {
-    title: "lite",
+    title: "example",
     width: 1200,
     height: 800,
     center: true,

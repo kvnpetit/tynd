@@ -1,6 +1,6 @@
-# playground/lite
+# playground/example
 
-Reference app for Tynd's **`lite`** runtime (embedded JS engine, no Bun subprocess). Same feature set as [`playground/full`](../full/README.md) so the two runtimes stay at parity.
+Minimal reference app for Tynd's **`lite`** runtime — a tiny RPC + event demo that fits on one screen. Companion to [`playground/full`](../full/README.md) (which ships a real LLM chatbot).
 
 ```bash
 # From the repo root
@@ -16,20 +16,18 @@ bun run start        # tynd start — run cached bundles, no rebuild
 ## Why lite?
 
 - **~6.5 MB** host, ~6.6 MB final binary with this playground's assets packed in.
-- No Bun subprocess — backend runs in-process inside the Rust binary.
+- No external runtime — backend runs in-process.
 - Fastest cold start.
-- Same OS APIs as `full` (Rust-backed): `fs`, `http`, `websocket`, `sql`, `compute`, `terminal`, and the rest.
+- Same OS APIs as `full`: `fs`, `http`, `websocket`, `sql`, `compute`, `terminal`, and the rest.
 
-When **not** to pick lite — if you need Bun's JIT for hot CPU-bound JS, direct `fetch`/`Intl`/`Buffer` in backend code, or native-binding npm packages. See [RUNTIMES.md](../../RUNTIMES.md).
+When **not** to pick lite — if you need Bun's JIT for hot CPU-bound JS, JS-level `fetch` / `Intl` / `Buffer` in backend code, or native-binding npm packages. See [RUNTIMES.md](../../RUNTIMES.md).
 
 ## Layout
 
-Mirrors `playground/full/`:
-
 ```
-playground/lite/
+playground/example/
 ├── backend/main.ts       ← exported RPC fns + app.start()
-├── src/                  ← React + Vite frontend (shared pattern)
+├── src/                  ← React + Vite frontend
 ├── tynd.config.ts        ← runtime: "lite"
 └── vite.config.ts
 ```

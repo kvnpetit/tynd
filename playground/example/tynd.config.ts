@@ -1,12 +1,12 @@
 import type { TyndConfig } from "@tynd/cli"
 
-// lite — tynd configuration
+// example — minimal Tynd playground for the lite runtime.
 export default {
   runtime: "lite",
   backend: "backend/main.ts",
   frontendDir: "dist",
   bundle: {
-    identifier: "dev.tynd.playground-lite",
+    identifier: "dev.tynd.playground-example",
     categories: ["Utility"],
   },
 } satisfies TyndConfig

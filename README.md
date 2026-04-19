@@ -308,4 +308,4 @@ packages/
 | [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common errors: missing binary, WebView2, GTK deps, Gatekeeper, etc. |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Dev loop, commit style, PR process |
 | Per-package READMEs | [@tynd/core](./packages/core/README.md) · [@tynd/cli](./packages/cli/README.md) · [@tynd/host](./packages/host/README.md) |
-| Working examples | [playground/full](./playground/full/README.md) · [playground/lite](./playground/lite/README.md) |
+| Working examples | [playground/full](./playground/full/README.md) (LLM chatbot, full runtime) · [playground/example](./playground/example/README.md) (minimal demo, lite runtime) |
