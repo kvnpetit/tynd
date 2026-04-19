@@ -18,7 +18,7 @@ Every Tynd app has three surfaces:
 ### [Frontend RPC — `createBackend<T>()`](#frontend-rpc--createbackendt)
 
 ### [OS APIs](#os-apis)
-[`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`updater`](#updater--auto-update-with-ed25519-verify) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
+[`app`](#app--name--version--exit--relaunch) · [`dialog`](#dialog) · [`tyndWindow`](#tyndwindow) · [`menu`](#menu--react-to-menu-item-clicks) · [`clipboard`](#clipboard) · [`shell`](#shell) · [`notification`](#notification) · [`tray`](#tray) · [`process`](#process) · [`fs`](#fs) · [`store`](#store) · [`os` / `path`](#os--path) · [`http`](#http) · [`websocket`](#websocket--full-duplex-client) · [`sql`](#sql--embedded-sqlite) · [`sidecar`](#sidecar--bundled-binaries) · [`terminal`](#terminal--real-pty-inside-the-app) · [`compute`](#compute--rust-native-cpu-helpers) · [`singleInstance`](#singleinstance--prevent-dual-launch) · [`updater`](#updater--auto-update-with-ed25519-verify) · [`workers`](#workers--offload-cpu-bound-js) · [Web-platform re-exports](#web-platform-re-exports) · [Binary IPC](#binary-ipc--tynd-bin)
 
 ### [IPC architecture](#ipc-architecture)
 
@@ -199,6 +199,23 @@ delivered as a single resolve on the promise side.
 ## OS APIs
 
 Called from the frontend. They go through the Rust host directly — no round-trip to the TypeScript backend.
+
+### `app` — name, version, exit, relaunch
+
+```typescript
+import { app } from "@tynd/core/client"
+
+// Backend sets once at startup — typically from package.json fields.
+await app.setInfo({ name: pkg.name, version: pkg.version })
+
+// Anyone can query — frontend or backend.
+const name    = await app.getName()     // fallback: binary file stem
+const version = await app.getVersion()  // fallback: "0.0.0"
+
+// Graceful lifecycle control.
+await app.relaunch()   // spawn self + exit current
+await app.exit(0)      // runs cleanup hooks first
+```
 
 ### `dialog`
 

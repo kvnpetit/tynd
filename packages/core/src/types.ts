@@ -43,8 +43,32 @@ const MenuActionSchema = v.object({
   label: v.string(),
   enabled: v.optional(v.boolean()),
   role: v.optional(v.picklist(MENU_ROLES)),
+  /** Keyboard accelerator (muda format — e.g. `"CmdOrCtrl+S"`, `"Alt+F4"`). */
+  accelerator: v.optional(v.string()),
 })
 export type MenuAction = v.InferOutput<typeof MenuActionSchema>
+
+const MenuCheckboxSchema = v.object({
+  type: v.literal("checkbox"),
+  id: v.optional(v.string()),
+  label: v.string(),
+  enabled: v.optional(v.boolean()),
+  checked: v.optional(v.boolean()),
+  accelerator: v.optional(v.string()),
+})
+export type MenuCheckbox = v.InferOutput<typeof MenuCheckboxSchema>
+
+/** Radio items behave like checkboxes; enforce single-selection in userland by
+ * updating `checked` on click (native OS doesn't group muda check items). */
+const MenuRadioSchema = v.object({
+  type: v.literal("radio"),
+  id: v.optional(v.string()),
+  label: v.string(),
+  enabled: v.optional(v.boolean()),
+  checked: v.optional(v.boolean()),
+  accelerator: v.optional(v.string()),
+})
+export type MenuRadio = v.InferOutput<typeof MenuRadioSchema>
 
 // Recursive — declare the type first, then the schema references itself.
 export interface MenuSubmenu {
@@ -53,12 +77,14 @@ export interface MenuSubmenu {
   enabled?: boolean | undefined
   items: MenuItem[]
 }
-export type MenuItem = MenuSeparator | MenuAction | MenuSubmenu
+export type MenuItem = MenuSeparator | MenuAction | MenuCheckbox | MenuRadio | MenuSubmenu
 
 const MenuItemSchema: v.GenericSchema<MenuItem> = v.lazy(() =>
   v.union([
     MenuSeparatorSchema,
     MenuActionSchema,
+    MenuCheckboxSchema,
+    MenuRadioSchema,
     v.object({
       type: v.literal("submenu"),
       label: v.string(),

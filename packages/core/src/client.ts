@@ -1,12 +1,14 @@
 // @tynd/core/client — frontend API. Backend imports from "@tynd/core".
 
+export { type AppInfo, app } from "./client/app.js"
 export { type BackendClient, createBackend } from "./client/backend.js"
-export { clipboard } from "./client/clipboard.js"
+export { type ClipboardImage, clipboard } from "./client/clipboard.js"
 export { compute, type HashAlgo } from "./client/compute.js"
 export {
   type ConfirmOptions,
   dialog,
   type MessageOptions,
+  type OpenDirectoryOptions,
   type OpenFileOptions,
   type SaveFileOptions,
 } from "./client/dialog.js"

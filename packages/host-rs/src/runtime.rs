@@ -92,7 +92,8 @@ pub struct BackendConfig {
 /// Flat struct covers all variants (missing fields are `None`).
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct MenuItemDef {
-    /// "separator" | "submenu" | "item" (or omitted -> action item)
+    /// "separator" | "submenu" | "checkbox" | "radio" | "item"
+    /// (omitted -> action item)
     #[serde(rename = "type")]
     pub kind: Option<String>,
     /// User-defined ID — emitted as `{ id }` on click
@@ -104,6 +105,10 @@ pub struct MenuItemDef {
     /// Native OS role: "quit" | "copy" | "cut" | "paste" | "undo" | "redo" |
     /// "selectAll" | "minimize" | "close" | "separator"
     pub role: Option<String>,
+    /// Keyboard accelerator (muda format — e.g. "CmdOrCtrl+S", "Alt+F4").
+    pub accelerator: Option<String>,
+    /// Initial check state for checkbox / radio items.
+    pub checked: Option<bool>,
     /// Child items for submenus
     pub items: Option<Vec<MenuItemDef>>,
 }
