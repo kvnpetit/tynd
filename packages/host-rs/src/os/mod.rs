@@ -1,4 +1,5 @@
 pub mod app;
+pub mod autolaunch;
 pub mod call_pool;
 pub mod clipboard;
 pub mod compute;
@@ -31,6 +32,7 @@ use serde_json::Value;
 pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> {
     match api {
         "app" => app::dispatch(method, args),
+        "autolaunch" => autolaunch::dispatch(method, args),
         "dialog" => dialog::dispatch(method, args),
         "clipboard" => clipboard::dispatch(method, args),
         "shell" => shell::dispatch(method, args),

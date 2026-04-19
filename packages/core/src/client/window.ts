@@ -71,6 +71,56 @@ export const tyndWindow = {
   setSize(width: number, height: number): Promise<void> {
     return osCall("window", "setSize", { width, height })
   },
+  /** Inner size (client area) in logical pixels. */
+  getSize(): Promise<WindowSize> {
+    return osCall("window", "getSize")
+  },
+  /** Outer size including title bar + borders. */
+  getOuterSize(): Promise<WindowSize> {
+    return osCall("window", "getOuterSize")
+  },
+  setPosition(x: number, y: number): Promise<void> {
+    return osCall("window", "setPosition", { x, y })
+  },
+  getPosition(): Promise<WindowPosition> {
+    return osCall("window", "getPosition")
+  },
+  setMinSize(width: number, height: number): Promise<void> {
+    return osCall("window", "setMinSize", { width, height })
+  },
+  setMaxSize(width: number, height: number): Promise<void> {
+    return osCall("window", "setMaxSize", { width, height })
+  },
+  setResizable(resizable: boolean): Promise<void> {
+    return osCall("window", "setResizable", { resizable })
+  },
+  setClosable(closable: boolean): Promise<void> {
+    return osCall("window", "setClosable", { closable })
+  },
+  setMaximizable(maximizable: boolean): Promise<void> {
+    return osCall("window", "setMaximizable", { maximizable })
+  },
+  setMinimizable(minimizable: boolean): Promise<void> {
+    return osCall("window", "setMinimizable", { minimizable })
+  },
+  toggleMaximize(): Promise<void> {
+    return osCall("window", "toggleMaximize")
+  },
+  isResizable(): Promise<boolean> {
+    return osCall("window", "isResizable")
+  },
+  isClosable(): Promise<boolean> {
+    return osCall("window", "isClosable")
+  },
+  isFocused(): Promise<boolean> {
+    return osCall("window", "isFocused")
+  },
+  isDecorated(): Promise<boolean> {
+    return osCall("window", "isDecorated")
+  },
+  scaleFactor(): Promise<number> {
+    return osCall("window", "scaleFactor")
+  },
   minimize(): Promise<void> {
     return osCall("window", "minimize")
   },

@@ -253,7 +253,29 @@ const isMax  = await tyndWindow.isMaximized()
 const isMin  = await tyndWindow.isMinimized()
 const isFull = await tyndWindow.isFullscreen()
 const isVis  = await tyndWindow.isVisible()
+
+// Geometry — logical pixels, divide by scaleFactor() for device pixels.
+await tyndWindow.setPosition(100, 100)
+const pos  = await tyndWindow.getPosition()    // { x, y }
+const size = await tyndWindow.getSize()         // inner { width, height }
+await tyndWindow.setMinSize(400, 300)
+await tyndWindow.setMaxSize(1920, 1080)
+await tyndWindow.setResizable(false)
+await tyndWindow.toggleMaximize()
+const dpi = await tyndWindow.scaleFactor()      // 1.0 / 1.5 / 2.0
 ```
+
+#### Monitor enumeration
+
+```typescript
+import { monitors } from "@tynd/core/client"
+
+const all     = await monitors.all()       // Monitor[]
+const primary = await monitors.primary()   // the OS's "main" display
+const current = await monitors.current()   // where the primary window is
+```
+
+Each `Monitor` has `{ name, position, size, scale, isPrimary }`. Coordinates are physical pixels (divide `size` by `scale` for logical pixels).
 
 #### Multi-window
 
@@ -398,6 +420,18 @@ const watcher = await fs.watch("./notes", { recursive: true }, (event) => {
 })
 // Later: await watcher.unwatch()
 ```
+
+### `autolaunch` — start the app at system boot
+
+```typescript
+import { autolaunch } from "@tynd/core/client"
+
+await autolaunch.enable({ args: ["--minimized"] })
+const on = await autolaunch.isEnabled()
+await autolaunch.disable()
+```
+
+Platform-specific storage (Windows: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; macOS: `~/Library/LaunchAgents/<app>.plist`; Linux: `~/.config/autostart/<app>.desktop`). The registered path is whatever `std::env::current_exe()` resolves to — typically the installed binary, not the dev bin.
 
 ### `shortcuts` — system-wide keyboard hotkeys
 
