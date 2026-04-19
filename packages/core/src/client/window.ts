@@ -181,6 +181,23 @@ export const tyndWindow = {
     return osCall("window", "requestAttention")
   },
 
+  /** Reload the webview's current URL. */
+  reload(): Promise<void> {
+    return osCall("window", "reload")
+  },
+  /** Set the webview's zoom level (`1.0` = 100 %). */
+  setZoom(level: number): Promise<void> {
+    return osCall("window", "setZoom", { level })
+  },
+  /** Open the webview devtools. Only available in debug builds. */
+  openDevTools(): Promise<void> {
+    return osCall("window", "openDevTools")
+  },
+  /** Close the webview devtools (no-op if already closed or in release build). */
+  closeDevTools(): Promise<void> {
+    return osCall("window", "closeDevTools")
+  },
+
   /** Label of the current window (`"main"` for the primary window). */
   label(): string {
     return getWindowLabel()

@@ -136,7 +136,8 @@ pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'sta
             if a.mime.starts_with("text/html") {
                 rsp = rsp
                     .header("Cross-Origin-Opener-Policy", "same-origin")
-                    .header("Cross-Origin-Embedder-Policy", "credentialless");
+                    .header("Cross-Origin-Embedder-Policy", "credentialless")
+                    .header("Content-Security-Policy", default_csp());
             }
 
             rsp.body(Cow::Borrowed(a.bytes)).unwrap()
@@ -147,6 +148,25 @@ pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'sta
             .body(Cow::Borrowed(b"404 Not Found" as &[u8]))
             .unwrap(),
     }
+}
+
+/// Baseline CSP applied to every HTML response served via `tynd://`. Blocks
+/// inline/eval scripts by default; frames + objects refused entirely. Apps
+/// that need third-party resources should migrate their `<script>`s to the
+/// app bundle (where the default allows them) or set their own policy via
+/// a `<meta http-equiv="Content-Security-Policy">` tag in `index.html`.
+fn default_csp() -> &'static str {
+    "default-src 'self' tynd: tynd-bin:; \
+     img-src 'self' tynd: tynd-bin: data: blob:; \
+     media-src 'self' tynd: tynd-bin: data: blob:; \
+     script-src 'self' tynd:; \
+     style-src 'self' tynd: 'unsafe-inline'; \
+     font-src 'self' tynd: data:; \
+     connect-src 'self' tynd: tynd-bin: ipc: https: wss:; \
+     frame-src 'none'; \
+     object-src 'none'; \
+     base-uri 'self'; \
+     form-action 'self'"
 }
 
 fn mime_for(path: &std::path::Path) -> &'static str {
