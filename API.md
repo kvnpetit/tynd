@@ -592,8 +592,7 @@ if (info) {
     pubKey:    "<base64 Ed25519 pubkey baked into the app>",
   })
   off()
-  // Next step: hand `path` to a platform-specific installer.
-  // Install is not handled by the runtime yet (planned).
+  await updater.install({ path })  // swaps the binary + relaunches
 }
 ```
 
@@ -616,10 +615,16 @@ Manifest shape (Tauri-compatible — any tooling that produces Tauri manifests w
 
 **Platform key.** Derived from `std::env::consts::OS` (with `macos` → `darwin` for parity with GitHub Releases / Tauri) and `std::env::consts::ARCH` (`x86_64` / `aarch64`). Manifest keys must use this `<os>-<arch>` form.
 
+**Install semantics.** `install({ path, relaunch? = true })` swaps the downloaded binary for the running one and relaunches:
+- **Windows**: runs `cmd /c timeout 2 & move /y <new> <current> & start <current>` — the timeout lets the current process exit so the `.exe` unlocks, then cmd replaces + relaunches. The call returns just before the current process exits.
+- **Linux AppImage** (and any single-file binary): `fs::rename` + chmod +x + spawn + exit. Safe while running because Linux keeps the old inode mapped as long as the exe is live.
+- **macOS**: not yet — `.app` bundles are directories and updates ship as archives; handle the swap manually for now.
+
 **Not yet handled:**
-- Installing the downloaded file (planned: macOS `.app` swap, Linux AppImage swap, Windows helper-exe swap).
+- macOS `.app` swap (extract from `.dmg` / `.tar.gz`).
 - Periodic auto-check.
 - Delta updates.
+- Rollback on failure.
 
 ### `workers` — offload CPU-bound JS
 

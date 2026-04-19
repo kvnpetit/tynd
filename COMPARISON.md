@@ -421,7 +421,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Check for updates | ✅ | ✅ | ❌ | ✅ |
-| Download + install | ⚠️ download only (install TBD) | ✅ | ❌ | ✅ |
+| Download + install | ⚠️ Windows + Linux; macOS TBD | ✅ | ❌ | ✅ |
 | Progress callback | ✅ | ✅ | ❌ | ✅ |
 | Periodic auto-check | ❌ | ✅ | ❌ | ✅ |
 | GitHub Releases support | ✅ any HTTPS manifest | ✅ | ❌ | ✅ |

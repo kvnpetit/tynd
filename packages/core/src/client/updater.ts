@@ -46,6 +46,20 @@ export interface UpdaterDownloadResult {
   size: number
 }
 
+export interface UpdaterInstallOptions {
+  /** Path returned by `downloadAndVerify`. */
+  path: string
+  /** Relaunch the app after swapping the binary. Defaults to `true`. */
+  relaunch?: boolean
+}
+
+export interface UpdaterInstallResult {
+  installed: boolean
+  /** Final on-disk path of the running binary after the swap. */
+  path: string
+  relaunch: boolean
+}
+
 export const updater = {
   /**
    * Fetch the update manifest from `endpoint` and return the entry for the
@@ -67,5 +81,14 @@ export const updater = {
   /** Subscribe to throttled download + verification progress events. */
   onProgress(handler: (p: UpdaterProgress) => void): () => void {
     return window.__tynd__.os_on("updater:progress", (raw) => handler(raw as UpdaterProgress))
+  },
+  /**
+   * Swap the downloaded binary for the current one and (by default) relaunch.
+   * Windows: delegates to a short cmd script so the running `.exe` can be
+   * replaced after it exits. Linux AppImage: `rename` + spawn + exit. macOS:
+   * not yet — callers must manage the `.app` swap themselves for now.
+   */
+  install(options: UpdaterInstallOptions): Promise<UpdaterInstallResult> {
+    return osCall("updater", "install", options)
   },
 }
