@@ -1,4 +1,18 @@
+use muda::accelerator::Accelerator;
+use std::str::FromStr as _;
+
 use crate::runtime::MenuItemDef;
+
+fn parse_accel(item: &MenuItemDef) -> Option<Accelerator> {
+    let s = item.accelerator.as_deref()?;
+    match Accelerator::from_str(s) {
+        Ok(a) => Some(a),
+        Err(e) => {
+            crate::tynd_log!("menu: bad accelerator {s:?}: {e}");
+            None
+        },
+    }
+}
 
 pub(crate) fn build_bar(items: &[MenuItemDef]) -> Result<muda::Menu, String> {
     let menu = muda::Menu::new();
@@ -35,6 +49,35 @@ pub(crate) fn fill(
                 )?;
                 append(&sub).map_err(|e| e.to_string())?;
             },
+            Some("checkbox") => {
+                if let Some(label) = &item.label {
+                    let id = muda::MenuId::new(item.id.as_deref().unwrap_or(label));
+                    let mi = muda::CheckMenuItem::with_id(
+                        id,
+                        label,
+                        item.enabled.unwrap_or(true),
+                        item.checked.unwrap_or(false),
+                        parse_accel(item),
+                    );
+                    append(&mi).map_err(|e| e.to_string())?;
+                }
+            },
+            Some("radio") => {
+                // muda has no native radio group — approximate with CheckMenuItem.
+                // Apps enforce single-selection by listening for clicks and
+                // calling `menu.setChecked(id, bool)` to uncheck siblings.
+                if let Some(label) = &item.label {
+                    let id = muda::MenuId::new(item.id.as_deref().unwrap_or(label));
+                    let mi = muda::CheckMenuItem::with_id(
+                        id,
+                        label,
+                        item.enabled.unwrap_or(true),
+                        item.checked.unwrap_or(false),
+                        parse_accel(item),
+                    );
+                    append(&mi).map_err(|e| e.to_string())?;
+                }
+            },
             _ => {
                 if let Some(role) = &item.role {
                     if let Some(pi) = role_to_predefined(role) {
@@ -44,7 +87,12 @@ pub(crate) fn fill(
                 }
                 if let Some(label) = &item.label {
                     let id = muda::MenuId::new(item.id.as_deref().unwrap_or(label));
-                    let mi = muda::MenuItem::with_id(id, label, item.enabled.unwrap_or(true), None);
+                    let mi = muda::MenuItem::with_id(
+                        id,
+                        label,
+                        item.enabled.unwrap_or(true),
+                        parse_accel(item),
+                    );
                     append(&mi).map_err(|e| e.to_string())?;
                 }
             },

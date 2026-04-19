@@ -5,6 +5,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "openFile" => Ok(open_file(args, false)),
         "openFiles" => Ok(open_file(args, true)),
+        "openDirectory" => Ok(open_directory(args)),
         "saveFile" => Ok(save_file(args)),
         "message" => Ok(message_box(args)),
         "confirm" => Ok(confirm(args)),
@@ -57,6 +58,20 @@ fn open_file(args: &Value, multiple: bool) -> Value {
             Value::String(h.path().to_string_lossy().into_owned())
         })
     }
+}
+
+fn open_directory(args: &Value) -> Value {
+    let mut d = AsyncFileDialog::new();
+    if let Some(title) = args.get("title").and_then(|t| t.as_str()) {
+        d = d.set_title(title);
+    }
+    if let Some(dir) = args.get("defaultDir").and_then(|p| p.as_str()) {
+        d = d.set_directory(dir);
+    }
+    let picked = pollster::block_on(d.pick_folder());
+    picked.map_or(Value::Null, |h| {
+        Value::String(h.path().to_string_lossy().into_owned())
+    })
 }
 
 fn save_file(args: &Value) -> Value {

@@ -216,13 +216,13 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Single file picker | ✅ | ✅ | ✅ | ✅ |
 | Multiple file picker | ✅ | ✅ | ✅ | ✅ |
 | Save file dialog | ✅ | ✅ | ✅ | ✅ |
-| Directory picker | ❌ | ✅ | ✅ | ✅ |
+| Directory picker | ✅ | ✅ | ✅ | ✅ |
 | File type filters | ✅ | ✅ | ✅ | ✅ |
 | Default path / filename | ✅ | ✅ | ✅ | ✅ |
 | Message / alert (info) | ✅ | ✅ | ✅ | ✅ |
 | OK/Cancel confirmation | ✅ | ✅ | ✅ | ✅ |
-| Warning dialog | ❌ | ✅ | ✅ | ✅ |
-| Error dialog | ❌ | ✅ | ✅ | ✅ |
+| Warning dialog | ✅ | ✅ | ✅ | ✅ |
+| Error dialog | ✅ | ✅ | ✅ | ✅ |
 | Custom button labels | ❌ | ✅ | ✅ | ✅ |
 | Show hidden files | ❌ | ❌ | ✅ | ✅ |
 | Can create directories | ❌ | ✅ | ✅ | ✅ |
@@ -273,9 +273,9 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Enabled / disabled items | ✅ | ✅ | ✅ | ✅ |
 | Native roles (quit / copy / paste / undo…) | ✅ | ✅ | ✅ | ✅ |
 | Menu item click event | ✅ | ✅ | ✅ | ✅ |
-| Keyboard accelerators | ❌ | ✅ | ✅ | ✅ |
-| Checkbox items | ❌ | ✅ | ✅ | ✅ |
-| Radio items | ❌ | ❌ | ✅ | ✅ |
+| Keyboard accelerators | ✅ | ✅ | ✅ | ✅ |
+| Checkbox items | ✅ | ✅ | ✅ | ✅ |
+| Radio items | ⚠️ no native grouping | ❌ | ✅ | ✅ |
 | Icon in menu item | ❌ | ✅ | ✅ | ✅ |
 | Icon in submenu | ❌ | ✅ | ✅ | ❌ |
 | Update submenu text at runtime | ❌ | ✅ | ✅ | ✅ |
@@ -304,10 +304,10 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 |---|---|---|---|---|
 | Read text | ✅ | ✅ | ✅ | ✅ |
 | Write text | ✅ | ✅ | ✅ | ✅ |
-| Read image | ❌ | ✅ | ❌ | ✅ |
-| Write image | ❌ | ✅ | ❌ | ✅ |
-| Read / write HTML | ❌ | ✅ | ❌ | ✅ |
-| Clear clipboard | ❌ | ✅ | ❌ | ✅ |
+| Read image | ✅ | ✅ | ❌ | ✅ |
+| Write image | ✅ | ✅ | ❌ | ✅ |
+| Read / write HTML | ⚠️ write only (no OS-level read API) | ✅ | ❌ | ✅ |
+| Clear clipboard | ✅ | ✅ | ❌ | ✅ |
 | Clipboard change monitoring | ❌ | ✅ | ❌ | ⚠️ |
 | Read / write file paths (drag sources) | ❌ | ✅ | ❌ | ✅ |
 | Read / write custom buffer formats | ❌ | ⚠️ | ❌ | ✅ |
@@ -491,8 +491,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Get app name | ❌ | ✅ | ✅ | ✅ |
-| Get app version | ❌ | ✅ | ✅ | ✅ |
+| Get app name | ✅ | ✅ | ✅ | ✅ |
+| Get app version | ✅ | ✅ | ✅ | ✅ |
 | Get framework version | ❌ | ✅ | N/A | ✅ |
 | Get bundle identifier | ❌ | ✅ | ❌ | ⚠️ |
 | Get bundle type | ❌ | ✅ | ❌ | ❌ |
@@ -501,8 +501,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Set dock visibility (macOS) | ❌ | ✅ | ✅ | ✅ |
 | App quits after last window closed | ❌ | ❌ | ✅ | ✅ |
 | About / info panel | ❌ | ❌ | ✅ | ✅ |
-| exit(code) | ❌ | ✅ | ✅ | ✅ |
-| relaunch() | ❌ | ✅ | ❌ | ✅ |
+| exit(code) | ✅ | ✅ | ✅ | ✅ |
+| relaunch() | ✅ | ✅ | ❌ | ✅ |
 | Back button (Android) | ❌ | ✅ 📱 | N/A | N/A |
 | Data store management (Apple platforms) | ❌ | ✅ 📱 | N/A | ❌ |
 
@@ -512,14 +512,14 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Platform name | ❌ | ✅ | ✅ | ✅ |
-| CPU architecture | ❌ | ✅ | ✅ | ✅ |
-| OS version | ❌ | ✅ | ✅ | ✅ |
-| Hostname | ❌ | ✅ | ❌ | ✅ |
-| Locale (BCP-47) | ❌ | ✅ | ❌ | ✅ |
-| EOL character | ❌ | ✅ | ❌ | ✅ |
-| OS family (unix / windows) | ❌ | ✅ | ❌ | ✅ |
-| Dark mode detection | ❌ | ✅ | ✅ | ✅ |
+| Platform name | ✅ | ✅ | ✅ | ✅ |
+| CPU architecture | ✅ | ✅ | ✅ | ✅ |
+| OS version | ✅ | ✅ | ✅ | ✅ |
+| Hostname | ✅ | ✅ | ❌ | ✅ |
+| Locale (BCP-47) | ✅ | ✅ | ❌ | ✅ |
+| EOL character | ✅ | ✅ | ❌ | ✅ |
+| OS family (unix / windows) | ✅ | ✅ | ❌ | ✅ |
+| Dark mode detection | ✅ | ✅ | ✅ | ✅ |
 | System accent color | ❌ | ❌ | ✅ | ✅ |
 | CLI argument parsing | ❌ | ✅ | ❌ | ✅ |
 | Print page | ❌ | ❌ | ✅ | ✅ |
@@ -535,8 +535,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | App config / cache / log dir | ✅ | ✅ | ❌ | ✅ |
 | App resource dir | ❌ | ✅ | ❌ | ✅ |
 | Home / temp dir | ✅ | ✅ | ❌ | ✅ |
-| Desktop / Downloads / Documents | ❌ | ✅ | ❌ | ✅ |
-| Pictures / Music / Video | ❌ | ✅ | ❌ | ✅ |
+| Desktop / Downloads / Documents | ✅ | ✅ | ❌ | ✅ |
+| Pictures / Music / Video | ✅ | ✅ | ❌ | ✅ |
 | Font dir (macOS) | ❌ | ✅ | ❌ | ❌ |
 | Public / runtime dir | ❌ | ✅ | ❌ | ❌ |
 | Executable path | ✅ | ✅ | ❌ | ✅ |
@@ -787,11 +787,11 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Cursor & mouse | 0/7 | 7/7 | 2/7 | 3/7 |
 | Monitors & screens | 0/8 | 7/8 | 6/8 | 7/8 |
 | Drag & drop | 1/4 | 3/4 | 4/4 | 3/4 |
-| Dialogs | 7/18 | 13/18 | 14/18 | 14/18 |
+| Dialogs | 10/18 | 13/18 | 14/18 | 14/18 |
 | System tray | 7/20 | 15/20 | 18/20 | 14/20 |
-| Menu bar (app) | 6/19 | 15/19 | 15/19 | 13/19 |
+| Menu bar (app) | 8/19 | 15/19 | 15/19 | 13/19 |
 | Context menu | 0/4 | 3/4 | 4/4 | 3/4 |
-| Clipboard | 2/9 | 8/9 | 2/9 | 8/9 |
+| Clipboard | 6/9 | 8/9 | 2/9 | 8/9 |
 | Notifications | 1/13 | 13/13 | 6/13 | 9/13 |
 | Global shortcuts | 0/6 | 6/6 | 4/6 | 4/6 |
 | Shell & FS | 2/21 | 20/21 | 6/21 | 20/21 |
@@ -802,9 +802,9 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Autolaunch | 0/3 | 3/3 | 0/3 | 3/3 |
 | Persistent storage | 4/10 | 7/10 | 3/10 | 7/10 |
 | Logging | 0/5 | 5/5 | 4/5 | 2/5 |
-| App-level APIs | 0/14 | 11/14 | 7/14 | 11/14 |
-| OS & Environment | 0/12 | 11/12 | 5/12 | 11/12 |
-| Path utilities | 0/13 | 13/13 | 0/13 | 11/13 |
+| App-level APIs | 4/14 | 11/14 | 7/14 | 11/14 |
+| OS & Environment | 8/12 | 11/12 | 5/12 | 11/12 |
+| Path utilities | 8/13 | 13/13 | 0/13 | 11/13 |
 | Security & permissions | 1/13 | 8/13 | 0/13 | 6/13 |
 | Mobile | 0/8 | 8/8 | 0/8 | 0/8 |
 | Build & distribution | 3/26 | 19/26 | 13/26 | 21/26 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~95/503 (19%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~118/503 (23%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
