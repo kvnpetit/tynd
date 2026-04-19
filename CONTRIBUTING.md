@@ -80,8 +80,8 @@ bun run --cwd packages/cli build         # bundles CLI to packages/cli/bin/index
 ### Test against a playground
 
 ```bash
-bun run --cwd playground/lite build
-./playground/lite/release/lite.exe
+bun run --cwd playground/example build
+./playground/example/release/example.exe
 ```
 
 GUI behavior (windows, menus, tray, dialogs, WebView rendering) must be exercised by hand in a `playground/` app — unit tests don't cover that.
