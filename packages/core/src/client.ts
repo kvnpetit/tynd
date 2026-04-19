@@ -1,6 +1,7 @@
 // @tynd/core/client — frontend API. Backend imports from "@tynd/core".
 
 export { type AppInfo, app } from "./client/app.js"
+export { type AutolaunchOptions, autolaunch } from "./client/autolaunch.js"
 export { type BackendClient, createBackend } from "./client/backend.js"
 export { type ClipboardImage, clipboard } from "./client/clipboard.js"
 export { compute, type HashAlgo } from "./client/compute.js"
@@ -26,6 +27,7 @@ export {
   http,
 } from "./client/http.js"
 export { menu } from "./client/menu.js"
+export { type Monitor, monitors } from "./client/monitor.js"
 export { type NotificationOptions, notification } from "./client/notification.js"
 export { type OsInfo, os } from "./client/os.js"
 export { path } from "./client/path.js"
