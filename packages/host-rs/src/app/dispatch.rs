@@ -13,9 +13,11 @@ use crate::{os, runtime::BackendCall};
 
 /// Dispatch one IPC message body. `body` is consumed; the fast path
 /// (`{"type":"call",...}`) moves it straight into the backend channel with
-/// zero extra allocation.
+/// zero extra allocation. `label` identifies which window sent the message —
+/// used so os_call responses can be routed back to the calling webview.
 pub(super) fn handle_ipc_body(
     body: String,
+    label: &str,
     call_tx: &mpsc::Sender<BackendCall>,
     proxy: &EventLoopProxy<UserEvent>,
 ) {
@@ -63,19 +65,30 @@ pub(super) fn handle_ipc_body(
 
         if api == "window" {
             // Window commands must run on the main thread.
-            let _ = proxy.send_event(UserEvent::WindowCmd { id, method, args });
+            let _ = proxy.send_event(UserEvent::WindowCmd {
+                label: label.into(),
+                id,
+                method,
+                args,
+            });
         } else {
             // Bounded pool absorbs bursts; overflow falls back to a
             // one-shot thread so urgent calls don't queue behind
             // long-running dialogs (see os::call_pool).
             let proxy = proxy.clone();
+            let label_owned = label.to_string();
             os::call_pool::submit(move || {
                 let result = os::dispatch(&api, &method, &args);
                 let (ok, value) = match result {
                     Ok(v) => (true, v),
                     Err(e) => (false, Value::String(e)),
                 };
-                let _ = proxy.send_event(UserEvent::OsResult { id, ok, value });
+                let _ = proxy.send_event(UserEvent::OsResult {
+                    label: label_owned,
+                    id,
+                    ok,
+                    value,
+                });
             });
         }
     }
