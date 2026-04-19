@@ -1,85 +1,45 @@
-import { existsSync, mkdirSync } from "node:fs"
+import { existsSync } from "node:fs"
 import path from "node:path"
 import { log } from "./logger.ts"
 
-// Ordered by preference: ICO best for Windows PE, then PNG, then SVG.
+// SVG first: single source of truth for multi-size rendering.
 const ICON_CANDIDATES = [
+  "public/favicon.svg",
+  "public/icon.svg",
+  "public/logo.svg",
   "public/favicon.ico",
   "public/favicon.png",
   "public/icon.ico",
   "public/icon.png",
   "public/logo.ico",
   "public/logo.png",
-  "public/favicon.svg",
-  "public/icon.svg",
-  "public/logo.svg",
-  "assets/icon.ico",
+  "assets/icon.svg",
   "assets/icon.png",
-  "icon.ico",
+  "assets/icon.ico",
+  "icon.svg",
   "icon.png",
+  "icon.ico",
 ]
 
-const RASTER_EXTS = new Set([".ico", ".png", ".jpg", ".jpeg", ".webp"])
+export interface PngEntry {
+  size: number
+  data: Buffer
+}
 
-/**
- * Find the best icon for the project, auto-converting SVG -> PNG if needed.
- * Converted PNGs go to `.tynd/cache/` so bundlers like Vite don't pick them up.
- */
-export async function detectIcon(cwd: string, configIcon?: string): Promise<string | null> {
+/** Locate the project icon. Returns the original source path (svg/png/ico). */
+export function detectIcon(cwd: string, configIcon?: string): string | null {
   const candidates = configIcon
     ? [path.resolve(cwd, configIcon), ...ICON_CANDIDATES.map((r) => path.join(cwd, r))]
     : ICON_CANDIDATES.map((r) => path.join(cwd, r))
 
-  let svgCandidate: string | null = null
-
   for (const abs of candidates) {
-    if (!existsSync(abs)) continue
-    const ext = path.extname(abs).toLowerCase()
-
-    if (RASTER_EXTS.has(ext)) return abs
-
-    if (ext === ".svg" && svgCandidate === null) {
-      const base = abs.slice(0, -4)
-      for (const rExt of [".ico", ".png", ".jpg"]) {
-        const companion = base + rExt
-        if (existsSync(companion)) return companion
-      }
-      svgCandidate = abs
-    }
+    if (existsSync(abs)) return abs
   }
-
-  if (svgCandidate) {
-    const outPath = path.join(cwd, ".tynd", "cache", "icon.png")
-    const converted = await svgToPng(svgCandidate, outPath)
-    if (converted) return converted
-    log.warn(
-      `Icon: ${path.basename(svgCandidate)} found but could not convert.\n` +
-        `         -> Add public/favicon.png (256×256 recommended)`,
-    )
-  }
-
   return null
 }
 
-/** Convert SVG -> PNG via @resvg/resvg-js (WASM). Returns outPath on success. */
-export async function svgToPng(svgPath: string, outPath: string): Promise<string | null> {
-  try {
-    const { Resvg } = await import("@resvg/resvg-js")
-    mkdirSync(path.dirname(outPath), { recursive: true })
-    const svg = squarifySvg(await Bun.file(svgPath).text())
-    const resvg = new Resvg(svg, {
-      fitTo: { mode: "width", value: 256 },
-      background: "transparent",
-    })
-    await Bun.write(outPath, resvg.render().asPng())
-    return outPath
-  } catch {
-    return null
-  }
-}
-
 /**
- * Rewrite a non-square SVG to a square viewBox so the rendered PNG is square
+ * Rewrite a non-square SVG to a square viewBox so rendered PNGs are square
  * (letterboxed with transparency). Windows PE icons and macOS ICNS reject or
  * distort non-square sources.
  */
@@ -129,51 +89,55 @@ export function squarifySvg(svg: string): string {
   return svg.replace(rootTag, newRoot)
 }
 
-/** Wrap raw PNG bytes in a minimal ICO container (Vista+ accepts PNG payloads). */
-export function pngToIco(pngBytes: Buffer): Buffer {
-  if (pngBytes.length < 24) throw new Error("Invalid PNG: too small")
+/**
+ * Wrap one or more PNG entries in an ICO container (Vista+ accepts PNG payloads).
+ * Entries ordered smallest-first by convention; Windows picks the best per-DPI.
+ */
+export function pngToIco(entries: readonly PngEntry[]): Buffer {
+  if (entries.length === 0) throw new Error("pngToIco: entries is empty")
 
-  const pngWidth = pngBytes.readUInt32BE(16)
-  const pngHeight = pngBytes.readUInt32BE(20)
-  const icoW = pngWidth >= 256 ? 0 : pngWidth
-  const icoH = pngHeight >= 256 ? 0 : pngHeight
+  const count = entries.length
+  const headerSize = 6 + 16 * count
+  let dataOffset = headerSize
 
-  const dataOffset = 6 + 16 // ICONDIR + ICONDIRENTRY
-  const buf = Buffer.allocUnsafe(dataOffset + pngBytes.length)
+  const header = Buffer.alloc(headerSize)
+  header.writeUInt16LE(0, 0) // reserved
+  header.writeUInt16LE(1, 2) // type: icon
+  header.writeUInt16LE(count, 4)
 
-  buf.writeUInt16LE(0, 0)
-  buf.writeUInt16LE(1, 2)
-  buf.writeUInt16LE(1, 4)
-  buf.writeUInt8(icoW, 6)
-  buf.writeUInt8(icoH, 7)
-  buf.writeUInt8(0, 8)
-  buf.writeUInt8(0, 9)
-  buf.writeUInt16LE(1, 10)
-  buf.writeUInt16LE(32, 12)
-  buf.writeUInt32LE(pngBytes.length, 14)
-  buf.writeUInt32LE(dataOffset, 18)
-  pngBytes.copy(buf, dataOffset)
-  return buf
+  entries.forEach((e, i) => {
+    if (e.data.length < 24) throw new Error("pngToIco: PNG entry too small")
+    const off = 6 + 16 * i
+    // ICO width/height are u8; 0 means 256+.
+    const dim = e.size >= 256 ? 0 : e.size
+    header.writeUInt8(dim, off) // width
+    header.writeUInt8(dim, off + 1) // height
+    header.writeUInt8(0, off + 2) // colorCount (0 = truecolor)
+    header.writeUInt8(0, off + 3) // reserved
+    header.writeUInt16LE(1, off + 4) // planes
+    header.writeUInt16LE(32, off + 6) // bitCount
+    header.writeUInt32LE(e.data.length, off + 8)
+    header.writeUInt32LE(dataOffset, off + 12)
+    dataOffset += e.data.length
+  })
+
+  return Buffer.concat([header, ...entries.map((e) => e.data)])
 }
 
-/** Embed an icon into a Windows PE binary. Non-fatal on error. */
+/** Embed pre-built ICO bytes into a Windows PE binary. Non-fatal on error. */
 export async function setWindowsExeIcon(
   exePath: string,
-  iconPath: string,
+  icoBytes: Buffer,
   appName?: string,
 ): Promise<void> {
   try {
     const ResEdit = await import("resedit")
 
-    const ext = path.extname(iconPath).toLowerCase()
-    const iconBuf = Buffer.from(await Bun.file(iconPath).bytes())
-    const icoData = ext === ".ico" ? iconBuf : pngToIco(iconBuf)
-
     // ignoreCert is required for signed binaries (Bun ships signed).
     const exeData = Buffer.from(await Bun.file(exePath).bytes())
     const exe = ResEdit.NtExecutable.from(exeData, { ignoreCert: true })
     const res = ResEdit.NtExecutableResource.from(exe)
-    const iconFile = ResEdit.Data.IconFile.from(icoData)
+    const iconFile = ResEdit.Data.IconFile.from(icoBytes)
 
     const existing = ResEdit.Resource.IconGroupEntry.fromEntries(res.entries)
     const iconGroupID = existing[0]?.id ?? 1

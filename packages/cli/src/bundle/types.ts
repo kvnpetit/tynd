@@ -30,7 +30,7 @@ export interface BundleContext {
   version: string
   /** Reverse-DNS (e.g. com.example.myapp). */
   identifier: string
-  /** PNG or SVG; .ico sources are filtered upstream. */
+  /** Raw icon source path (.svg, .png or .ico). Each bundler handles formats it can't use. */
   iconSource: string | null
   categories: readonly string[]
   shortDescription: string

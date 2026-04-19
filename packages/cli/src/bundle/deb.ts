@@ -3,7 +3,7 @@ import path from "node:path"
 import { promisify } from "node:util"
 import { gzip as gzipCb } from "node:zlib"
 import { log } from "../lib/logger.ts"
-import { loadIconAsPng } from "./icon-gen.ts"
+import { rasterSource, renderHicolorSet } from "./icon-gen.ts"
 import type { BundleContext } from "./types.ts"
 
 const gzip = promisify(gzipCb)
@@ -39,17 +39,13 @@ export async function bundleDeb(ctx: BundleContext): Promise<string> {
   )
   installedSize += desktop.length
 
-  if (ctx.iconSource) {
-    const iconPng = await loadIconAsPng(ctx.iconSource)
-    tarPack.entry(
-      {
-        name: `./usr/share/icons/hicolor/256x256/apps/${ctx.appName}.png`,
-        mode: 0o644,
-        type: "file",
-      },
-      iconPng,
-    )
-    installedSize += iconPng.length
+  const iconSrc = rasterSource(ctx.iconSource, "deb")
+  if (iconSrc) {
+    const hicolor = await renderHicolorSet(iconSrc, ctx.appName)
+    for (const entry of hicolor) {
+      tarPack.entry({ name: `./${entry.relPath}`, mode: 0o644, type: "file" }, entry.data)
+      installedSize += entry.data.length
+    }
   }
 
   tarPack.finalize()

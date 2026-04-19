@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, rmSync } from "node:fs"
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
-import { loadIconAsPng } from "./icon-gen.ts"
+import { rasterSource, renderHicolorSet } from "./icon-gen.ts"
 import type { BundleContext } from "./types.ts"
 
 // RPM is the one format without a portable builder — we shell out to the
@@ -31,18 +31,25 @@ export async function bundleRpm(ctx: BundleContext): Promise<string> {
     mkdirSync(path.join(topdir, sub), { recursive: true })
   }
 
-  // Sources that %install copies into %{buildroot}. Named to match the
-  // Source0/Source1/Source2 entries emitted by renderSpec.
+  // Sources that %install copies into %{buildroot}. One file per Source* entry
+  // declared in renderSpec: binary, desktop, then one PNG per hicolor size.
   const binDest = path.join(sources, ctx.appName)
   await Bun.write(binDest, Bun.file(ctx.inputBinary))
   chmodSync(binDest, 0o755)
   await Bun.write(path.join(sources, `${ctx.appName}.desktop`), renderDesktopEntry(ctx))
-  if (ctx.iconSource) {
-    await Bun.write(path.join(sources, `${ctx.appName}.png`), await loadIconAsPng(ctx.iconSource))
+
+  let iconSizes: number[] = []
+  const iconSrc = rasterSource(ctx.iconSource, "rpm")
+  if (iconSrc) {
+    const hicolor = await renderHicolorSet(iconSrc, ctx.appName)
+    iconSizes = hicolor.map((h) => h.size)
+    for (const h of hicolor) {
+      await Bun.write(path.join(sources, `${ctx.appName}-${h.size}.png`), h.data)
+    }
   }
 
   const specPath = path.join(topdir, "SPECS", `${ctx.appName}.spec`)
-  await Bun.write(specPath, renderSpec(ctx, !!ctx.iconSource))
+  await Bun.write(specPath, renderSpec(ctx, iconSizes))
 
   await exec("rpmbuild", ["--define", `_topdir ${topdir}`, "--target", rpmArch, "-bb", specPath], {
     silent: true,
@@ -76,16 +83,23 @@ async function hasRpmbuild(): Promise<boolean> {
   }
 }
 
-function renderSpec(ctx: BundleContext, hasIcon: boolean): string {
+function renderSpec(ctx: BundleContext, iconSizes: readonly number[]): string {
   const license = ctx.bundleConfig.rpm?.license ?? "Unspecified"
   const requires = ctx.bundleConfig.rpm?.requires ?? []
   const url = ctx.homepage ? `URL: ${ctx.homepage}` : ""
   const requiresLines = requires.map((r) => `Requires: ${r}`).join("\n")
-  const iconInstall = hasIcon
-    ? `install -Dm644 %{SOURCE2} %{buildroot}/usr/share/icons/hicolor/256x256/apps/%{name}.png`
-    : ""
-  const iconFile = hasIcon ? `/usr/share/icons/hicolor/256x256/apps/%{name}.png` : ""
-  const source2 = hasIcon ? `Source2: ${ctx.appName}.png` : ""
+
+  // One Source line + install + %files line per hicolor size rendered.
+  const iconSources = iconSizes.map((s, i) => `Source${i + 2}: ${ctx.appName}-${s}.png`).join("\n")
+  const iconInstalls = iconSizes
+    .map(
+      (s, i) =>
+        `install -Dm644 %{SOURCE${i + 2}} %{buildroot}/usr/share/icons/hicolor/${s}x${s}/apps/%{name}.png`,
+    )
+    .join("\n")
+  const iconFiles = iconSizes
+    .map((s) => `/usr/share/icons/hicolor/${s}x${s}/apps/%{name}.png`)
+    .join("\n")
 
   return `Name: ${ctx.appName}
 Version: ${ctx.version}
@@ -95,7 +109,7 @@ License: ${license}
 ${url}
 Source0: ${ctx.appName}
 Source1: ${ctx.appName}.desktop
-${source2}
+${iconSources}
 ${requiresLines}
 
 %description
@@ -104,12 +118,12 @@ ${ctx.longDescription}
 %install
 install -Dm755 %{SOURCE0} %{buildroot}/usr/bin/%{name}
 install -Dm644 %{SOURCE1} %{buildroot}/usr/share/applications/%{name}.desktop
-${iconInstall}
+${iconInstalls}
 
 %files
 /usr/bin/%{name}
 /usr/share/applications/%{name}.desktop
-${iconFile}
+${iconFiles}
 `
 }
 

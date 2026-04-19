@@ -9,6 +9,7 @@ const zstdAsync = promisify(zstdCompressCb)
 import { pngToIco, setWindowsExeIcon } from "../lib/icon.ts"
 import { log } from "../lib/logger.ts"
 import { patchPeSubsystem } from "../lib/pe.ts"
+import { ICO_SIZES, renderIconPngSet } from "./icon-gen.ts"
 
 export interface PackOpts {
   hostBin: string
@@ -39,9 +40,8 @@ export async function packageLite(o: PackOpts): Promise<void> {
     ...(o.sidecars ?? []).map((s) => ({ rel: `sidecar/${s.name}`, abs: s.path })),
   ]
 
-  const tmpIconPath = await addIcon(packFiles, o)
+  await addIcon(packFiles, o)
   await writeBinary(o, packFiles)
-  cleanupTmpIcon(tmpIconPath)
 
   const size = lstatSync(o.outFile).size / 1_048_576
   log.success(
@@ -62,7 +62,8 @@ export async function packageFull(o: PackOpts): Promise<void> {
     const appName = path.basename(o.outFile, ".exe")
     bunSrcPath = path.join(tmpBunDir, `${appName}.exe`)
     await Bun.write(bunSrcPath, await readBuf(bunBin))
-    await setWindowsExeIcon(bunSrcPath, o.iconPath, appName)
+    const icoBytes = await buildIcoBytes(o.iconPath)
+    await setWindowsExeIcon(bunSrcPath, icoBytes, appName)
   }
 
   const bunBytes = await readBuf(bunSrcPath)
@@ -86,9 +87,8 @@ export async function packageFull(o: PackOpts): Promise<void> {
     ...(o.sidecars ?? []).map((s) => ({ rel: `sidecar/${s.name}`, abs: s.path })),
   ]
 
-  const tmpIconPath = await addIcon(packFiles, o)
+  await addIcon(packFiles, o)
   await writeBinary(o, packFiles)
-  cleanupTmpIcon(tmpIconPath)
 
   const size = lstatSync(o.outFile).size / 1_048_576
   log.success(
@@ -96,18 +96,16 @@ export async function packageFull(o: PackOpts): Promise<void> {
   )
 }
 
-async function addIcon(files: PackEntry[], o: PackOpts): Promise<string | null> {
-  if (!o.iconPath) return null
-  const ext = path.extname(o.iconPath).toLowerCase()
-  if (ext === ".png") {
-    const icoBytes = pngToIco(await readBuf(o.iconPath))
-    const tmp = path.join(path.dirname(o.outFile), ".icon-tmp.ico")
-    await Bun.write(tmp, icoBytes)
-    files.push({ rel: "icon.ico", data: await readBuf(tmp) })
-    return tmp
-  }
-  files.push({ rel: "icon.ico", data: await readBuf(o.iconPath) })
-  return null
+async function addIcon(files: PackEntry[], o: PackOpts): Promise<void> {
+  if (!o.iconPath) return
+  files.push({ rel: "icon.ico", data: await buildIcoBytes(o.iconPath) })
+}
+
+/** Build multi-size ICO bytes from any icon source (.ico pass-through, .svg/.png multi-render). */
+async function buildIcoBytes(iconPath: string): Promise<Buffer> {
+  if (path.extname(iconPath).toLowerCase() === ".ico") return readBuf(iconPath)
+  const entries = await renderIconPngSet(iconPath, ICO_SIZES)
+  return pngToIco(entries)
 }
 
 async function writeBinary(o: PackOpts, files: PackEntry[]): Promise<void> {
@@ -121,16 +119,7 @@ async function writeBinary(o: PackOpts, files: PackEntry[]): Promise<void> {
   // On Windows: flip PE subsystem to GUI + embed icon resources into the final .exe
   if (o.platform === "windows") {
     patchPeSubsystem(o.outFile)
-    if (o.iconPath) await setWindowsExeIcon(o.outFile, o.iconPath)
-  }
-}
-
-function cleanupTmpIcon(tmp: string | null): void {
-  if (!tmp) return
-  try {
-    rmSync(tmp)
-  } catch {
-    /* intentional: best-effort cleanup */
+    if (o.iconPath) await setWindowsExeIcon(o.outFile, await buildIcoBytes(o.iconPath))
   }
 }
 

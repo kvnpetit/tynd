@@ -3,7 +3,7 @@ import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { pngToIco } from "../lib/icon.ts"
 import { log } from "../lib/logger.ts"
-import { loadIconAsPng } from "./icon-gen.ts"
+import { ICO_SIZES, renderIconPngSet } from "./icon-gen.ts"
 import { ensureTool, type ToolSpec } from "./tools.ts"
 import type { BundleContext } from "./types.ts"
 
@@ -35,7 +35,13 @@ export async function bundleNsis(ctx: BundleContext): Promise<string> {
   let iconRel: string | null = null
   if (ctx.iconSource) {
     iconRel = `${ctx.appName}.ico`
-    await Bun.write(path.join(workDir, iconRel), pngToIco(await loadIconAsPng(ctx.iconSource)))
+    const dest = path.join(workDir, iconRel)
+    if (path.extname(ctx.iconSource).toLowerCase() === ".ico") {
+      copyFileSync(ctx.iconSource, dest)
+    } else {
+      const entries = await renderIconPngSet(ctx.iconSource, ICO_SIZES)
+      await Bun.write(dest, pngToIco(entries))
+    }
   }
 
   const outFile = path.join(ctx.outDir, `${ctx.appName}-${ctx.version}-setup.exe`)

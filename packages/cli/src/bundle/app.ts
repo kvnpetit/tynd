@@ -1,7 +1,7 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs"
 import path from "node:path"
 import { log } from "../lib/logger.ts"
-import { generateIcns, loadIconAsPng } from "./icon-gen.ts"
+import { generateIcns, ICNS_SIZES, rasterSource, renderIconPngSet } from "./icon-gen.ts"
 import type { BundleContext } from "./types.ts"
 
 export async function bundleApp(ctx: BundleContext): Promise<string> {
@@ -22,10 +22,11 @@ export async function bundleApp(ctx: BundleContext): Promise<string> {
   await Bun.write(path.join(contents, "PkgInfo"), "APPL????")
 
   let iconFile: string | null = null
-  if (ctx.iconSource) {
+  const iconSrc = rasterSource(ctx.iconSource, "app")
+  if (iconSrc) {
     iconFile = "icon.icns"
-    const pngBytes = await loadIconAsPng(ctx.iconSource)
-    await generateIcns(pngBytes, path.join(resources, iconFile))
+    const entries = await renderIconPngSet(iconSrc, ICNS_SIZES)
+    await generateIcns(entries, path.join(resources, iconFile))
   }
 
   await Bun.write(path.join(contents, "Info.plist"), renderInfoPlist(ctx, exeName, iconFile))

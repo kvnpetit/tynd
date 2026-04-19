@@ -1,7 +1,7 @@
 # 📊 Tynd vs Tauri v2 vs Wails v3 vs Electron
 
 > **Exhaustive feature matrix across 39 categories — 512 rows.**
-> Last updated: April 18, 2026 · Desktop only (mobile features marked 📱)
+> Last updated: April 19, 2026 · Desktop only (mobile features marked 📱)
 
 ## Tynd in one paragraph
 
@@ -611,7 +611,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | **General** | | | | |
 | Build hooks (before / after) | ❌ | ✅ | ✅ | ✅ |
 | Icon embedded in binary | ✅ | ✅ | ✅ | ✅ |
-| Icon generation (PNG -> ICO / ICNS) | ✅ | ✅ | ✅ | ⚠️ |
+| Icon generation (SVG/PNG -> multi-size ICO / ICNS / hicolor PNG set) | ✅ | ✅ | ✅ | ⚠️ |
 | Cross-compilation | ❌ | ✅ | ✅ | ✅ |
 | PE patch (suppress Windows console) | ✅ | ✅ | ✅ | ✅ |
 | Build tools auto-downloaded | ✅ NSIS/WiX/appimagetool | ❌ | ❌ | ✅ |

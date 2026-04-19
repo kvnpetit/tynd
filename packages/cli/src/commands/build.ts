@@ -159,7 +159,7 @@ export async function build(opts: BuildOptions): Promise<void> {
   const frontendFiles = collectFiles(cfg.frontendDir)
   log.step(`Frontend: ${frontendFiles.length} files`)
 
-  const iconPath = await detectIcon(opts.cwd, cfg.icon)
+  const iconPath = detectIcon(opts.cwd, cfg.icon)
   if (iconPath) {
     log.step(`Icon:    ${log.gray(path.relative(opts.cwd, iconPath))}`)
   }

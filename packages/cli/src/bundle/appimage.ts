@@ -2,7 +2,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, symlinkSync } f
 import path from "node:path"
 import { exec } from "../lib/exec.ts"
 import { log } from "../lib/logger.ts"
-import { loadIconAsPng } from "./icon-gen.ts"
+import { loadIconAsPng, rasterSource, renderHicolorSet } from "./icon-gen.ts"
 import { ensureTool, type ToolSpec } from "./tools.ts"
 import type { BundleContext } from "./types.ts"
 
@@ -28,9 +28,6 @@ export async function bundleAppImage(ctx: BundleContext): Promise<string> {
   const appDir = path.join(ctx.outDir, `${ctx.appName}.AppDir`)
   if (existsSync(appDir)) rmSync(appDir, { recursive: true, force: true })
   mkdirSync(path.join(appDir, "usr", "bin"), { recursive: true })
-  mkdirSync(path.join(appDir, "usr", "share", "icons", "hicolor", "256x256", "apps"), {
-    recursive: true,
-  })
 
   const binDest = path.join(appDir, "usr", "bin", ctx.appName)
   copyFileSync(ctx.inputBinary, binDest)
@@ -41,23 +38,14 @@ export async function bundleAppImage(ctx: BundleContext): Promise<string> {
 
   await Bun.write(path.join(appDir, `${ctx.appName}.desktop`), renderDesktopEntry(ctx))
 
-  if (ctx.iconSource) {
-    const iconPng = await loadIconAsPng(ctx.iconSource)
+  const iconSrc = rasterSource(ctx.iconSource, "appimage")
+  if (iconSrc) {
     // Top-level PNG is what appimagetool embeds as the AppImage's own icon.
-    await Bun.write(path.join(appDir, `${ctx.appName}.png`), iconPng)
-    await Bun.write(
-      path.join(
-        appDir,
-        "usr",
-        "share",
-        "icons",
-        "hicolor",
-        "256x256",
-        "apps",
-        `${ctx.appName}.png`,
-      ),
-      iconPng,
-    )
+    await Bun.write(path.join(appDir, `${ctx.appName}.png`), await loadIconAsPng(iconSrc))
+    // Full hicolor tree so post-install desktop integration scales cleanly.
+    for (const entry of await renderHicolorSet(iconSrc, ctx.appName)) {
+      await Bun.write(path.join(appDir, entry.relPath), entry.data)
+    }
   }
 
   const outFile = path.join(ctx.outDir, `${ctx.appName}-${ctx.version}-${ctx.arch}.AppImage`)
