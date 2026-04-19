@@ -55,6 +55,9 @@ hmac   = { version = "0.12", default-features = false }
 
 # Single-instance lock across OSes
 single-instance = "0.3"
+# Cross-platform local socket for forwarding argv/cwd from a 2nd launch
+# to the 1st (Windows named pipe, Unix domain socket).
+interprocess = "2.2"
 
 # CSPRNG + WebSocket + embedded SQL (lite parity with bun:sqlite)
 rand       = { version = "0.8", default-features = false, features = ["std", "std_rng"] }

@@ -49,6 +49,9 @@ enum UserEvent {
     ForceExit,
     /// Sent 500ms after CloseRequested if `cancelClose()` wasn't called.
     ProceedClose,
+    /// Sent by the single-instance listener when a duplicate launch forwards
+    /// its argv — we bring the primary window to the front.
+    FocusPrimary,
 }
 
 /// A secondary (non-primary) window with its own WebView and state tracker.
@@ -75,6 +78,15 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             // loop just passes the string to the WebView.
             let script = ipc::eval_os_event(name, data);
             let _ = proxy.send_event(UserEvent::OsEventScript(script));
+        }));
+    }
+
+    {
+        // When another instance of this app forwards its argv via the
+        // single-instance socket, bring the primary window to the front.
+        let proxy = proxy.clone();
+        os::single_instance::set_second_launch_hook(Box::new(move |_payload| {
+            let _ = proxy.send_event(UserEvent::FocusPrimary);
         }));
     }
 
@@ -230,6 +242,12 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             Event::UserEvent(UserEvent::PageReady) => {
                 native_window.set_visible(true);
                 let _ = call_tx.send(BackendCall::lifecycle("on_ready"));
+            },
+
+            Event::UserEvent(UserEvent::FocusPrimary) => {
+                native_window.set_minimized(false);
+                native_window.set_visible(true);
+                native_window.set_focus();
             },
 
             Event::UserEvent(UserEvent::ForceExit)
