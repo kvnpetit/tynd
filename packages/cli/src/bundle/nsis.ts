@@ -4,6 +4,7 @@ import { exec } from "../lib/exec.ts"
 import { pngToIco } from "../lib/icon.ts"
 import { log } from "../lib/logger.ts"
 import { ICO_SIZES, renderIconPngSet } from "./icon-gen.ts"
+import { signWindows } from "./sign.ts"
 import { ensureTool, type ToolSpec } from "./tools.ts"
 import type { BundleContext } from "./types.ts"
 
@@ -56,6 +57,10 @@ export async function bundleNsis(ctx: BundleContext): Promise<string> {
   if (!existsSync(outFile)) {
     throw new Error(`makensis finished without producing ${outFile}`)
   }
+
+  // Sign the installer itself — otherwise users see a SmartScreen "Unknown
+  // Publisher" warning even if the inner .exe is signed.
+  await signWindows(ctx.bundleConfig, outFile)
 
   rmSync(workDir, { recursive: true, force: true })
   log.success(`NSIS     -> ${log.cyan(`release/${path.basename(outFile)}`)}`)

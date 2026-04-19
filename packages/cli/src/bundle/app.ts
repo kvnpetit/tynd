@@ -2,6 +2,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs"
 import path from "node:path"
 import { log } from "../lib/logger.ts"
 import { generateIcns, ICNS_SIZES, rasterSource, renderIconPngSet } from "./icon-gen.ts"
+import { signMacos } from "./sign.ts"
 import type { BundleContext } from "./types.ts"
 
 export async function bundleApp(ctx: BundleContext): Promise<string> {
@@ -30,6 +31,10 @@ export async function bundleApp(ctx: BundleContext): Promise<string> {
   }
 
   await Bun.write(path.join(contents, "Info.plist"), renderInfoPlist(ctx, exeName, iconFile))
+
+  // Re-sign the `.app` after assembly — codesign's `--deep` walks Contents/
+  // and signs every nested binary in one pass. Required for notarization.
+  await signMacos(ctx.bundleConfig, appPath)
 
   log.success(`App bundle -> ${log.cyan(`release/${path.basename(appPath)}`)}`)
   return appPath

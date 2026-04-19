@@ -4,6 +4,7 @@ import path from "node:path"
 import { buildBundleContext } from "../bundle/context.ts"
 import { parseBundleFlag, resolveTargets, runBundle } from "../bundle/index.ts"
 import { collectFiles, packageFull, packageLite } from "../bundle/pack.ts"
+import { signMacos, signWindows } from "../bundle/sign.ts"
 import type { BundleTarget } from "../bundle/types.ts"
 import { buildFrontendEntry, buildFullBundle, buildLiteBundle } from "../lib/bundle.ts"
 import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/cache.ts"
@@ -205,6 +206,15 @@ export async function build(opts: BuildOptions): Promise<void> {
       iconPath,
       sidecars,
     })
+  }
+
+  // Sign the raw binary before any bundle step copies it into installers.
+  // Gatekeeper / SmartScreen reject unsigned binaries post-install anyway,
+  // so signing upstream of bundlers keeps every downstream artifact valid.
+  if (platform === "windows") {
+    await signWindows(cfg.bundle, outFile)
+  } else if (platform === "macos") {
+    await signMacos(cfg.bundle, outFile)
   }
 
   if (bundleTargets.length > 0) {

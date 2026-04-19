@@ -60,6 +60,42 @@ const BundleSchema = v.object({
       upgradeCode: v.optional(v.string()),
     }),
   ),
+  /**
+   * Code signing for distribution. Values marked `env:NAME` are resolved at
+   * build time from `process.env.NAME` — never put secrets directly in
+   * source control. Signing is opt-in: omit the block and builds stay
+   * unsigned (fine for dev / CI smoke tests).
+   */
+  sign: v.optional(
+    v.object({
+      windows: v.optional(
+        v.object({
+          /** Path to a `.pfx` / `.p12` file OR `cert:subject=...` for Windows cert store. */
+          certificate: v.pipe(v.string(), v.minLength(1)),
+          /** Password protecting the PFX. Use `env:NAME` to read from the environment. */
+          password: v.optional(v.string()),
+          /** RFC 3161 timestamp server. Defaults to http://timestamp.digicert.com. */
+          timestampUrl: v.optional(v.pipe(v.string(), v.url())),
+        }),
+      ),
+      macos: v.optional(
+        v.object({
+          /** "Developer ID Application: Name (TEAMID)" or a SHA-1 hash. */
+          identity: v.pipe(v.string(), v.minLength(1)),
+          /** Path to an entitlements `.plist` (required for some sandboxed features). */
+          entitlements: v.optional(v.string()),
+          /** If set, submits the signed `.app` to Apple notary service after codesign. */
+          notarize: v.optional(
+            v.object({
+              appleId: v.string(),
+              password: v.string(),
+              teamId: v.string(),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
 })
 
 // Window/menu/tray config lives in the backend (app.start({ window: {...} }))

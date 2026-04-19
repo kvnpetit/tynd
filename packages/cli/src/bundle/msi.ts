@@ -4,6 +4,7 @@ import { exec } from "../lib/exec.ts"
 import { pngToIco } from "../lib/icon.ts"
 import { log } from "../lib/logger.ts"
 import { ICO_SIZES, renderIconPngSet } from "./icon-gen.ts"
+import { signWindows } from "./sign.ts"
 import { ensureTool, type ToolSpec } from "./tools.ts"
 import type { BundleContext } from "./types.ts"
 
@@ -69,6 +70,8 @@ export async function bundleMsi(ctx: BundleContext): Promise<string> {
   if (!existsSync(outFile)) {
     throw new Error(`light finished without producing ${outFile}`)
   }
+
+  await signWindows(ctx.bundleConfig, outFile)
 
   rmSync(workDir, { recursive: true, force: true })
   log.success(`MSI      -> ${log.cyan(`release/${path.basename(outFile)}`)}`)

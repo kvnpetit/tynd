@@ -591,12 +591,12 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | MSI / WiX (.msi) | ✅ WiX v3 | ✅ | ❌ | ✅ |
 | WebView2 bootstrapper embedded | ❌ | ✅ | ❌ | N/A |
 | WebView2 custom user data path | ❌ | ✅ | ✅ | N/A |
-| Code signing | ❌ | ✅ | ✅ | ✅ |
+| Code signing | ✅ signtool | ✅ | ✅ | ✅ |
 | **macOS** | | | | |
 | .app bundle | ✅ | ✅ | ✅ | ✅ |
 | .dmg disk image | ✅ | ✅ | ✅ | ✅ |
-| codesign | ❌ | ✅ | ✅ | ✅ |
-| Notarization | ❌ | ✅ | ❌ | ✅ |
+| codesign | ✅ | ✅ | ✅ | ✅ |
+| Notarization | ✅ notarytool + stapler | ✅ | ❌ | ✅ |
 | **Linux** | | | | |
 | .deb (Debian / Ubuntu) | ✅ | ✅ | ❌ | ✅ |
 | .AppImage | ✅ | ✅ | ✅ | ✅ |
@@ -807,7 +807,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Path utilities | 8/13 | 13/13 | 0/13 | 11/13 |
 | Security & permissions | 2/13 | 8/13 | 0/13 | 6/13 |
 | Mobile | 0/8 | 8/8 | 0/8 | 0/8 |
-| Build & distribution | 3/26 | 19/26 | 13/26 | 21/26 |
+| Build & distribution | 6/26 | 19/26 | 13/26 | 21/26 |
 | DX & CLI | 7/17 | 12/17 | 11/17 | 9/17 |
 | Printing & PDF | 0/7 | 0/7 | 1/7 | 7/7 |
 | Screen & media capture | 0/7 | 0/7 | 0/7 | 7/7 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~144/503 (29%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~147/503 (29%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
