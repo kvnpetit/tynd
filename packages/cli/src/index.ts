@@ -6,6 +6,7 @@ import { create, FRAMEWORKS, type Framework } from "./commands/create.ts"
 import { dev } from "./commands/dev.ts"
 import { info } from "./commands/info.ts"
 import { init } from "./commands/init.ts"
+import { keygen, sign } from "./commands/signer.ts"
 import { start } from "./commands/start.ts"
 import { upgrade } from "./commands/upgrade.ts"
 import { validate } from "./commands/validate.ts"
@@ -157,6 +158,26 @@ cli
     await info(opts)
   })
 
+cli
+  .command("keygen", "Generate an Ed25519 keypair for the auto-updater")
+  .option("--out <base>", "Output base path (creates <base>.key + <base>.pub)", {
+    default: "tynd-updater",
+  })
+  .option("-f, --force", "Overwrite existing files", { default: false })
+  .action(async (opts: { out: string; force: boolean }) => {
+    await keygen(opts)
+  })
+
+cli
+  .command("sign <file>", "Sign a file with an Ed25519 updater private key")
+  .option("--key <path>", "Path to the .key file produced by `tynd keygen`", {
+    default: "tynd-updater.key",
+  })
+  .option("--out <path>", "Write signature to this file instead of stdout")
+  .action(async (file: string, opts: { key: string; out?: string }) => {
+    await sign(opts.out ? { file, key: opts.key, out: opts.out } : { file, key: opts.key })
+  })
+
 cli.help()
 cli.version(VERSION)
 
@@ -183,6 +204,8 @@ const KNOWN_COMMANDS = [
   "validate",
   "upgrade",
   "info",
+  "keygen",
+  "sign",
 ]
 const firstArg = rawArgs.find((a) => !a.startsWith("-"))
 if (firstArg && !KNOWN_COMMANDS.includes(firstArg)) {
