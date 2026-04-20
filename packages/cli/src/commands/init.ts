@@ -186,6 +186,12 @@ async function patchPackageJson(pkgPath: string, pkg: PackageJson): Promise<void
   if (!deps["@tynd/host"]) deps["@tynd/host"] = range
   pkg.dependencies = deps
 
+  // @tynd/host's postinstall downloads the native binaries. Bun blocks
+  // postinstall scripts unless the package is listed here.
+  const trusted = new Set(pkg.trustedDependencies ?? [])
+  trusted.add("@tynd/host")
+  pkg.trustedDependencies = [...trusted].sort()
+
   await Bun.write(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
   log.step(`${log.cyan("patch")}   package.json`)
   log.debug(`patchPackageJson: deps @tynd/core, @tynd/host -> ${range}`)

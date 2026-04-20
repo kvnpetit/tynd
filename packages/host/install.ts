@@ -16,7 +16,7 @@ const pkg = (await Bun.file(join(import.meta.dir, "package.json")).json()) as {
 }
 
 const VERSION = pkg.version
-const REPO_URL = pkg.repository.url.replace(/\.git$/, "")
+const REPO_URL = pkg.repository.url.replace(/^git\+/, "").replace(/\.git$/, "")
 // Single unified release-please tag: v<VERSION>
 const TAG = `v${VERSION}`
 const BASE_URL = `${REPO_URL}/releases/download/${TAG}`

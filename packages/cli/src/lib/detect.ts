@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { log } from "./logger.ts"
 import { allDeps, loadPackageJson } from "./pkg.ts"
+import { REPO, VERSION } from "./version.ts"
 
 export type Platform = "windows" | "macos" | "linux"
 export type Arch = "x64" | "arm64"
@@ -112,6 +113,66 @@ export function binaryMissingHint(runtime: "full" | "lite", cwd: string): string
     dir = parent
   }
   return `Install: bun add @tynd/host`
+}
+
+function isInWorkspace(cwd: string): boolean {
+  let dir = cwd
+  for (let i = 0; i < 6; i++) {
+    if (existsSync(path.join(dir, "packages", "host-rs", "Cargo.toml"))) return true
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return false
+}
+
+async function downloadHostBinary(runtime: "full" | "lite", destPath: string): Promise<void> {
+  const plat = getPlatform()
+  const arch = getArch()
+  const ext = plat === "windows" ? ".exe" : ""
+  const assetName = `tynd-${runtime}-${plat}-${arch}${ext}`
+  const url = `https://github.com/${REPO}/releases/download/v${VERSION}/${assetName}`
+
+  log.step(`Downloading tynd-${runtime} (${plat}-${arch})…`)
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} for ${url}`)
+  }
+  mkdirSync(path.dirname(destPath), { recursive: true })
+  await Bun.write(destPath, await res.arrayBuffer())
+  if (plat !== "windows") chmodSync(destPath, 0o755)
+}
+
+/**
+ * Locate the host binary, downloading it on demand if `@tynd/host` is present
+ * but its postinstall was skipped (Bun trust gate) or failed (e.g. the broken
+ * `git+https://` URL in @tynd/host@0.1.0). Returns the binary path or null.
+ */
+export async function ensureHostBinary(
+  runtime: "full" | "lite",
+  cwd: string,
+): Promise<string | null> {
+  const existing = findBinary(runtime, cwd)
+  if (existing) return existing
+
+  // Don't auto-download inside the monorepo — user is expected to `cargo build`.
+  if (isInWorkspace(cwd)) return null
+
+  const plat = getPlatform()
+  const arch = getArch()
+  const name = binaryName(runtime)
+  const hostDir = path.join(cwd, "node_modules", "@tynd/host")
+  if (!existsSync(hostDir)) return null
+
+  const destPath = path.join(hostDir, "bin", `${plat}-${arch}`, name)
+  try {
+    await downloadHostBinary(runtime, destPath)
+    log.success(`tynd-${runtime} ready`)
+    return destPath
+  } catch (e) {
+    log.debug(`ensureHostBinary: download failed: ${e}`)
+    return null
+  }
 }
 
 /** Server-side frameworks incompatible with tynd (they own the server). */

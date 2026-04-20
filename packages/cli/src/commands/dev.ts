@@ -3,7 +3,7 @@ import path from "node:path"
 import { buildFrontendEntry, buildLiteBundle } from "../lib/bundle.ts"
 import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
-import { detectFrontend, findBinary } from "../lib/detect.ts"
+import { binaryMissingHint, detectFrontend, ensureHostBinary } from "../lib/detect.ts"
 import { getLogLevel, log } from "../lib/logger.ts"
 import { pipeWithPrefix, waitForServer } from "../lib/spawn-helpers.ts"
 import { installWatchers } from "./dev-reload.ts"
@@ -30,9 +30,9 @@ export async function dev(opts: DevOptions): Promise<void> {
   log.blank()
   log.info(`Starting in ${log.cyan("dev")} mode (${cfg.runtime})`)
 
-  const binPath = findBinary(cfg.runtime, opts.cwd)
+  const binPath = await ensureHostBinary(cfg.runtime, opts.cwd)
   if (!binPath) {
-    log.hint(`tynd-${cfg.runtime} binary not found.`, "Install: bun add @tynd/host")
+    log.hint(`tynd-${cfg.runtime} binary not found.`, binaryMissingHint(cfg.runtime, opts.cwd))
     process.exit(1)
   }
 

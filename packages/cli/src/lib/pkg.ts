@@ -22,6 +22,7 @@ export const PackageJsonSchema = v.looseObject({
   scripts: v.optional(StringRecord),
   dependencies: v.optional(StringRecord),
   devDependencies: v.optional(StringRecord),
+  trustedDependencies: v.optional(v.array(v.string())),
 })
 export type PackageJson = v.InferOutput<typeof PackageJsonSchema>
 

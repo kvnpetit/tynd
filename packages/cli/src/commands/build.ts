@@ -9,7 +9,7 @@ import type { BundleTarget } from "../bundle/types.ts"
 import { buildFrontendEntry, buildFullBundle, buildLiteBundle } from "../lib/bundle.ts"
 import { hashSources, readCache, wipeIfStaleVersion, writeCache } from "../lib/cache.ts"
 import { loadConfig, resolvePaths } from "../lib/config.ts"
-import { detectFrontend, findBinary, getPlatform } from "../lib/detect.ts"
+import { binaryMissingHint, detectFrontend, ensureHostBinary, getPlatform } from "../lib/detect.ts"
 import { exec } from "../lib/exec.ts"
 import { detectIcon } from "../lib/icon.ts"
 import { log } from "../lib/logger.ts"
@@ -146,9 +146,9 @@ export async function build(opts: BuildOptions): Promise<void> {
     log.success("Backend bundled")
   }
 
-  const hostBin = findBinary(cfg.runtime, opts.cwd)
+  const hostBin = await ensureHostBinary(cfg.runtime, opts.cwd)
   if (!hostBin) {
-    log.hint(`tynd-${cfg.runtime} binary not found.`, "Install: bun add @tynd/host")
+    log.hint(`tynd-${cfg.runtime} binary not found.`, binaryMissingHint(cfg.runtime, opts.cwd))
     process.exit(1)
   }
   log.step(`Host: ${log.gray(path.relative(opts.cwd, hostBin))}`)

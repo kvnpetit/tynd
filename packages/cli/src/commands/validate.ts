@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { ConfigError, loadConfig, resolvePaths, type TyndConfig } from "../lib/config.ts"
-import { detectFrontend, findBinary } from "../lib/detect.ts"
+import { binaryMissingHint, detectFrontend, findBinary } from "../lib/detect.ts"
 import { log } from "../lib/logger.ts"
 
 type Level = "error" | "warn" | "info"
@@ -69,7 +69,7 @@ export async function validate(opts: ValidateOptions): Promise<void> {
   if (binPath) {
     pass(`tynd-${cfg.runtime} binary found`)
   } else {
-    warn(`tynd-${cfg.runtime} binary not found`, `Install: bun add @tynd/${cfg.runtime}`)
+    warn(`tynd-${cfg.runtime} binary not found`, binaryMissingHint(cfg.runtime, opts.cwd))
   }
 
   output(issues, opts)
