@@ -21,7 +21,8 @@ Linux system deps (match CI):
 ```bash
 sudo apt-get install -y \
   libgtk-3-dev libwebkit2gtk-4.1-dev \
-  libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+  libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+  libxdo-dev
 ```
 
 The Rust toolchain auto-installs on first `cargo` run (pinned via `rust-toolchain.toml`). Bun is required — install once from [bun.sh](https://bun.sh/).

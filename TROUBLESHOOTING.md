@@ -75,7 +75,8 @@ sudo apt install libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libsoup-3.0-0
 For building from source:
 ```bash
 sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
-  libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+  libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+  libxdo-dev
 ```
 
 Fedora:
