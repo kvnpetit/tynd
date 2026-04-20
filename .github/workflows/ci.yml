@@ -41,7 +41,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: tynd-rust
-          save-if: ${{ github.event.pull_request.base.ref == 'main' }}
 
       - name: cargo fmt --check
         if: startsWith(matrix.runner, 'ubuntu')
@@ -75,6 +74,7 @@ jobs:
             packages/*/node_modules
             playground/*/node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: node-modules-${{ runner.os }}-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
