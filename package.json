@@ -18,7 +18,8 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "playground/*"
+    "playground/*",
+    "docs"
   ],
   "scripts": {
     "typecheck": "bun run --filter '@tynd/*' typecheck",

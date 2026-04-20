@@ -1,0 +1,5 @@
+# Bump the target when a new version becomes latest (keep src/lib/versions.ts in sync).
+/docs/latest/*  /docs/v0.1/:splat  301
+/docs/latest    /docs/v0.1/         301
+/docs/          /docs/v0.1/         301
+/docs           /docs/v0.1/         301
