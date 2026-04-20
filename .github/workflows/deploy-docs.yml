@@ -35,6 +35,24 @@ jobs:
           key: bun-cache-docs-${{ runner.os }}-${{ hashFiles('docs/bun.lock', 'bun.lock') }}
           restore-keys: bun-cache-docs-${{ runner.os }}-
 
+      - name: Cache docs node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            docs/node_modules
+            node_modules
+          key: docs-node-modules-${{ runner.os }}-${{ hashFiles('docs/bun.lock', 'bun.lock') }}
+          restore-keys: docs-node-modules-${{ runner.os }}-
+
+      - name: Cache Next.js incremental build
+        uses: actions/cache@v4
+        with:
+          path: docs/.next/cache
+          key: docs-next-${{ runner.os }}-${{ hashFiles('docs/bun.lock') }}-${{ hashFiles('docs/src/**/*.{ts,tsx,mdx}', 'docs/next.config.ts') }}
+          restore-keys: |
+            docs-next-${{ runner.os }}-${{ hashFiles('docs/bun.lock') }}-
+            docs-next-${{ runner.os }}-
+
       - name: Install docs dependencies
         run: bun install --frozen-lockfile
         working-directory: docs
