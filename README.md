@@ -310,3 +310,4 @@ packages/
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Dev loop, commit style, PR process |
 | Per-package READMEs | [@tynd/core](./packages/core/README.md) · [@tynd/cli](./packages/cli/README.md) · [@tynd/host](./packages/host/README.md) |
 | Working examples | [playground/full](./playground/full/README.md) (LLM chatbot, full runtime) · [playground/example](./playground/example/README.md) (minimal demo, lite runtime) |
+| [docs/](./docs/README.md) | Next.js 16 + Nextra 4 docs site (landing + versioned docs). Static export, deploys to Cloudflare Pages. `bun --cwd docs run dev` |
