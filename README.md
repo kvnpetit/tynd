@@ -298,6 +298,8 @@ packages/
 
 ## 📚 Documentation
 
+**-> [tynd.kvnpetit.com/docs](https://tynd.kvnpetit.com/docs)** — live versioned docs site.
+
 | Doc | When to read it |
 |---|---|
 | [GETTING_STARTED.md](./GETTING_STARTED.md) | First project — scaffold, dev, build, ship in 5 min |
