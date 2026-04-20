@@ -1,4 +1,48 @@
 @layer theme, base, nextra, components, utilities;
+
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
+
+/* Tailwind v4 scans project files by default; Nextra's components live in
+   node_modules and use the `x:` prefix. Register their source so the
+   generated CSS includes the card / sidebar / navbar / callout classes. */
+@source "../../../node_modules/nextra-theme-docs/dist/**/*.js";
+@source "../../../node_modules/nextra/dist/**/*.js";
+
+/* Nextra's theme uses a `x:` prefix so its utility classes don't collide
+   with the app's own Tailwind. Register the prefix. */
+@custom-variant x (&:is([class*="x\\:"]));
+
+/* Nextra toggles a `.dark` class on <html> (not `prefers-color-scheme`), so
+   rebind Tailwind's `dark:` variant to match that class instead of the media
+   query. Without this, dark variants only react to the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Let the docs layout use the full viewport width instead of Nextra's
+   default max-content-width that creates gaps on wide screens. */
+:root {
+  --nextra-content-width: 100%;
+}
+
+/* Center the docs search bar in the navbar: push equal margin on each side of
+   the search wrapper so it sits between the nav links (left) and the icon
+   cluster (right) rather than hugging the right edge. */
+.nextra-navbar nav > div:has(> .nextra-search) {
+  margin-inline: auto;
+}
+
+/* Keep the search results popover centered below the (now centered) search
+   input. Pagefind groups hits by page, each page lists its matching
+   sub-sections — cap both so the popover stays readable. Pagefind already
+   debounces the query internally (~300ms) via `pagefind.debouncedSearch`. */
+.nextra-search-results {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%);
+}
+/* Cap to the top 10 pages returned — Pagefind already ranks by relevance. */
+.nextra-search-results > ul > li:nth-child(n + 11) {
+  display: none !important;
+}
+

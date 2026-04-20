@@ -1,0 +1,52 @@
+---
+title: Remember Window Size
+description: "Persist window dimensions + position to `store`; restore on next launch."
+---
+
+# Remember Window Size
+
+```ts
+import { tyndWindow, createStore } from "@tynd/core/client";
+
+const prefs = createStore("com.example.myapp");
+
+interface WindowState {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  maximized: boolean;
+}
+
+export async function restoreWindowState() {
+  const saved = await prefs.get<WindowState>("window");
+  if (!saved) return;
+  await tyndWindow.setSize(saved.width, saved.height);
+  await tyndWindow.setPosition(saved.x, saved.y);
+  if (saved.maximized) await tyndWindow.maximize();
+}
+
+export function trackWindowState() {
+  let t: ReturnType<typeof setTimeout> | null = null;
+  const save = () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(async () => {
+      const size = await tyndWindow.getSize();
+      const pos = await tyndWindow.getPosition();
+      const maximized = await tyndWindow.isMaximized();
+      await prefs.set("window", { ...size, ...pos, maximized });
+    }, 200);
+  };
+  const offResize = tyndWindow.onResized(save);
+  const offMove   = tyndWindow.onMoved(save);
+  return () => { offResize(); offMove(); };
+}
+
+// Call at startup
+await restoreWindowState();
+trackWindowState();
+```
+
+**Debounced** — avoid writing on every pixel of a resize drag. 200 ms delay is enough to coalesce without feeling laggy.
+
+**Related:** [tyndWindow API](/docs/v0.1/api/os/window) · [store API](/docs/v0.1/api/os/store).

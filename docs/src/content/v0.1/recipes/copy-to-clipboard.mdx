@@ -1,0 +1,56 @@
+---
+title: Copy to Clipboard
+description: "Text, image, and HTML. Native OS clipboard."
+---
+
+# Copy to Clipboard
+
+## Text
+
+```ts
+import { clipboard } from "@tynd/core/client";
+
+await clipboard.writeText("Hello, world");
+const got = await clipboard.readText();
+```
+
+## Image (base64 PNG)
+
+`clipboard.writeImage` takes a **base64-encoded PNG string**. Convert a canvas to PNG, strip the data-URL prefix, write it.
+
+```ts
+const canvas = document.querySelector("canvas")!;
+const dataUrl = canvas.toDataURL("image/png");
+const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
+
+await clipboard.writeImage(base64);
+```
+
+Reading an image (returns `{ png, width, height }` with `png` as base64):
+
+```ts
+const img = await clipboard.readImage();   // null if no image
+if (img) {
+  const el = document.createElement("img");
+  el.src = `data:image/png;base64,${img.png}`;
+  el.width = img.width;
+  el.height = img.height;
+  document.body.appendChild(el);
+}
+```
+
+## HTML (write-only)
+
+```ts
+await clipboard.writeHtml(`<p><b>Hello</b> <i>world</i></p>`);
+```
+
+Paste into a rich-text target (email, Google Doc) → formatted content. Plain-text targets get a stripped fallback (the OS handles this).
+
+## Clear
+
+```ts
+await clipboard.clear();
+```
+
+**Related:** [clipboard API](/docs/v0.1/api/os/clipboard).

@@ -1,0 +1,91 @@
+---
+title: sidecar
+description: "Resolve the on-disk path of a bundled sidecar binary extracted at launch."
+---
+
+# `sidecar`
+
+```ts
+import { sidecar } from "@tynd/core/client";
+```
+
+Registry of binaries extracted from the TYNDPKG `sidecar/*` section at startup.
+
+## `path(name): Promise<string>`
+
+Returns the extracted on-disk path of a sidecar. Throws if no sidecar by that name was packed.
+
+```ts
+const ffmpegPath = await sidecar.path("ffmpeg.exe");
+```
+
+## `list(): Promise<Array<{ name: string; path: string }>>`
+
+Enumerate every registered sidecar with its extracted path.
+
+```ts
+const all = await sidecar.list();
+// [{ name: "ffmpeg.exe", path: "/tmp/tynd-xxxx/sidecar/ffmpeg.exe" }, …]
+```
+
+## Declare at build time
+
+```ts filename="tynd.config.ts"
+sidecars: [
+  { name: "ffmpeg.exe", path: "bin/ffmpeg.exe" },
+  { name: "yt-dlp",     path: "bin/yt-dlp" },
+]
+```
+
+- `name` — what your runtime code queries by.
+- `path` — where the binary lives at build time (relative to project root).
+
+## Execute via `process.exec`
+
+```ts
+import { sidecar, process } from "@tynd/core/client";
+
+const ffmpeg = await sidecar.path("ffmpeg.exe");
+const { stdout, code } = await process.exec(ffmpeg, {
+  args: ["-i", input, "-c:v", "libx264", output],
+});
+```
+
+## What happens under the hood
+
+At launch, the Rust host walks TYNDPKG and, for every entry under `sidecar/`:
+
+1. Extracts the bytes to `<temp_dir>/sidecar/<name>`.
+2. On Unix, chmods +755.
+3. Registers the path in a `Mutex<HashMap<name, PathBuf>>` inside `os::sidecar`.
+
+`sidecar.path(name)` looks up the map.
+
+## Platform-specific binaries
+
+Cross-compilation isn't supported. CI matrix pattern — stage the right binary per host before `tynd build`:
+
+```yaml
+- name: Stage sidecar for this host
+  shell: bash
+  run: |
+    case "${{ matrix.target }}" in
+      windows-x64)  curl -L -o bin/ffmpeg.exe https://…/ffmpeg-win-x64.exe ;;
+      linux-x64)    curl -L -o bin/ffmpeg https://…/ffmpeg-linux-x64 ;;
+      macos-arm64)  curl -L -o bin/ffmpeg https://…/ffmpeg-macos-arm64 ;;
+    esac
+```
+
+See the [Sidecars guide](/docs/v0.1/guides/sidecars).
+
+## Notes
+
+- Sidecars are **not zstd-compressed** in TYNDPKG — they're already-compressed formats.
+- They inflate your final binary by their uncompressed size.
+- On macOS, a signed outer `.app` doesn't extend its signature to extracted sidecars; sign them separately or accept Gatekeeper prompts.
+
+## Related
+
+- [process](/docs/v0.1/api/os/process) — invoke the sidecar.
+- [terminal](/docs/v0.1/api/os/terminal) — long-running sidecars streaming stdout.
+- [TYNDPKG format](/docs/v0.1/concepts/tyndpkg).

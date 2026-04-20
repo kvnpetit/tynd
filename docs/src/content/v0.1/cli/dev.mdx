@@ -1,0 +1,74 @@
+---
+title: tynd dev
+description: "Dev mode with HMR on both frontend and backend. Native window stays alive across backend restarts."
+---
+
+# `tynd dev`
+
+```bash
+tynd dev
+```
+
+Starts the frontend dev server + backend watcher + native window. Frontend HMR is provided by the framework's dev server (Vite, Angular CLI, …); the backend watcher rebuilds and restarts the backend on every file change while **keeping the WebView alive**.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Run against a project in another directory |
+
+Global flags (available on every command):
+
+| Flag | Effect |
+|---|---|
+| `--verbose` | Debug-level logs |
+| `--quiet` | Suppress everything except errors |
+
+## What happens
+
+<Steps>
+
+### Detects the frontend tool
+
+Reads `package.json` to find Vite, CRA, Angular, etc. Starts the dev server and waits for the `devUrl` to respond (up to 60 s).
+
+### Builds the backend
+
+- **`lite`** → `.tynd/cache/bundle.dev.js`
+- **`full`** → `.tynd/cache/bundle.dist.js`
+
+Cached — skipped on cache hit.
+
+### Launches the host
+
+Spawns `tynd-full` or `tynd-lite` pointed at the dev URL + backend path. Native window appears.
+
+### Watches the backend
+
+Changes to `backend/**` rebuild the bundle + restart the backend **without** tearing down the WebView.
+
+</Steps>
+
+## HMR coverage
+
+| Framework | Fast Refresh |
+|---|---|
+| Vue / Svelte / Solid / Preact | ✅ |
+| React | ⚠ OK (breaks if React Compiler is enabled) |
+| Lit | ♻ Full page reload (Web Components) |
+| Angular | ♻ Full page reload unless `devCommand: "bunx ng serve --hmr"` |
+
+## Stopping
+
+Ctrl+C stops the dev server and the host cleanly.
+
+## Troubleshooting
+
+- Dev server doesn't start → `bun install`, then retry. Override `devCommand` / `devUrl` in `tynd.config.ts` for non-standard setups.
+- Blank window → wait ~2 s for the dev server. Check `tynd info` for the detected URL. Use `tynd dev --verbose` for IPC trace.
+- Backend doesn't hot-reload → confirm you're editing a file under `backend/`. Check terminal for bundler errors.
+
+## Related
+
+- [`tynd start`](/docs/v0.1/cli/start) — classic build without HMR.
+- [Development Workflow](/docs/v0.1/getting-started/dev-workflow).

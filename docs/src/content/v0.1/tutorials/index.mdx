@@ -1,0 +1,28 @@
+---
+title: Tutorials
+description: "Build complete Tynd apps step-by-step — markdown editor, file browser, LLM chat client."
+---
+
+# Tutorials
+
+End-to-end walkthroughs. Each tutorial starts from `bunx tynd create` and ends with a shippable binary.
+
+<Cards>
+  <Cards.Card title="Markdown Editor" href="/docs/v0.1/tutorials/markdown-editor">
+    File open/save, live preview, keyboard shortcuts, native menu — ~150 LOC.
+  </Cards.Card>
+  <Cards.Card title="File Browser" href="/docs/v0.1/tutorials/file-browser">
+    Directory walker, binary thumbnails via `fs.readBinary`, reveal-in-folder.
+  </Cards.Card>
+  <Cards.Card title="LLM Chat Client" href="/docs/v0.1/tutorials/chat-client">
+    Streaming RPC over `fetch`, token-by-token rendering, cancellation.
+  </Cards.Card>
+</Cards>
+
+Each tutorial is self-contained. Pick whichever matches what you're building.
+
+## Prerequisites
+
+- [Bun installed](/docs/v0.1/getting-started/installation).
+- Comfortable with TypeScript.
+- A framework you like — the tutorials use framework-agnostic DOM APIs; swap in React hooks / Vue refs / Svelte runes as you prefer.

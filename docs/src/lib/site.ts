@@ -5,7 +5,7 @@
 const REPO_OWNER = "kvnpetit";
 const REPO_NAME = "tynd";
 const REPO = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
-const URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://tynd.dev";
+const URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://tynd.kvnpetit.com";
 
 export const SITE = {
   name: "Tynd",

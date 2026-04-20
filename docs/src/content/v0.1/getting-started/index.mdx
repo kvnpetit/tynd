@@ -1,0 +1,63 @@
+---
+title: Getting Started
+description: "Scaffold your first Tynd app, run it with hot reload, and produce a release binary in under five minutes."
+---
+
+# Getting Started
+
+Build a native desktop app in TypeScript in under 5 minutes. By the end of this section you'll have:
+
+- a running dev window with HMR on both the frontend and the backend,
+- a typed RPC boundary — rename a function in `backend/main.ts` and the TypeScript compiler catches every stale frontend call,
+- a single-file `.exe` / binary in `release/`, around 6.6 MB for `lite` or 44 MB for `full`, that you can ship as-is.
+
+<Steps>
+
+### Install prerequisites
+
+[Bun](https://bun.sh) is required. On Linux you also need the WebKitGTK dev packages — see [Installation](/docs/v0.1/getting-started/installation).
+
+### Scaffold a project
+
+```bash
+bunx @tynd/cli create my-app
+```
+
+The CLI asks for a project name, a frontend framework (React, Vue, Svelte, Solid, Preact, Lit, or Angular), and a runtime mode (`lite` or `full`).
+
+### Run it
+
+```bash
+cd my-app
+bun run dev
+```
+
+A native window opens with your frontend + HMR. Save `backend/main.ts` — the backend hot-reloads without tearing down the window.
+
+### Ship it
+
+```bash
+tynd build            # raw binary
+tynd build --bundle   # + platform installers (.app/.dmg, .deb/.rpm/.AppImage, NSIS/MSI)
+```
+
+Output lands in `release/`.
+
+</Steps>
+
+## Keep reading
+
+<Cards>
+  <Cards.Card title="Installation" href="/docs/v0.1/getting-started/installation">
+    Bun, WebView deps per OS, verifying the setup.
+  </Cards.Card>
+  <Cards.Card title="Your First App" href="/docs/v0.1/getting-started/first-app">
+    Walk through the backend, the frontend, and the RPC boundary.
+  </Cards.Card>
+  <Cards.Card title="Project Structure" href="/docs/v0.1/getting-started/project-structure">
+    What each file does and where your code goes.
+  </Cards.Card>
+  <Cards.Card title="Development Workflow" href="/docs/v0.1/getting-started/dev-workflow">
+    `tynd dev` vs `tynd start`, caching, hot reload.
+  </Cards.Card>
+</Cards>

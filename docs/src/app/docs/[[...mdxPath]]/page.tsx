@@ -21,13 +21,6 @@ function splitVersion(segments: readonly string[]): {
     : { version: undefined, rest: [...segments] };
 }
 
-function titleCase(slug: string): string {
-  return slug
-    .split(/[-_]/)
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-    .join(" ");
-}
-
 function docsUrl(parts: readonly string[]): string {
   return `/docs/${parts.join("/")}/`;
 }
@@ -83,85 +76,15 @@ export async function generateMetadata({
 }
 
 export default async function Page(props: PageProps) {
-  const { mdxPath } = await props.params;
-  const segments = mdxPath ?? [];
-  const result = await importPage(mdxPath);
+  const result = await importPage((await props.params).mdxPath);
   const { default: MDXContent, toc, metadata, sourceCode } = result;
   const Wrapper = useMDXComponents().wrapper;
 
-  const title = pickString(metadata?.title, SITE.name);
-  const description = pickString(
-    metadata?.description,
-    `${title} — ${SITE.description}`,
-  );
-  const { version, rest } = splitVersion(segments);
-  const canonicalSegments = version
-    ? [LATEST_SLUG, ...rest]
-    : segments.length
-      ? segments
-      : [LATEST_SLUG];
-  const pageUrl = `${SITE.url}${docsUrl(canonicalSegments)}`;
-
-  const breadcrumbParts: Array<{ name: string; url: string }> = [
-    { name: "Home", url: `${SITE.url}/` },
-    { name: "Docs", url: `${SITE.url}${docsUrl([LATEST_SLUG])}` },
-  ];
-  rest.forEach((seg, i) => {
-    breadcrumbParts.push({
-      name: titleCase(seg),
-      url: `${SITE.url}${docsUrl([LATEST_SLUG, ...rest.slice(0, i + 1)])}`,
-    });
-  });
-
-  const techArticle = {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: title,
-    description,
-    url: pageUrl,
-    inLanguage: SITE.locale,
-    isPartOf: { "@type": "WebSite", name: SITE.name, url: SITE.url },
-    author: { "@type": "Person", name: SITE.author.name, url: SITE.author.url },
-    publisher: {
-      "@type": "Person",
-      name: SITE.author.name,
-      url: SITE.author.url,
-    },
-    license: `https://spdx.org/licenses/${SITE.license}.html`,
-  };
-
-  const breadcrumbList = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: breadcrumbParts.map((b, i) => ({
-      "@type": "ListItem",
-      position: i + 1,
-      name: b.name,
-      item: b.url,
-    })),
-  };
-
-  const body = Wrapper ? (
+  return Wrapper ? (
     <Wrapper toc={toc} metadata={metadata} sourceCode={sourceCode}>
       <MDXContent {...props} params={props.params} />
     </Wrapper>
   ) : (
     <MDXContent {...props} params={props.params} />
-  );
-
-  return (
-    <>
-      {body}
-      <script
-        type="application/ld+json"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(techArticle) }}
-      />
-      <script
-        type="application/ld+json"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbList) }}
-      />
-    </>
   );
 }

@@ -1,0 +1,78 @@
+---
+title: autolaunch
+description: "Register / unregister the app to start at system boot."
+---
+
+# `autolaunch`
+
+```ts
+import { autolaunch } from "@tynd/core/client";
+```
+
+Start at system boot.
+
+## `enable(opts?): Promise<{ enabled: boolean }>`
+
+```ts
+interface AutolaunchOptions {
+  name?: string;       // display name (registry key / .plist label / .desktop Name)
+  args?: string[];     // extra CLI args appended when the OS relaunches
+}
+
+const { enabled } = await autolaunch.enable({ args: ["--minimized"] });
+```
+
+## `disable(opts?): Promise<{ enabled: boolean }>`
+
+```ts
+const { enabled } = await autolaunch.disable();
+// enabled is the new state (false on success)
+```
+
+`opts` takes the same shape as `enable` — usually you can pass nothing.
+
+## `isEnabled(opts?): Promise<boolean>`
+
+```ts
+const on = await autolaunch.isEnabled();
+```
+
+## Platform-specific storage
+
+- **Windows** — `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry entry.
+- **macOS** — `~/Library/LaunchAgents/<identifier>.plist`.
+- **Linux** — `~/.config/autostart/<name>.desktop`.
+
+All user-scoped — no admin / UAC prompt.
+
+## Path registered
+
+The registered command is **whatever `std::env::current_exe()` resolves to at the time of `enable()`**. Typically:
+
+- Installed app → path to the installed binary.
+- Dev binary → `target/release/tynd-full.exe` or similar.
+
+Re-register after an upgrade if the binary path changes.
+
+## Notes
+
+- No per-user vs per-machine toggle. All three OSes use the user-scoped autostart store.
+- `enable()` is idempotent — calling twice doesn't duplicate the entry.
+- Linux autostart obeys the XDG spec — the `.desktop` file needs correct `Exec=` / `Name=` / `Type=Application`. `autolaunch` writes these for you.
+
+## Example — toggle via settings
+
+```ts
+import { autolaunch } from "@tynd/core/client";
+
+async function setAutolaunch(enabled: boolean) {
+  if (enabled) await autolaunch.enable({ args: ["--minimized"] });
+  else          await autolaunch.disable();
+}
+
+const current = await autolaunch.isEnabled();
+```
+
+## Related
+
+- [singleInstance](/docs/v0.1/api/os/single-instance) — argv forwarding.

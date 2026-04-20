@@ -1,0 +1,102 @@
+---
+title: Guides
+description: "Task-focused guides for real Tynd work — frontend frameworks, streaming RPC, multi-window, auto-updates, code signing, bundling, and more."
+---
+
+# Guides
+
+Topic-oriented guides. Each one walks through a concept you'll hit while building a real app.
+
+## Core
+
+<Cards>
+  <Cards.Card title="Frontend Frameworks" href="/docs/v0.1/guides/frontend-frameworks">
+    React, Vue, Svelte, Solid, Preact, Lit, Angular — what's supported, HMR caveats, SSR frameworks that are blocked.
+  </Cards.Card>
+  <Cards.Card title="Backend RPC" href="/docs/v0.1/guides/backend-rpc">
+    Zero-codegen typed RPC. How arguments / returns / errors serialize, emitters, modularization.
+  </Cards.Card>
+  <Cards.Card title="Streaming RPC" href="/docs/v0.1/guides/streaming">
+    Async-generator handlers with flow control, cancellation, multi-window routing.
+  </Cards.Card>
+  <Cards.Card title="Multi-Window" href="/docs/v0.1/guides/multi-window">
+    Secondary windows, per-window events, cross-window coordination.
+  </Cards.Card>
+  <Cards.Card title="Binary Data" href="/docs/v0.1/guides/binary-data">
+    Zero-copy multi-MB payloads via the `tynd-bin://` channel.
+  </Cards.Card>
+  <Cards.Card title="Persistence" href="/docs/v0.1/guides/persistence">
+    Picking between `store`, `sql`, `keyring`, and `fs` for app state.
+  </Cards.Card>
+</Cards>
+
+## Desktop integration
+
+<Cards>
+  <Cards.Card title="Single Instance" href="/docs/v0.1/guides/single-instance">
+    Prevent duplicate launches, forward argv, auto-focus the primary.
+  </Cards.Card>
+  <Cards.Card title="Deep Linking" href="/docs/v0.1/guides/deep-linking">
+    Register `myapp://` URLs — registration, testing, validation.
+  </Cards.Card>
+  <Cards.Card title="Keyboard Shortcuts" href="/docs/v0.1/guides/keyboard-shortcuts">
+    System-wide hotkeys that fire even when the app is unfocused.
+  </Cards.Card>
+  <Cards.Card title="Sidecars" href="/docs/v0.1/guides/sidecars">
+    Bundle and execute a native CLI (ffmpeg, yt-dlp, …).
+  </Cards.Card>
+</Cards>
+
+## Release workflow
+
+<Cards>
+  <Cards.Card title="Bundling & Distribution" href="/docs/v0.1/guides/bundling">
+    `.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS, MSI — produce platform-native installers.
+  </Cards.Card>
+  <Cards.Card title="Code Signing" href="/docs/v0.1/guides/code-signing">
+    Windows `signtool`, macOS `codesign` + notarization, Linux detached `.sig`.
+  </Cards.Card>
+  <Cards.Card title="Auto-Updates" href="/docs/v0.1/guides/auto-updates">
+    Ed25519-signed updates with a Tauri-compatible manifest.
+  </Cards.Card>
+  <Cards.Card title="Icons & Branding" href="/docs/v0.1/guides/icons-branding">
+    One SVG source → Windows ICO, macOS ICNS, Linux hicolor.
+  </Cards.Card>
+</Cards>
+
+## Quality
+
+<Cards>
+  <Cards.Card title="Testing" href="/docs/v0.1/guides/testing">
+    `bun test` for backend logic, mocking OS APIs, smoke tests in CI.
+  </Cards.Card>
+  <Cards.Card title="Performance" href="/docs/v0.1/guides/performance">
+    Startup latency, IPC overhead, CPU-bound JS, memory.
+  </Cards.Card>
+  <Cards.Card title="Debugging" href="/docs/v0.1/guides/debugging">
+    DevTools, verbose logs, the backend inspector, common symptoms.
+  </Cards.Card>
+  <Cards.Card title="Accessibility" href="/docs/v0.1/guides/accessibility">
+    Screen readers, focus management, reduced motion, color contrast.
+  </Cards.Card>
+  <Cards.Card title="Internationalization" href="/docs/v0.1/guides/i18n">
+    Locale detection, string catalogs, RTL layouts.
+  </Cards.Card>
+</Cards>
+
+## Migration
+
+<Cards>
+  <Cards.Card title="Migrate from Tauri" href="/docs/v0.1/guides/migrate-from-tauri">
+    Port `#[tauri::command]`s to backend `export`s. Keep the same installers + updater.
+  </Cards.Card>
+  <Cards.Card title="Migrate from Electron" href="/docs/v0.1/guides/migrate-from-electron">
+    Replace `ipcMain.handle` with typed RPC; drop the ~160 MB Chromium.
+  </Cards.Card>
+</Cards>
+
+## Related
+
+- [API Reference](/docs/v0.1/api) — signatures for every surface the guides touch.
+- [Recipes](/docs/v0.1/recipes) — shorter self-contained snippets.
+- [Tutorials](/docs/v0.1/tutorials) — full app walkthroughs.

@@ -1,0 +1,149 @@
+---
+title: File Browser
+description: "Build a file browser with directory walking, image thumbnails via zero-copy binary IPC, and reveal-in-folder."
+---
+
+# File Browser
+
+A working cross-platform file browser: directory tree, image thumbnails, double-click to open with the OS default handler, right-click to reveal.
+
+Exercises: [`fs.readDir`](/docs/v0.1/api/os/fs), [`fs.readBinary`](/docs/v0.1/api/os/fs) (zero-copy), [`shell.openPath`](/docs/v0.1/api/os/shell), [`os.homeDir`](/docs/v0.1/api/os/os), [`path.join`](/docs/v0.1/api/os/path).
+
+## Scaffold
+
+```bash
+bunx @tynd/cli create file-browser --framework react --runtime lite
+cd file-browser
+```
+
+## Backend — minimal
+
+No RPC needed — every operation is an OS call from the frontend.
+
+```ts filename="backend/main.ts"
+import { app } from "@tynd/core";
+
+app.start({
+  window: { title: "Files", width: 1100, height: 720, center: true },
+});
+```
+
+## Frontend
+
+```tsx filename="src/App.tsx"
+import { useEffect, useState } from "react";
+import { fs, os, path, shell } from "@tynd/core/client";
+
+interface Entry {
+  name: string;
+  path: string;
+  isDir: boolean;
+}
+
+export default function App() {
+  const [cwd, setCwd] = useState<string>("");
+  const [entries, setEntries] = useState<Entry[]>([]);
+
+  useEffect(() => {
+    os.homeDir().then((h) => h && setCwd(h));
+  }, []);
+
+  useEffect(() => {
+    if (!cwd) return;
+    fs.readDir(cwd).then((items) => {
+      items.sort((a, b) =>
+        a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1,
+      );
+      setEntries(items);
+    });
+  }, [cwd]);
+
+  async function goUp() {
+    const parent = await path.dirname(cwd);
+    if (parent !== cwd) setCwd(parent);
+  }
+
+  async function onOpen(e: Entry) {
+    if (e.isDir) setCwd(e.path);
+    else await shell.openPath(e.path);
+  }
+
+  return (
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <header style={{ display: "flex", gap: 8, padding: 8, borderBottom: "1px solid #ddd" }}>
+        <button onClick={goUp}>↑</button>
+        <code style={{ flex: 1, padding: "4px 8px", background: "#f4f4f4" }}>{cwd}</code>
+      </header>
+
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, overflow: "auto" }}>
+        {entries.map((e) => (
+          <li
+            key={e.path}
+            onDoubleClick={() => onOpen(e)}
+            style={{
+              padding: "8px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              cursor: "pointer",
+            }}
+          >
+            {e.isDir ? "📁" : isImage(e.name) ? <Thumbnail path={e.path} /> : "📄"}
+            <span>{e.name}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function isImage(name: string) {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
+}
+
+function Thumbnail({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let dead = false;
+    fs.readBinary(path).then((bytes) => {
+      if (dead) return;
+      const blob = new Blob([bytes]);
+      setUrl(URL.createObjectURL(blob));
+    });
+    return () => {
+      dead = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [path]);
+  return url ? <img src={url} alt="" width={32} height={32} style={{ objectFit: "cover" }} /> : <span>🖼️</span>;
+}
+```
+
+## Why this matters
+
+- **`fs.readBinary`** goes through the `tynd-bin://` zero-copy channel — multi-MB thumbnails don't stall the main thread.
+- **`shell.openPath`** delegates to the OS default handler — PDFs open in Preview/Acrobat, images in your image viewer, etc. No need to build your own viewer.
+- **No backend RPC.** Every operation is a direct OS call from the frontend. The backend is essentially a config file.
+
+## Build
+
+```bash
+tynd build
+```
+
+~9 MB binary on `lite`. Launches to the user's home directory.
+
+## Next ideas
+
+- **Watch the current directory** — `fs.watch(cwd, { recursive: false }, reload)` to pick up changes from other apps.
+- **Search** — recursive walk with [`async function*`](/docs/v0.1/guides/streaming) yielding matches as they're found.
+- **Copy / move / delete** — `fs.copy`, `fs.rename`, `fs.remove`, wrapped with a `dialog.confirm` for destructive ops.
+- **Reveal in file manager** — use `process.exec("explorer", { args: [path] })` on Windows, `open` on macOS, `xdg-open` on Linux.
+- **Drag-drop to add files** — frontend HTML5 drag-drop; the dropped paths are returned as native file paths.
+
+## Related
+
+- [fs API](/docs/v0.1/api/os/fs).
+- [Binary Data guide](/docs/v0.1/guides/binary-data) — why `fs.readBinary` is fast.
+- [shell API](/docs/v0.1/api/os/shell).
+- [process API](/docs/v0.1/api/os/process).

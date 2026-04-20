@@ -1,0 +1,54 @@
+---
+title: tynd start
+description: "Run the app from cached bundles without rebuild or hot reload. Classic build-then-run."
+---
+
+# `tynd start`
+
+```bash
+tynd start
+```
+
+Builds frontend + backend from scratch (cache-hash keyed), then runs the host against the built artifacts. **No HMR, no watcher.**
+
+## When to use
+
+- Reproduce what a release build does without producing an installer.
+- Profile production-shaped startup latency.
+- Debug when the framework dev server is giving you trouble.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Run against a project in another directory |
+
+Global flags: `--verbose`, `--quiet`.
+
+## Pipeline
+
+```
+frontend build  ──▶  cache  ──▶  backend bundle  ──▶  cache  ──▶  launch host
+```
+
+1. Runs the framework build (`vite build`, `ng build`, …) if cache misses.
+2. Bundles the backend if cache misses.
+3. Launches the host pointing at the built `dist/` and `bundle.dist.js` / `bundle.js`.
+
+No pack step — the app runs from the cached artifacts.
+
+## Cache
+
+Three keys:
+
+- `frontend`
+- `backend`
+- `backend-dev` (N/A for `start`)
+
+Decisions printed on `--verbose`. Flush with `tynd clean`.
+
+## Related
+
+- [`tynd dev`](/docs/v0.1/cli/dev) — with HMR.
+- [`tynd build`](/docs/v0.1/cli/build) — produce a release binary.
+- [`tynd clean`](/docs/v0.1/cli/clean) — flush the cache.

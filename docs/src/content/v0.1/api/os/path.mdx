@@ -1,0 +1,69 @@
+---
+title: path
+description: "Cross-OS path helpers — join, dirname, basename, extname, sep. Synchronous."
+---
+
+# `path`
+
+```ts
+import { path } from "@tynd/core/client";
+```
+
+Small synchronous path utilities. Platform-aware via `navigator.platform` detection. No round-trip to Rust — these run entirely in the WebView / JS runtime.
+
+## `sep(): "/" | "\\"`
+
+Platform path separator.
+
+```ts
+path.sep();   // "\\" on Windows, "/" elsewhere
+```
+
+## `join(...parts: string[]): string`
+
+Joins path segments with the platform separator, collapsing duplicate slashes.
+
+```ts
+path.join("/tmp", "notes", "hello.md");   // "/tmp/notes/hello.md"
+path.join("C:\\", "Users", "me");          // "C:\\Users\\me" on Windows
+```
+
+Empty strings are ignored.
+
+## `dirname(p: string): string`
+
+Parent directory of the path.
+
+```ts
+path.dirname("/tmp/notes/hello.md");   // "/tmp/notes"
+path.dirname("/tmp");                   // ""
+```
+
+## `basename(p: string, ext?: string): string`
+
+Last segment, optionally with an extension stripped.
+
+```ts
+path.basename("/tmp/notes/hello.md");         // "hello.md"
+path.basename("/tmp/notes/hello.md", ".md");   // "hello"
+```
+
+## `extname(p: string): string`
+
+File extension including the leading dot, or `""` if none.
+
+```ts
+path.extname("hello.md");   // ".md"
+path.extname("Makefile");    // ""
+```
+
+## Notes
+
+- **Synchronous.** These functions do not return promises — they run in the WebView.
+- No `resolve()`, `normalize()`, or `isAbsolute()` — compose them yourself or use `URL` / framework helpers if you need them.
+- Absolute paths are produced by joining from a known root (`await os.homeDir()`, etc.) — not by a `resolve` function.
+
+## Related
+
+- [fs](/docs/v0.1/api/os/fs) — every `fs.*` method accepts path strings.
+- [os](/docs/v0.1/api/os/os) — `homeDir`, `dataDir`, `tmpDir`, etc. for building absolute paths.

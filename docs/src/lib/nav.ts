@@ -10,7 +10,6 @@ export type NavItem = {
 export const TOP_NAV: readonly NavItem[] = [
   { label: "Docs", href: `/docs/${LATEST_SLUG}` },
   { label: "Showcase", href: "/showcase" },
-  { label: "Blog", href: "/blog" },
   { label: "Changelog", href: "/changelog" },
   { label: "GitHub", href: SITE.links.github, external: true },
 ];
@@ -33,7 +32,6 @@ export const FOOTER_LINKS: ReadonlyArray<{
     items: [
       { label: "API reference", href: `/docs/${LATEST_SLUG}` },
       { label: "Compare", href: "/compare" },
-      { label: "Blog", href: "/blog" },
     ],
   },
   {

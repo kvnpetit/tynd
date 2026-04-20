@@ -1,0 +1,79 @@
+---
+title: Tynd vs Electron
+description: "Native WebView vs bundled Chromium — 25× binary-size difference, completely different surface areas."
+---
+
+# Tynd vs Electron
+
+Electron bundles its own Chromium build (~130 MB overhead) and exposes a full Node.js runtime in the main process. Tynd uses the OS's native WebView (WebView2 / WKWebView / WebKitGTK) and runs TypeScript either as an embedded interpreter or a Bun subprocess.
+
+## The core tradeoff
+
+| | Tynd | Electron |
+|---|---|---|
+| WebView | System (WebView2 / WKWebView / WebKitGTK) | Bundled Chromium |
+| Binary size | ~6.5 MB (lite) / ~44 MB (full) | ~160-200 MB |
+| Rendering consistency across OSes | Varies with OS WebView version | Identical everywhere |
+| Main-process API | Rust + TS | Full Node.js |
+| Typed RPC | Zero-codegen | Requires manual typing or `electron-trpc` |
+| Screen capture / print-to-PDF / Chrome extensions | ❌ | ✅ |
+| Touch Bar / StoreKit / spellcheck / find-in-page | ❌ | ✅ |
+| Binary size matters | ✓ (ships in 6-44 MB) | ✗ (100 MB+ expected) |
+
+## When Tynd wins
+
+- **Binary size.** 6.5 MB vs 160 MB — a real UX factor for consumer apps.
+- **Memory footprint.** Native WebView uses ~30-80 MB idle; bundled Chromium is typically ~200-400 MB.
+- **TypeScript end-to-end** without main-process / renderer distinction. The backend is just `export async function` — no IPC `ipcMain.handle` / `ipcRenderer.invoke` dance.
+- **Zero-codegen typed RPC** — Electron has no first-class typed RPC; you layer `electron-trpc` or similar on top.
+- **Structural security** — what the frontend can call is what the backend exports. No preload-script boundary to remember.
+- **Zero-network IPC** — same as Tauri. Electron's Chromium IPC is also non-TCP, but it doesn't ship zero-copy binary channels.
+- **No "main process" / "renderer process" mental model.** The backend is TypeScript, the frontend is TypeScript, and the bridge is typed.
+
+## When Electron wins
+
+- **Rendering consistency.** WebView2 version varies by Windows install, WebKitGTK version varies by distro, WKWebView is tied to the macOS version. Electron's bundled Chromium guarantees the same engine everywhere.
+- **Full Node stdlib.** `node:fs`, `child_process`, `net`, `tls`, `dns`, `http.createServer` — everything in the main process without IPC.
+- **Chromium-native features:**
+  - `desktopCapturer` — screen and window capture (MediaStream).
+  - `printToPDF` — programmatic PDF export.
+  - `findInPage` / `stopFindInPage`.
+  - Built-in spellchecker with custom dictionaries.
+  - Chrome extension loading (`session.loadExtension`, MV3).
+  - Touch Bar (macOS) API.
+  - `safeStorage` — OS-level encrypted secret storage (Tynd has `keyring` for this).
+- **powerMonitor** — suspend/resume/idle detection.
+- **inAppPurchase** — StoreKit product lookup + receipt validation.
+- **Massive npm ecosystem** — any npm package (including native bindings) works in the main process.
+- **MessageChannelMain** — transferable-object IPC between main and renderer.
+
+## Where they're tied
+
+- **Native notifications**, **tray**, **menu**, **clipboard**, **shell.openExternal**, **dialog**, **global shortcuts**, **deep linking**, **single instance** — both cover these, often with near-identical semantics.
+- **Auto-updater** — both have first-class auto-updaters.
+- **Code signing + notarization** — both integrate `signtool` and `codesign`.
+- **Bundle formats** — both ship `.app` / `.dmg` / `.deb` / `.rpm` / `.AppImage` / NSIS / MSI.
+
+## Migration path
+
+Porting Electron → Tynd:
+
+- **`BrowserWindow`** → `app.start({ window: { … } })` or `tyndWindow.create` for secondary.
+- **`ipcMain.handle("cmd", fn)`** → `export async function cmd(…)` in `backend/main.ts`.
+- **`ipcRenderer.invoke("cmd", …)`** → `await api.cmd(…)` with `createBackend<typeof backend>()`.
+- **`BrowserWindow.webContents.send("evt", …)`** → `events.emit("evt", …)` from backend, `api.on("evt", …)` on frontend.
+- **Node modules** — works in `full` runtime; in `lite`, use Tynd OS APIs (`fs`, `http`, `sql`, `process`, …) or pure-JS libs.
+- **Preload scripts / contextBridge** — N/A in Tynd. Exposure surface = exported backend functions. No separate "context isolation" step.
+- **`session` / cookies / custom protocols** — Tynd's `tynd://` + `tynd-bin://` schemes are fixed; no per-session customization.
+- **Screen capture / `printToPDF`** — no direct replacement. Use a native CLI via `sidecar` (e.g. `ffmpeg`, `wkhtmltopdf`).
+
+Porting Tynd → Electron:
+
+- **Backend** becomes Electron's main process. All TypeScript still works in the main process — just via `ipcMain` + `ipcRenderer` dance.
+- **OS APIs** — most have Electron or npm equivalents. `compute` → use `crypto` node module. `workers` → `Worker` from `node:worker_threads`.
+- **Binary IPC** — Electron has MessageChannel, not a dedicated bytes channel. Usually OK for the size.
+
+## Related
+
+- [Comparisons overview](/docs/v0.1/compare).
+- [Full 500-row matrix](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md).

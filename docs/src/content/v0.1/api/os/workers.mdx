@@ -1,0 +1,92 @@
+---
+title: workers
+description: "Offload CPU-bound JS to an isolated thread. Unified API across `lite` (embedded QuickJS) and `full` (`Bun.Worker`)."
+---
+
+# `workers`
+
+```ts
+import { workers } from "@tynd/core/client";
+```
+
+Isolated JS runtime on its own OS thread — JSON input / output.
+
+## `spawn<I, O>(fn): Promise<Worker<I, O>>`
+
+```ts
+const w = await workers.spawn((input: number[]) =>
+  input.reduce((a, b) => a + b, 0)
+);
+```
+
+- `fn` must be **self-contained** — no closure captures, no outer references.
+- Arguments and return value are JSON-serialized.
+
+## `Worker<I, O>` methods
+
+### `run(input): Promise<O>`
+
+```ts
+const sum = await w.run<number, number[]>([1, 2, 3, 4, 5]);   // 15
+```
+
+Serializes `input`, runs the function in the worker, returns the result.
+
+### `terminate(): Promise<void>`
+
+Force-stop the worker.
+
+```ts
+await w.terminate();
+```
+
+## How it works under the hood
+
+- **`lite`** — spawns an isolated `rquickjs::Runtime` on a fresh OS thread. Each `run` serializes input to JSON, evaluates the function there, and sends the result back. No shared globals, no shared heap.
+- **`full`** — wraps `Bun.Worker` via a data-URL worker script. Same surface, same serialization semantics.
+
+## Typical uses
+
+- **Heavy JSON parsing** — 50 MB JSON blob that would block the main thread.
+- **Image / audio processing in pure JS** — keep the UI responsive.
+- **Computation without an event loop** — simulation loops, particle systems.
+
+For **Rust-backed compute** (hashing, CSPRNG), prefer [`compute`](/docs/v0.1/api/os/compute) — it's faster and doesn't round-trip through JSON.
+
+## Notes
+
+- No `SharedArrayBuffer` / `Atomics` support in lite (QuickJS limitation). Use message passing (the worker's `run` input/output) instead.
+- Cannot import modules inside the worker function — everything it needs must be captured in the function body or serialized as input.
+- Workers run on OS threads, not thread pools. Spawning dozens is wasteful. Use a small pool + `run` tasks to it.
+
+## Example — parallel map
+
+```ts
+async function parallelMap<I, O>(
+  items: I[],
+  fn: (x: I) => O,
+  poolSize = 4,
+): Promise<O[]> {
+  const pool = await Promise.all(
+    Array.from({ length: poolSize }, () => workers.spawn(fn)),
+  );
+  try {
+    const out = new Array<O>(items.length);
+    let idx = 0;
+    await Promise.all(pool.map(async (w) => {
+      while (idx < items.length) {
+        const i = idx++;
+        out[i] = await w.run(items[i]);
+      }
+    }));
+    return out;
+  } finally {
+    await Promise.all(pool.map((w) => w.terminate()));
+  }
+}
+```
+
+## Related
+
+- [compute](/docs/v0.1/api/os/compute) — Rust-native hashing and RNG (faster for those tasks).
+- [Streaming RPC](/docs/v0.1/api/streaming-rpc) — if you need to stream intermediate results.

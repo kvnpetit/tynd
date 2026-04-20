@@ -1,0 +1,121 @@
+---
+title: menu
+description: "Handle clicks on the native app menu bar. Items are declared in `app.start({ menu: … })`."
+---
+
+# `menu`
+
+```ts
+import { menu } from "@tynd/core/client";
+```
+
+The menu bar is declared in `app.start({ menu: … })` on the backend. This module subscribes to menu-item clicks (both app menu bar and tray menu).
+
+## Declare the menu
+
+```ts filename="backend/main.ts"
+app.start({
+  menu: [
+    {
+      type: "submenu",
+      label: "File",
+      items: [
+        { label: "New",   id: "file.new",   accelerator: "CmdOrCtrl+N" },
+        { label: "Open",  id: "file.open",  accelerator: "CmdOrCtrl+O" },
+        { label: "Save",  id: "file.save",  accelerator: "CmdOrCtrl+S" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    {
+      type: "submenu",
+      label: "Edit",
+      items: [
+        { role: "undo" }, { role: "redo" },
+        { type: "separator" },
+        { role: "cut" }, { role: "copy" }, { role: "paste" },
+        { type: "separator" },
+        { label: "Find",    id: "edit.find",  accelerator: "CmdOrCtrl+F" },
+      ],
+    },
+    {
+      type: "submenu",
+      label: "View",
+      items: [
+        { label: "Toggle Theme", id: "view.theme", checkbox: true },
+      ],
+    },
+  ],
+  // ...
+});
+```
+
+## Subscribe to clicks
+
+```ts
+const unsub1 = menu.onClick("file.new",  () => createDocument());
+const unsub2 = menu.onClick("file.open", () => openPicker());
+const unsub3 = menu.onClick("file.save", () => saveCurrent());
+const unsub4 = menu.onClick("edit.find", () => focusSearch());
+
+const unsub5 = menu.onClick("view.theme", (e) => {
+  // e.checked = new checked state for checkbox items
+  applyTheme(e.checked ? "dark" : "light");
+});
+```
+
+Each returns `unsubscribe()`.
+
+## Item shapes
+
+### Action item
+
+```ts
+{
+  type?:        "action",        // default — optional
+  label:        string,
+  id:           string,          // passed to menu.onClick
+  accelerator?: string,          // "CmdOrCtrl+S"
+  enabled?:     boolean,
+  checkbox?:    boolean,         // shows a check mark when checked
+  radio?:       boolean,         // single-selection within a group
+}
+```
+
+### Separator
+
+```ts
+{ type: "separator" }
+```
+
+### Role
+
+OS-native actions with platform-correct labels and accelerators:
+
+```ts
+{ role: "quit" | "copy" | "paste" | "undo" | "redo" | "cut" | "selectAll"
+       | "minimize" | "close" | "about" | "hide" | "hideOthers" | "unhide" }
+```
+
+Roles don't need `id` / `accelerator` — the OS provides both.
+
+## Accelerators
+
+Use the standard accelerator syntax's format — same as [`shortcuts`](/docs/v0.1/api/os/shortcuts):
+
+- `CmdOrCtrl+S` — ⌘S on macOS, Ctrl+S elsewhere
+- `Alt+F4`
+- `Shift+Space`
+
+Accelerators on menu items fire **only when your app is focused** (unlike `shortcuts.register` which is global).
+
+## Notes
+
+- Menu item clicks are broadcast — a single `menu.onClick` handler fires from any window or the backend.
+- Radio items don't have native single-selection grouping yet; track the selected id manually.
+- Icons in menu items, tooltips, and dynamic-menu-edit-at-runtime aren't exposed yet.
+
+## Related
+
+- [tray](/docs/v0.1/api/os/tray) — tray menu handlers share the same `menu.onClick` dispatcher.
+- [shortcuts](/docs/v0.1/api/os/shortcuts) — global hotkeys (fire unfocused).

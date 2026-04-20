@@ -1,0 +1,259 @@
+---
+title: Backend RPC
+description: "Typed RPC between frontend and backend without codegen — `createBackend<typeof backend>()`, emitters, and the rules of engagement."
+---
+
+# Backend RPC
+
+Tynd's RPC is **zero-codegen** and **zero-schema**. Every `export` from your backend file is a callable RPC method on the frontend, typed via `typeof backend`.
+
+## Core pattern
+
+```ts filename="backend/main.ts"
+import { app, createEmitter } from "@tynd/core";
+
+// Named exports are RPC methods
+export async function greet(name: string): Promise<string> {
+  return `Hello, ${name}!`;
+}
+
+export async function add(a: number, b: number): Promise<number> {
+  return a + b;
+}
+
+// Emitters are frontend event sources
+export const events = createEmitter<{
+  tick: { at: number };
+}>();
+
+app.start({
+  window: { title: "RPC demo", width: 900, height: 600 },
+});
+```
+
+```ts filename="src/main.ts"
+import { createBackend } from "@tynd/core/client";
+import type * as backend from "../backend/main";
+
+const api = createBackend<typeof backend>();
+
+const msg = await api.greet("Alice");      // string, typed
+const sum = await api.add(2, 3);           // number, typed
+
+const unsub = api.on("tick", ({ at }) => {
+  console.log("tick at", at);
+});
+// unsub() when done
+```
+
+Under the hood `createBackend` is a thin `Proxy` that serialises the call as JSON and sends it over `window.ipc.postMessage`. The return value deserialises as JSON. No codegen, no IDL — types flow from `typeof backend`.
+
+## Supported argument and return types
+
+JSON-serializable:
+
+- Primitives: `string`, `number`, `boolean`, `null`, `bigint` (stringified)
+- Arrays, plain objects
+- Nested structures
+
+**Not serializable directly:**
+
+- `Function` — no way to roundtrip across IPC
+- `Map` / `Set` — convert to array first
+- `Date` — serializes as ISO string; pass epoch ms (`Date.now()`) or parse on arrival
+- `ArrayBuffer` / `Uint8Array` — use [binary IPC](/docs/v0.1/guides/binary-data) for anything large; for small payloads, base64-encode manually
+
+## Error handling
+
+Throwing in the backend rejects the frontend promise:
+
+```ts
+// backend
+export async function divide(a: number, b: number) {
+  if (b === 0) throw new Error("division by zero");
+  return a / b;
+}
+
+// frontend
+try {
+  await api.divide(10, 0);
+} catch (err) {
+  console.error(err.message);   // "division by zero"
+}
+```
+
+Error objects are serialized with `name` and `message`. Stack traces are stripped in production. Use a custom error class + `instanceof` check if you want structured errors:
+
+```ts
+export class BusinessError extends Error {
+  constructor(public code: string, message: string) { super(message); }
+}
+
+export async function doThing() {
+  throw new BusinessError("not_found", "widget not found");
+}
+```
+
+Frontend receives `{ name: "BusinessError", message: "widget not found" }` — enough to switch on `err.name`.
+
+## Lifecycle hooks
+
+```ts filename="backend/main.ts"
+import { app } from "@tynd/core";
+
+app.onReady(() => {
+  console.log("window shown, WebView alive");
+});
+
+app.onClose(() => {
+  // 2-second watchdog — if handlers don't complete in time, the host force-exits.
+  console.log("user clicked X, cleaning up");
+});
+
+app.start({ window: { title: "…" } });
+```
+
+- `onReady` fires when the WebView emits `DOMContentLoaded` on the primary window.
+- `onClose` fires when the user closes the primary window (`WindowEvent::CloseRequested`). The window hides immediately; you have ~2 s to finish before a watchdog force-exits.
+
+## Emitters — typed events
+
+```ts filename="backend/main.ts"
+export const events = createEmitter<{
+  userCreated: { id: string; name: string };
+  progress: { percent: number };
+}>();
+
+// anywhere in backend code
+events.emit("userCreated", { id: "1", name: "Alice" });
+events.emit("progress", { percent: 42 });
+```
+
+Frontend subscribes:
+
+```ts
+api.on("userCreated", (user) => console.log(user.name));
+api.once("userCreated", (user) => { /* fires once */ });
+```
+
+<Callout type="info">
+  **Emitters must be exported.** The frontend's type-only import (`typeof backend`) needs to see them to type-check `api.on("name", …)`. Forgetting `export` is a silent type-only error.
+</Callout>
+
+## Async generators — streaming
+
+An `async function*` export is a streaming RPC:
+
+```ts
+export async function* count(to: number) {
+  for (let i = 1; i <= to; i++) {
+    yield i;
+    await Bun.sleep(100);
+  }
+  return "done";
+}
+
+// frontend
+const stream = api.count(5);
+for await (const n of stream) console.log(n);   // 1, 2, 3, 4, 5
+console.log(await stream);                      // "done"
+```
+
+See [Streaming RPC](/docs/v0.1/guides/streaming) for flow control, cancellation, and multi-window routing.
+
+## Calling between backend functions
+
+Just regular function calls:
+
+```ts filename="backend/main.ts"
+async function loadFromDB(id: string) { /* internal */ }
+
+export async function getUser(id: string) {
+  return loadFromDB(id);
+}
+```
+
+Unexported functions are **not** RPC-accessible — the frontend type import can't see them.
+
+## Modularization
+
+```ts filename="backend/main.ts"
+export { greet, farewell } from "./user";
+export { list, create } from "./items";
+export { app } from "@tynd/core";
+
+import { app } from "@tynd/core";
+app.start({ window: { title: "…" } });
+```
+
+```ts filename="backend/user.ts"
+export async function greet(name: string) { return `Hi, ${name}`; }
+export async function farewell(name: string) { return `Bye, ${name}`; }
+```
+
+Frontend:
+
+```ts
+api.greet("Alice");
+api.list();
+```
+
+The typed proxy flattens all re-exports.
+
+## Rules of engagement
+
+<Steps>
+
+### One backend file per app
+
+`tynd.config.ts::backend` points at one entry (default `backend/main.ts`). All RPC methods and emitters live in the exports of that module (directly or re-exported). This is what types `typeof backend` — nothing else is reachable.
+
+### Never throw sensitive strings
+
+Error messages cross IPC verbatim. Don't put DB connection strings, secrets, or file paths you wouldn't show the user in a thrown message.
+
+### Keep RPC granularity moderate
+
+10 calls for one user action cost 10 round-trips + 10 promise resolutions. Batch when you control both sides: expose a single `loadDashboard()` RPC that returns everything the view needs, not 12 small getters.
+
+### Return POJOs, not class instances
+
+Class methods don't survive serialization. If you use classes internally, convert to plain objects at the RPC boundary.
+
+### Don't return cycles
+
+`JSON.stringify` throws on circular references. Break cycles before returning.
+
+</Steps>
+
+## Full-runtime-only patterns
+
+In `full` mode, the backend has full Bun + Node + npm access:
+
+```ts
+// full-only — don't do this in lite
+import { readFile } from "node:fs/promises";
+
+export async function readConfig() {
+  return JSON.parse(await readFile("./config.json", "utf8"));
+}
+```
+
+For cross-runtime code, use the **Tynd OS APIs** (`fs`, `sql`, `http`, …) — they work identically in both modes:
+
+```ts
+// works in full AND lite
+import { fs } from "@tynd/core/client";
+
+export async function readConfig() {
+  return JSON.parse(await fs.readText("./config.json"));
+}
+```
+
+Wait — `fs` lives in `@tynd/core/client`. Can the backend use it? Yes: `@tynd/core/client` is importable from the backend too. The OS APIs dispatch to Rust regardless of which side calls them.
+
+## Next
+
+- [Streaming RPC](/docs/v0.1/guides/streaming)
+- [Binary Data](/docs/v0.1/guides/binary-data)
+- [Backend API reference](/docs/v0.1/api/backend)

@@ -1,0 +1,201 @@
+---
+title: tynd.config.ts
+description: "Full reference for the `TyndConfig` schema — runtime, paths, protocols, bundle metadata, signing."
+---
+
+# `tynd.config.ts`
+
+Project config. Validated by [valibot](https://valibot.dev) — invalid shape fails fast with a clear error message listing every bad field.
+
+```ts filename="tynd.config.ts"
+import type { TyndConfig } from "@tynd/cli";
+
+export default {
+  runtime:     "lite",
+  backend:     "backend/main.ts",
+  frontendDir: "dist",
+  icon:        "public/favicon.svg",
+} satisfies TyndConfig;
+```
+
+<Callout type="info">
+  **Window / menu / tray config lives in the backend**, not in `tynd.config.ts`. Each spawned window can configure itself programmatically, so `app.start({ window: {...}, menu: [...], tray: {...} })` is the authoritative place. See [Backend API](/docs/v0.1/api/backend).
+</Callout>
+
+## Top-level fields
+
+| Field | Default | Description |
+|---|---|---|
+| `runtime` | `"full"` | `"full"` (Bun subprocess) or `"lite"` (embedded QuickJS) |
+| `backend` | `"backend/main.ts"` | Backend entry file |
+| `frontendDir` | `"frontend"` | Built frontend output directory |
+| `frontendEntry` | — | Single TS/JS entry without a framework — auto-bundled |
+| `devUrl` | auto | Dev server URL override |
+| `devCommand` | auto | Dev server start command override |
+| `icon` | auto | App icon path (SVG / PNG / ICO) |
+| `binaryArgs` | — | Extra args passed to the `tynd-full` / `tynd-lite` binary |
+| `protocols` | — | Custom URL schemes to register (e.g. `["myapp"]`) |
+| `sidecars` | — | Bundled binaries |
+| `bundle` | — | Installer metadata + signing |
+
+## `sidecars`
+
+Binaries bundled inside your app.
+
+```ts
+sidecars: [
+  { name: "ffmpeg.exe", path: "bin/ffmpeg.exe" },
+  { name: "yt-dlp",     path: "bin/yt-dlp" },
+]
+```
+
+- `name` — resolved at runtime via `sidecar.path(name)`.
+- `path` — relative to the project root at build time.
+
+See the [Sidecars guide](/docs/v0.1/guides/sidecars).
+
+## `protocols`
+
+Custom URL schemes registered by the installer.
+
+```ts
+protocols: ["myapp", "myapp-dev"]
+```
+
+Must match `/^[a-zA-Z][a-zA-Z0-9+\-.]*$/`. Reserved schemes are rejected at config-validation time:
+
+`http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`
+
+See the [Deep Linking guide](/docs/v0.1/guides/deep-linking).
+
+## `bundle`
+
+Required only when using `tynd build --bundle`.
+
+```ts
+bundle: {
+  identifier:        string,            // reverse-DNS (e.g. com.example.myapp), required
+  displayName?:      string,            // shown in installers / menus
+  categories?:       string[],          // XDG / Launch Services
+  shortDescription?: string,
+  longDescription?:  string,
+  copyright?:        string,
+
+  deb?: {
+    depends?:   string[],
+    section?:   string,                 // e.g. "utils"
+    priority?:  string,                 // e.g. "optional"
+  },
+  rpm?: {
+    license?:   string,                 // SPDX id, e.g. "MIT"
+    requires?:  string[],
+  },
+  appimage?: { /* reserved — currently empty */ },
+  nsis?: {
+    installMode?: "currentUser" | "perMachine" | "both",   // default "currentUser"
+  },
+  msi?: {
+    upgradeCode?: string,               // GUID — pin to enable in-place upgrades
+  },
+  sign?: { /* see below */ },
+}
+```
+
+### `bundle.sign.windows`
+
+```ts
+windows: {
+  certificate:   string,     // path to .pfx / .p12, OR "cert:subject=..." for Windows cert store
+  password?:     string,     // plain or "env:NAME" (recommended)
+  timestampUrl?: string,     // default: http://timestamp.digicert.com
+}
+```
+
+### `bundle.sign.macos`
+
+```ts
+macos: {
+  identity:      string,     // "Developer ID Application: Name (TEAMID)" or a SHA-1 hash
+  entitlements?: string,     // path to an entitlements.plist
+  notarize?: {
+    appleId:   string,       // plain or "env:APPLE_ID"
+    password:  string,       // app-specific password, plain or "env:NAME"
+    teamId:    string,
+  },
+}
+```
+
+See the [Code Signing guide](/docs/v0.1/guides/code-signing).
+
+## `env:NAME` references
+
+Any string field in `bundle.sign.*` can use `env:NAME` to read from `process.env.NAME` at build time. **Missing env vars throw** — no silent fallback to unsigned builds.
+
+```ts
+sign: {
+  windows: {
+    certificate: "./cert.pfx",
+    password:    "env:WIN_CERT_PASSWORD",
+  },
+  macos: {
+    notarize: {
+      appleId:  "env:APPLE_ID",
+      password: "env:APPLE_APP_PASSWORD",
+      teamId:   "env:APPLE_TEAM_ID",
+    },
+  },
+}
+```
+
+## Icon
+
+Auto-detected if `icon` is not set:
+
+1. `public/{favicon,icon,logo}.svg`
+2. `public/{favicon,icon,logo}.{ico,png}`
+3. `assets/icon.{svg,png,ico}`
+4. `icon.{svg,png,ico}`
+
+Override via `icon: "path/to/source.svg"`.
+
+Single source renders per-format:
+
+- Windows ICO (16/32/48/256)
+- macOS ICNS (32/128/256/512/1024)
+- Linux hicolor PNG set (16/32/48/64/128/256/512)
+
+PNG source degrades to single-size. ICO source passes through to Windows only.
+
+See the [Bundling guide](/docs/v0.1/guides/bundling).
+
+## Window / menu / tray
+
+These live in the **backend**, not the config file:
+
+```ts filename="backend/main.ts"
+import { app } from "@tynd/core";
+
+app.start({
+  window: {
+    title:  "My App",
+    width:  1200,
+    height: 800,
+    center: true,
+  },
+  menu: [ /* … */ ],
+  tray: { /* … */ },
+});
+```
+
+Rationale: each spawned window can define its own settings programmatically; a static config file can't express that flexibility. See [Backend API](/docs/v0.1/api/backend).
+
+## Validation
+
+Run `tynd validate` to typecheck the config + confirm the Rust host binary is discoverable.
+
+## Related
+
+- [Backend API](/docs/v0.1/api/backend) — `app.start`, window/menu/tray config.
+- [Bundling](/docs/v0.1/guides/bundling).
+- [Code Signing](/docs/v0.1/guides/code-signing).
+- [Deep Linking](/docs/v0.1/guides/deep-linking).

@@ -1,0 +1,51 @@
+---
+title: notification
+description: "Send native OS toast notifications."
+---
+
+# `notification`
+
+```ts
+import { notification } from "@tynd/core/client";
+```
+
+## `send(title, opts?): Promise<void>`
+
+Fires a native notification.
+
+```ts
+await notification.send("Build Complete", { body: "0 errors." });
+```
+
+### Options
+
+```ts
+interface NotificationOptions {
+  body?:   string;
+  icon?:   string;   // path to an image file (platform-dependent support)
+}
+```
+
+- `body` — secondary text under the title.
+- `icon` — path to an image. Support varies by OS; fallback to the app icon if unavailable.
+
+## Platform notes
+
+- **macOS** — uses `UNUserNotificationCenter` (notification center). The first call may prompt for permission.
+- **Windows** — uses the `ToastNotification` Win32 API. Windows 10+ toast UI.
+- **Linux** — uses D-Bus (`org.freedesktop.Notifications`). Requires a running notification daemon (GNOME Shell, KDE, `dunst`, etc.).
+
+## Not supported yet
+
+- Action buttons.
+- Interactive text input.
+- Sound.
+- Scheduled / recurring notifications.
+- Custom notification channels (Android-specific; N/A on desktop).
+- On-click / on-action callbacks.
+
+For those, wrap a platform-specific native tool via `process.exec` (e.g. `terminal-notifier` on macOS, `SnoreToast` on Windows).
+
+## Related
+
+- [tray](/docs/v0.1/api/os/tray) — persistent tray icon + menu for recurring actions.

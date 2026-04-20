@@ -1,0 +1,75 @@
+---
+title: web
+description: "Web-platform globals (fetch, WebSocket, crypto, URL, Blob…) re-exported as named exports — spec-identical in both `lite` and `full`."
+---
+
+# `web`
+
+```ts
+import * as web from "@tynd/core/client/web";
+// or grab individual exports:
+import { fetch, crypto, URL } from "@tynd/core/client/web";
+```
+
+Standard Web-platform globals, re-exported so they're discoverable in the
+`@tynd/core/client` surface next to the Tynd OS APIs.
+
+- In **`full`** they point at Bun's native implementations.
+- In **`lite`** they point at Tynd's polyfills (`tungstenite`-backed `WebSocket`,
+  `ureq`-backed `fetch`, `@noble/*`-backed `crypto.subtle`, etc.).
+
+Behavior follows the Web spec in both runtimes — the same app code runs
+unchanged across `full` and `lite`.
+
+## Exports
+
+| Group | Exports |
+|---|---|
+| Fetch | `fetch`, `Request`, `Response`, `Headers`, `AbortController`, `AbortSignal`, `ReadableStream` |
+| Sockets | `WebSocket`, `EventSource` |
+| Crypto | `crypto` (with `crypto.subtle`, `crypto.randomUUID`, `crypto.getRandomValues`) |
+| URL + encoding | `URL`, `URLSearchParams`, `TextEncoder`, `TextDecoder`, `atob`, `btoa` |
+| Binary data | `Blob`, `File`, `FormData` |
+| Misc | `structuredClone`, `performance` |
+
+## Example
+
+```ts
+import { fetch, crypto, URL } from "@tynd/core/client/web";
+import { fs } from "@tynd/core/client";
+
+export async function downloadAndHash(url: string, dest: string) {
+  const res = await fetch(url);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+
+  // Web-standard SubtleCrypto — available on lite via polyfill.
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const hex = [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  // Tynd OS API on the same namespace.
+  await fs.writeBinary(dest, bytes);
+  return hex;
+}
+```
+
+## When to prefer the Tynd APIs
+
+These re-exports are pure Web-standard. Use them when you want spec-conformant
+behavior and portability to browser code.
+
+For workloads that benefit from a Rust-native fast path, prefer the dedicated
+Tynd APIs:
+
+- [`http`](/docs/v0.1/api/os/http) — request retries, download-with-progress
+  events, no CORS.
+- [`websocket`](/docs/v0.1/api/os/websocket) — dedicated thread per session,
+  auto-reconnect helpers.
+- [`compute`](/docs/v0.1/api/os/compute) — `hash` (blake3/sha2) and
+  `randomBytes` via Rust, ~3–10× faster than `crypto.subtle` on lite.
+
+## Related
+
+- [Runtimes](/docs/v0.1/runtimes) — full vs lite parity matrix.
+- [Architecture](/docs/v0.1/concepts/architecture) — where polyfills fit.

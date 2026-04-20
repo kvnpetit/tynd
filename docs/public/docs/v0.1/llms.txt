@@ -1,0 +1,157 @@
+# Tynd — v0.1
+
+> Desktop apps in TypeScript. Small native binaries, zero-codegen typed RPC.
+
+Tynd is a desktop-app framework with a TypeScript backend, a native WebView front-end, and small native binaries. It ships two runtimes — `lite` (~6.5 MB, embedded JS engine) and `full` (~44 MB, Bun subprocess) — from the same TypeScript source. IPC is zero-network (no TCP), RPC is zero-codegen (types flow from `typeof backend`), and 26 OS APIs behave identically across both runtimes.
+
+## Overview
+
+- [Introduction](https://tynd.dev/docs/v0.1): Tynd is a desktop-app framework with a TypeScript backend, a native WebView front-end, and small native binaries. One language end-to-end, zero codegen, two runtime modes.
+
+## Getting Started
+
+- [Getting Started](https://tynd.dev/docs/v0.1/getting-started): Scaffold your first Tynd app, run it with hot reload, and produce a release binary in under five minutes.
+- [Development Workflow](https://tynd.dev/docs/v0.1/getting-started/dev-workflow): The day-to-day loop — dev mode with HMR, classic builds without HMR, cache hits, and troubleshooting.
+- [Your First App](https://tynd.dev/docs/v0.1/getting-started/first-app): Build a minimal Tynd app from scratch — backend function, frontend call, typed RPC, and a production binary.
+- [Installation](https://tynd.dev/docs/v0.1/getting-started/installation): Install Bun and the OS-level dependencies Tynd needs to build and run desktop apps on Windows, macOS, and Linux.
+- [Project Structure](https://tynd.dev/docs/v0.1/getting-started/project-structure): The files and directories `tynd create` scaffolds, what each one does, and where your code goes.
+
+## Core Concepts
+
+- [Architecture](https://tynd.dev/docs/v0.1/concepts/architecture): How Tynd splits an app across three surfaces — frontend WebView, Rust host, and TypeScript backend — and what each one owns.
+- [Build Pipeline](https://tynd.dev/docs/v0.1/concepts/build-pipeline): How `tynd dev`, `tynd start`, and `tynd build` turn your TypeScript into frontend assets, a backend bundle, and a self-contained native binary.
+- [IPC Model](https://tynd.dev/docs/v0.1/concepts/ipc): The transport under RPC calls, events, streaming, and OS calls — how Tynd moves data between frontend, Rust host, and backend without touching the network.
+- [Runtime Modes](https://tynd.dev/docs/v0.1/concepts/runtimes): The difference between `lite` (embedded QuickJS, ~6.5 MB) and `full` (Bun subprocess, ~44 MB) and how to pick between them.
+- [Security](https://tynd.dev/docs/v0.1/concepts/security): The security model — CSP defaults, scheme allowlists, structural exposure surface, and OS-backed secret storage.
+- [TYNDPKG Format](https://tynd.dev/docs/v0.1/concepts/tyndpkg): The self-extracting trailer appended to a Tynd binary — how your frontend, backend, Bun, and sidecars live inside a single .exe.
+
+## Guides
+
+- [Guides](https://tynd.dev/docs/v0.1/guides): Task-focused guides for real Tynd work — frontend frameworks, streaming RPC, multi-window, auto-updates, code signing, bundling, and more.
+- [Accessibility](https://tynd.dev/docs/v0.1/guides/accessibility): Ship an app that works for screen readers, keyboard-only users, and high-contrast / reduced-motion preferences.
+- [Auto-Updates](https://tynd.dev/docs/v0.1/guides/auto-updates): Ship Ed25519-signed auto-updates with a Tauri-compatible manifest. The CLI handles keygen, signing, and verification.
+- [Backend RPC](https://tynd.dev/docs/v0.1/guides/backend-rpc): Typed RPC between frontend and backend without codegen — `createBackend<typeof backend>()`, emitters, and the rules of engagement.
+- [Binary Data](https://tynd.dev/docs/v0.1/guides/binary-data): Move multi-MB payloads between frontend and Rust without JSON or base64 — the `tynd-bin://` channel.
+- [Bundling & Distribution](https://tynd.dev/docs/v0.1/guides/bundling): Turn the raw Tynd binary into platform-native installers — `.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS `.exe`, MSI.
+- [Code Signing](https://tynd.dev/docs/v0.1/guides/code-signing): Sign Windows binaries with signtool, sign + notarize macOS builds with codesign + notarytool, and integrate signing into `tynd build`.
+- [Debugging](https://tynd.dev/docs/v0.1/guides/debugging): DevTools, verbose logs, backend inspector, and common diagnostic commands for Tynd apps.
+- [Deep Linking](https://tynd.dev/docs/v0.1/guides/deep-linking): Register a custom URL scheme (`myapp://`) so the OS launches your app for matching links.
+- [Frontend Frameworks](https://tynd.dev/docs/v0.1/guides/frontend-frameworks): Tynd is framework-agnostic — any framework that builds to a pure SPA works. Detailed notes for React, Vue, Svelte, Solid, Preact, Lit, and Angular.
+- [Internationalization](https://tynd.dev/docs/v0.1/guides/i18n): Detect the user's locale, localize UI strings, format dates and numbers — in both `lite` (stubbed Intl) and `full` (full ICU).
+- [Icons & Branding](https://tynd.dev/docs/v0.1/guides/icons-branding): One source of truth for your app icon — SVG preferred. Tynd renders per-format sizes for Windows ICO, macOS ICNS, Linux hicolor.
+- [Keyboard Shortcuts](https://tynd.dev/docs/v0.1/guides/keyboard-shortcuts): Register system-wide global shortcuts that fire even when the app is unfocused.
+- [Migrate from Electron](https://tynd.dev/docs/v0.1/guides/migrate-from-electron): Move an Electron app to Tynd — replace `ipcMain.handle` with backend `export`s, drop the 160 MB Chromium, keep your TypeScript.
+- [Migrate from Tauri](https://tynd.dev/docs/v0.1/guides/migrate-from-tauri): Move a Tauri v2 app to Tynd — rewrite `#[tauri::command]`s as backend `export`s, port events to `createEmitter`, keep Rust out of your source tree.
+- [Multi-Window](https://tynd.dev/docs/v0.1/guides/multi-window): Create secondary windows, route events per-window, and clean up state on close.
+- [Performance](https://tynd.dev/docs/v0.1/guides/performance): Startup latency, IPC overhead, binary size, and CPU-bound hot paths — how to profile and optimize a Tynd app.
+- [Persistence](https://tynd.dev/docs/v0.1/guides/persistence): Store app state — plain k/v with `store`, relational with `sql`, secrets with `keyring`, arbitrary files with `fs`.
+- [Sidecars](https://tynd.dev/docs/v0.1/guides/sidecars): Ship a helper binary (ffmpeg, yt-dlp, etc.) embedded inside your Tynd app and execute it at runtime.
+- [Single Instance](https://tynd.dev/docs/v0.1/guides/single-instance): Prevent duplicate launches, forward argv / cwd from the second instance to the primary, and auto-focus the existing window.
+- [Streaming RPC](https://tynd.dev/docs/v0.1/guides/streaming): Async-generator backend handlers stream yields to the frontend with flow control, batched DOM updates, and cancellation — safe at 10k+ yields/sec.
+- [Testing](https://tynd.dev/docs/v0.1/guides/testing): Unit-test backend logic with `bun test`, exercise OS APIs in isolation, and run integration smoke tests with the native host.
+
+## Tutorials
+
+- [Tutorials](https://tynd.dev/docs/v0.1/tutorials): Build complete Tynd apps step-by-step — markdown editor, file browser, LLM chat client.
+- [LLM Chat Client](https://tynd.dev/docs/v0.1/tutorials/chat-client): Build a streaming LLM chat — backend proxies token-by-token via `async function*`, frontend renders progressively with a cancel button.
+- [File Browser](https://tynd.dev/docs/v0.1/tutorials/file-browser): Build a file browser with directory walking, image thumbnails via zero-copy binary IPC, and reveal-in-folder.
+- [Markdown Editor](https://tynd.dev/docs/v0.1/tutorials/markdown-editor): Build a complete markdown editor — file open/save, live preview, keyboard shortcuts, native menu. ~150 LOC end-to-end.
+
+## Recipes
+
+- [Recipes](https://tynd.dev/docs/v0.1/recipes): Short self-contained snippets for common desktop-app tasks — remember window size, minimize to tray, handle deep links, and more.
+- [Confirm Before Quit](https://tynd.dev/docs/v0.1/recipes/confirm-before-quit): Intercept the close request; show a native confirm dialog if there are unsaved changes.
+- [Copy to Clipboard](https://tynd.dev/docs/v0.1/recipes/copy-to-clipboard): Text, image, and HTML. Native OS clipboard.
+- [Sync with OS Dark Mode](https://tynd.dev/docs/v0.1/recipes/dark-mode-sync): Read the OS dark-mode preference and react to theme changes.
+- [Detect Online / Offline](https://tynd.dev/docs/v0.1/recipes/detect-online): Periodic connectivity probe. The DOM `navigator.onLine` lies; use a real network check.
+- [Embed and Run a Sidecar](https://tynd.dev/docs/v0.1/recipes/embed-sidecar): Bundle `ffmpeg` (or any CLI) inside your app binary; resolve the extracted path at runtime.
+- [Handle Deep Link (myapp://)](https://tynd.dev/docs/v0.1/recipes/handle-deep-link): React to custom-scheme URLs on both cold start and duplicate launch.
+- [Launch on System Boot](https://tynd.dev/docs/v0.1/recipes/launch-on-boot): Register the app to start at login; pass `--minimized` so it lands in the tray.
+- [Minimize to Tray](https://tynd.dev/docs/v0.1/recipes/minimize-to-tray): Hide window on close; restore on tray icon click. Keeps the app alive in the background.
+- [Download with Progress](https://tynd.dev/docs/v0.1/recipes/progress-download): Stream a file to disk, render a progress bar, handle cancellation.
+- [Remember Window Size](https://tynd.dev/docs/v0.1/recipes/remember-window-size): Persist window dimensions + position to `store`; restore on next launch.
+- [Run a Shell Command](https://tynd.dev/docs/v0.1/recipes/run-shell-command): Direct `exec` (safe, no shell interpolation) vs `execShell` (pipes + globs). With timeout and output capture.
+- [Single Instance + argv Forwarding](https://tynd.dev/docs/v0.1/recipes/single-instance-argv): Duplicate launch focuses the primary; its argv reaches the primary's handler.
+
+## API Reference
+
+- [API Reference](https://tynd.dev/docs/v0.1/api): Every public Tynd surface — backend, frontend RPC, and 26 OS APIs — with signatures and examples.
+- [Backend (@tynd/core)](https://tynd.dev/docs/v0.1/api/backend): Backend API — app.start, app.onReady, app.onClose, createEmitter, AppConfig, WindowConfig, MenuSubmenu, TrayConfig.
+- [app](https://tynd.dev/docs/v0.1/api/os/app): App identity, exit, and relaunch — the process-level controls.
+- [autolaunch](https://tynd.dev/docs/v0.1/api/os/autolaunch): Register / unregister the app to start at system boot.
+- [clipboard](https://tynd.dev/docs/v0.1/api/os/clipboard): Read / write text, base64-PNG images, and HTML on the system clipboard.
+- [compute](https://tynd.dev/docs/v0.1/api/os/compute): Rust-native CPU helpers — hash (blake3/sha256/384/512) and CSPRNG. Runs off the JS event loop.
+- [dialog](https://tynd.dev/docs/v0.1/api/os/dialog): Native file pickers and message / confirm / warn / error dialogs. 
+- [fs](https://tynd.dev/docs/v0.1/api/os/fs): Filesystem — read / write text and binary, walk directories, watch for changes.
+- [http](https://tynd.dev/docs/v0.1/api/os/http): HTTP client with upload / download progress. TLS is bundled — no OpenSSL runtime dep.
+- [keyring](https://tynd.dev/docs/v0.1/api/os/keyring): OS-encrypted credential storage. Keychain on macOS, Credential Manager + DPAPI on Windows, Secret Service on Linux.
+- [menu](https://tynd.dev/docs/v0.1/api/os/menu): Handle clicks on the native app menu bar. Items are declared in `app.start({ menu: … })`.
+- [monitors](https://tynd.dev/docs/v0.1/api/os/monitor): Enumerate displays; read per-monitor DPI scale and position.
+- [notification](https://tynd.dev/docs/v0.1/api/os/notification): Send native OS toast notifications.
+- [os](https://tynd.dev/docs/v0.1/api/os/os): Platform / arch / OS version, common user directories, env var lookup, EOL, hostname, locale, dark-mode detection.
+- [path](https://tynd.dev/docs/v0.1/api/os/path): Cross-OS path helpers — join, dirname, basename, extname, sep. Synchronous.
+- [process](https://tynd.dev/docs/v0.1/api/os/process): Spawn subprocesses and capture stdout / stderr / exit code. Direct exec and shell exec.
+- [shell](https://tynd.dev/docs/v0.1/api/os/shell): Open URLs in the default browser and files in their OS-default handler.
+- [shortcuts](https://tynd.dev/docs/v0.1/api/os/shortcuts): Register system-wide global keyboard hotkeys that fire even when the app is unfocused.
+- [sidecar](https://tynd.dev/docs/v0.1/api/os/sidecar): Resolve the on-disk path of a bundled sidecar binary extracted at launch.
+- [singleInstance](https://tynd.dev/docs/v0.1/api/os/single-instance): Prevent duplicate launches, forward argv / cwd to the primary, and auto-focus the existing window.
+- [sql](https://tynd.dev/docs/v0.1/api/os/sql): Embedded SQLite via the SQLite driver — no system dependency, bundled with your binary.
+- [store](https://tynd.dev/docs/v0.1/api/os/store): Persistent JSON key-value store under the OS config directory.
+- [terminal](https://tynd.dev/docs/v0.1/api/os/terminal): Real PTY inside your app — cross-OS (ConPTY on Windows, POSIX elsewhere).
+- [tray](https://tynd.dev/docs/v0.1/api/os/tray): System tray icon + menu event handling. The tray is configured in `app.start`, this API handles clicks.
+- [updater](https://tynd.dev/docs/v0.1/api/os/updater): Check for, download, verify, and install Ed25519-signed auto-updates. Tauri-compatible manifest format.
+- [web](https://tynd.dev/docs/v0.1/api/os/web): Web-platform globals (fetch, WebSocket, crypto, URL, Blob…) re-exported as named exports — spec-identical in both `lite` and `full`.
+- [websocket](https://tynd.dev/docs/v0.1/api/os/websocket): Full-duplex WebSocket client with bundled TLS. Text + binary frames.
+- [tyndWindow](https://tynd.dev/docs/v0.1/api/os/window): Window control, events, multi-window management. All methods auto-target the window they're called from.
+- [workers](https://tynd.dev/docs/v0.1/api/os/workers): Offload CPU-bound JS to an isolated thread. Unified API across `lite` (embedded QuickJS) and `full` (`Bun.Worker`).
+- [Streaming RPC](https://tynd.dev/docs/v0.1/api/streaming-rpc): Async-generator backend handlers stream yields + return values to the frontend with flow control and cancellation.
+
+## CLI Reference
+
+- [CLI Reference](https://tynd.dev/docs/v0.1/cli): The `tynd` CLI — create, dev, start, build, clean, validate, info, upgrade, keygen, sign.
+- [tynd build](https://tynd.dev/docs/v0.1/cli/build): Produce a single-file native binary. With `--bundle`, also emit platform-native installers.
+- [tynd clean](https://tynd.dev/docs/v0.1/cli/clean): Remove build artifacts. Useful when the cache gets in the way or before a fresh release build.
+- [tynd.config.ts](https://tynd.dev/docs/v0.1/cli/config): Full reference for the `TyndConfig` schema — runtime, paths, protocols, bundle metadata, signing.
+- [tynd create](https://tynd.dev/docs/v0.1/cli/create): Scaffold a new Tynd project — interactive or flag-driven.
+- [tynd dev](https://tynd.dev/docs/v0.1/cli/dev): Dev mode with HMR on both frontend and backend. Native window stays alive across backend restarts.
+- [tynd info](https://tynd.dev/docs/v0.1/cli/info): Print environment diagnostics — Bun version, Rust toolchain, WebView2 status (Windows), OS, cache paths.
+- [tynd init](https://tynd.dev/docs/v0.1/cli/init): Add Tynd to an existing frontend project — detects the build tool and wires up config automatically.
+- [tynd keygen](https://tynd.dev/docs/v0.1/cli/keygen): Generate an Ed25519 keypair for the auto-updater.
+- [tynd sign](https://tynd.dev/docs/v0.1/cli/sign): Sign a file with an Ed25519 private key generated by `tynd keygen`.
+- [tynd start](https://tynd.dev/docs/v0.1/cli/start): Run the app from cached bundles without rebuild or hot reload. Classic build-then-run.
+- [tynd upgrade](https://tynd.dev/docs/v0.1/cli/upgrade): Bump `@tynd/cli`, `@tynd/core`, and `@tynd/host` to the latest versions.
+- [tynd validate](https://tynd.dev/docs/v0.1/cli/validate): Typecheck `tynd.config.ts` against the `TyndConfig` schema and confirm the Rust host binary is discoverable.
+
+## Runtimes
+
+- [Runtimes](https://tynd.dev/docs/v0.1/runtimes): `lite` vs `full` parity table — what each exposes, when to pick which.
+
+## Comparisons
+
+- [Comparisons](https://tynd.dev/docs/v0.1/compare): Tynd vs Tauri, Electron, Wails — how to choose and where each excels.
+- [Tynd vs Electron](https://tynd.dev/docs/v0.1/compare/vs-electron): Native WebView vs bundled Chromium — 25× binary-size difference, completely different surface areas.
+- [Tynd vs Tauri v2](https://tynd.dev/docs/v0.1/compare/vs-tauri): Shared stack, different philosophies. Tauri has 30 plugins + mobile + capability ACLs; Tynd keeps TypeScript-only with zero-codegen typed RPC.
+- [Tynd vs Wails v3](https://tynd.dev/docs/v0.1/compare/vs-wails): Both target native WebView with a non-Rust backend language. Wails uses Go; Tynd uses TypeScript.
+
+## Production Checklist
+
+- [Production Checklist](https://tynd.dev/docs/v0.1/production-checklist): Pre-release checklist — binary, installers, signing, updater, telemetry, accessibility, i18n, and smoke tests.
+
+## FAQ
+
+- [FAQ](https://tynd.dev/docs/v0.1/faq): Common questions about Tynd — runtime choice, Bun requirement, mobile, licensing, production readiness.
+
+## Glossary
+
+- [Glossary](https://tynd.dev/docs/v0.1/glossary): Definitions for every Tynd-specific term — runtimes, IPC primitives, build artifacts, and Rust-side concepts.
+
+## Troubleshooting
+
+- [Troubleshooting](https://tynd.dev/docs/v0.1/troubleshooting): Common errors and how to fix them. If yours isn't here, run `tynd info --verbose` and open an issue.
+
+## Resources
+
+- [GitHub repository](https://github.com/kvnpetit/tynd)
+- [npm: @tynd/cli](https://www.npmjs.com/package/@tynd/cli)
+- [npm: @tynd/core](https://www.npmjs.com/package/@tynd/core)
+- [llms-full.txt (v0.1)](https://tynd.dev/docs/v0.1/llms-full.txt) — full content of every page in this version

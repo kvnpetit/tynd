@@ -1,0 +1,106 @@
+---
+title: Architecture
+description: "How Tynd splits an app across three surfaces — frontend WebView, Rust host, and TypeScript backend — and what each one owns."
+---
+
+# Architecture
+
+A Tynd app has **three surfaces**:
+
+```
+┌──────────────────────────┐        ┌──────────────────────────┐        ┌──────────────────────────┐
+│      Frontend            │        │      Rust Host           │        │      TS Backend          │
+│  (WebView)               │◄──IPC─►│  (native layer)          │◄──IPC─►│  (Bun or QuickJS)        │
+│                          │        │                          │        │                          │
+│  • Your UI               │        │  • Window + event loop   │        │  • Your exported fns     │
+│  • @tynd/core/client     │        │  • 26 OS APIs (Rust)     │        │  • createEmitter         │
+│  • createBackend<T>()    │        │  • tynd:// + tynd-bin:// │        │  • app.start(config)     │
+│  • OS calls (direct)     │        │  • Streaming RPC         │        │  • Lifecycle hooks       │
+└──────────────────────────┘        └──────────────────────────┘        └──────────────────────────┘
+```
+
+Each surface has a single, narrow responsibility. The glue between them is **typed, zero-codegen, and transport-agnostic** (no HTTP, no WebSocket, no TCP).
+
+## The three surfaces
+
+### 1. Frontend — your UI
+
+A pure SPA. Whatever framework you picked (React, Vue, Svelte, Solid, Preact, Lit, Angular) emits static assets into `dist/`. Tynd serves those through the `tynd://localhost/` custom scheme — `window.location.origin` is `tynd://localhost` (no `http://localhost:xxxx`, no TCP port, no firewall prompt).
+
+Three imports:
+
+- `import { createBackend } from "@tynd/core/client"` — typed RPC proxy to your backend.
+- `import { dialog, tyndWindow, fs, … } from "@tynd/core/client"` — direct OS calls to the Rust host.
+- `import * as tynd from "@tynd/core/client"` — everything above *plus* the Web platform globals (`fetch`, `WebSocket`, `crypto`, `URL`, …) re-exported on the same namespace.
+
+### 2. Rust host — the native layer
+
+Built from two crates:
+
+- **`tynd-host`** (library) — the native event loop, the IPC bridge, and the 26 OS APIs. Shared between both runtimes.
+- **`tynd-full`** / **`tynd-lite`** (binaries) — one of them is the actual executable. `full` spawns a Bun subprocess; `lite` embeds QuickJS in-process.
+
+OS APIs (`dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `fs`, `http`, `websocket`, `sql`, `process`, `sidecar`, `store`, `terminal`, `compute`, `workers`, `keyring`, `autolaunch`, `monitor`, `single-instance`, `shortcuts`, `updater`, `app`, `os`, `path`) all live in Rust. They're called from the **frontend directly** — no round-trip through the TypeScript backend.
+
+### 3. Backend — your TypeScript
+
+Your exported functions, your typed emitters, your lifecycle hooks. Runs in one of two environments:
+
+- **`full`** — a Bun subprocess. You get full Bun + Node.js globals (`fetch`, `Bun.*`, `node:*`), JIT, and native npm bindings.
+- **`lite`** — embedded QuickJS inside the Rust host. You get **Web standards only** (WHATWG + W3C + TC39), plus all 26 Tynd OS APIs. No `Buffer`, no `process.*`, no `Bun.*`.
+
+Same TypeScript, same frontend. The only difference is what JS-level globals you can reach inside backend code. See [Runtime Modes](/docs/v0.1/concepts/runtimes).
+
+## Two topology variants
+
+### Full mode
+
+```
+Frontend (WebView)  ──postMessage──►  Rust host (IPC handler)  ──stdin JSON──►  Bun backend
+            ▲                                    ▲                                       │
+            │  evaluate_script                   │           stdout JSON ◄───────────────┘
+```
+
+- Frontend → backend calls travel over the WebView's `window.ipc.postMessage` → Rust parses → stdin JSON → Bun reads a line, dispatches, writes stdout JSON → Rust evaluates the response on the originating webview.
+- OS calls take a shortcut: frontend → Rust (direct), Rust → frontend (direct). Backend never sees them.
+
+### Lite mode
+
+```
+Frontend (WebView)  ──postMessage──►  Rust host (IPC handler)  ──direct QuickJS call──►  Embedded backend
+            ▲                                    ▲                                                │
+            │  evaluate_script                   │           return value ◄────────────────────────┘
+```
+
+- No subprocess. The backend runs in QuickJS, in-process with the Rust host.
+- Events emit via `globalThis.__tynd_emit__(name, json)` — injected by Rust.
+- Window/frontend config is read from `globalThis.__tynd_config__` after backend eval (QuickJS can't read env vars).
+
+## What's shared, what's runtime-specific
+
+**Shared (identical lite + full):**
+
+- All 26 OS APIs (`@tynd/core/client`) — they're Rust, independent of the JS runtime.
+- The RPC wire format (`{ type: "call", id, fn, args }` / `{ type: "return", id, value }`).
+- The streaming RPC mechanism (per-stream credit, yield batching, cancellation on window close).
+- The `tynd://` frontend scheme + the `tynd-bin://` binary IPC scheme.
+- TYNDPKG packing (how your built binary embeds the frontend + backend + assets + sidecars).
+
+**Runtime-specific:**
+
+- JS-level globals inside backend code — see [Runtimes](/docs/v0.1/runtimes).
+- Bun vs QuickJS binary packing: full packs Bun + zstd; lite packs QuickJS directly into the host.
+- `workers` — lite uses an isolated QuickJS runtime on a fresh thread; full uses `Bun.Worker`. Same API surface.
+
+## Why this split matters
+
+- **No HTTP, no TCP.** Frontend assets and IPC ride a native custom scheme. No loopback port, no firewall prompt on first launch, no MITM window for an attacker on the same machine.
+- **No Rust in your code.** You never learn, write, or maintain Rust — the host is prebuilt and downloaded by `@tynd/host`'s postinstall.
+- **OS APIs are uniformly fast.** Every OS call runs on a fresh Rust thread (or, for long-lived resources like PTY and workers, a dedicated thread). The JS event loop is never blocked on a native call.
+- **Migration between runtimes is a one-line diff.** Change `runtime: "lite"` to `runtime: "full"` in `tynd.config.ts`, re-run `tynd build`. Same source, same API surface, different binary.
+
+## Next
+
+- [Runtime Modes](/docs/v0.1/concepts/runtimes) — lite vs full, parity table.
+- [IPC Model](/docs/v0.1/concepts/ipc) — call / event / stream flow in detail.
+- [Security](/docs/v0.1/concepts/security) — CSP, scheme allowlists, structural model.

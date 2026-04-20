@@ -51,7 +51,6 @@ const STATIC_ROUTES: ReadonlyArray<{
   { path: "/", priority: 1.0, changeFrequency: "weekly" },
   { path: `/docs/${LATEST_SLUG}/`, priority: 0.9, changeFrequency: "weekly" },
   { path: "/showcase/", priority: 0.8, changeFrequency: "weekly" },
-  { path: "/blog/", priority: 0.7, changeFrequency: "weekly" },
   { path: "/changelog/", priority: 0.6, changeFrequency: "weekly" },
   { path: "/compare/", priority: 0.6, changeFrequency: "monthly" },
 ];

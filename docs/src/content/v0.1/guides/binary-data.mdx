@@ -1,0 +1,110 @@
+---
+title: Binary Data
+description: "Move multi-MB payloads between frontend and Rust without JSON or base64 — the `tynd-bin://` channel."
+---
+
+# Binary Data
+
+JSON IPC is text-only — base64 is fine for kilobytes but chokes on multi-megabyte files (encoding overhead, memory spikes, main-thread stalls). Tynd ships a **second custom protocol** dedicated to raw bytes.
+
+## The `tynd-bin://` channel
+
+A wry custom protocol `tynd-bin://localhost/<api>/<method>?<query>` carries raw bytes in the request body and response body:
+
+- No base64.
+- No JSON envelope.
+- `ArrayBuffer` on arrival.
+
+Current routes:
+
+| Route | Method | In | Out |
+|---|---|---|---|
+| `fs/readBinary?path=...` | `GET` | — | file bytes |
+| `fs/writeBinary?path=...&createDirs=0\|1` | `POST` | bytes | `204` |
+| `compute/hash?algo=blake3\|sha256\|sha384\|sha512&encoding=base64` | `POST` | bytes | UTF-8 digest |
+
+Typical throughput is **5-10× faster** than a base64-over-JSON round-trip on multi-MB payloads.
+
+## TS client wrappers
+
+You don't hit the scheme directly — use the wrappers:
+
+```ts
+import { fs, compute } from "@tynd/core/client";
+
+// Read
+const bytes = await fs.readBinary("image.png");   // Uint8Array
+
+// Write
+await fs.writeBinary("./out/copy.png", bytes, { createDirs: true });
+
+// Hash
+const digest = await compute.hash(bytes, { algo: "sha256" });   // base64 string
+```
+
+## Small payloads stay on JSON IPC
+
+Sub-MB or text-shaped calls stay on the JSON channel where it's simpler:
+
+- `fs.readText` / `fs.writeText` — text
+- `compute.randomBytes(32)` — small, text protocol is fine
+- `terminal:data` events — base64-encoded PTY chunks (small + streaming)
+
+Use binary only when you have multi-MB payloads.
+
+## When to use fetch vs binary IPC for network I/O
+
+For HTTP downloads, prefer `http.download` or `fetch` — they already stream and never round-trip through JSON:
+
+```ts
+import { http } from "@tynd/core/client";
+
+// Streams bytes straight to disk, emits progress events
+await http.download("https://.../bigfile.zip", "./downloads/bigfile.zip", {
+  onProgress: ({ loaded, total }) => {
+    console.log(total ? `${((loaded / total) * 100).toFixed(1)}%` : `${loaded}B`);
+  },
+});
+
+// Or read into memory as ArrayBuffer
+const { body: bytes } = await http.getBinary("https://.../image.png");
+```
+
+`http.getBinary` / `http.download` use the Rust HTTP client (TLS, HTTP/1.1) — no detour through the JS fetch polyfill in `lite`.
+
+## Hashing large buffers
+
+```ts
+const bytes = await fs.readBinary("video.mp4");
+const digest = await compute.hash(bytes, { algo: "sha256" });
+```
+
+For ~100 MB of video, `compute.hash` is roughly 10× faster than hashing in JS on lite (interpreter) and 2-3× faster than Node/Bun's `crypto.createHash("sha256")` because:
+
+- The bytes travel via the zero-copy scheme, not base64.
+- Rust computes the hash on a fresh thread, off the JS event loop.
+
+## Gotchas
+
+- **Don't pass `ArrayBuffer` across the JSON RPC channel.** If you return a 50 MB buffer from a regular RPC call, it gets JSON-encoded (→ `{"0":12,"1":7, …}`) and the app will grind. Use `fs.readBinary` / `compute.hash` or a handle-based pattern instead.
+- **No transferable objects** — wry's IPC bridge doesn't have `Transferable` semantics. You always receive a fresh ArrayBuffer, the original is still yours.
+- **In lite, `Response.clone()` / `Request.clone()` throw.** If you're writing a fetch-based helper that reads the body twice, consume it once and stash the bytes.
+
+## Under the hood
+
+The Rust side of the binary scheme lives at `host-rs/src/scheme_bin.rs`. The TS client wraps the scheme through the WebView's native `fetch` (which handles `tynd-bin://` transparently):
+
+```ts
+// Simplified version of what fs.readBinary does
+const res = await fetch(`tynd-bin://localhost/fs/readBinary?path=${encodeURIComponent(path)}`);
+const buf = await res.arrayBuffer();
+return new Uint8Array(buf);
+```
+
+Custom APIs could add new routes in the Rust host, but the scheme is currently **closed** — only `fs.readBinary`, `fs.writeBinary`, `compute.hash` are registered.
+
+## Next
+
+- [fs API reference](/docs/v0.1/api/os/fs)
+- [compute API reference](/docs/v0.1/api/os/compute)
+- [http API reference](/docs/v0.1/api/os/http)

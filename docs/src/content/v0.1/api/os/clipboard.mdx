@@ -1,0 +1,70 @@
+---
+title: clipboard
+description: "Read / write text, base64-PNG images, and HTML on the system clipboard."
+---
+
+# `clipboard`
+
+```ts
+import { clipboard } from "@tynd/core/client";
+```
+
+## Text
+
+```ts
+const text = await clipboard.readText();
+await clipboard.writeText("Hello!");
+```
+
+## HTML
+
+```ts
+await clipboard.writeHtml(`<p><b>Hello</b> world</p>`);
+await clipboard.writeHtml(`<p>rich</p>`, "rich");   // optional plain-text fallback
+
+const html = await clipboard.readHtml();   // always returns null — no reliable cross-OS HTML read
+```
+
+`writeHtml` sets both `text/html` and (optionally) a plain-text variant. `readHtml` **always returns `null`** — the OS clipboard usually flattens HTML to text for other readers. Use `readText` as a fallback.
+
+## Image
+
+```ts
+interface ClipboardImage {
+  png:    string;   // base64-encoded PNG bytes
+  width:  number;
+  height: number;
+}
+
+const img = await clipboard.readImage();   // ClipboardImage | null
+if (img) {
+  // Decode: atob(img.png) → binary string → Uint8Array → <img> src
+  const bin = atob(img.png);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+  document.querySelector("img")!.src = url;
+}
+
+await clipboard.writeImage(pngBase64);   // string — base64 PNG
+```
+
+<Callout type="info">
+  **Image format is base64 PNG, not RGBA.** `writeImage` takes a base64-encoded PNG string; `readImage` returns `{ png, width, height }` where `png` is base64. Convert to/from `Uint8Array` via `atob`/`btoa` or use a Blob.
+</Callout>
+
+## Clear
+
+```ts
+await clipboard.clear();
+```
+
+## Notes
+
+- Clipboard state is shared with the rest of the OS — writes replace whatever the user had copied.
+- No clipboard-change monitoring. Poll periodically or spawn a platform-specific native helper via `process.exec`.
+- On Wayland, clipboard semantics vary by compositor; a few compositors (without `wlr_data_control`) may return empty.
+
+## Related
+
+- [shell.openExternal](/docs/v0.1/api/os/shell) — for "copy link + open" flows.

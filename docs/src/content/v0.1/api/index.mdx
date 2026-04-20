@@ -1,0 +1,72 @@
+---
+title: API Reference
+description: "Every public Tynd surface — backend, frontend RPC, and 26 OS APIs — with signatures and examples."
+---
+
+# API Reference
+
+Every Tynd app has three surfaces:
+
+- **Backend** (`@tynd/core`) — imported by `backend/main.ts`, exposes `app.start`, emitters, lifecycle hooks.
+- **Frontend RPC** (`@tynd/core/client`) — typed proxy to your backend functions via `createBackend<typeof backend>()`.
+- **OS APIs** (`@tynd/core/client`) — direct bridge from the frontend to the Rust host: dialog, window, clipboard, shell, notification, tray, process, fs, http, websocket, sql, sidecar, terminal, store, os, path, compute, and more.
+
+<Callout type="info">
+  **Lite vs full parity.** All OS APIs live in Rust (`packages/host-rs/src/os/`) so both runtimes expose the exact same surface. See [Runtime Modes](/docs/v0.1/runtimes) for JS-runtime differences.
+</Callout>
+
+## Backend
+
+- [`@tynd/core`](/docs/v0.1/api/backend) — `app.start`, `app.onReady`, `app.onClose`, `createEmitter`, `AppConfig`, `WindowConfig`, menu/tray config.
+- [Streaming RPC](/docs/v0.1/api/streaming-rpc) — async-generator handlers.
+
+## OS APIs
+
+<Cards>
+  <Cards.Card title="app" href="/docs/v0.1/api/os/app">Name, version, exit, relaunch.</Cards.Card>
+  <Cards.Card title="tyndWindow" href="/docs/v0.1/api/os/window">Window control, events, multi-window.</Cards.Card>
+  <Cards.Card title="monitors" href="/docs/v0.1/api/os/monitor">Enumerate displays, scale factors.</Cards.Card>
+  <Cards.Card title="dialog" href="/docs/v0.1/api/os/dialog">Native pickers, message / confirm.</Cards.Card>
+  <Cards.Card title="clipboard" href="/docs/v0.1/api/os/clipboard">Text / image / HTML.</Cards.Card>
+  <Cards.Card title="shell" href="/docs/v0.1/api/os/shell">Open URLs and files in default handler.</Cards.Card>
+  <Cards.Card title="notification" href="/docs/v0.1/api/os/notification">Native OS notifications.</Cards.Card>
+  <Cards.Card title="tray" href="/docs/v0.1/api/os/tray">System tray + menu.</Cards.Card>
+  <Cards.Card title="menu" href="/docs/v0.1/api/os/menu">App menu bar click handlers.</Cards.Card>
+  <Cards.Card title="shortcuts" href="/docs/v0.1/api/os/shortcuts">Global system-wide hotkeys.</Cards.Card>
+  <Cards.Card title="fs" href="/docs/v0.1/api/os/fs">Filesystem — text, binary, watcher.</Cards.Card>
+  <Cards.Card title="path" href="/docs/v0.1/api/os/path">Cross-OS path helpers.</Cards.Card>
+  <Cards.Card title="os" href="/docs/v0.1/api/os/os">Platform, arch, system dirs.</Cards.Card>
+  <Cards.Card title="process" href="/docs/v0.1/api/os/process">Subprocess exec + shell exec.</Cards.Card>
+  <Cards.Card title="sidecar" href="/docs/v0.1/api/os/sidecar">Bundled binaries — resolve runtime path.</Cards.Card>
+  <Cards.Card title="store" href="/docs/v0.1/api/os/store">Persistent JSON k/v.</Cards.Card>
+  <Cards.Card title="sql" href="/docs/v0.1/api/os/sql">Embedded SQLite.</Cards.Card>
+  <Cards.Card title="http" href="/docs/v0.1/api/os/http">HTTP client, upload/download progress.</Cards.Card>
+  <Cards.Card title="websocket" href="/docs/v0.1/api/os/websocket">WebSocket client.</Cards.Card>
+  <Cards.Card title="terminal" href="/docs/v0.1/api/os/terminal">Real PTY — cross-OS.</Cards.Card>
+  <Cards.Card title="workers" href="/docs/v0.1/api/os/workers">Offload CPU-bound JS to OS threads.</Cards.Card>
+  <Cards.Card title="compute" href="/docs/v0.1/api/os/compute">Rust-native hash + CSPRNG.</Cards.Card>
+  <Cards.Card title="keyring" href="/docs/v0.1/api/os/keyring">OS-encrypted secret storage.</Cards.Card>
+  <Cards.Card title="autolaunch" href="/docs/v0.1/api/os/autolaunch">Start at system boot.</Cards.Card>
+  <Cards.Card title="singleInstance" href="/docs/v0.1/api/os/single-instance">Single-launch lock + deep links.</Cards.Card>
+  <Cards.Card title="updater" href="/docs/v0.1/api/os/updater">Ed25519-signed auto-update.</Cards.Card>
+  <Cards.Card title="web" href="/docs/v0.1/api/os/web">Fetch, WebSocket, crypto, URL — Web globals.</Cards.Card>
+</Cards>
+
+## Web-platform re-exports
+
+`@tynd/core/client` also re-exports the standard Web globals as named exports so `import * as tynd` surfaces them in one namespace alongside the Tynd OS APIs:
+
+```ts
+import * as tynd from "@tynd/core/client";
+
+await tynd.fetch(url);
+const ws = new tynd.WebSocket(wsUrl);
+const hash = await tynd.crypto.subtle.digest("SHA-256", bytes);
+
+await tynd.fs.readText(path);       // Tynd OS API on the same namespace
+await tynd.sql.open(dbPath);
+```
+
+Available re-exports: `fetch`, `Request`, `Response`, `Headers`, `AbortController`, `AbortSignal`, `ReadableStream`, `WebSocket`, `EventSource`, `crypto`, `URL`, `URLSearchParams`, `TextEncoder`, `TextDecoder`, `atob`, `btoa`, `Blob`, `File`, `FormData`, `structuredClone`, `performance`.
+
+Behavior matches the Web spec in both runtimes. In `lite` they point at Tynd's polyfills; in `full` they point at Bun's native implementations.

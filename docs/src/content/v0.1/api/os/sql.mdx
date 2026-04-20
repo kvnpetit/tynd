@@ -1,0 +1,161 @@
+---
+title: sql
+description: "Embedded SQLite via the SQLite driver — no system dependency, bundled with your binary."
+---
+
+# `sql`
+
+```ts
+import { sql } from "@tynd/core/client";
+```
+
+Bundled SQLite. No system libsqlite needed. Connections are keyed by an opaque numeric id on the Rust side.
+
+## `open(path): Promise<Database>`
+
+Opens or creates a database file. `":memory:"` for in-memory.
+
+```ts
+const db = await sql.open("./data.db");
+const mem = await sql.open(":memory:");
+```
+
+Prefer joining against `os.dataDir()`:
+
+```ts
+import { os, path } from "@tynd/core/client";
+
+const dataDir = await os.dataDir();
+const dbPath  = await path.join(dataDir, "com.example.myapp", "data.db");
+const db      = await sql.open(dbPath);
+```
+
+## `Database` methods
+
+### `exec(sql, params?): Promise<ExecResult>`
+
+Run a statement that doesn't return rows (`INSERT`, `UPDATE`, `DELETE`, `CREATE`, …).
+
+```ts
+await db.exec(`CREATE TABLE IF NOT EXISTS users(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL
+)`);
+
+const { changes, lastInsertId } = await db.exec(
+  "INSERT INTO users(name) VALUES (?1)",
+  ["Alice"],
+);
+```
+
+### `query<T>(sql, params?): Promise<T[]>`
+
+Run a `SELECT` and return every row.
+
+```ts
+const rows = await db.query<{ id: number; name: string }>(
+  "SELECT * FROM users WHERE name LIKE ?1",
+  ["A%"],
+);
+```
+
+### `queryOne<T>(sql, params?): Promise<T | null>`
+
+First row only, or `null` if no match.
+
+```ts
+const user = await db.queryOne<{ id: number; name: string }>(
+  "SELECT * FROM users WHERE id = ?1",
+  [1],
+);
+```
+
+### `close(): Promise<void>`
+
+Release the connection.
+
+```ts
+await db.close();
+```
+
+## `list(): Promise<number[]>`
+
+IDs of all currently-open connections (useful for debugging).
+
+```ts
+const ids = await sql.list();
+```
+
+## Param binding
+
+Positional:
+
+```ts
+await db.exec("INSERT INTO x(a, b) VALUES (?1, ?2)", ["hi", 42]);
+```
+
+Type coercion:
+
+- `string` → `TEXT`
+- `number` (integer) → `INTEGER`
+- `number` (float) → `REAL`
+- `boolean` → `INTEGER` (0/1)
+- `null` / `undefined` → `NULL`
+- `Array` / plain object → `TEXT` (JSON-serialized) — read back with `json_extract(col, '$.field')`
+
+## BLOBs
+
+`BLOB` columns come back as **base64 strings** over the JSON IPC channel. For large blobs, store a path in the table and use [`fs.readBinary`](/docs/v0.1/api/os/fs) on the payload.
+
+## Migrations
+
+No built-in migrator. Standard pattern:
+
+```ts
+await db.exec(`CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)`);
+
+const row = await db.queryOne<{ v: string }>(
+  "SELECT v FROM meta WHERE k='schema_version'",
+);
+const version = row ? parseInt(row.v) : 0;
+
+const migrations: Array<() => Promise<void>> = [
+  async () => { await db.exec(`CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT)`); },
+  async () => { await db.exec(`ALTER TABLE notes ADD COLUMN created_at INTEGER`); },
+];
+
+for (let i = version; i < migrations.length; i++) {
+  await migrations[i]();
+  await db.exec(
+    "INSERT OR REPLACE INTO meta VALUES('schema_version', ?1)",
+    [String(i + 1)],
+  );
+}
+```
+
+## Transactions
+
+Standard SQL — wrap in `BEGIN` / `COMMIT` / `ROLLBACK`:
+
+```ts
+await db.exec("BEGIN");
+try {
+  await db.exec("INSERT INTO a VALUES(?1)", [1]);
+  await db.exec("INSERT INTO b VALUES(?1)", [2]);
+  await db.exec("COMMIT");
+} catch (err) {
+  await db.exec("ROLLBACK");
+  throw err;
+}
+```
+
+## Notes
+
+- No prepared-statement handle returned to the frontend — each call prepares + binds + executes on the Rust side. Still fast for typical desktop-app workloads.
+- WAL journaling is the SQLite default for file DBs; enable with `await db.exec("PRAGMA journal_mode=WAL")` if you want crash-resilient writes.
+
+## Related
+
+- [store](/docs/v0.1/api/os/store) — k/v, simpler for flat preferences.
+- [fs](/docs/v0.1/api/os/fs) — for large BLOBs stored out-of-row.
+- [Persistence guide](/docs/v0.1/guides/persistence).

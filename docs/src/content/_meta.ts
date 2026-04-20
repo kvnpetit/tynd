@@ -7,7 +7,6 @@
 // Add future non-versioned top-level pages here as they ship:
 //   showcase:  { title: "Showcase",  type: "page" }
 //   changelog: { title: "Changelog", type: "page" }
-//   blog:      { title: "Blog",      type: "page" }
 export default {
   "v0.1": { display: "hidden" },
 };

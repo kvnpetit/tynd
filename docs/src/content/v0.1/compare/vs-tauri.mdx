@@ -1,0 +1,67 @@
+---
+title: Tynd vs Tauri v2
+description: "Shared stack, different philosophies. Tauri has 30 plugins + mobile + capability ACLs; Tynd keeps TypeScript-only with zero-codegen typed RPC."
+---
+
+# Tynd vs Tauri v2
+
+Tauri and Tynd share a **native WebView stack** — both use `wry` + `tao` (the same Rust crates) for the window and IPC bridge. The philosophical difference is the backend language.
+
+## The core tradeoff
+
+| | Tynd | Tauri v2 |
+|---|---|---|
+| Backend language | **TypeScript only** | Rust (with optional JS via embedded engine) |
+| Typed RPC | **`createBackend<typeof backend>()`** — zero codegen | `@tauri-apps/api` — command-by-command bindings, codegen plugin required for full types |
+| Runtime options | `lite` (~6.5 MB QuickJS) or `full` (~44 MB Bun subprocess) | One binary shape |
+| Mobile | ❌ | ✅ iOS + Android |
+| Capability ACLs | ❌ | ✅ per-command / per-path / per-URL, default-deny |
+| Plugin ecosystem | ❌ (no official plugins) | ✅ ~30 official (Stronghold, biometric, NFC, …) |
+| IPC transport | `wry` postMessage + custom scheme | same |
+| Binary size (empty app) | ~6.5 MB (lite) / ~44 MB (full) | ~8-12 MB |
+
+## When Tynd wins
+
+- **TypeScript-only shop.** You never write Rust — the native host is precompiled and downloaded by `@tynd/host`'s postinstall.
+- **Smaller binary.** `lite` ships at ~6.5 MB vs Tauri's typical ~10 MB; every MB matters on a download page.
+- **Zero-codegen RPC.** Rename a backend function and the compiler catches every stale frontend call. No `invoke("cmd", …)` strings.
+- **Dual runtimes.** Move between `lite` (small) and `full` (full Node/Bun) with one line in `tynd.config.ts`. Same source, different binary.
+- **Structural security.** What the frontend can call is what the backend exports. No separate allowlist to maintain.
+
+## When Tauri wins
+
+- **Capability-based security.** Fine-grained ACLs for FS paths, HTTP origins, command allowlists — a serious feature for apps handling untrusted content.
+- **Mobile.** iOS and Android share the same command model as desktop. Tynd is desktop-only.
+- **Plugin catalog.** 30+ official plugins (Stronghold encrypted storage, biometric, NFC, deep-link, autostart, persistence, positioner, …). Most common integrations are one `tauri add` away.
+- **Cross-compilation.** Tauri supports cross-compiling from one host to another. Tynd does not.
+- **Richer window surface.** More visual effects (Mica/Acrylic, vibrancy variants), traffic-light position on macOS, window tabbing identifier, context menu, taskbar progress / badge count.
+- **Richer permissions.** Permission request handlers (camera, mic, geolocation), per-webview data stores, multi-webview in one window.
+- **Delta updates.** Binary diff on updates; Tynd ships full binary swaps.
+
+## Where they're tied
+
+- **IPC stack** — both use `wry` + `tao` + custom scheme. Zero TCP, no firewall prompt.
+- **OS APIs that are covered by both** — dialogs, clipboard, shell, notification, tray, menu, global shortcuts, FS, HTTP, store, auto-updater (Ed25519-signed manifests — Tynd uses the exact same format).
+- **Code signing + notarization** — both integrate `signtool` on Windows and `codesign` + `notarytool` on macOS.
+- **Bundle formats** — both ship `.app` / `.dmg` / `.deb` / `.rpm` / `.AppImage` / NSIS / MSI.
+
+## Migration path
+
+Porting Tauri → Tynd:
+
+- **Commands** (`#[tauri::command] fn greet(name: &str)`) → backend `export async function greet(name: string)`.
+- **Events** (`app.emit("event", …)` + `await listen("event", …)`) → `createEmitter` + `api.on("event", …)`.
+- **Plugins that Tynd has first-class** (fs, http, websocket, sql, store, notification, dialog, clipboard, shell, process, global-shortcut, autolaunch, deep-link, single-instance, updater, tray, menu) → drop-in via `@tynd/core/client`.
+- **Plugins Tynd doesn't have** (Stronghold, biometric, NFC, positioner, persisted-scope, log) → no direct equivalent; use pure-JS libs in lite or Bun-native in full.
+- **Capability ACLs** — not supported in Tynd. Do access control in your backend logic.
+
+Porting Tynd → Tauri:
+
+- **Backend exports** → rewrite each as a `#[tauri::command]`.
+- **Typed RPC** — you'll need either `tauri-bindgen` or manually maintain `.d.ts` on the frontend.
+- **`lite` runtime** — N/A in Tauri (all backend code is Rust).
+
+## Related
+
+- [Comparisons overview](/docs/v0.1/compare).
+- [Full 500-row matrix](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md) in the repo.

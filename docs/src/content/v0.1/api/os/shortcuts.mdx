@@ -1,0 +1,77 @@
+---
+title: shortcuts
+description: "Register system-wide global keyboard hotkeys that fire even when the app is unfocused."
+---
+
+# `shortcuts`
+
+```ts
+import { shortcuts } from "@tynd/core/client";
+```
+
+Global keyboard shortcuts — fire even when your app is unfocused. Backed by `RegisterHotKey` (Windows), Event Tap (macOS), `XGrabKey` (Linux X11) / desktop portal (Wayland).
+
+## `register(accelerator, handler, id?): Promise<ShortcutHandle>`
+
+```ts
+interface ShortcutHandle {
+  id:           string;
+  unregister(): Promise<boolean>;
+}
+
+const h = await shortcuts.register("CmdOrCtrl+Shift+P", () => {
+  openCommandPalette();
+}, "open-palette");
+
+console.log(h.id);        // "open-palette"
+await h.unregister();      // true if existed
+```
+
+- `accelerator` — accelerator string (standard format — `CmdOrCtrl+Shift+P`, etc.).
+- `handler` — fires on key-down of the full combo.
+- `id` — optional stable id. Auto-generated from the accelerator if omitted.
+
+## `unregister(id): Promise<boolean>`
+
+Unregister by id without the handle. Returns `true` if the id existed.
+
+```ts
+await shortcuts.unregister("open-palette");
+```
+
+## `unregisterAll(): Promise<void>`
+
+```ts
+await shortcuts.unregisterAll();
+```
+
+## `isRegistered(id): Promise<boolean>`
+
+```ts
+const ok = await shortcuts.isRegistered("open-palette");
+```
+
+## Accelerator format
+
+| Modifier | Effect |
+|---|---|
+| `CmdOrCtrl` | ⌘ on macOS, Ctrl elsewhere |
+| `Cmd` / `Super` | Command / Windows key |
+| `Ctrl` | Control |
+| `Alt` / `Option` | Alt / Option |
+| `Shift` | Shift |
+
+Key names: `A-Z`, `0-9`, `F1-F24`, `Space`, `Tab`, `Escape`, `Enter`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`.
+
+## Notes
+
+- **Conflicts** — if another process holds the combo, `register` throws. Catch and let the user pick something else.
+- **Wayland** — needs `org.freedesktop.portal.GlobalShortcuts`, which not every compositor implements.
+- **macOS Input Monitoring** — first registration on macOS Monterey+ may prompt for Input Monitoring permission.
+- OS auto-releases registrations on process exit; calling `unregisterAll` in `app.onClose` is optional.
+
+See the [Keyboard Shortcuts guide](/docs/v0.1/guides/keyboard-shortcuts).
+
+## Related
+
+- [menu](/docs/v0.1/api/os/menu) — menu accelerators (fire only when app focused).

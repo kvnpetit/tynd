@@ -1,0 +1,76 @@
+---
+title: tynd build
+description: "Produce a single-file native binary. With `--bundle`, also emit platform-native installers."
+---
+
+# `tynd build`
+
+```bash
+tynd build                  # raw binary
+tynd build --bundle         # + installers for the host OS
+tynd build --bundle app,dmg # specific installer formats
+```
+
+## Flags
+
+| Flag | Values | Effect |
+|---|---|---|
+| `--cwd <dir>` | — | Run against a project in another directory |
+| `--outfile <path>` | — | Override output binary path (default `release/<name>[.exe]`) |
+| `--bundle [targets]` | `all`, or comma-list of `app`,`dmg`,`deb`,`rpm`,`appimage`,`nsis`,`msi` | Produce installers in addition to the raw binary. Omit the value to build every format applicable to the host OS. |
+
+Global flags: `--verbose`, `--quiet`.
+
+## Output
+
+Written to `release/`:
+
+- Raw binary: `<app>.exe` (Windows), `<app>` (elsewhere).
+- Installers (with `--bundle`):
+
+| Host OS | Formats |
+|---|---|
+| macOS | `.app`, `.dmg` |
+| Linux | `.deb`, `.rpm` (if `rpmbuild` installed), `.AppImage` |
+| Windows | NSIS `.exe` setup, `.msi` |
+
+## Pipeline
+
+```
+frontend build  ─▶  backend bundle  ─▶  pack TYNDPKG  ─▶  PE patch (Windows)
+                                                      ─▶  icon embed  ─▶  sign  ─▶  bundlers
+```
+
+See the [Build Pipeline](/docs/v0.1/concepts/build-pipeline).
+
+## Signing
+
+When `bundle.sign` is declared in `tynd.config.ts`, the raw binary is signed **before** any bundler copies it into an installer. Bundlers re-sign the outer artifact.
+
+- Windows — `signtool.exe`.
+- macOS — `codesign --options runtime` + optional `notarytool submit` + `stapler`.
+
+See the [Code Signing guide](/docs/v0.1/guides/code-signing).
+
+## Cross-compilation
+
+**Not supported.** Each host produces installers only for its own OS. Use a GitHub Actions matrix with `windows-latest` + `macos-latest` + `ubuntu-latest` runners.
+
+See the [Bundling guide](/docs/v0.1/guides/bundling).
+
+## Auto-downloaded tools
+
+On first `--bundle`:
+
+- NSIS 3.09 (Windows `nsis`)
+- WiX v3.11.2 (Windows `msi`)
+- `appimagetool` latest (Linux `appimage`)
+
+Cached to `.tynd/cache/tools/<tool>/<version>/`. `rpmbuild` must be installed separately (`sudo apt install rpm` / `sudo dnf install rpm-build`).
+
+## Related
+
+- [Build Pipeline](/docs/v0.1/concepts/build-pipeline).
+- [TYNDPKG Format](/docs/v0.1/concepts/tyndpkg).
+- [Bundling guide](/docs/v0.1/guides/bundling).
+- [Code Signing guide](/docs/v0.1/guides/code-signing).

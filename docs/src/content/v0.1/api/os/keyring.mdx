@@ -1,0 +1,84 @@
+---
+title: keyring
+description: "OS-encrypted credential storage. Keychain on macOS, Credential Manager + DPAPI on Windows, Secret Service on Linux."
+---
+
+# `keyring`
+
+```ts
+import { keyring } from "@tynd/core/client";
+```
+
+Encrypted secret storage backed by the OS credential manager. Use this for anything sensitive — tokens, passwords, session cookies, API keys.
+
+## `set(entry, value): Promise<void>`
+
+```ts
+const entry = { service: "com.example.myapp", account: "alice" };
+await keyring.set(entry, "s3cr3t-token");
+```
+
+- `service` — reverse-DNS recommended. Namespaces your secrets.
+- `account` — arbitrary string identifying the credential (username, `"access_token"`, etc.).
+- `value` — the secret as a UTF-8 string.
+
+## `get(entry): Promise<string | null>`
+
+```ts
+const token = await keyring.get(entry);   // string | null
+```
+
+Returns `null` if no entry matches.
+
+## `delete(entry): Promise<boolean>`
+
+```ts
+const existed = await keyring.delete(entry);   // true if something was deleted
+```
+
+## Backing store per OS
+
+| OS | Backend |
+|---|---|
+| macOS | Keychain — encrypted with the user's login password |
+| Windows | Credential Manager + DPAPI |
+| Linux | Secret Service API (GNOME Keyring / KWallet / others via D-Bus) |
+
+On Linux, a Secret Service provider must be running (virtually every desktop environment has one). Headless VMs may not — `get` / `set` throw in that case. Fall back to a file-backed encrypted store or require the user to install `gnome-keyring`.
+
+## `keyring` vs `store`
+
+| | `keyring` | `store` |
+|---|---|---|
+| Encrypted at rest | ✓ | ✗ |
+| Readable by other processes with user access | ✗ | ✓ |
+| Suitable for tokens / passwords | ✓ | ✗ |
+| Suitable for UI preferences | ✗ (overkill) | ✓ |
+
+## Example — OAuth token round-trip
+
+```ts
+import { keyring } from "@tynd/core/client";
+
+const ENTRY = { service: "com.example.myapp", account: "access_token" };
+
+async function getOrRefreshToken() {
+  let token = await keyring.get(ENTRY);
+  if (!token || isExpired(token)) {
+    token = await refreshOAuth();          // your refresh flow
+    await keyring.set(ENTRY, token);
+  }
+  return token;
+}
+```
+
+## Notes
+
+- Values are UTF-8 strings — encode binary secrets as base64 on the way in and decode on the way out.
+- macOS prompts the user to grant Keychain access on first call from a newly-signed binary. A signed / notarized build avoids repeat prompts.
+- There's no "list all entries" API. Track the set of known `account` strings in `store` if you need enumeration.
+
+## Related
+
+- [store](/docs/v0.1/api/os/store) — plaintext k/v.
+- [Persistence guide](/docs/v0.1/guides/persistence).

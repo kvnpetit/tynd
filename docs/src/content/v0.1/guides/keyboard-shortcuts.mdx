@@ -1,0 +1,136 @@
+---
+title: Keyboard Shortcuts
+description: "Register system-wide global shortcuts that fire even when the app is unfocused."
+---
+
+# Keyboard Shortcuts
+
+Global shortcuts register with the OS and fire **even when your app is unfocused**. Typical uses: quick-capture / scratchpad apps (`Cmd+Shift+N`), toggle-visibility apps (`F12`), press-to-talk, clipboard manager hotkeys.
+
+## API
+
+```ts
+import { shortcuts, tyndWindow } from "@tynd/core/client";
+
+const handle = await shortcuts.register("CmdOrCtrl+Shift+P", () => {
+  tyndWindow.setFocus();
+}, "open-palette");
+
+const ok = await shortcuts.isRegistered("open-palette");   // true
+await handle.unregister();
+// Or bulk:
+await shortcuts.unregisterAll();
+```
+
+- First arg — accelerator string (standard format — `CmdOrCtrl+Shift+P`, etc.).
+- Second arg — handler function.
+- Third arg — optional stable id for `isRegistered` / later lookup. If omitted, a random id is generated.
+
+## Accelerator format
+
+Uses the standard accelerator syntax's accelerator syntax:
+
+| Modifier | Keys |
+|---|---|
+| `CmdOrCtrl` | ⌘ on macOS, Ctrl elsewhere |
+| `Cmd` / `Super` | Command / Windows key |
+| `Ctrl` | Control |
+| `Alt` / `Option` | Alt / Option |
+| `Shift` | Shift |
+
+Keys:
+
+- Letters: `A-Z`
+- Numbers: `0-9`
+- Function keys: `F1-F24`
+- Named: `Space`, `Tab`, `Escape`, `Enter`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, …
+
+Examples:
+
+- `CmdOrCtrl+S`
+- `Alt+F4`
+- `Shift+Space`
+- `CmdOrCtrl+Shift+P`
+- `Ctrl+Alt+Delete` *(blocked by some OSes)*
+
+## What triggers the callback
+
+Global shortcuts fire on **key-down** of the full combo. They fire regardless of focus — even if your app is minimized or in the background.
+
+<Callout type="info">
+  **Not the same as keyboard events in the WebView.** Use DOM `keydown` listeners for in-app shortcuts (Ctrl+F find, etc.). Global shortcuts are for chord-like system-wide hotkeys.
+</Callout>
+
+## Gotchas
+
+### Conflicts
+
+If another process (or the OS itself) has already registered the same shortcut, `register()` throws. Either pick a different combo or catch and report to the user.
+
+```ts
+try {
+  await shortcuts.register("CmdOrCtrl+Shift+P", handler);
+} catch (err) {
+  alert("That shortcut is in use. Pick another.");
+}
+```
+
+### Wayland (Linux)
+
+Global hotkeys on Wayland need the `org.freedesktop.portal.GlobalShortcuts` portal, which not every compositor implements. On Wayland compositors without portal support, `register()` may silently fail or never fire. X11 sessions work fine via `XGrabKey`.
+
+### macOS — Input Monitoring permission
+
+On macOS Monterey and later, the OS may prompt the user to grant **Input Monitoring** permission on first registration. Registration succeeds regardless; the callback won't fire until the user accepts. The prompt appears in System Settings → Privacy & Security → Input Monitoring.
+
+### Unregister on app exit
+
+The OS auto-releases registrations on process exit, so you don't need to clean up manually — but you *should* call `shortcuts.unregisterAll()` during `app.onClose` if you want to be explicit.
+
+## Example — toggle window visibility
+
+```ts
+import { shortcuts, tyndWindow } from "@tynd/core/client";
+
+let visible = true;
+
+await shortcuts.register("CmdOrCtrl+Shift+Space", async () => {
+  visible = !visible;
+  if (visible) {
+    await tyndWindow.show();
+    await tyndWindow.setFocus();
+  } else {
+    await tyndWindow.hide();
+  }
+}, "toggle-visibility");
+```
+
+## Example — user-configurable
+
+Let users pick their own hotkey:
+
+```ts
+import { shortcuts, createStore } from "@tynd/core/client";
+
+const prefs = createStore("com.example.myapp");
+const DEFAULT = "CmdOrCtrl+Shift+P";
+
+async function bindQuickOpen(accel: string) {
+  await shortcuts.unregisterAll();   // or track the prior handle
+  try {
+    await shortcuts.register(accel, onQuickOpen, "quick-open");
+    await prefs.set("shortcuts.quickOpen", accel);
+  } catch {
+    // fall back to default
+    await shortcuts.register(DEFAULT, onQuickOpen, "quick-open");
+  }
+}
+
+const saved = (await prefs.get<string>("shortcuts.quickOpen")) ?? DEFAULT;
+await bindQuickOpen(saved);
+```
+
+## Next
+
+- [shortcuts API](/docs/v0.1/api/os/shortcuts)
+- [Menu guide](/docs/v0.1/api/os/menu) — menu accelerators (app-focused, not global)

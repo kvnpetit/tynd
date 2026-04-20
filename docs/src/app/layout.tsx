@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Head } from "nextra/components";
+import { ThemeProvider } from "../components/ui/ThemeProvider";
 import { SITE } from "../lib/site";
 import "./globals.css";
 import "nextra-theme-docs/style.css";
@@ -70,7 +71,9 @@ export default function RootLayout({
   return (
     <html lang={SITE.locale} dir="ltr" suppressHydrationWarning>
       <Head />
-      <body>{children}</body>
+      <body>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

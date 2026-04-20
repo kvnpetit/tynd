@@ -1,0 +1,232 @@
+---
+title: Persistence
+description: "Store app state — plain k/v with `store`, relational with `sql`, secrets with `keyring`, arbitrary files with `fs`."
+---
+
+# Persistence
+
+Four layers, pick the right one for the data you're persisting.
+
+| Data shape | API | Backing |
+|---|---|---|
+| Non-sensitive k/v (theme, recent files, preferences) | `createStore(ns)` | JSON file at `config_dir()/<ns>/store.json` |
+| Relational / SQL | `sql.open(path)` | Bundled SQLite (the SQLite driver) |
+| Secrets (tokens, passwords) | `keyring.set/get` | OS credential manager (Keychain / DPAPI / Secret Service) |
+| Arbitrary files (documents, images, logs) | `fs.*` | Filesystem |
+
+## Key-value — `store`
+
+```ts
+import { createStore } from "@tynd/core/client";
+
+const prefs = createStore("com.example.myapp");
+
+await prefs.set("theme", "dark");
+await prefs.set("recentFiles", ["/tmp/a.md", "/tmp/b.md"]);
+
+const theme  = await prefs.get<string>("theme");
+const keys   = await prefs.keys();               // string[]
+const hasKey = keys.includes("theme");            // no `has` — derive from keys()
+
+await prefs.delete("theme");
+await prefs.clear();
+```
+
+- Namespaced per `createStore(ns)` — each namespace maps to `<config_dir>/<ns>/store.json`.
+- Writes flush synchronously (durable; no "dirty, will flush later" window).
+- JSON-serializable values only — no functions, no class instances, no cycles.
+
+<Callout type="warning">
+  **Not encrypted.** Anything on disk under the user's config dir is readable by any process with user-level access. Don't put tokens / passwords / session cookies in `store` — use `keyring`.
+</Callout>
+
+## Secrets — `keyring`
+
+```ts
+import { keyring } from "@tynd/core/client";
+
+const entry = { service: "com.example.myapp", account: "alice" };
+
+await keyring.set(entry, "s3cr3t-token");
+const token = await keyring.get(entry);   // string | null
+await keyring.delete(entry);               // true if it existed
+```
+
+Backing per OS:
+
+- **macOS** — Keychain (encrypted with the user's login password).
+- **Windows** — Credential Manager + DPAPI.
+- **Linux** — Secret Service API (GNOME Keyring / KWallet).
+
+Anything in `keyring` is encrypted at rest and only accessible when the user is logged in. Strictly better than `store` for OAuth tokens, API keys, session cookies, passwords.
+
+## Relational — `sql`
+
+Bundled SQLite (no system dependency):
+
+```ts
+import { sql } from "@tynd/core/client";
+
+const db = await sql.open("./data.db");   // or ":memory:"
+
+await db.exec(`
+  CREATE TABLE IF NOT EXISTS users(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE
+  )
+`);
+
+const { changes, lastInsertId } = await db.exec(
+  "INSERT INTO users(name, email) VALUES (?1, ?2)",
+  ["Alice", "alice@example.com"],
+);
+
+const rows = await db.query<{ id: number; name: string; email: string }>(
+  "SELECT * FROM users WHERE name LIKE ?1",
+  ["A%"],
+);
+
+const one = await db.queryOne<{ count: number }>(
+  "SELECT COUNT(*) AS count FROM users",
+);
+
+await db.close();
+```
+
+### Params
+
+- Strings, numbers, booleans, nulls.
+- Arrays / objects → stored as JSON text (use `json_extract` in SQL to read back).
+
+### BLOBs
+
+- Stored as base64 strings on the JSON IPC channel (not zero-copy).
+- Fine for small BLOBs (icons, thumbnails). For large ones, prefer `fs.writeBinary` + store the path.
+
+### Storing the DB in the right place
+
+Use the OS data directory:
+
+```ts
+import { os, path } from "@tynd/core/client";
+
+const dataDir = await os.dataDir();
+const dbPath = await path.join(dataDir, "com.example.myapp", "data.db");
+const db = await sql.open(dbPath);
+```
+
+### Migrations
+
+There's no built-in migrator. Pin schema version in a table:
+
+```ts
+await db.exec(`CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)`);
+const versionRow = await db.queryOne<{ v: string }>("SELECT v FROM meta WHERE k='schema_version'");
+const version = versionRow ? parseInt(versionRow.v) : 0;
+
+const migrations: Array<() => Promise<void>> = [
+  async () => {
+    await db.exec(`CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT)`);
+  },
+  async () => {
+    await db.exec(`ALTER TABLE notes ADD COLUMN created_at INTEGER`);
+  },
+];
+
+for (let i = version; i < migrations.length; i++) {
+  await migrations[i]();
+  await db.exec("INSERT OR REPLACE INTO meta VALUES('schema_version', ?1)", [String(i + 1)]);
+}
+```
+
+## Files — `fs`
+
+```ts
+import { fs } from "@tynd/core/client";
+
+// text
+await fs.writeText("./notes/hello.md", "# Hi\n", { createDirs: true });
+const body = await fs.readText("./notes/hello.md");
+
+// binary
+const bytes = await fs.readBinary("./logo.png");
+await fs.writeBinary("./out/logo-copy.png", bytes);
+
+// metadata
+const info = await fs.stat("./notes/hello.md");
+// { isFile, isDir, size, modifiedMs }
+
+// directories
+await fs.mkdir("./notes/archive", { recursive: true });
+const entries = await fs.readDir("./notes");
+// [{ name, path, isDir }, ...]
+
+await fs.remove("./notes/hello.md");
+await fs.rename("./a.txt", "./b.txt");
+await fs.copy("./a.txt", "./c.txt");
+
+// watch
+const watcher = await fs.watch("./notes", { recursive: true }, (event) => {
+  console.log(event.kind, event.path);
+});
+// later
+await watcher.unwatch();
+```
+
+`fs.watch` uses `ReadDirectoryChangesW` (Windows), `FSEvents` (macOS), `inotify` (Linux).
+
+## Where to put files
+
+Use the right OS directory:
+
+```ts
+import { os, path } from "@tynd/core/client";
+
+const configDir = await os.configDir();   // ~/.config/myapp   (Linux)
+const dataDir   = await os.dataDir();     // ~/.local/share/myapp or equivalent
+const cacheDir  = await os.cacheDir();    // user cache dir
+const tmpDir    = await os.tmpDir();      // system temp
+const homeDir   = await os.homeDir();     // $HOME / USERPROFILE
+```
+
+Convention:
+
+- **`configDir`** — user-editable settings, YAML/TOML/JSON.
+- **`dataDir`** — databases, caches the app rebuilds on demand, user-authored documents.
+- **`cacheDir`** — purely derived data; OK to lose.
+- **`tmpDir`** — ephemeral, don't expect anything to survive a reboot.
+
+## Export / import
+
+To let users back up and restore:
+
+```ts
+import { fs, sql, dialog } from "@tynd/core/client";
+
+async function exportBackup() {
+  const dest = await dialog.saveFile({ defaultPath: "backup.db" });
+  if (!dest) return;
+
+  // Close the db to ensure journal is flushed
+  await db.close();
+  await fs.copy(dbPath, dest);
+  db = await sql.open(dbPath);
+}
+
+async function importBackup() {
+  const src = await dialog.openFile();
+  if (!src) return;
+
+  await db.close();
+  await fs.copy(src, dbPath);
+  db = await sql.open(dbPath);
+}
+```
+
+## Next
+
+- [fs API](/docs/v0.1/api/os/fs)
+- [sql API](/docs/v0.1/api/os/sql)
+- [store API](/docs/v0.1/api/os/store)
+- [keyring API](/docs/v0.1/api/os/keyring)

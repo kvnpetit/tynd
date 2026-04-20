@@ -1,0 +1,132 @@
+---
+title: Single Instance
+description: "Prevent duplicate launches, forward argv / cwd from the second instance to the primary, and auto-focus the existing window."
+---
+
+# Single Instance
+
+Most desktop apps should **only ever run one copy per user**. When a user double-clicks the app icon while it's already open, you want the existing window to focus — not a second window.
+
+## API
+
+```ts
+import { singleInstance } from "@tynd/core/client";
+
+const { acquired } = await singleInstance.acquire("com.example.myapp");
+
+if (!acquired) {
+  // We're the second instance. The primary has already auto-focused itself
+  // and will receive {argv, cwd} via onSecondLaunch. Exit silently.
+  process.exit(0);   // or return from main()
+}
+
+// Only the primary reaches this point. Set up second-launch handling:
+singleInstance.onSecondLaunch(({ argv, cwd }) => {
+  console.log("user tried to launch again with", argv, "from", cwd);
+  // typical: focus the main window + interpret argv as a file-open request
+});
+```
+
+- `acquire(id)` uses a cross-OS exclusive lock + a local socket for forwarding argv/cwd.
+- **Hold the lock for the process lifetime** — don't release and re-acquire. The lock releases on process exit.
+- `id` doubles as the OS lock name and the socket name. Use a stable reverse-DNS identifier.
+
+## What happens under the hood
+
+When `acquire()` returns `{ acquired: false }`, the host has already:
+
+1. Connected to the primary instance's local socket (named pipe on Windows, abstract socket on Linux, CFMessagePort on macOS).
+2. Sent the forwarded payload as a single JSON line `{ argv, cwd }`.
+3. Triggered the primary window's `setFocus()` + un-minimize **via the host's native event loop** — no IPC round-trip needed.
+
+## Use cases
+
+### Deep-link handling
+
+Register a custom scheme in `tynd.config.ts`:
+
+```ts
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  protocols: ["myapp"],   // myapp:// links now launch this app
+  bundle: { identifier: "com.example.myapp" },
+} satisfies TyndConfig;
+```
+
+Handle both cold-start and duplicate-launch cases with `onOpenUrl`:
+
+```ts
+singleInstance.onOpenUrl((url) => {
+  // e.g. "myapp://invite/abc123"
+  const parsed = new URL(url);
+  router.navigate(parsed.pathname);
+});
+```
+
+`onOpenUrl` fires for:
+
+- Cold start — argv contains the URL.
+- Duplicate launch — the primary receives the forwarded URL.
+
+See [Deep Linking](/docs/v0.1/guides/deep-linking) for scheme registration details per OS.
+
+### File-open
+
+Users drag a file onto your app icon while it's running. The OS relaunches the app with the file path as argv[1]:
+
+```ts
+singleInstance.onSecondLaunch(({ argv }) => {
+  const file = argv.find((a) => a.endsWith(".myapp"));
+  if (file) openFile(file);
+});
+```
+
+File type associations are a separate concern (not currently exposed as a first-class config field — you'd hand-edit the `.desktop` / `.app` / installer metadata).
+
+## Platform notes
+
+- **Windows** — named pipe (`\\.\pipe\<id>`). Windows frees the pipe when the owning process dies; no stale-lock cleanup needed.
+- **Linux** — abstract socket (Linux-specific, not filesystem-visible). Auto-released by the kernel on process exit.
+- **macOS** — `CFMessagePort` (user-session-scoped, Mach-kernel-backed). If a crash leaves a zombie, `killall MyApp` or reboot.
+
+## Error modes
+
+### `acquire()` returns `false` even when alone
+
+Stale lock. Usually self-heals on process exit (see above). If it doesn't:
+
+- **Windows** — nothing to do; Windows frees named pipes aggressively.
+- **Linux** — abstract socket auto-released.
+- **macOS** — `killall MyApp` to clear the zombie.
+
+### `onSecondLaunch` fires twice
+
+You called `singleInstance.onSecondLaunch(...)` inside a handler that itself re-fires (React `useEffect` rerender, component re-mount). The API is idempotent for a given handler function, but registering two different handler functions means both fire.
+
+```ts
+// Register once, not in a render function
+const unsub = singleInstance.onSecondLaunch(onRelaunch);
+// call unsub() if you want to stop handling
+```
+
+## Id convention
+
+Use a stable reverse-DNS identifier that matches `bundle.identifier`:
+
+```ts
+singleInstance.acquire("com.example.myapp");
+```
+
+**Don't include version numbers** — a user upgrading from 1.0.0 to 1.1.0 expects the upgrade to auto-focus the already-running old version (so the old one can shut down cleanly, then the new one starts). Different ids break that.
+
+## What this doesn't give you
+
+- **Multi-user isolation on Windows (service / tenancy setups)** — `single-instance` is user-scoped, so two users on the same box each get their own primary.
+- **Cross-machine coordination** — no network-wide lock. If you want a license server, build your own.
+
+## Next
+
+- [singleInstance API](/docs/v0.1/api/os/single-instance)
+- [Deep Linking](/docs/v0.1/guides/deep-linking)

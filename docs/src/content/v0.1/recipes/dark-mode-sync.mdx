@@ -1,0 +1,59 @@
+---
+title: Sync with OS Dark Mode
+description: "Read the OS dark-mode preference and react to theme changes."
+---
+
+# Sync with OS Dark Mode
+
+## Read at startup
+
+```ts
+import { os, tyndWindow } from "@tynd/core/client";
+
+export async function applyInitialTheme() {
+  const dark = await os.isDarkMode();
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+```
+
+## React to changes
+
+`tyndWindow.onThemeChanged` fires when the OS theme flips:
+
+```ts
+tyndWindow.onThemeChanged(({ theme }) => {
+  document.documentElement.dataset.theme = theme;
+});
+```
+
+## CSS
+
+```css
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --text: #111111;
+}
+:root[data-theme="dark"] {
+  --bg: #0a0a0a;
+  --text: #fafafa;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+```
+
+Or rely on pure CSS via `@media (prefers-color-scheme: dark)` — matches the same OS signal:
+
+```css
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a0a;
+    --text: #fafafa;
+  }
+}
+```
+
+Both work. Pick JS if you need programmatic access or want to override (user toggles "always light"); pick CSS if OS-synced behavior is all you need.
+
+**Related:** [os API](/docs/v0.1/api/os/os) · [tyndWindow events](/docs/v0.1/api/os/window).

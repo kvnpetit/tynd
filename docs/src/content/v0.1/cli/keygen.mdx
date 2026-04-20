@@ -1,0 +1,83 @@
+---
+title: tynd keygen
+description: "Generate an Ed25519 keypair for the auto-updater."
+---
+
+# `tynd keygen`
+
+```bash
+tynd keygen                                 # default: tynd-updater.{key,pub}
+tynd keygen --out release/updater           # custom base path
+```
+
+Generates an Ed25519 keypair for signing auto-updater artifacts. Uses WebCrypto — no OpenSSL / external signing tool needed.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--out <base>` | `tynd-updater` | Output path base. Produces `<base>.key` + `<base>.pub`. |
+| `-f, --force` | `false` | Overwrite existing files at the output paths. |
+
+Global flags: `--verbose`, `--quiet`.
+
+## Output
+
+- **`<base>.key`** — PKCS#8 private key.
+  <Callout type="warning">
+    **Store offline. Never commit.** Compromise of this key lets an attacker ship malicious updates to every user of your app.
+  </Callout>
+- **`<base>.pub`** — raw 32-byte public key (base64).
+
+## Workflow
+
+<Steps>
+
+### Generate once
+
+```bash
+tynd keygen --out release/updater
+```
+
+### Commit only the pub
+
+```bash
+echo "release/updater.key" >> .gitignore
+git add release/updater.pub
+```
+
+### Bake the pubkey into your app
+
+```ts filename="src/updater-key.ts"
+export const UPDATER_PUB_KEY = "cFpG...RVDv/RQ=";
+```
+
+### For each release, sign the artifact
+
+```bash
+tynd sign release/MyApp-1.2.3-setup.exe \
+  --key release/updater.key \
+  --out release/MyApp-1.2.3-setup.exe.sig
+```
+
+### Publish signature + manifest
+
+Upload the `.sig` alongside each artifact. Reference in the update manifest's `signature` field.
+
+</Steps>
+
+## Rotating the key
+
+Ed25519 keys don't expire, but if compromised:
+
+1. Generate a new keypair.
+2. Ship an update **signed with the old key** that bakes in the new pubkey.
+3. After that update rolls out, sign future updates only with the new key.
+
+Users who haven't applied the migration are stuck on the old trust root — there's no remote revocation.
+
+## Related
+
+- [`tynd sign`](/docs/v0.1/cli/sign) — sign files with the generated key.
+- [updater API](/docs/v0.1/api/os/updater) — runtime verification.
+- [Auto-Updates guide](/docs/v0.1/guides/auto-updates).

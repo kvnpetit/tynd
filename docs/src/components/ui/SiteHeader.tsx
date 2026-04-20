@@ -2,6 +2,7 @@ import Link from "next/link";
 import { TOP_NAV } from "../../lib/nav";
 import { SITE } from "../../lib/site";
 import { Container } from "./Container";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function SiteHeader() {
   return (
@@ -32,6 +33,7 @@ export function SiteHeader() {
               </Link>
             ),
           )}
+          <ThemeToggle />
         </nav>
       </Container>
     </header>

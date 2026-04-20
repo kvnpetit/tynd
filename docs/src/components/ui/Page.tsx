@@ -12,7 +12,7 @@ type Props = {
 
 // Standard site page shell: header + hero + content + footer. Use for
 // every non-doc route (landing uses a custom shell). Keeps visual parity
-// across /showcase, /blog, /changelog, /compare, etc.
+// across /showcase, /changelog, /compare, etc.
 export function Page({ eyebrow, title, description, children }: Props) {
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100">

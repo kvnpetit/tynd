@@ -1,0 +1,161 @@
+---
+title: Accessibility
+description: "Ship an app that works for screen readers, keyboard-only users, and high-contrast / reduced-motion preferences."
+---
+
+# Accessibility
+
+Tynd hands off rendering to the native WebView, so your app inherits the OS's accessibility tree for free — **if your HTML cooperates**. This guide is about the app-level concerns Tynd can't solve for you.
+
+## What the WebView gives you
+
+- **Screen readers** — VoiceOver (macOS), Narrator (Windows), Orca (Linux). They walk the ARIA tree exposed by the WebView. Same semantics as a browser: `<button>` is a button, `aria-label` is read, `role="..."` is respected.
+- **Keyboard navigation** — Tab order from the DOM. Focus rings rendered by the WebView.
+- **Reduced motion** — `@media (prefers-reduced-motion: reduce)` works.
+- **High contrast** — `@media (prefers-contrast: more)` / Windows High Contrast Mode both flow through.
+- **Dark mode** — `@media (prefers-color-scheme: dark)` is respected; `os.isDarkMode()` gives you a programmatic read.
+
+What **doesn't** come for free:
+
+- Global hotkeys for screen-reader shortcuts (the OS owns those).
+- `aria-live` regions still need you to write them.
+- Focus management across multi-window scenarios.
+
+## Checklist
+
+<Steps>
+
+### Semantic HTML
+
+- Use `<button>` not `<div onclick>`.
+- Landmarks: `<main>`, `<nav>`, `<header>`, `<footer>`, `<aside>`.
+- Headings in order (don't skip `<h1>` → `<h3>`).
+- `<img alt="...">` — or `alt=""` for decorative.
+- Forms: `<label for="id">` tied to `<input id="id">`.
+
+### Focus management
+
+- Every interactive element must be reachable by Tab.
+- Focus indicator must be **visible** (don't `outline: none` without a replacement).
+- Trap focus inside modal dialogs; restore on close.
+- On multi-window, focus the content area when a window gains focus:
+
+  ```ts
+  tyndWindow.onFocused(() => {
+    document.getElementById("main-content")?.focus();
+  });
+  ```
+
+### Live updates
+
+Long-running operations (upload, search, stream) need an `aria-live` region:
+
+```html
+<div aria-live="polite" aria-atomic="true" class="sr-only">
+  {statusMessage}
+</div>
+```
+
+Where `sr-only` visually hides but keeps it in the AT tree:
+
+```css
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+```
+
+### Reduced motion
+
+Respect the user preference:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+Or with JS:
+
+```ts
+const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+if (!reduced) runFancyAnimation();
+```
+
+### Color contrast
+
+- Body text: AA = 4.5:1, AAA = 7:1.
+- Large text (18pt+ or 14pt+ bold): AA = 3:1.
+- Don't convey information through color alone (error + icon, not just red).
+
+### Keyboard shortcuts
+
+- Document them in an in-app help dialog.
+- Don't hijack OS-reserved combos (⌘Q on macOS, Ctrl+Alt+Del on Windows).
+- Let users remap — see [Keyboard Shortcuts](/docs/v0.1/guides/keyboard-shortcuts) for a user-configurable pattern.
+
+### Tray menu keyboard access
+
+Tray menus open on left-click. Keyboard access to the tray is OS-specific (Windows: `Win+B` then Tab; macOS: accessibility menu; Linux: varies). You can't change this — design your app so the tray is an accelerator, not the only way to reach critical features.
+
+### Dialog focus
+
+Native dialogs (`dialog.openFile`, `dialog.confirm`) are OS-managed — they get focus correctly. In-app modals you build yourself must:
+
+- Move focus into the modal on open.
+- Trap Tab inside the modal.
+- Close on Esc.
+- Restore focus to the trigger on close.
+
+### Multi-monitor / DPI changes
+
+Re-measure on DPI change:
+
+```ts
+tyndWindow.onDpiChanged(({ scale }) => {
+  applyScaleFactor(scale);
+});
+```
+
+User-increased font size should reflow your layout. Design for `rem`, not `px`, for text.
+
+</Steps>
+
+## Testing
+
+- **macOS** — VoiceOver (⌘F5 to toggle). Navigate with VO+arrows.
+- **Windows** — Narrator (Win+Ctrl+Enter) or NVDA (free). Tab through the app.
+- **Linux** — Orca (`orca` command).
+- **All OSes** — unplug the mouse. Can you still use the app?
+
+Automated checks help but don't replace manual testing:
+
+- `axe-core` as a devDependency, run in a dev-mode check.
+- Lighthouse audit against `tynd://localhost/index.html` — paste the URL into `await tyndWindow.openDevTools()` → Lighthouse tab.
+
+## Platform quirks
+
+- **macOS VoiceOver** — may not announce dynamically inserted content unless in an `aria-live` region.
+- **Windows Narrator** — reads `title` attributes; don't duplicate with `aria-label` unless you want both read.
+- **Linux Orca** — coverage varies by app. WebKitGTK's AT tree is usually complete.
+
+## What Tynd will not help with
+
+- No programmatic API for "announce this" — use `aria-live` regions.
+- No way to query screen-reader activity. Design assuming it's on; the CSS media queries above are the programmatic signal.
+
+## Related
+
+- [Keyboard Shortcuts](/docs/v0.1/guides/keyboard-shortcuts).
+- [Multi-Window](/docs/v0.1/guides/multi-window) — focus management.
+- [Security](/docs/v0.1/concepts/security) — CSP and trusted-content defaults.
