@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0](https://github.com/kvnpetit/tynd/compare/v0.1.0...v0.2.0) (2026-04-20)
+
+
+### Features
+
+* **docs:** scaffold docs site on Next.js + Nextra with full SEO wiring ([8b20e08](https://github.com/kvnpetit/tynd/commit/8b20e08592e1207dfeea2f85708d9022a69e0e40))
+
+
+### Bug Fixes
+
+* **cli:** auto-download @tynd/host binary when postinstall skipped ([3195c2b](https://github.com/kvnpetit/tynd/commit/3195c2b28851913fd66864211c1a9c72e0e63bed))
+
+
+### Documentation
+
+* rework site — custom Cards, theme sync, nav parity, LLMs sidebar ([b7c3294](https://github.com/kvnpetit/tynd/commit/b7c3294be6b517f34b5836752913ae925990a7ea))
+
+
+### Continuous Integration
+
+* **docs:** deploy docs to Cloudflare Workers after release ([db0f796](https://github.com/kvnpetit/tynd/commit/db0f79650a435712c04221e6ddb53a6cb2bd8fd6))
+* drop release-as pin from release-please config ([9092b7d](https://github.com/kvnpetit/tynd/commit/9092b7d141a7d114ae7d7f72d7e7a12a7ac1a1d5))
+
 ## 0.1.0 (2026-04-19)
 
 
