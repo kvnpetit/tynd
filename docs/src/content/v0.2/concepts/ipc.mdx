@@ -1,0 +1,188 @@
+---
+title: IPC Model
+description: "The transport under RPC calls, events, streaming, and OS calls — how Tynd moves data between frontend, Rust host, and backend without touching the network."
+---
+
+# IPC Model
+
+Tynd's IPC is intentionally boring: **no HTTP, no WebSocket, no TCP port**. Everything rides native WebView bindings + a pair of custom schemes.
+
+## The transport matrix
+
+| Channel | Direction | Transport |
+|---|---|---|
+| `api.<fn>()` | Frontend → Backend | `window.ipc.postMessage` → stdin JSON |
+| `api.on("evt")` | Backend → Frontend | Rust `evaluate_script` |
+| `events.emit()` | Backend → Frontend | stdout JSON → Rust → `evaluate_script` |
+| `dialog` / `fs` / `http` / … | Frontend → Rust (OS APIs) | `window.ipc.postMessage` (direct, no backend round-trip) |
+| `terminal:data` / `http:progress` | Rust → Frontend (stream) | native user events → `evaluate_script` |
+| `fs.readBinary` / `compute.hash` / … | Frontend ↔ Rust (binary) | `tynd-bin://` custom scheme, raw bytes |
+
+**No HTTP. No WebSocket. No firewall prompt.**
+
+## Frontend serving — `tynd://localhost/`
+
+A native custom protocol maps `tynd://localhost/<path>` to the built frontend directory (dev: proxied to the dev server; prod: read from the TYNDPKG-packed assets). The asset cache is pre-warmed on a background thread before the WebView is built, so the first request is instant.
+
+```
+GET tynd://localhost/index.html   → reads dist/index.html
+GET tynd://localhost/main.js      → reads dist/main.js
+```
+
+`window.location.origin` is `tynd://localhost`. You can reason about same-origin exactly as on a normal HTTPS site.
+
+## RPC calls — frontend → backend
+
+```ts
+// backend/main.ts
+export async function greet(name: string) {
+  return `Hello, ${name}!`;
+}
+
+// frontend
+import { createBackend } from "@tynd/core/client";
+import type * as backend from "../backend/main";
+
+const api = createBackend<typeof backend>();
+const msg = await api.greet("Alice");   // "Hello, Alice!"
+```
+
+Wire:
+
+```json
+// frontend → rust (via postMessage)
+{ "type": "call", "id": "c42", "fn": "greet", "args": ["Alice"] }
+
+// rust → backend (full: stdin; lite: direct QuickJS call)
+{ "type": "call", "id": "c42", "fn": "greet", "args": ["Alice"] }
+
+// backend → rust
+{ "type": "return", "id": "c42", "value": "Hello, Alice!" }
+
+// rust → frontend (via evaluate_script of the originating webview)
+```
+
+### Zero-codegen types
+
+The frontend only knows the backend by `typeof backend` — no generated files, no IDL, no `.d.ts` step. Rename a backend function and every stale frontend call lights up in the compiler.
+
+```ts
+const api = createBackend<typeof backend>();
+//                       ^^^^^^^^^^^^^^^^ compile-time-only type import
+```
+
+`createBackend` is a thin `Proxy` that sends the call by method name. The runtime code is tiny (one `postMessage` + a `Promise.withResolvers`).
+
+## Events — backend → frontend
+
+Typed via `createEmitter<T>()`:
+
+```ts
+// backend
+import { createEmitter } from "@tynd/core";
+
+export const events = createEmitter<{
+  userCreated: { id: string; name: string };
+}>();
+
+events.emit("userCreated", { id: "1", name: "Alice" });
+
+// frontend
+api.on("userCreated", (user) => console.log(user.name));   // user: { id, name }
+api.once("userCreated", (user) => { /* fires once */ });
+```
+
+Wire (full mode): `{ "type": "emit", "name": "userCreated", "data": {...} }` lands on stdout, Rust reads the line and `evaluate_script`s `__tynd_emit__(name, data)` on every subscribed webview.
+
+## Streaming RPC — async-generator handlers
+
+If a backend export is an `async function*`, the frontend gets a **StreamCall handle** — awaitable and async-iterable:
+
+```ts
+// backend
+export async function* processFiles(paths: string[]) {
+  let ok = 0;
+  for (const [i, path] of paths.entries()) {
+    await doWork(path);
+    ok++;
+    yield { path, progress: (i + 1) / paths.length };
+  }
+  return { ok, failed: paths.length - ok };
+}
+
+// frontend
+const stream = api.processFiles(["a.txt", "b.txt"]);
+
+for await (const chunk of stream) {
+  render(chunk.progress);      // yields
+}
+
+const summary = await stream;   // return value
+// early stop: await stream.cancel();
+```
+
+Three flow-control mechanisms keep streaming safe at arbitrary yield rates:
+
+1. **Per-stream credit** — backend generator starts with 64 credits. Every yield decrements. At 0 credit, the backend awaits a waiter; the frontend replenishes by ACK-ing every 32 consumed chunks. Bounded memory regardless of producer speed.
+2. **Yield batching** — Rust buffers yields and flushes either every 10ms or at 64 items per bucket. One `evaluate_script` per webview per flush, not one per chunk.
+3. **Cleanup on window close** — when a secondary window closes, Rust cancels every active stream that originated there so generators don't leak.
+
+Combined guarantee: 10k+ yields/sec to the UI without freezing it.
+
+See the [Streaming RPC guide](/docs/v0.2/guides/streaming).
+
+## OS calls — frontend → Rust directly
+
+Native things bypass the TypeScript backend entirely:
+
+```ts
+// frontend
+import { dialog } from "@tynd/core/client";
+const path = await dialog.openFile({ filters: [{ name: "Images", extensions: ["png", "jpg"] }] });
+```
+
+Wire: frontend posts `{ type: "os_call", api: "dialog", method: "openFile", args: [...] }`. Rust dispatches via `host-rs/src/os/mod.rs::dispatch` — one fresh `std::thread` per call (dialog blocks for seconds on user input; a shared pool would starve).
+
+**Backend never sees OS calls** — the TypeScript backend is only for *your* app logic, not for bridging the frontend to the OS.
+
+### Main-thread vs worker-thread dispatch
+
+- `tyndWindow.*` calls run on the **main thread** (event loop proxy) because native windowing requires it. Each request carries the label of the webview that issued it; responses route back to the originating window only.
+- **Every other OS call** runs on a fresh `std::thread` per call.
+- **Long-lived resources** (terminal PTYs, workers, WebSocket sessions, SQL connections) run on their own dedicated thread and survive across calls; their handles live in `Mutex<HashMap<id, _>>` statics inside each module.
+
+## Binary IPC — `tynd-bin://localhost/`
+
+Multi-MB payloads skip JSON entirely. A second custom scheme, `tynd-bin://localhost/<api>/<method>?<query>`, carries raw bytes in the request and response bodies — no base64, no JSON envelope, `ArrayBuffer` on arrival.
+
+Current routes:
+
+| Route | Method | In | Out |
+|---|---|---|---|
+| `fs/readBinary?path=...` | `GET` | — | file bytes |
+| `fs/writeBinary?path=...&createDirs=0\|1` | `POST` | bytes | `204` |
+| `compute/hash?algo=blake3\|sha256\|sha384\|sha512&encoding=base64` | `POST` | bytes | UTF-8 digest |
+
+The TS client wraps these — `fs.readBinary(path)`, `compute.hash(bytes)` — users never touch the scheme directly. Small / non-binary calls (`randomBytes`, text helpers, terminal events) stay on the JSON IPC where it's simpler.
+
+See the [Binary Data guide](/docs/v0.2/guides/binary-data).
+
+## Event emitter infrastructure
+
+Any API that pushes async events to the frontend goes through a central emit helper in the Rust host. At startup, the app wires an emitter that turns each emit into a native user event, which the event loop then forwards to the WebView via `evaluate_script`.
+
+Subscribe on the frontend via `window.__tynd__.os_on(name, handler)` — or use the typed wrappers (`tyndWindow.onResized`, `terminal.onData`, `http.onProgress`, …).
+
+## Multi-window routing
+
+- The primary window has label `"main"`. Additional windows created via `tyndWindow.create({ label })` get their own WebView + IPC channel.
+- Every frontend call includes the originating window's label; responses route back to it only.
+- Window events (resize, focus, close, …) are broadcast to every webview with a `label` field in the payload. Client-side helpers filter by `__TYND_WINDOW_LABEL__` (injected at WebView creation) so handlers only fire for their own window.
+
+See the [Multi-Window guide](/docs/v0.2/guides/multi-window).
+
+## Next
+
+- [Build Pipeline](/docs/v0.2/concepts/build-pipeline)
+- [TYNDPKG Format](/docs/v0.2/concepts/tyndpkg)
+- [Streaming RPC guide](/docs/v0.2/guides/streaming)

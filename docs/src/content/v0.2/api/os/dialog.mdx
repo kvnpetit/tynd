@@ -1,0 +1,119 @@
+---
+title: dialog
+description: "Native file pickers and message / confirm / warn / error dialogs. "
+---
+
+# `dialog`
+
+```ts
+import { dialog } from "@tynd/core/client";
+```
+
+## File pickers
+
+### `openFile(opts?): Promise<string | null>`
+
+Pick one file. Returns the chosen path or `null` if cancelled.
+
+```ts
+const path = await dialog.openFile({
+  title: "Open image",
+  defaultPath: "/home/me",
+  filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg"] }],
+});
+```
+
+### `openFiles(opts?): Promise<string[] | null>`
+
+Pick multiple files. Returns `string[]` on success, `null` if cancelled.
+
+```ts
+const paths = await dialog.openFiles({
+  filters: [{ name: "Text", extensions: ["txt", "md"] }],
+});
+if (paths) { /* ... */ }
+```
+
+### `openDirectory(opts?): Promise<string | null>`
+
+Pick a directory.
+
+```ts
+const dir = await dialog.openDirectory({ title: "Choose project root" });
+```
+
+Options:
+
+```ts
+interface OpenDirectoryOptions {
+  title?:      string;
+  defaultDir?: string;
+}
+```
+
+### `saveFile(opts?): Promise<string | null>`
+
+Ask the user where to save a new file.
+
+```ts
+const dest = await dialog.saveFile({
+  defaultPath: "export.csv",
+  filters: [{ name: "CSV", extensions: ["csv"] }],
+});
+```
+
+## Message dialogs
+
+### `message(text, opts?): Promise<void>`
+
+Informational message with an OK button.
+
+```ts
+await dialog.message("Operation complete.", { title: "Success" });
+```
+
+### `confirm(text, opts?): Promise<boolean>`
+
+OK/Cancel. Returns `true` if the user clicked OK.
+
+```ts
+const ok = await dialog.confirm("Delete this file?", { title: "Are you sure?" });
+if (ok) await fs.remove(path);
+```
+
+### `warn(text, opts?): Promise<void>`
+
+Same shape as `message` with a warning icon (shorthand for `message(..., { kind: "warning" })`).
+
+```ts
+await dialog.warn("Unsaved changes will be lost.");
+```
+
+### `error(text, opts?): Promise<void>`
+
+Same shape as `message` with an error icon.
+
+```ts
+await dialog.error("Network unreachable.", { title: "Cannot sync" });
+```
+
+## Options
+
+Shared:
+
+- `title` — window title (defaults to the app name).
+
+File-picker-specific:
+
+- `defaultPath` — initial file/dir.
+- `filters` — array of `{ name, extensions }`. Extensions without leading dots.
+
+## Notes
+
+- Each dialog runs on a fresh Rust thread — won't block the JS event loop.
+- Dialogs are not modal to your main window by default. OS-specific attachment is handled for you.
+- Custom button labels, show-hidden-files, and a few advanced options are not currently exposed.
+
+## Related
+
+- [fs](/docs/v0.2/api/os/fs) — read/write the picked path.

@@ -1,0 +1,54 @@
+---
+title: Single Instance + argv Forwarding
+description: "Duplicate launch focuses the primary; its argv reaches the primary's handler."
+---
+
+# Single Instance + argv
+
+Typical flow: user double-clicks the app icon while it's already open. You want:
+
+1. The second launch **exits silently** (no duplicate window).
+2. The primary window **focuses + unminimizes**.
+3. The primary **receives the launch argv** (e.g. a file path).
+
+```ts
+import { singleInstance, tyndWindow } from "@tynd/core/client";
+
+const { acquired } = await singleInstance.acquire("com.example.myapp");
+if (!acquired) {
+  // Second instance — host already forwarded argv+cwd and focused the primary.
+  process.exit(0);
+}
+
+// Only the primary reaches here. Handle forwarded launches:
+singleInstance.onSecondLaunch(({ argv, cwd }) => {
+  // First argv entry is the exe path; look at argv[1..] for args
+  const file = argv.slice(1).find((a) => a.endsWith(".myapp"));
+  if (file) {
+    openFile(file);
+  }
+});
+```
+
+Host auto-focus + unminimize is **built in** — no IPC round-trip needed. Your code only handles what to *do* with the forwarded args.
+
+## Combine with deep links
+
+```ts
+singleInstance.onOpenUrl((url) => {
+  // Fires on cold start (argv has the URL) AND duplicate launch (forwarded)
+  const parsed = new URL(url);
+  router.navigate(parsed.pathname);
+});
+```
+
+`onOpenUrl` and `onSecondLaunch` can coexist — the URL-scheme detection happens in the host, custom-scheme URLs fire `onOpenUrl`, plain paths fire `onSecondLaunch`.
+
+## Use stable, reverse-DNS ids
+
+```ts
+singleInstance.acquire("com.example.myapp");   // ✓
+singleInstance.acquire("MyApp-v1.0.0");         // ✗ — version breaks upgrade UX
+```
+
+**Related:** [Single Instance guide](/docs/v0.2/guides/single-instance) · [singleInstance API](/docs/v0.2/api/os/single-instance).

@@ -1,0 +1,217 @@
+---
+title: Troubleshooting
+description: "Common errors and how to fix them. If yours isn't here, run `tynd info --verbose` and open an issue."
+---
+
+# Troubleshooting
+
+## Install & setup
+
+### `tynd-full` / `tynd-lite` binary not found
+
+The CLI looks in this order: workspace `target/release` → `target/debug` → `node_modules/@tynd/host/bin/<plat>-<arch>` → system `PATH`.
+
+**Inside the Tynd monorepo (contributors):**
+
+```bash
+cargo build --release -p tynd-full
+cargo build --release -p tynd-lite
+```
+
+**In a user project:**
+
+```bash
+bun add @tynd/host
+# postinstall downloads the matching binary for your OS/arch
+```
+
+If `@tynd/host` is installed but no binary is present under `node_modules/@tynd/host/bin/`, the postinstall was skipped or failed. The CLI commands (`dev`, `start`, `build`, `validate`) fall back to an on-demand download into that same directory, so retrying the command usually fixes it. If you want to force a reinstall:
+
+```bash
+bun install --force
+```
+
+### Bun skipped the `@tynd/host` postinstall
+
+Bun blocks postinstall scripts unless the package is listed in `trustedDependencies`. Starting with `tynd init` / `tynd create`, `@tynd/host` is added automatically — if you added it by hand, trust it explicitly:
+
+```bash
+bun pm trust @tynd/host
+# or append "@tynd/host" to trustedDependencies in package.json, then:
+bun install
+```
+
+The CLI's `ensureHostBinary` fallback will also download the binary on demand when you next run `tynd dev` / `start` / `build` / `validate` outside the monorepo.
+
+### Postinstall can't download the binary
+
+`@tynd/host`'s postinstall fetches release assets from `github.com/kvnpetit/tynd/releases`. Requirements:
+
+- The repo must be **public** at the time of download.
+- Outbound HTTPS to `github.com` + `objects.githubusercontent.com` (GitHub uses signed S3 redirects).
+- Corporate proxies: set `HTTPS_PROXY=http://proxy:port` before `bun install`.
+
+Temporary workaround: build from source with `cargo build --release -p tynd-{full,lite}` and set `PATH` to include `target/release/`.
+
+### `bun: command not found`
+
+Tynd is Bun-first. Install:
+
+```bash
+curl -fsSL https://bun.sh/install | bash                   # macOS/Linux
+powershell -c "irm bun.sh/install.ps1 | iex"               # Windows
+```
+
+End users of your built app do **not** need Bun — the runtime is bundled into the binary.
+
+---
+
+## WebView & platform quirks
+
+### Windows: nothing opens, app exits silently
+
+WebView2 runtime is missing. Windows 11 ships it; some locked-down Windows 10 VMs don't. Install the Evergreen Bootstrapper: https://developer.microsoft.com/microsoft-edge/webview2/
+
+### Windows: SmartScreen "Unknown publisher"
+
+Binary isn't code-signed. Options:
+
+- Click "More info → Run anyway" for local testing.
+- Sign the binary — see the [Code Signing guide](/docs/v0.2/guides/code-signing).
+
+### macOS: "can't be opened because it is from an unidentified developer"
+
+Gatekeeper rejects unsigned apps. Options:
+
+- Right-click the `.app` → Open → Open (one-time override).
+- Sign + notarize — see [Code Signing](/docs/v0.2/guides/code-signing).
+
+### Linux: `libwebkit2gtk-4.1.so.0` missing
+
+```bash
+sudo apt install libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libsoup-3.0-0
+```
+
+For **building from source**:
+
+```bash
+sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
+  libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+  libxdo-dev
+```
+
+Fedora:
+
+```bash
+sudo dnf install gtk3-devel webkit2gtk4.1-devel libsoup3-devel
+```
+
+---
+
+## CLI errors
+
+### `<framework> detected — incompatible with server-side frameworks`
+
+Tynd owns the HTTP layer. SSR frameworks (Next.js, Nuxt, SvelteKit, Remix, Gatsby, SolidStart, Angular Universal, Qwik City, Astro, TanStack Start, Vike) are blocked.
+
+Use the pure-SPA variant — plain React (Vite), plain Svelte, plain Solid, etc.
+
+### `backend is not a string` / config validation error
+
+`tynd.config.ts` is validated with [valibot](https://valibot.dev). The error message lists the offending field. Required: `runtime`. See the [config reference](/docs/v0.2/cli/config).
+
+### `tynd dev` shows a blank window, no errors
+
+Three likely causes:
+
+1. Dev server hasn't started yet — wait ~2 s. Tynd probes up to 60 s.
+2. Custom `devUrl` is wrong. Check `tynd info`.
+3. Frontend throws on load. Open devtools with `tynd dev --verbose` or add `window.addEventListener("error", console.error)`.
+
+### `tynd build --bundle` fails with `rpmbuild: command not found`
+
+RPM is the only bundler Tynd doesn't auto-download:
+
+```bash
+sudo apt install rpm                  # Debian/Ubuntu
+sudo dnf install rpm-build            # Fedora/RHEL
+```
+
+Or build only the formats you need:
+
+```bash
+tynd build --bundle app,dmg,deb,appimage,nsis,msi
+```
+
+### React Fast Refresh triggers full reloads
+
+React Compiler (React 19+) conflicts with Vite's Fast Refresh. Either disable the Compiler in dev mode, or accept full reloads. See [Frontend Frameworks](/docs/v0.2/guides/frontend-frameworks).
+
+---
+
+## Runtime errors
+
+### `fs.readBinary` / `compute.hash` → "unknown binary route"
+
+You hit `tynd-bin://` with a typo. Expected routes: `fs/readBinary`, `fs/writeBinary`, `compute/hash`. Prefer the published wrappers in `@tynd/core/client`.
+
+### `sql.open(path)` silently uses in-memory mode
+
+Empty string or `":memory:"` opens an in-memory DB. Anything else is treated as an on-disk path. If data isn't persisting, pass an absolute path resolved against `os.dataDir()`.
+
+### Events don't arrive in the frontend
+
+- Confirm `app.start()` was called in the backend.
+- Emitters returned by `createEmitter` must be **`export`ed** — the frontend proxy needs them at bundle time.
+- In lite mode, events require the host's `__tynd_emit__` shim — running a lite bundle without `tynd-lite` produces no events.
+
+### `singleInstance.acquire()` returns `{ acquired: false }` even alone
+
+Stale lock. Usually self-heals on process exit. If a crash left a zombie:
+
+- **Windows** — nothing to clean up.
+- **Linux** — abstract socket auto-released.
+- **macOS** — `killall MyApp` or reboot.
+
+---
+
+## Performance / sizing
+
+### Binary bigger than `@tynd/host` reports
+
+Stock host is ~6.5 MB. `tynd build` appends frontend + backend + (`full`) zstd-compressed Bun (~37 MB). Expected totals: ~8-10 MB for `lite`, ~44 MB for `full`.
+
+### `tynd dev` feels slow to start
+
+First run: backend + frontend rebuild from scratch (~2-5 s). Subsequent runs hit `.tynd/cache/` and start in under 1 s. If caching isn't working, check `tynd info` for cache decisions.
+
+### Dialogs / file pickers stutter
+
+The OS-call pool caps concurrent threads. Rate-limit your dialog spam on the client side.
+
+---
+
+## Packaging
+
+### NSIS installer wants admin privileges
+
+Default is `currentUser` (no UAC). Either:
+
+- `bundle.nsis.installMode: "perMachine"` is set — remove it.
+- `%LOCALAPPDATA%\Programs` is restricted by Group Policy.
+
+### `.deb` fails to install with "package depends on..."
+
+Tynd's `.deb` generator lists WebKitGTK as a dependency. On minimal distros, install `libwebkit2gtk-4.1-0` first.
+
+### AppImage won't run on older glibc
+
+`appimagetool` bundles the AppRun shim but not glibc. The AppImage links against the glibc version used at build time. Build on the oldest supported system (e.g. Ubuntu 20.04 LTS) to maximise compatibility.
+
+---
+
+## Still stuck?
+
+- `tynd info --verbose` — everything Tynd sees about your environment.
+- `tynd validate` — config + binary availability.
+- [GitHub Issues](https://github.com/kvnpetit/tynd/issues) — include the output of the two commands above.

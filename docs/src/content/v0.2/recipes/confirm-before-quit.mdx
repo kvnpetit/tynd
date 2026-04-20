@@ -1,0 +1,63 @@
+---
+title: Confirm Before Quit
+description: "Intercept the close request; show a native confirm dialog if there are unsaved changes."
+---
+
+# Confirm Before Quit
+
+```ts
+import { tyndWindow, dialog } from "@tynd/core/client";
+
+let dirty = false;
+let closing = false;
+
+// track your app's dirty state wherever it changes
+export function markDirty()   { dirty = true; }
+export function markClean()   { dirty = false; }
+
+tyndWindow.onCloseRequested(async (e) => {
+  if (!dirty || closing) return;   // allow close
+
+  e.preventDefault();               // block the close for 500 ms
+
+  const discard = await dialog.confirm(
+    "You have unsaved changes. Close anyway?",
+    { title: "Are you sure?" },
+  );
+
+  if (discard) {
+    closing = true;
+    await tyndWindow.close("main");   // or app.exit(0) from backend
+  }
+});
+```
+
+`onCloseRequested` gives you a 500 ms synchronous window to decide. `preventDefault()` blocks the close; call `tyndWindow.close(label)` or `app.exit()` once the user confirms.
+
+**If the dialog takes longer than 500 ms** — add `cancelClose()` to explicitly halt the pending close:
+
+```ts
+tyndWindow.onCloseRequested(async (e) => {
+  if (!dirty) return;
+  e.preventDefault();
+
+  await tyndWindow.cancelClose();   // stop the watchdog
+
+  const discard = await dialog.confirm("Unsaved changes. Close?");
+  if (discard) await tyndWindow.close("main");
+});
+```
+
+## Save-and-quit variant
+
+```ts
+const choice = await dialog.openFile({
+  // ... use a 3-button native dialog if you add support for it, or roll your own in HTML
+});
+
+// Or use a HTML modal with 3 buttons — Save, Discard, Cancel.
+```
+
+Tynd's `dialog.confirm` is 2-button (OK / Cancel). For Save/Discard/Cancel, use an in-app HTML modal.
+
+**Related:** [tyndWindow events](/docs/v0.2/api/os/window) · [dialog API](/docs/v0.2/api/os/dialog).

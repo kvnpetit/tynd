@@ -1,0 +1,183 @@
+---
+title: Security
+description: "The security model — CSP defaults, scheme allowlists, structural exposure surface, and OS-backed secret storage."
+---
+
+# Security
+
+Tynd's security model is **structural + conservative-by-default**. The exposure surface of your app is the exported module — code and policy can't drift apart — and the WebView runs with an auto-injected CSP.
+
+## Threat model
+
+Tynd targets a single-user desktop environment. The primary concerns:
+
+- **Untrusted content injection** into the WebView (XSS from user-supplied HTML, data URLs, `postMessage`-based smuggling).
+- **Local-machine attackers** sniffing IPC traffic if it were on TCP. *(It isn't — see below.)*
+- **Supply-chain compromise** of a bundled `.exe` (solved by code signing + notarization).
+- **Update-channel hijacking** (solved by Ed25519-signed auto-updates).
+
+What's **not** in scope:
+
+- Protecting app secrets from a user with admin access on their own machine. Disk-encryption + OS-level isolation are the right answer, not app-level obfuscation.
+- Fine-grained permission ACLs (capability system). That's a Tauri v2 differentiator; Tynd currently has none.
+
+## Transport — no TCP, no firewall prompt
+
+RPC and frontend asset serving never touch a TCP port. Everything rides:
+
+- **`tynd://localhost/<path>`** (wry custom scheme) for frontend assets.
+- **`tynd-bin://localhost/<api>/<method>?<query>`** (wry custom scheme) for binary IPC.
+- **`window.ipc.postMessage`** for JSON IPC.
+- **`evaluate_script`** for backend → frontend pushes.
+
+Consequence: no loopback port, no firewall prompt on first launch, and no MITM window for another process on the same machine that could listen on a socket.
+
+## CSP — auto-injected
+
+Every HTML response served through the `tynd://` scheme carries a baseline Content-Security-Policy header that:
+
+- Blocks **inline scripts** (no `<script>alert()</script>` from smuggled HTML).
+- Disables `frame-src` and `object-src`.
+- Restricts `connect-src` to same-origin (`tynd://localhost`) plus HTTPS/WSS.
+
+**Override per-page** via a `<meta http-equiv="Content-Security-Policy">` tag if you need a custom policy.
+
+<Callout type="warning">
+  **Don't relax CSP without a reason.** Every loosening (`'unsafe-inline'`, `'unsafe-eval'`, broad `connect-src *`) widens the attack surface for any bug that injects HTML into your WebView.
+</Callout>
+
+## `shell.openExternal` — scheme allowlist
+
+```ts
+shell.openExternal(url);   // opens in the default browser
+```
+
+Rust-side, only **`http://`**, **`https://`**, and **`mailto:`** schemes are accepted. Passing `file://`, `javascript:`, `data:`, or a registered custom scheme throws.
+
+## `shell.openPath` — absolute paths only
+
+```ts
+shell.openPath("/Users/me/document.pdf");   // opens in OS default handler
+```
+
+Passed directly to the OS's "open with default app" handler. No scheme-level filter — the OS decides what's handled.
+
+## Custom URL schemes — reserved list
+
+If you declare `protocols: ["myapp"]` in `tynd.config.ts`, the following are rejected at config-validation time:
+
+- `http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`
+
+See [Deep Linking](/docs/v0.2/guides/deep-linking).
+
+## Secret storage — `keyring` > `store`
+
+For anything sensitive (OAuth tokens, API keys, session cookies, passwords):
+
+- **`keyring`** — OS-encrypted credential storage. Keychain (macOS), Credential Manager + DPAPI (Windows), Secret Service / GNOME Keyring / KWallet (Linux). Secrets are encrypted at rest with the user's login credentials.
+- **`store`** — plain JSON k/v at `config_dir()/<ns>/store.json`. **Readable by any process with user-level access** — use only for non-sensitive preferences.
+
+```ts
+import { keyring, createStore } from "@tynd/core/client";
+
+// Sensitive — use keyring
+await keyring.set({ service: "com.example.app", account: "alice" }, "s3cr3t-token");
+
+// Non-sensitive — use store
+const prefs = createStore("com.example.app");
+await prefs.set("theme", "dark");
+```
+
+See the [Persistence guide](/docs/v0.2/guides/persistence).
+
+## Code signing — trust the binary
+
+Unsigned binaries trigger SmartScreen warnings (Windows), Gatekeeper quarantine (macOS), and download flags in Chrome/Edge. Tynd ships built-in signing via the `bundle.sign` block in `tynd.config.ts`:
+
+- **Windows** — `signtool.exe` (SHA-256 + timestamp server).
+- **macOS** — `codesign --options runtime` + optional `xcrun notarytool submit --wait` + stapler.
+
+See the [Code Signing guide](/docs/v0.2/guides/code-signing).
+
+## Auto-update — Ed25519 signatures
+
+The updater downloads an artifact and **verifies an Ed25519 signature** over the raw file bytes before installing. The public key is supplied by the app (typically baked in at build time), so a compromised manifest server can only redirect to a URL whose bytes still have to verify against the local pubkey.
+
+- Manifest format is Tauri-compatible.
+- The CLI ships `tynd keygen` / `tynd sign` so you can produce signed manifests without third-party tools.
+- WebCrypto Ed25519 on the signing side, the Ed25519 verifier on the verifying side — raw 32-byte pubkeys, raw 64-byte signatures, no format conversions.
+
+See the [Auto-Updates guide](/docs/v0.2/guides/auto-updates).
+
+## OS-level `process.exec` / `execShell`
+
+```ts
+process.exec("git", { args: ["status"] });        // direct exec — no shell interpolation
+process.execShell("ls -la | grep tynd");           // shell=true — cmd.exe / sh
+```
+
+`process.exec` is the **safe default** — arguments are passed as an array, no shell interpolation. Only use `process.execShell` if you need pipes / globs / shell builtins, and validate or quote untrusted inputs yourself.
+
+## Structural security — export = exposure
+
+The frontend can only call what the backend **explicitly exports**:
+
+```ts
+// backend/main.ts
+export async function greet(name: string) { … }   // callable from frontend
+export const events = createEmitter<…>();          // subscribeable from frontend
+
+async function internal() { … }                     // NOT callable — not exported
+```
+
+There's no command allowlist to maintain, no capability manifest to keep in sync. **The TypeScript module is the policy.**
+
+Consequences:
+
+- **Safe default** — you have to opt a function in (via `export`) to make it reachable. Forgetting to export something is a "safer than intended" outcome, not the other way around.
+- **No drift** — there is no second config file describing "what RPC calls are allowed" that could fall out of date.
+- **Grep-auditable** — search for `export async function` or `export const events =` to enumerate the entire surface.
+
+## What Tynd does NOT offer (yet)
+
+- **Capability-based ACL** (per-command / per-path / per-URL permissions) — Tauri v2 has this; Tynd doesn't.
+- **Context isolation** (renderer ↔ preload boundary) — N/A because there is no Node/Bun in the renderer; the only injected globals are the Tynd IPC shims.
+- **Renderer sandbox mode** — no configurable sandbox; the WebView runs with the OS's default web-content permissions.
+- **Permission request handlers** (camera, mic, geolocation prompts) — the WebView handles them per the OS default, Tynd doesn't intercept.
+- **Scoped FS / HTTP access patterns** — your backend is what enforces access control.
+
+## Security checklist for shipping an app
+
+<Steps>
+
+### Sign and notarize
+
+Configure `bundle.sign` in `tynd.config.ts` (Windows `signtool` + macOS `codesign` + optional notarization). Unsigned binaries hurt user trust and trip every OS defense mechanism.
+
+### Bake your updater public key
+
+Generate a keypair with `tynd keygen`. Store the private key **offline**; commit only the `.pub`. Bake the pubkey into your app source. Every `tynd sign` step produces a signature; only signatures verifiable against the baked pubkey install.
+
+### Keep CSP tight
+
+Don't add `'unsafe-inline'` / `'unsafe-eval'` unless you know why you're adding them. If you must, scope it to a single route via `<meta http-equiv>`.
+
+### Use `keyring` for secrets
+
+Never put tokens / passwords / session cookies in `store`. Use `keyring`.
+
+### Validate user-supplied paths
+
+If you let a user pass a path to `fs.readText` / `process.exec`, validate the path stays inside a directory you control. Don't trust normalization — canonicalize first and check for prefix.
+
+### Use `process.exec`, not `execShell`, with user input
+
+`execShell` runs through `cmd.exe` / `sh` — any unquoted user input is a shell injection. Default to `process.exec("git", { args: [...] })` with arguments as an array.
+
+</Steps>
+
+## Next
+
+- [Code Signing guide](/docs/v0.2/guides/code-signing)
+- [Auto-Updates guide](/docs/v0.2/guides/auto-updates)
+- [keyring API](/docs/v0.2/api/os/keyring)

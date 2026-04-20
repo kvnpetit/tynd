@@ -1,12 +1,12 @@
-# Tynd — v0.1
+# Tynd — v0.2
 
 > Desktop apps in TypeScript. Small native binaries, zero-codegen typed RPC.
 
-Complete documentation for Tynd v0.1. Each page below includes its URL, title, description, and full body content. Intended for LLM ingestion.
+Complete documentation for Tynd v0.2. Each page below includes its URL, title, description, and full body content. Intended for LLM ingestion.
 
 --- SECTION: Overview ---
 
-URL: https://tynd.dev/docs/v0.1
+URL: https://tynd.kvnpetit.com/docs/v0.2
 TITLE: Introduction
 DESCRIPTION: Tynd is a desktop-app framework with a TypeScript backend, a native WebView front-end, and small native binaries. One language end-to-end, zero codegen, two runtime modes.
 
@@ -21,7 +21,7 @@ bunx @tynd/cli create my-app
 ```
 
 <Callout type="info">
-  **New here?** Start with the [5-minute quickstart](/docs/v0.1/getting-started) — scaffold an app, run it with HMR, ship a binary.
+  **New here?** Start with the [5-minute quickstart](/docs/v0.2/getting-started) — scaffold an app, run it with HMR, ship a binary.
 </Callout>
 
 ## At a glance
@@ -39,16 +39,16 @@ bunx @tynd/cli create my-app
 Most desktop-app frameworks force you to pick a language for the native side (Rust for Tauri, Go for Wails, or the entire Chromium for Electron). Tynd keeps the native layer invisible: **you write TypeScript, you get a native binary**.
 
 <Cards>
-  <Cards.Card title="TypeScript end-to-end" href="/docs/v0.1/concepts/architecture">
+  <Cards.Card title="TypeScript end-to-end" href="/docs/v0.2/concepts/architecture">
     Backend, frontend, RPC — same language, same types.
   </Cards.Card>
-  <Cards.Card title="Two runtimes, same API" href="/docs/v0.1/runtimes">
+  <Cards.Card title="Two runtimes, same API" href="/docs/v0.2/runtimes">
     `lite` for a 6.5 MB binary, `full` for the full Node/Bun surface.
   </Cards.Card>
-  <Cards.Card title="Zero-network IPC" href="/docs/v0.1/concepts/ipc">
+  <Cards.Card title="Zero-network IPC" href="/docs/v0.2/concepts/ipc">
     RPC and assets never touch TCP — no loopback port, no firewall prompt.
   </Cards.Card>
-  <Cards.Card title="Complete API reference" href="/docs/v0.1/api">
+  <Cards.Card title="Complete API reference" href="/docs/v0.2/api">
     Every backend, frontend, and OS API with signatures and examples.
   </Cards.Card>
 </Cards>
@@ -82,7 +82,7 @@ Frontend assets and IPC ride a native custom scheme — no HTTP server, no loopb
 | Binary size | smaller (~6.5 MB) | larger (~44 MB, Bun compressed) |
 | Startup | faster (everything in-process) | slower (spawns Bun) |
 
-See [Runtimes](/docs/v0.1/runtimes) for the full parity table.
+See [Runtimes](/docs/v0.2/runtimes) for the full parity table.
 
 ## Requirements
 
@@ -101,16 +101,16 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 ## What to read next
 
 <Cards>
-  <Cards.Card title="Getting Started" href="/docs/v0.1/getting-started">
+  <Cards.Card title="Getting Started" href="/docs/v0.2/getting-started">
     Scaffold a project, run it with HMR, produce a release binary.
   </Cards.Card>
-  <Cards.Card title="Architecture" href="/docs/v0.1/concepts/architecture">
+  <Cards.Card title="Architecture" href="/docs/v0.2/concepts/architecture">
     Frontend, Rust host, TS backend — how the three surfaces fit.
   </Cards.Card>
-  <Cards.Card title="Guides" href="/docs/v0.1/guides">
+  <Cards.Card title="Guides" href="/docs/v0.2/guides">
     Recipes for streaming, multi-window, auto-update, signing, bundling.
   </Cards.Card>
-  <Cards.Card title="Comparisons" href="/docs/v0.1/compare">
+  <Cards.Card title="Comparisons" href="/docs/v0.2/compare">
     Tynd vs Tauri, Electron, Wails — 39 categories, 503 rows.
   </Cards.Card>
 </Cards>
@@ -119,7 +119,7 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 
 --- SECTION: Getting Started ---
 
-URL: https://tynd.dev/docs/v0.1/getting-started
+URL: https://tynd.kvnpetit.com/docs/v0.2/getting-started
 TITLE: Getting Started
 DESCRIPTION: Scaffold your first Tynd app, run it with hot reload, and produce a release binary in under five minutes.
 
@@ -135,7 +135,7 @@ Build a native desktop app in TypeScript in under 5 minutes. By the end of this 
 
 ### Install prerequisites
 
-[Bun](https://bun.sh) is required. On Linux you also need the WebKitGTK dev packages — see [Installation](/docs/v0.1/getting-started/installation).
+[Bun](https://bun.sh) is required. On Linux you also need the WebKitGTK dev packages — see [Installation](/docs/v0.2/getting-started/installation).
 
 ### Scaffold a project
 
@@ -168,23 +168,23 @@ Output lands in `release/`.
 ## Keep reading
 
 <Cards>
-  <Cards.Card title="Installation" href="/docs/v0.1/getting-started/installation">
+  <Cards.Card title="Installation" href="/docs/v0.2/getting-started/installation">
     Bun, WebView deps per OS, verifying the setup.
   </Cards.Card>
-  <Cards.Card title="Your First App" href="/docs/v0.1/getting-started/first-app">
+  <Cards.Card title="Your First App" href="/docs/v0.2/getting-started/first-app">
     Walk through the backend, the frontend, and the RPC boundary.
   </Cards.Card>
-  <Cards.Card title="Project Structure" href="/docs/v0.1/getting-started/project-structure">
+  <Cards.Card title="Project Structure" href="/docs/v0.2/getting-started/project-structure">
     What each file does and where your code goes.
   </Cards.Card>
-  <Cards.Card title="Development Workflow" href="/docs/v0.1/getting-started/dev-workflow">
+  <Cards.Card title="Development Workflow" href="/docs/v0.2/getting-started/dev-workflow">
     `tynd dev` vs `tynd start`, caching, hot reload.
   </Cards.Card>
 </Cards>
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/getting-started/dev-workflow
+URL: https://tynd.kvnpetit.com/docs/v0.2/getting-started/dev-workflow
 TITLE: Development Workflow
 DESCRIPTION: The day-to-day loop — dev mode with HMR, classic builds without HMR, cache hits, and troubleshooting.
 
@@ -215,7 +215,7 @@ bun run dev        # alias for `tynd dev`
 | Lit | ♻ Full reload — Web Components by design |
 | Angular | ♻ Full reload by default (opt-in HMR via `ng serve --hmr`) |
 
-See [Frontend Frameworks](/docs/v0.1/guides/frontend-frameworks) for per-framework details.
+See [Frontend Frameworks](/docs/v0.2/guides/frontend-frameworks) for per-framework details.
 
 ## `tynd start` — classic build, no HMR
 
@@ -251,7 +251,7 @@ With `--bundle`:
 | Linux | `.deb`, `.rpm` (needs `rpmbuild`), `.AppImage` |
 | Windows | NSIS `.exe` setup + `.msi` |
 
-See [Bundling & Distribution](/docs/v0.1/guides/bundling).
+See [Bundling & Distribution](/docs/v0.2/guides/bundling).
 
 ## The build cache
 
@@ -296,13 +296,13 @@ Run both if something feels off.
 
 ## Next
 
-- [Backend RPC guide](/docs/v0.1/guides/backend-rpc)
-- [Architecture](/docs/v0.1/concepts/architecture)
-- [Troubleshooting](/docs/v0.1/troubleshooting)
+- [Backend RPC guide](/docs/v0.2/guides/backend-rpc)
+- [Architecture](/docs/v0.2/concepts/architecture)
+- [Troubleshooting](/docs/v0.2/troubleshooting)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/getting-started/first-app
+URL: https://tynd.kvnpetit.com/docs/v0.2/getting-started/first-app
 TITLE: Your First App
 DESCRIPTION: Build a minimal Tynd app from scratch — backend function, frontend call, typed RPC, and a production binary.
 
@@ -410,7 +410,7 @@ document.getElementById("max")!.addEventListener("click", async () => {
 ```
 
 <Callout type="info">
-  OS calls bypass the TypeScript backend entirely — the frontend talks straight to the Rust host over the native IPC channel. See [IPC Model](/docs/v0.1/concepts/ipc).
+  OS calls bypass the TypeScript backend entirely — the frontend talks straight to the Rust host over the native IPC channel. See [IPC Model](/docs/v0.2/concepts/ipc).
 </Callout>
 
 ## Run it
@@ -448,17 +448,17 @@ Produces platform-native installers:
 | Linux | `.deb` + `.rpm` (if `rpmbuild` is available) + `.AppImage` |
 | Windows | NSIS `.exe` setup + `.msi` |
 
-See [Bundling & Distribution](/docs/v0.1/guides/bundling) for the full workflow.
+See [Bundling & Distribution](/docs/v0.2/guides/bundling) for the full workflow.
 
 ## Next
 
-- [Project Structure](/docs/v0.1/getting-started/project-structure)
-- [Backend RPC guide](/docs/v0.1/guides/backend-rpc)
-- [API Reference](/docs/v0.1/api)
+- [Project Structure](/docs/v0.2/getting-started/project-structure)
+- [Backend RPC guide](/docs/v0.2/guides/backend-rpc)
+- [API Reference](/docs/v0.2/api)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/getting-started/installation
+URL: https://tynd.kvnpetit.com/docs/v0.2/getting-started/installation
 TITLE: Installation
 DESCRIPTION: Install Bun and the OS-level dependencies Tynd needs to build and run desktop apps on Windows, macOS, and Linux.
 
@@ -540,7 +540,7 @@ bun add -d @tynd/cli @tynd/core @tynd/host
 
 `@tynd/host`'s postinstall downloads the pre-built `tynd-full` and `tynd-lite` binaries for your OS/arch from GitHub Releases. Bun blocks postinstall scripts by default — `tynd init` / `tynd create` auto-add `@tynd/host` to your `package.json` `trustedDependencies` so the download runs on the next `bun install`.
 
-If the postinstall was skipped or failed (old `@tynd/host` version, network glitch), `tynd dev` / `start` / `build` / `validate` fall back to fetching the matching release asset on demand and cache it under `node_modules/@tynd/host/bin/<platform>-<arch>/`. If that also fails, see [Troubleshooting](/docs/v0.1/troubleshooting).
+If the postinstall was skipped or failed (old `@tynd/host` version, network glitch), `tynd dev` / `start` / `build` / `validate` fall back to fetching the matching release asset on demand and cache it under `node_modules/@tynd/host/bin/<platform>-<arch>/`. If that also fails, see [Troubleshooting](/docs/v0.2/troubleshooting).
 
 ## Verify the install
 
@@ -560,12 +560,12 @@ Any TypeScript-capable editor works. The project's `tsconfig.json` points at ES2
 
 ## Next
 
-- [Your First App](/docs/v0.1/getting-started/first-app)
-- [Development Workflow](/docs/v0.1/getting-started/dev-workflow)
+- [Your First App](/docs/v0.2/getting-started/first-app)
+- [Development Workflow](/docs/v0.2/getting-started/dev-workflow)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/getting-started/project-structure
+URL: https://tynd.kvnpetit.com/docs/v0.2/getting-started/project-structure
 TITLE: Project Structure
 DESCRIPTION: The files and directories `tynd create` scaffolds, what each one does, and where your code goes.
 
@@ -619,7 +619,7 @@ export default {
 } satisfies TyndConfig;
 ```
 
-See [tynd.config.ts reference](/docs/v0.1/cli/config) for every field.
+See [tynd.config.ts reference](/docs/v0.2/cli/config) for every field.
 
 ### `package.json`
 
@@ -641,7 +641,7 @@ The TypeScript side that runs in the `lite` QuickJS or `full` Bun runtime. Decla
 - **Emitters from `createEmitter`** become frontend event sources (subscribed via `api.on`).
 - **`app.start(config)`** must be the final top-level call.
 
-See [Backend API](/docs/v0.1/api/backend).
+See [Backend API](/docs/v0.2/api/backend).
 
 ## `src/`
 
@@ -703,14 +703,14 @@ Keep `tynd.config.ts`, `backend/`, `src/`, `public/`, and the root manifest/lock
 
 ## Next
 
-- [Development Workflow](/docs/v0.1/getting-started/dev-workflow)
-- [Architecture](/docs/v0.1/concepts/architecture)
+- [Development Workflow](/docs/v0.2/getting-started/dev-workflow)
+- [Architecture](/docs/v0.2/concepts/architecture)
 
 ----
 
 --- SECTION: Core Concepts ---
 
-URL: https://tynd.dev/docs/v0.1/concepts/architecture
+URL: https://tynd.kvnpetit.com/docs/v0.2/concepts/architecture
 TITLE: Architecture
 DESCRIPTION: How Tynd splits an app across three surfaces — frontend WebView, Rust host, and TypeScript backend — and what each one owns.
 
@@ -760,7 +760,7 @@ Your exported functions, your typed emitters, your lifecycle hooks. Runs in one 
 - **`full`** — a Bun subprocess. You get full Bun + Node.js globals (`fetch`, `Bun.*`, `node:*`), JIT, and native npm bindings.
 - **`lite`** — embedded QuickJS inside the Rust host. You get **Web standards only** (WHATWG + W3C + TC39), plus all 26 Tynd OS APIs. No `Buffer`, no `process.*`, no `Bun.*`.
 
-Same TypeScript, same frontend. The only difference is what JS-level globals you can reach inside backend code. See [Runtime Modes](/docs/v0.1/concepts/runtimes).
+Same TypeScript, same frontend. The only difference is what JS-level globals you can reach inside backend code. See [Runtime Modes](/docs/v0.2/concepts/runtimes).
 
 ## Two topology variants
 
@@ -799,7 +799,7 @@ Frontend (WebView)  ──postMessage──►  Rust host (IPC handler)  ──d
 
 **Runtime-specific:**
 
-- JS-level globals inside backend code — see [Runtimes](/docs/v0.1/runtimes).
+- JS-level globals inside backend code — see [Runtimes](/docs/v0.2/runtimes).
 - Bun vs QuickJS binary packing: full packs Bun + zstd; lite packs QuickJS directly into the host.
 - `workers` — lite uses an isolated QuickJS runtime on a fresh thread; full uses `Bun.Worker`. Same API surface.
 
@@ -812,13 +812,13 @@ Frontend (WebView)  ──postMessage──►  Rust host (IPC handler)  ──d
 
 ## Next
 
-- [Runtime Modes](/docs/v0.1/concepts/runtimes) — lite vs full, parity table.
-- [IPC Model](/docs/v0.1/concepts/ipc) — call / event / stream flow in detail.
-- [Security](/docs/v0.1/concepts/security) — CSP, scheme allowlists, structural model.
+- [Runtime Modes](/docs/v0.2/concepts/runtimes) — lite vs full, parity table.
+- [IPC Model](/docs/v0.2/concepts/ipc) — call / event / stream flow in detail.
+- [Security](/docs/v0.2/concepts/security) — CSP, scheme allowlists, structural model.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/concepts/build-pipeline
+URL: https://tynd.kvnpetit.com/docs/v0.2/concepts/build-pipeline
 TITLE: Build Pipeline
 DESCRIPTION: How `tynd dev`, `tynd start`, and `tynd build` turn your TypeScript into frontend assets, a backend bundle, and a self-contained native binary.
 
@@ -894,7 +894,7 @@ Icons are **not** cached — the source stays in `public/` and bundlers render t
 
 ## Pack step (`tynd build` only)
 
-After the frontend and backend builds succeed, `tynd build` concatenates them into a self-extracting binary by appending a **TYNDPKG** trailer to the host executable. See [TYNDPKG Format](/docs/v0.1/concepts/tyndpkg).
+After the frontend and backend builds succeed, `tynd build` concatenates them into a self-extracting binary by appending a **TYNDPKG** trailer to the host executable. See [TYNDPKG Format](/docs/v0.2/concepts/tyndpkg).
 
 Flow:
 
@@ -923,7 +923,7 @@ Auto-downloaded tools cache to `.tynd/cache/tools/<tool>/<version>/`. No manual 
 
 Cross-compilation **is not supported** — each host produces installers only for its own OS. Use a GitHub Actions matrix to cover all three.
 
-See the [Bundling guide](/docs/v0.1/guides/bundling).
+See the [Bundling guide](/docs/v0.2/guides/bundling).
 
 ## Code signing (`tynd build --bundle` with `bundle.sign`)
 
@@ -932,7 +932,7 @@ When `bundle.sign` is declared in `tynd.config.ts`, the raw binary is signed rig
 - **Windows** → `signtool.exe` (auto-discovered: `SIGNTOOL` env var → Windows SDK → PATH).
 - **macOS** → `codesign --options runtime --timestamp` with optional `xcrun notarytool submit --wait` + `xcrun stapler staple`.
 
-See the [Code Signing guide](/docs/v0.1/guides/code-signing).
+See the [Code Signing guide](/docs/v0.2/guides/code-signing).
 
 ## CLI flag summary
 
@@ -946,13 +946,13 @@ See the [Code Signing guide](/docs/v0.1/guides/code-signing).
 
 ## Next
 
-- [TYNDPKG Format](/docs/v0.1/concepts/tyndpkg)
-- [Security](/docs/v0.1/concepts/security)
-- [Bundling guide](/docs/v0.1/guides/bundling)
+- [TYNDPKG Format](/docs/v0.2/concepts/tyndpkg)
+- [Security](/docs/v0.2/concepts/security)
+- [Bundling guide](/docs/v0.2/guides/bundling)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/concepts/ipc
+URL: https://tynd.kvnpetit.com/docs/v0.2/concepts/ipc
 TITLE: IPC Model
 DESCRIPTION: The transport under RPC calls, events, streaming, and OS calls — how Tynd moves data between frontend, Rust host, and backend without touching the network.
 
@@ -1082,7 +1082,7 @@ Three flow-control mechanisms keep streaming safe at arbitrary yield rates:
 
 Combined guarantee: 10k+ yields/sec to the UI without freezing it.
 
-See the [Streaming RPC guide](/docs/v0.1/guides/streaming).
+See the [Streaming RPC guide](/docs/v0.2/guides/streaming).
 
 ## OS calls — frontend → Rust directly
 
@@ -1118,7 +1118,7 @@ Current routes:
 
 The TS client wraps these — `fs.readBinary(path)`, `compute.hash(bytes)` — users never touch the scheme directly. Small / non-binary calls (`randomBytes`, text helpers, terminal events) stay on the JSON IPC where it's simpler.
 
-See the [Binary Data guide](/docs/v0.1/guides/binary-data).
+See the [Binary Data guide](/docs/v0.2/guides/binary-data).
 
 ## Event emitter infrastructure
 
@@ -1132,17 +1132,17 @@ Subscribe on the frontend via `window.__tynd__.os_on(name, handler)` — or use 
 - Every frontend call includes the originating window's label; responses route back to it only.
 - Window events (resize, focus, close, …) are broadcast to every webview with a `label` field in the payload. Client-side helpers filter by `__TYND_WINDOW_LABEL__` (injected at WebView creation) so handlers only fire for their own window.
 
-See the [Multi-Window guide](/docs/v0.1/guides/multi-window).
+See the [Multi-Window guide](/docs/v0.2/guides/multi-window).
 
 ## Next
 
-- [Build Pipeline](/docs/v0.1/concepts/build-pipeline)
-- [TYNDPKG Format](/docs/v0.1/concepts/tyndpkg)
-- [Streaming RPC guide](/docs/v0.1/guides/streaming)
+- [Build Pipeline](/docs/v0.2/concepts/build-pipeline)
+- [TYNDPKG Format](/docs/v0.2/concepts/tyndpkg)
+- [Streaming RPC guide](/docs/v0.2/guides/streaming)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/concepts/runtimes
+URL: https://tynd.kvnpetit.com/docs/v0.2/concepts/runtimes
 TITLE: Runtime Modes
 DESCRIPTION: The difference between `lite` (embedded QuickJS, ~6.5 MB) and `full` (Bun subprocess, ~44 MB) and how to pick between them.
 
@@ -1230,7 +1230,7 @@ Most code written against Web standards runs unchanged on both runtimes. The tab
 
 ## Parity table (Tynd OS APIs)
 
-**All identical on both runtimes** — implemented in Rust, called the same way from the same `@tynd/core/client` import. See the [API Reference](/docs/v0.1/api) for the complete list.
+**All identical on both runtimes** — implemented in Rust, called the same way from the same `@tynd/core/client` import. See the [API Reference](/docs/v0.2/api) for the complete list.
 
 ## Size and startup
 
@@ -1273,13 +1273,13 @@ For Web-standard work that lite doesn't polyfill, see [Alternatives (pure-JS lib
 
 ## Next
 
-- [Architecture](/docs/v0.1/concepts/architecture)
-- [Full runtime reference page](/docs/v0.1/runtimes)
-- [Compare Tynd vs other frameworks](/docs/v0.1/compare)
+- [Architecture](/docs/v0.2/concepts/architecture)
+- [Full runtime reference page](/docs/v0.2/runtimes)
+- [Compare Tynd vs other frameworks](/docs/v0.2/compare)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/concepts/security
+URL: https://tynd.kvnpetit.com/docs/v0.2/concepts/security
 TITLE: Security
 DESCRIPTION: The security model — CSP defaults, scheme allowlists, structural exposure surface, and OS-backed secret storage.
 
@@ -1348,7 +1348,7 @@ If you declare `protocols: ["myapp"]` in `tynd.config.ts`, the following are rej
 
 - `http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`
 
-See [Deep Linking](/docs/v0.1/guides/deep-linking).
+See [Deep Linking](/docs/v0.2/guides/deep-linking).
 
 ## Secret storage — `keyring` > `store`
 
@@ -1368,7 +1368,7 @@ const prefs = createStore("com.example.app");
 await prefs.set("theme", "dark");
 ```
 
-See the [Persistence guide](/docs/v0.1/guides/persistence).
+See the [Persistence guide](/docs/v0.2/guides/persistence).
 
 ## Code signing — trust the binary
 
@@ -1377,7 +1377,7 @@ Unsigned binaries trigger SmartScreen warnings (Windows), Gatekeeper quarantine 
 - **Windows** — `signtool.exe` (SHA-256 + timestamp server).
 - **macOS** — `codesign --options runtime` + optional `xcrun notarytool submit --wait` + stapler.
 
-See the [Code Signing guide](/docs/v0.1/guides/code-signing).
+See the [Code Signing guide](/docs/v0.2/guides/code-signing).
 
 ## Auto-update — Ed25519 signatures
 
@@ -1387,7 +1387,7 @@ The updater downloads an artifact and **verifies an Ed25519 signature** over the
 - The CLI ships `tynd keygen` / `tynd sign` so you can produce signed manifests without third-party tools.
 - WebCrypto Ed25519 on the signing side, the Ed25519 verifier on the verifying side — raw 32-byte pubkeys, raw 64-byte signatures, no format conversions.
 
-See the [Auto-Updates guide](/docs/v0.1/guides/auto-updates).
+See the [Auto-Updates guide](/docs/v0.2/guides/auto-updates).
 
 ## OS-level `process.exec` / `execShell`
 
@@ -1458,13 +1458,13 @@ If you let a user pass a path to `fs.readText` / `process.exec`, validate the pa
 
 ## Next
 
-- [Code Signing guide](/docs/v0.1/guides/code-signing)
-- [Auto-Updates guide](/docs/v0.1/guides/auto-updates)
-- [keyring API](/docs/v0.1/api/os/keyring)
+- [Code Signing guide](/docs/v0.2/guides/code-signing)
+- [Auto-Updates guide](/docs/v0.2/guides/auto-updates)
+- [keyring API](/docs/v0.2/api/os/keyring)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/concepts/tyndpkg
+URL: https://tynd.kvnpetit.com/docs/v0.2/concepts/tyndpkg
 TITLE: TYNDPKG Format
 DESCRIPTION: The self-extracting trailer appended to a Tynd binary — how your frontend, backend, Bun, and sidecars live inside a single .exe.
 
@@ -1608,15 +1608,15 @@ So a real `lite` app ships around ~6.5-10 MB; a `full` app ships around ~44-50 M
 
 ## Next
 
-- [Build Pipeline](/docs/v0.1/concepts/build-pipeline)
-- [Bundling guide](/docs/v0.1/guides/bundling)
-- [Sidecars guide](/docs/v0.1/guides/sidecars)
+- [Build Pipeline](/docs/v0.2/concepts/build-pipeline)
+- [Bundling guide](/docs/v0.2/guides/bundling)
+- [Sidecars guide](/docs/v0.2/guides/sidecars)
 
 ----
 
 --- SECTION: Guides ---
 
-URL: https://tynd.dev/docs/v0.1/guides
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides
 TITLE: Guides
 DESCRIPTION: Task-focused guides for real Tynd work — frontend frameworks, streaming RPC, multi-window, auto-updates, code signing, bundling, and more.
 
@@ -1627,22 +1627,22 @@ Topic-oriented guides. Each one walks through a concept you'll hit while buildin
 ## Core
 
 <Cards>
-  <Cards.Card title="Frontend Frameworks" href="/docs/v0.1/guides/frontend-frameworks">
+  <Cards.Card title="Frontend Frameworks" href="/docs/v0.2/guides/frontend-frameworks">
     React, Vue, Svelte, Solid, Preact, Lit, Angular — what's supported, HMR caveats, SSR frameworks that are blocked.
   </Cards.Card>
-  <Cards.Card title="Backend RPC" href="/docs/v0.1/guides/backend-rpc">
+  <Cards.Card title="Backend RPC" href="/docs/v0.2/guides/backend-rpc">
     Zero-codegen typed RPC. How arguments / returns / errors serialize, emitters, modularization.
   </Cards.Card>
-  <Cards.Card title="Streaming RPC" href="/docs/v0.1/guides/streaming">
+  <Cards.Card title="Streaming RPC" href="/docs/v0.2/guides/streaming">
     Async-generator handlers with flow control, cancellation, multi-window routing.
   </Cards.Card>
-  <Cards.Card title="Multi-Window" href="/docs/v0.1/guides/multi-window">
+  <Cards.Card title="Multi-Window" href="/docs/v0.2/guides/multi-window">
     Secondary windows, per-window events, cross-window coordination.
   </Cards.Card>
-  <Cards.Card title="Binary Data" href="/docs/v0.1/guides/binary-data">
+  <Cards.Card title="Binary Data" href="/docs/v0.2/guides/binary-data">
     Zero-copy multi-MB payloads via the `tynd-bin://` channel.
   </Cards.Card>
-  <Cards.Card title="Persistence" href="/docs/v0.1/guides/persistence">
+  <Cards.Card title="Persistence" href="/docs/v0.2/guides/persistence">
     Picking between `store`, `sql`, `keyring`, and `fs` for app state.
   </Cards.Card>
 </Cards>
@@ -1650,16 +1650,16 @@ Topic-oriented guides. Each one walks through a concept you'll hit while buildin
 ## Desktop integration
 
 <Cards>
-  <Cards.Card title="Single Instance" href="/docs/v0.1/guides/single-instance">
+  <Cards.Card title="Single Instance" href="/docs/v0.2/guides/single-instance">
     Prevent duplicate launches, forward argv, auto-focus the primary.
   </Cards.Card>
-  <Cards.Card title="Deep Linking" href="/docs/v0.1/guides/deep-linking">
+  <Cards.Card title="Deep Linking" href="/docs/v0.2/guides/deep-linking">
     Register `myapp://` URLs — registration, testing, validation.
   </Cards.Card>
-  <Cards.Card title="Keyboard Shortcuts" href="/docs/v0.1/guides/keyboard-shortcuts">
+  <Cards.Card title="Keyboard Shortcuts" href="/docs/v0.2/guides/keyboard-shortcuts">
     System-wide hotkeys that fire even when the app is unfocused.
   </Cards.Card>
-  <Cards.Card title="Sidecars" href="/docs/v0.1/guides/sidecars">
+  <Cards.Card title="Sidecars" href="/docs/v0.2/guides/sidecars">
     Bundle and execute a native CLI (ffmpeg, yt-dlp, …).
   </Cards.Card>
 </Cards>
@@ -1667,16 +1667,16 @@ Topic-oriented guides. Each one walks through a concept you'll hit while buildin
 ## Release workflow
 
 <Cards>
-  <Cards.Card title="Bundling & Distribution" href="/docs/v0.1/guides/bundling">
+  <Cards.Card title="Bundling & Distribution" href="/docs/v0.2/guides/bundling">
     `.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS, MSI — produce platform-native installers.
   </Cards.Card>
-  <Cards.Card title="Code Signing" href="/docs/v0.1/guides/code-signing">
+  <Cards.Card title="Code Signing" href="/docs/v0.2/guides/code-signing">
     Windows `signtool`, macOS `codesign` + notarization, Linux detached `.sig`.
   </Cards.Card>
-  <Cards.Card title="Auto-Updates" href="/docs/v0.1/guides/auto-updates">
+  <Cards.Card title="Auto-Updates" href="/docs/v0.2/guides/auto-updates">
     Ed25519-signed updates with a Tauri-compatible manifest.
   </Cards.Card>
-  <Cards.Card title="Icons & Branding" href="/docs/v0.1/guides/icons-branding">
+  <Cards.Card title="Icons & Branding" href="/docs/v0.2/guides/icons-branding">
     One SVG source → Windows ICO, macOS ICNS, Linux hicolor.
   </Cards.Card>
 </Cards>
@@ -1684,19 +1684,19 @@ Topic-oriented guides. Each one walks through a concept you'll hit while buildin
 ## Quality
 
 <Cards>
-  <Cards.Card title="Testing" href="/docs/v0.1/guides/testing">
+  <Cards.Card title="Testing" href="/docs/v0.2/guides/testing">
     `bun test` for backend logic, mocking OS APIs, smoke tests in CI.
   </Cards.Card>
-  <Cards.Card title="Performance" href="/docs/v0.1/guides/performance">
+  <Cards.Card title="Performance" href="/docs/v0.2/guides/performance">
     Startup latency, IPC overhead, CPU-bound JS, memory.
   </Cards.Card>
-  <Cards.Card title="Debugging" href="/docs/v0.1/guides/debugging">
+  <Cards.Card title="Debugging" href="/docs/v0.2/guides/debugging">
     DevTools, verbose logs, the backend inspector, common symptoms.
   </Cards.Card>
-  <Cards.Card title="Accessibility" href="/docs/v0.1/guides/accessibility">
+  <Cards.Card title="Accessibility" href="/docs/v0.2/guides/accessibility">
     Screen readers, focus management, reduced motion, color contrast.
   </Cards.Card>
-  <Cards.Card title="Internationalization" href="/docs/v0.1/guides/i18n">
+  <Cards.Card title="Internationalization" href="/docs/v0.2/guides/i18n">
     Locale detection, string catalogs, RTL layouts.
   </Cards.Card>
 </Cards>
@@ -1704,23 +1704,23 @@ Topic-oriented guides. Each one walks through a concept you'll hit while buildin
 ## Migration
 
 <Cards>
-  <Cards.Card title="Migrate from Tauri" href="/docs/v0.1/guides/migrate-from-tauri">
+  <Cards.Card title="Migrate from Tauri" href="/docs/v0.2/guides/migrate-from-tauri">
     Port `#[tauri::command]`s to backend `export`s. Keep the same installers + updater.
   </Cards.Card>
-  <Cards.Card title="Migrate from Electron" href="/docs/v0.1/guides/migrate-from-electron">
+  <Cards.Card title="Migrate from Electron" href="/docs/v0.2/guides/migrate-from-electron">
     Replace `ipcMain.handle` with typed RPC; drop the ~160 MB Chromium.
   </Cards.Card>
 </Cards>
 
 ## Related
 
-- [API Reference](/docs/v0.1/api) — signatures for every surface the guides touch.
-- [Recipes](/docs/v0.1/recipes) — shorter self-contained snippets.
-- [Tutorials](/docs/v0.1/tutorials) — full app walkthroughs.
+- [API Reference](/docs/v0.2/api) — signatures for every surface the guides touch.
+- [Recipes](/docs/v0.2/recipes) — shorter self-contained snippets.
+- [Tutorials](/docs/v0.2/tutorials) — full app walkthroughs.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/accessibility
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/accessibility
 TITLE: Accessibility
 DESCRIPTION: Ship an app that works for screen readers, keyboard-only users, and high-contrast / reduced-motion preferences.
 
@@ -1823,7 +1823,7 @@ if (!reduced) runFancyAnimation();
 
 - Document them in an in-app help dialog.
 - Don't hijack OS-reserved combos (⌘Q on macOS, Ctrl+Alt+Del on Windows).
-- Let users remap — see [Keyboard Shortcuts](/docs/v0.1/guides/keyboard-shortcuts) for a user-configurable pattern.
+- Let users remap — see [Keyboard Shortcuts](/docs/v0.2/guides/keyboard-shortcuts) for a user-configurable pattern.
 
 ### Tray menu keyboard access
 
@@ -1877,13 +1877,13 @@ Automated checks help but don't replace manual testing:
 
 ## Related
 
-- [Keyboard Shortcuts](/docs/v0.1/guides/keyboard-shortcuts).
-- [Multi-Window](/docs/v0.1/guides/multi-window) — focus management.
-- [Security](/docs/v0.1/concepts/security) — CSP and trusted-content defaults.
+- [Keyboard Shortcuts](/docs/v0.2/guides/keyboard-shortcuts).
+- [Multi-Window](/docs/v0.2/guides/multi-window) — focus management.
+- [Security](/docs/v0.2/concepts/security) — CSP and trusted-content defaults.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/auto-updates
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/auto-updates
 TITLE: Auto-Updates
 DESCRIPTION: Ship Ed25519-signed auto-updates with a Tauri-compatible manifest. The CLI handles keygen, signing, and verification.
 
@@ -2082,13 +2082,13 @@ For macOS today, download the artifact, extract it manually, then tell the user 
 
 ## Next
 
-- [updater API](/docs/v0.1/api/os/updater)
-- [tynd keygen](/docs/v0.1/cli/keygen)
-- [tynd sign](/docs/v0.1/cli/sign)
+- [updater API](/docs/v0.2/api/os/updater)
+- [tynd keygen](/docs/v0.2/cli/keygen)
+- [tynd sign](/docs/v0.2/cli/sign)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/backend-rpc
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/backend-rpc
 TITLE: Backend RPC
 DESCRIPTION: Typed RPC between frontend and backend without codegen — `createBackend<typeof backend>()`, emitters, and the rules of engagement.
 
@@ -2150,7 +2150,7 @@ JSON-serializable:
 - `Function` — no way to roundtrip across IPC
 - `Map` / `Set` — convert to array first
 - `Date` — serializes as ISO string; pass epoch ms (`Date.now()`) or parse on arrival
-- `ArrayBuffer` / `Uint8Array` — use [binary IPC](/docs/v0.1/guides/binary-data) for anything large; for small payloads, base64-encode manually
+- `ArrayBuffer` / `Uint8Array` — use [binary IPC](/docs/v0.2/guides/binary-data) for anything large; for small payloads, base64-encode manually
 
 ## Error handling
 
@@ -2248,7 +2248,7 @@ for await (const n of stream) console.log(n);   // 1, 2, 3, 4, 5
 console.log(await stream);                      // "done"
 ```
 
-See [Streaming RPC](/docs/v0.1/guides/streaming) for flow control, cancellation, and multi-window routing.
+See [Streaming RPC](/docs/v0.2/guides/streaming) for flow control, cancellation, and multi-window routing.
 
 ## Calling between backend functions
 
@@ -2343,13 +2343,13 @@ Wait — `fs` lives in `@tynd/core/client`. Can the backend use it? Yes: `@tynd/
 
 ## Next
 
-- [Streaming RPC](/docs/v0.1/guides/streaming)
-- [Binary Data](/docs/v0.1/guides/binary-data)
-- [Backend API reference](/docs/v0.1/api/backend)
+- [Streaming RPC](/docs/v0.2/guides/streaming)
+- [Binary Data](/docs/v0.2/guides/binary-data)
+- [Backend API reference](/docs/v0.2/api/backend)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/binary-data
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/binary-data
 TITLE: Binary Data
 DESCRIPTION: Move multi-MB payloads between frontend and Rust without JSON or base64 — the `tynd-bin://` channel.
 
@@ -2455,13 +2455,13 @@ Custom APIs could add new routes in the Rust host, but the scheme is currently *
 
 ## Next
 
-- [fs API reference](/docs/v0.1/api/os/fs)
-- [compute API reference](/docs/v0.1/api/os/compute)
-- [http API reference](/docs/v0.1/api/os/http)
+- [fs API reference](/docs/v0.2/api/os/fs)
+- [compute API reference](/docs/v0.2/api/os/compute)
+- [http API reference](/docs/v0.2/api/os/http)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/bundling
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/bundling
 TITLE: Bundling & Distribution
 DESCRIPTION: Turn the raw Tynd binary into platform-native installers — `.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS `.exe`, MSI.
 
@@ -2663,13 +2663,13 @@ jobs:
 
 ## Next
 
-- [Code Signing](/docs/v0.1/guides/code-signing)
-- [Auto-Updates](/docs/v0.1/guides/auto-updates)
-- [tynd.config.ts](/docs/v0.1/cli/config)
+- [Code Signing](/docs/v0.2/guides/code-signing)
+- [Auto-Updates](/docs/v0.2/guides/auto-updates)
+- [tynd.config.ts](/docs/v0.2/cli/config)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/code-signing
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/code-signing
 TITLE: Code Signing
 DESCRIPTION: Sign Windows binaries with signtool, sign + notarize macOS builds with codesign + notarytool, and integrate signing into `tynd build`.
 
@@ -2931,13 +2931,13 @@ EV certs ship on hardware tokens and **don't work in most CI runners**. Use a cl
 
 ## Next
 
-- [tynd.config.ts reference](/docs/v0.1/cli/config)
-- [Auto-Updates](/docs/v0.1/guides/auto-updates)
-- [Bundling](/docs/v0.1/guides/bundling)
+- [tynd.config.ts reference](/docs/v0.2/cli/config)
+- [Auto-Updates](/docs/v0.2/guides/auto-updates)
+- [Bundling](/docs/v0.2/guides/bundling)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/debugging
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/debugging
 TITLE: Debugging
 DESCRIPTION: DevTools, verbose logs, backend inspector, and common diagnostic commands for Tynd apps.
 
@@ -3098,13 +3098,13 @@ Once the app is on a user's machine, you don't have DevTools. Options:
 
 ## Related
 
-- [Testing](/docs/v0.1/guides/testing) — catch bugs before users see them.
-- [Performance](/docs/v0.1/guides/performance) — profiling specifics.
-- [Troubleshooting](/docs/v0.1/troubleshooting) — common errors + fixes.
+- [Testing](/docs/v0.2/guides/testing) — catch bugs before users see them.
+- [Performance](/docs/v0.2/guides/performance) — profiling specifics.
+- [Troubleshooting](/docs/v0.2/troubleshooting) — common errors + fixes.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/deep-linking
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/deep-linking
 TITLE: Deep Linking
 DESCRIPTION: Register a custom URL scheme (`myapp://`) so the OS launches your app for matching links.
 
@@ -3250,12 +3250,12 @@ A future release may expose a `fileAssociations` config field; for now, roll you
 
 ## Next
 
-- [Single Instance](/docs/v0.1/guides/single-instance)
-- [singleInstance API](/docs/v0.1/api/os/single-instance)
+- [Single Instance](/docs/v0.2/guides/single-instance)
+- [singleInstance API](/docs/v0.2/api/os/single-instance)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/frontend-frameworks
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/frontend-frameworks
 TITLE: Frontend Frameworks
 DESCRIPTION: Tynd is framework-agnostic — any framework that builds to a pure SPA works. Detailed notes for React, Vue, Svelte, Solid, Preact, Lit, and Angular.
 
@@ -3416,12 +3416,12 @@ If the new framework is SSR (owns a server process at end-user runtime), add its
 
 ## Next
 
-- [Backend RPC](/docs/v0.1/guides/backend-rpc)
-- [Development Workflow](/docs/v0.1/getting-started/dev-workflow)
+- [Backend RPC](/docs/v0.2/guides/backend-rpc)
+- [Development Workflow](/docs/v0.2/getting-started/dev-workflow)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/i18n
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/i18n
 TITLE: Internationalization
 DESCRIPTION: Detect the user's locale, localize UI strings, format dates and numbers — in both `lite` (stubbed Intl) and `full` (full ICU).
 
@@ -3594,16 +3594,16 @@ Some UI is system-rendered and uses the OS language regardless of your app's pre
 - Screen readers read text in the page's `lang`. Set `<html lang>` correctly or VoiceOver / Narrator may mispronounce.
 - RTL users expect RTL focus order — use logical CSS, not hard-coded left/right.
 
-See [Accessibility](/docs/v0.1/guides/accessibility).
+See [Accessibility](/docs/v0.2/guides/accessibility).
 
 ## Related
 
-- [os.locale API](/docs/v0.1/api/os/os).
-- [Runtimes](/docs/v0.1/runtimes) — what's in `Intl` per runtime.
+- [os.locale API](/docs/v0.2/api/os/os).
+- [Runtimes](/docs/v0.2/runtimes) — what's in `Intl` per runtime.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/icons-branding
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/icons-branding
 TITLE: Icons & Branding
 DESCRIPTION: One source of truth for your app icon — SVG preferred. Tynd renders per-format sizes for Windows ICO, macOS ICNS, Linux hicolor.
 
@@ -3745,13 +3745,13 @@ test -f public/favicon.svg || { echo "icon missing"; exit 1; }
 
 ## Related
 
-- [Bundling guide](/docs/v0.1/guides/bundling).
-- [tynd.config.ts reference](/docs/v0.1/cli/config).
-- [TYNDPKG format](/docs/v0.1/concepts/tyndpkg) — how the icon gets embedded.
+- [Bundling guide](/docs/v0.2/guides/bundling).
+- [tynd.config.ts reference](/docs/v0.2/cli/config).
+- [TYNDPKG format](/docs/v0.2/concepts/tyndpkg) — how the icon gets embedded.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/keyboard-shortcuts
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/keyboard-shortcuts
 TITLE: Keyboard Shortcuts
 DESCRIPTION: Register system-wide global shortcuts that fire even when the app is unfocused.
 
@@ -3884,12 +3884,12 @@ await bindQuickOpen(saved);
 
 ## Next
 
-- [shortcuts API](/docs/v0.1/api/os/shortcuts)
-- [Menu guide](/docs/v0.1/api/os/menu) — menu accelerators (app-focused, not global)
+- [shortcuts API](/docs/v0.2/api/os/shortcuts)
+- [Menu guide](/docs/v0.2/api/os/menu) — menu accelerators (app-focused, not global)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/migrate-from-electron
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/migrate-from-electron
 TITLE: Migrate from Electron
 DESCRIPTION: Move an Electron app to Tynd — replace `ipcMain.handle` with backend `export`s, drop the 160 MB Chromium, keep your TypeScript.
 
@@ -4054,15 +4054,15 @@ In `full` mode, most Node APIs work unchanged. In `lite`, replace with Tynd OS A
 | `node:crypto` → `createHash` | `compute.hash` (faster, off-thread) |
 | `node:crypto` → `randomBytes` | `compute.randomBytes` |
 | Electron `session` → cookies | **No replacement.** Use `keyring` for tokens, `store` for other state. |
-| Electron `safeStorage` | [`keyring`](/docs/v0.1/api/os/keyring) — OS credential manager |
-| Electron `shell.openExternal` | [`shell.openExternal`](/docs/v0.1/api/os/shell) |
-| Electron `clipboard` | [`clipboard`](/docs/v0.1/api/os/clipboard) |
-| Electron `dialog` | [`dialog`](/docs/v0.1/api/os/dialog) |
-| Electron `Notification` | [`notification.send`](/docs/v0.1/api/os/notification) |
-| Electron `Tray` | declare `tray` in `app.start`, handle in [`tray`](/docs/v0.1/api/os/tray) |
-| Electron `Menu` | declare `menu` in `app.start`, handle in [`menu`](/docs/v0.1/api/os/menu) |
-| Electron `globalShortcut` | [`shortcuts`](/docs/v0.1/api/os/shortcuts) |
-| Electron `autoUpdater` | [`updater`](/docs/v0.1/api/os/updater) (Tauri-compatible manifest) |
+| Electron `safeStorage` | [`keyring`](/docs/v0.2/api/os/keyring) — OS credential manager |
+| Electron `shell.openExternal` | [`shell.openExternal`](/docs/v0.2/api/os/shell) |
+| Electron `clipboard` | [`clipboard`](/docs/v0.2/api/os/clipboard) |
+| Electron `dialog` | [`dialog`](/docs/v0.2/api/os/dialog) |
+| Electron `Notification` | [`notification.send`](/docs/v0.2/api/os/notification) |
+| Electron `Tray` | declare `tray` in `app.start`, handle in [`tray`](/docs/v0.2/api/os/tray) |
+| Electron `Menu` | declare `menu` in `app.start`, handle in [`menu`](/docs/v0.2/api/os/menu) |
+| Electron `globalShortcut` | [`shortcuts`](/docs/v0.2/api/os/shortcuts) |
+| Electron `autoUpdater` | [`updater`](/docs/v0.2/api/os/updater) (Tauri-compatible manifest) |
 
 ### What has no Tynd replacement
 
@@ -4082,7 +4082,7 @@ Replace your Electron build tooling (electron-builder, electron-forge) with `tyn
 tynd build --bundle        # .app, .dmg, .deb, .rpm, .AppImage, NSIS, MSI for host OS
 ```
 
-See [Bundling](/docs/v0.1/guides/bundling).
+See [Bundling](/docs/v0.2/guides/bundling).
 
 ### Port CI
 
@@ -4090,7 +4090,7 @@ Remove Electron-specific steps (Electron download cache, ASAR packaging). Use th
 
 ### Port code signing
 
-If you were signing Electron builds, your certs work as-is — `signtool` and `codesign` are the same tools. Just declare `bundle.sign` in `tynd.config.ts` and `tynd build` handles signing + (optional) notarization. See [Code Signing](/docs/v0.1/guides/code-signing).
+If you were signing Electron builds, your certs work as-is — `signtool` and `codesign` are the same tools. Just declare `bundle.sign` in `tynd.config.ts` and `tynd build` handles signing + (optional) notarization. See [Code Signing](/docs/v0.2/guides/code-signing).
 
 ### Port the updater
 
@@ -4101,7 +4101,7 @@ Tynd's updater uses the **Tauri-compatible** manifest format. If you were alread
 - Download + verify signature.
 - Swap + relaunch.
 
-See [Auto-Updates](/docs/v0.1/guides/auto-updates).
+See [Auto-Updates](/docs/v0.2/guides/auto-updates).
 
 </Steps>
 
@@ -4115,16 +4115,16 @@ See [Auto-Updates](/docs/v0.1/guides/auto-updates).
 
 Electron's security relies on `contextIsolation` + preload scripts exposing a minimal API. Tynd's security is **structural**: the frontend can only call what the backend exports. There's no separate preload boundary to maintain; if it's not `export`ed from `backend/main.ts`, the frontend can't reach it.
 
-See [Security concept](/docs/v0.1/concepts/security).
+See [Security concept](/docs/v0.2/concepts/security).
 
 ## Related
 
-- [vs Electron comparison](/docs/v0.1/compare/vs-electron).
+- [vs Electron comparison](/docs/v0.2/compare/vs-electron).
 - [Full 500-row matrix](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/migrate-from-tauri
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/migrate-from-tauri
 TITLE: Migrate from Tauri
 DESCRIPTION: Move a Tauri v2 app to Tynd — rewrite `#[tauri::command]`s as backend `export`s, port events to `createEmitter`, keep Rust out of your source tree.
 
@@ -4263,22 +4263,22 @@ api.on("userCreated", (user) => { /* user.id, user.name — typed */ });
 
 | Tauri plugin | Tynd equivalent |
 |---|---|
-| `@tauri-apps/plugin-fs` | [`fs`](/docs/v0.1/api/os/fs) |
-| `@tauri-apps/plugin-http` | [`http`](/docs/v0.1/api/os/http) (or `fetch`) |
-| `@tauri-apps/plugin-shell` | [`shell`](/docs/v0.1/api/os/shell) + [`process`](/docs/v0.1/api/os/process) |
-| `@tauri-apps/plugin-dialog` | [`dialog`](/docs/v0.1/api/os/dialog) |
-| `@tauri-apps/plugin-clipboard-manager` | [`clipboard`](/docs/v0.1/api/os/clipboard) |
-| `@tauri-apps/plugin-notification` | [`notification`](/docs/v0.1/api/os/notification) |
-| `@tauri-apps/plugin-os` | [`os`](/docs/v0.1/api/os/os) |
-| `@tauri-apps/plugin-process` | [`process`](/docs/v0.1/api/os/process) + [`app.exit`](/docs/v0.1/api/os/app) |
-| `@tauri-apps/plugin-global-shortcut` | [`shortcuts`](/docs/v0.1/api/os/shortcuts) |
-| `@tauri-apps/plugin-autostart` | [`autolaunch`](/docs/v0.1/api/os/autolaunch) |
-| `@tauri-apps/plugin-deep-link` | [`singleInstance.onOpenUrl`](/docs/v0.1/api/os/single-instance) + `protocols` in config |
-| `@tauri-apps/plugin-single-instance` | [`singleInstance`](/docs/v0.1/api/os/single-instance) |
-| `@tauri-apps/plugin-updater` | [`updater`](/docs/v0.1/api/os/updater) — same manifest format |
-| `@tauri-apps/plugin-store` | [`store`](/docs/v0.1/api/os/store) |
-| `@tauri-apps/plugin-sql` | [`sql`](/docs/v0.1/api/os/sql) (bundled SQLite) |
-| `@tauri-apps/plugin-websocket` | [`websocket`](/docs/v0.1/api/os/websocket) (or native `WebSocket`) |
+| `@tauri-apps/plugin-fs` | [`fs`](/docs/v0.2/api/os/fs) |
+| `@tauri-apps/plugin-http` | [`http`](/docs/v0.2/api/os/http) (or `fetch`) |
+| `@tauri-apps/plugin-shell` | [`shell`](/docs/v0.2/api/os/shell) + [`process`](/docs/v0.2/api/os/process) |
+| `@tauri-apps/plugin-dialog` | [`dialog`](/docs/v0.2/api/os/dialog) |
+| `@tauri-apps/plugin-clipboard-manager` | [`clipboard`](/docs/v0.2/api/os/clipboard) |
+| `@tauri-apps/plugin-notification` | [`notification`](/docs/v0.2/api/os/notification) |
+| `@tauri-apps/plugin-os` | [`os`](/docs/v0.2/api/os/os) |
+| `@tauri-apps/plugin-process` | [`process`](/docs/v0.2/api/os/process) + [`app.exit`](/docs/v0.2/api/os/app) |
+| `@tauri-apps/plugin-global-shortcut` | [`shortcuts`](/docs/v0.2/api/os/shortcuts) |
+| `@tauri-apps/plugin-autostart` | [`autolaunch`](/docs/v0.2/api/os/autolaunch) |
+| `@tauri-apps/plugin-deep-link` | [`singleInstance.onOpenUrl`](/docs/v0.2/api/os/single-instance) + `protocols` in config |
+| `@tauri-apps/plugin-single-instance` | [`singleInstance`](/docs/v0.2/api/os/single-instance) |
+| `@tauri-apps/plugin-updater` | [`updater`](/docs/v0.2/api/os/updater) — same manifest format |
+| `@tauri-apps/plugin-store` | [`store`](/docs/v0.2/api/os/store) |
+| `@tauri-apps/plugin-sql` | [`sql`](/docs/v0.2/api/os/sql) (bundled SQLite) |
+| `@tauri-apps/plugin-websocket` | [`websocket`](/docs/v0.2/api/os/websocket) (or native `WebSocket`) |
 
 Tynd doesn't ship equivalents for: Stronghold, biometric, NFC, positioner, persisted-scope, log. For those, either use pure-JS libs or write your own wrapper on top of the available primitives.
 
@@ -4364,7 +4364,7 @@ Replace `tauri-apps/tauri-action` with a direct `tynd build --bundle` step:
 - run: bunx tynd build --bundle
 ```
 
-See the [Bundling guide](/docs/v0.1/guides/bundling) for a full matrix example.
+See the [Bundling guide](/docs/v0.2/guides/bundling) for a full matrix example.
 
 </Steps>
 
@@ -4385,12 +4385,12 @@ See the [Bundling guide](/docs/v0.1/guides/bundling) for a full matrix example.
 
 ## Related
 
-- [vs Tauri comparison](/docs/v0.1/compare/vs-tauri).
+- [vs Tauri comparison](/docs/v0.2/compare/vs-tauri).
 - [Full 500-row matrix](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/multi-window
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/multi-window
 TITLE: Multi-Window
 DESCRIPTION: Create secondary windows, route events per-window, and clean up state on close.
 
@@ -4532,13 +4532,13 @@ const current = await monitors.current();   // where the calling window is
 
 ## Next
 
-- [Window API reference](/docs/v0.1/api/os/window)
-- [Menu API](/docs/v0.1/api/os/menu)
-- [Monitor API](/docs/v0.1/api/os/monitor)
+- [Window API reference](/docs/v0.2/api/os/window)
+- [Menu API](/docs/v0.2/api/os/menu)
+- [Monitor API](/docs/v0.2/api/os/monitor)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/performance
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/performance
 TITLE: Performance
 DESCRIPTION: Startup latency, IPC overhead, binary size, and CPU-bound hot paths — how to profile and optimize a Tynd app.
 
@@ -4619,7 +4619,7 @@ await api.processAll(files);
 
 - If you catch yourself calling RPC in a tight loop, batch on the backend.
 - If the call returns a lot of small objects, consider streaming (`async function*`) so the UI can render progressively.
-- For multi-MB binary, use [`tynd-bin://`](/docs/v0.1/guides/binary-data) — `fs.readBinary` / `compute.hash`. Don't encode binary as base64 through the JSON channel.
+- For multi-MB binary, use [`tynd-bin://`](/docs/v0.2/guides/binary-data) — `fs.readBinary` / `compute.hash`. Don't encode binary as base64 through the JSON channel.
 
 ## CPU-bound JS
 
@@ -4704,13 +4704,13 @@ cargo build --release -p tynd-lite --features tracing
 
 ## Related
 
-- [Binary Data](/docs/v0.1/guides/binary-data) — zero-copy multi-MB IPC.
-- [Streaming RPC](/docs/v0.1/guides/streaming) — progressive delivery.
-- [Runtimes](/docs/v0.1/runtimes) — lite vs full tradeoff.
+- [Binary Data](/docs/v0.2/guides/binary-data) — zero-copy multi-MB IPC.
+- [Streaming RPC](/docs/v0.2/guides/streaming) — progressive delivery.
+- [Runtimes](/docs/v0.2/runtimes) — lite vs full tradeoff.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/persistence
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/persistence
 TITLE: Persistence
 DESCRIPTION: Store app state — plain k/v with `store`, relational with `sql`, secrets with `keyring`, arbitrary files with `fs`.
 
@@ -4937,14 +4937,14 @@ async function importBackup() {
 
 ## Next
 
-- [fs API](/docs/v0.1/api/os/fs)
-- [sql API](/docs/v0.1/api/os/sql)
-- [store API](/docs/v0.1/api/os/store)
-- [keyring API](/docs/v0.1/api/os/keyring)
+- [fs API](/docs/v0.2/api/os/fs)
+- [sql API](/docs/v0.2/api/os/sql)
+- [store API](/docs/v0.2/api/os/store)
+- [keyring API](/docs/v0.2/api/os/keyring)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/sidecars
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/sidecars
 TITLE: Sidecars
 DESCRIPTION: Ship a helper binary (ffmpeg, yt-dlp, etc.) embedded inside your Tynd app and execute it at runtime.
 
@@ -5071,13 +5071,13 @@ macOS: a signed outer `.app` doesn't extend its signature to extracted sidecars.
 
 ## Next
 
-- [process API](/docs/v0.1/api/os/process)
-- [terminal API](/docs/v0.1/api/os/terminal)
-- [TYNDPKG format](/docs/v0.1/concepts/tyndpkg)
+- [process API](/docs/v0.2/api/os/process)
+- [terminal API](/docs/v0.2/api/os/terminal)
+- [TYNDPKG format](/docs/v0.2/concepts/tyndpkg)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/single-instance
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/single-instance
 TITLE: Single Instance
 DESCRIPTION: Prevent duplicate launches, forward argv / cwd from the second instance to the primary, and auto-focus the existing window.
 
@@ -5148,7 +5148,7 @@ singleInstance.onOpenUrl((url) => {
 - Cold start — argv contains the URL.
 - Duplicate launch — the primary receives the forwarded URL.
 
-See [Deep Linking](/docs/v0.1/guides/deep-linking) for scheme registration details per OS.
+See [Deep Linking](/docs/v0.2/guides/deep-linking) for scheme registration details per OS.
 
 ### File-open
 
@@ -5206,12 +5206,12 @@ singleInstance.acquire("com.example.myapp");
 
 ## Next
 
-- [singleInstance API](/docs/v0.1/api/os/single-instance)
-- [Deep Linking](/docs/v0.1/guides/deep-linking)
+- [singleInstance API](/docs/v0.2/api/os/single-instance)
+- [Deep Linking](/docs/v0.2/guides/deep-linking)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/streaming
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/streaming
 TITLE: Streaming RPC
 DESCRIPTION: Async-generator backend handlers stream yields to the frontend with flow control, batched DOM updates, and cancellation — safe at 10k+ yields/sec.
 
@@ -5442,18 +5442,18 @@ Yield batches render as `__tynd_yield_batch__([[id, val], [id, val], …])` on t
 
 ## Limitations
 
-- **No transferable objects** — values are JSON-serialized each time. For multi-MB binary chunks, use the [binary IPC channel](/docs/v0.1/guides/binary-data) separately and yield handles/IDs over JSON.
+- **No transferable objects** — values are JSON-serialized each time. For multi-MB binary chunks, use the [binary IPC channel](/docs/v0.2/guides/binary-data) separately and yield handles/IDs over JSON.
 - **No backpressure from the iterator back to the producer's I/O** — the generator is credit-paused, not paused at the network / disk level. If you're reading from a `fetch` body, the body reader is only called between yields, so the TCP buffer naturally backs up.
 
 ## Next
 
-- [Binary Data](/docs/v0.1/guides/binary-data)
-- [Backend RPC](/docs/v0.1/guides/backend-rpc)
-- [IPC model](/docs/v0.1/concepts/ipc)
+- [Binary Data](/docs/v0.2/guides/binary-data)
+- [Backend RPC](/docs/v0.2/guides/backend-rpc)
+- [IPC model](/docs/v0.2/concepts/ipc)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/guides/testing
+URL: https://tynd.kvnpetit.com/docs/v0.2/guides/testing
 TITLE: Testing
 DESCRIPTION: Unit-test backend logic with `bun test`, exercise OS APIs in isolation, and run integration smoke tests with the native host.
 
@@ -5656,15 +5656,15 @@ jobs:
 
 ## Related
 
-- [Performance](/docs/v0.1/guides/performance) — profiling and optimization.
-- [Debugging](/docs/v0.1/guides/debugging) — devtools, logs, verbose mode.
+- [Performance](/docs/v0.2/guides/performance) — profiling and optimization.
+- [Debugging](/docs/v0.2/guides/debugging) — devtools, logs, verbose mode.
 - [CONTRIBUTING.md](https://github.com/kvnpetit/tynd/blob/main/CONTRIBUTING.md) — how the Tynd monorepo tests itself.
 
 ----
 
 --- SECTION: Tutorials ---
 
-URL: https://tynd.dev/docs/v0.1/tutorials
+URL: https://tynd.kvnpetit.com/docs/v0.2/tutorials
 TITLE: Tutorials
 DESCRIPTION: Build complete Tynd apps step-by-step — markdown editor, file browser, LLM chat client.
 
@@ -5673,13 +5673,13 @@ DESCRIPTION: Build complete Tynd apps step-by-step — markdown editor, file bro
 End-to-end walkthroughs. Each tutorial starts from `bunx tynd create` and ends with a shippable binary.
 
 <Cards>
-  <Cards.Card title="Markdown Editor" href="/docs/v0.1/tutorials/markdown-editor">
+  <Cards.Card title="Markdown Editor" href="/docs/v0.2/tutorials/markdown-editor">
     File open/save, live preview, keyboard shortcuts, native menu — ~150 LOC.
   </Cards.Card>
-  <Cards.Card title="File Browser" href="/docs/v0.1/tutorials/file-browser">
+  <Cards.Card title="File Browser" href="/docs/v0.2/tutorials/file-browser">
     Directory walker, binary thumbnails via `fs.readBinary`, reveal-in-folder.
   </Cards.Card>
-  <Cards.Card title="LLM Chat Client" href="/docs/v0.1/tutorials/chat-client">
+  <Cards.Card title="LLM Chat Client" href="/docs/v0.2/tutorials/chat-client">
     Streaming RPC over `fetch`, token-by-token rendering, cancellation.
   </Cards.Card>
 </Cards>
@@ -5688,13 +5688,13 @@ Each tutorial is self-contained. Pick whichever matches what you're building.
 
 ## Prerequisites
 
-- [Bun installed](/docs/v0.1/getting-started/installation).
+- [Bun installed](/docs/v0.2/getting-started/installation).
 - Comfortable with TypeScript.
 - A framework you like — the tutorials use framework-agnostic DOM APIs; swap in React hooks / Vue refs / Svelte runes as you prefer.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/tutorials/chat-client
+URL: https://tynd.kvnpetit.com/docs/v0.2/tutorials/chat-client
 TITLE: LLM Chat Client
 DESCRIPTION: Build a streaming LLM chat — backend proxies token-by-token via `async function*`, frontend renders progressively with a cancel button.
 
@@ -5702,7 +5702,7 @@ DESCRIPTION: Build a streaming LLM chat — backend proxies token-by-token via `
 
 A native chat app backed by any OpenAI-compatible endpoint (OpenAI, Anthropic, Ollama, etc.). Demonstrates streaming RPC, cancellation, and keyring-stored API keys.
 
-Exercises: [async-generator RPC](/docs/v0.1/guides/streaming), [`keyring`](/docs/v0.1/api/os/keyring), [`fetch`](/docs/v0.1/api).
+Exercises: [async-generator RPC](/docs/v0.2/guides/streaming), [`keyring`](/docs/v0.2/api/os/keyring), [`fetch`](/docs/v0.2/api).
 
 ## Scaffold
 
@@ -5898,17 +5898,17 @@ tynd build
 - **Save conversations** — JSON in `os.dataDir()` + `fs.writeText`.
 - **Model picker** — store the selected model in `createStore`.
 - **Multi-window** — one conversation per `tyndWindow.create({ label: convoId })`.
-- **System tray** — minimize to tray for quick ⌘-Space access with a [global shortcut](/docs/v0.1/guides/keyboard-shortcuts).
+- **System tray** — minimize to tray for quick ⌘-Space access with a [global shortcut](/docs/v0.2/guides/keyboard-shortcuts).
 
 ## Related
 
-- [Streaming RPC guide](/docs/v0.1/guides/streaming).
-- [keyring API](/docs/v0.1/api/os/keyring).
-- [Persistence guide](/docs/v0.1/guides/persistence).
+- [Streaming RPC guide](/docs/v0.2/guides/streaming).
+- [keyring API](/docs/v0.2/api/os/keyring).
+- [Persistence guide](/docs/v0.2/guides/persistence).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/tutorials/file-browser
+URL: https://tynd.kvnpetit.com/docs/v0.2/tutorials/file-browser
 TITLE: File Browser
 DESCRIPTION: Build a file browser with directory walking, image thumbnails via zero-copy binary IPC, and reveal-in-folder.
 
@@ -5916,7 +5916,7 @@ DESCRIPTION: Build a file browser with directory walking, image thumbnails via z
 
 A working cross-platform file browser: directory tree, image thumbnails, double-click to open with the OS default handler, right-click to reveal.
 
-Exercises: [`fs.readDir`](/docs/v0.1/api/os/fs), [`fs.readBinary`](/docs/v0.1/api/os/fs) (zero-copy), [`shell.openPath`](/docs/v0.1/api/os/shell), [`os.homeDir`](/docs/v0.1/api/os/os), [`path.join`](/docs/v0.1/api/os/path).
+Exercises: [`fs.readDir`](/docs/v0.2/api/os/fs), [`fs.readBinary`](/docs/v0.2/api/os/fs) (zero-copy), [`shell.openPath`](/docs/v0.2/api/os/shell), [`os.homeDir`](/docs/v0.2/api/os/os), [`path.join`](/docs/v0.2/api/os/path).
 
 ## Scaffold
 
@@ -6045,21 +6045,21 @@ tynd build
 ## Next ideas
 
 - **Watch the current directory** — `fs.watch(cwd, { recursive: false }, reload)` to pick up changes from other apps.
-- **Search** — recursive walk with [`async function*`](/docs/v0.1/guides/streaming) yielding matches as they're found.
+- **Search** — recursive walk with [`async function*`](/docs/v0.2/guides/streaming) yielding matches as they're found.
 - **Copy / move / delete** — `fs.copy`, `fs.rename`, `fs.remove`, wrapped with a `dialog.confirm` for destructive ops.
 - **Reveal in file manager** — use `process.exec("explorer", { args: [path] })` on Windows, `open` on macOS, `xdg-open` on Linux.
 - **Drag-drop to add files** — frontend HTML5 drag-drop; the dropped paths are returned as native file paths.
 
 ## Related
 
-- [fs API](/docs/v0.1/api/os/fs).
-- [Binary Data guide](/docs/v0.1/guides/binary-data) — why `fs.readBinary` is fast.
-- [shell API](/docs/v0.1/api/os/shell).
-- [process API](/docs/v0.1/api/os/process).
+- [fs API](/docs/v0.2/api/os/fs).
+- [Binary Data guide](/docs/v0.2/guides/binary-data) — why `fs.readBinary` is fast.
+- [shell API](/docs/v0.2/api/os/shell).
+- [process API](/docs/v0.2/api/os/process).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/tutorials/markdown-editor
+URL: https://tynd.kvnpetit.com/docs/v0.2/tutorials/markdown-editor
 TITLE: Markdown Editor
 DESCRIPTION: Build a complete markdown editor — file open/save, live preview, keyboard shortcuts, native menu. ~150 LOC end-to-end.
 
@@ -6242,21 +6242,21 @@ Output in `release/`. On macOS, open the `.app`; on Windows, run the NSIS setup;
 
 - **Watch the file on disk** — `fs.watch(path, { recursive: false }, (e) => reload())` to detect external edits.
 - **Recent files list** — persist to `createStore("com.example.mdeditor")`.
-- **Export to PDF** — bundle a `wkhtmltopdf` [sidecar](/docs/v0.1/api/os/sidecar) and run via `process.exec`.
-- **Sync with cloud** — `http.post` to your API with the body; auth token in [`keyring`](/docs/v0.1/api/os/keyring).
+- **Export to PDF** — bundle a `wkhtmltopdf` [sidecar](/docs/v0.2/api/os/sidecar) and run via `process.exec`.
+- **Sync with cloud** — `http.post` to your API with the body; auth token in [`keyring`](/docs/v0.2/api/os/keyring).
 
 ## Related
 
-- [fs API](/docs/v0.1/api/os/fs).
-- [dialog API](/docs/v0.1/api/os/dialog).
-- [menu API](/docs/v0.1/api/os/menu).
-- [Bundling](/docs/v0.1/guides/bundling).
+- [fs API](/docs/v0.2/api/os/fs).
+- [dialog API](/docs/v0.2/api/os/dialog).
+- [menu API](/docs/v0.2/api/os/menu).
+- [Bundling](/docs/v0.2/guides/bundling).
 
 ----
 
 --- SECTION: Recipes ---
 
-URL: https://tynd.dev/docs/v0.1/recipes
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes
 TITLE: Recipes
 DESCRIPTION: Short self-contained snippets for common desktop-app tasks — remember window size, minimize to tray, handle deep links, and more.
 
@@ -6265,47 +6265,47 @@ DESCRIPTION: Short self-contained snippets for common desktop-app tasks — reme
 Drop-in code for common tasks. Each recipe is short, focused, and runnable.
 
 <Cards>
-  <Cards.Card title="Remember window size" href="/docs/v0.1/recipes/remember-window-size">
+  <Cards.Card title="Remember window size" href="/docs/v0.2/recipes/remember-window-size">
     Persist width/height/position; restore on next launch.
   </Cards.Card>
-  <Cards.Card title="Minimize to tray" href="/docs/v0.1/recipes/minimize-to-tray">
+  <Cards.Card title="Minimize to tray" href="/docs/v0.2/recipes/minimize-to-tray">
     Hide window on close, restore on tray click.
   </Cards.Card>
-  <Cards.Card title="Launch on boot" href="/docs/v0.1/recipes/launch-on-boot">
+  <Cards.Card title="Launch on boot" href="/docs/v0.2/recipes/launch-on-boot">
     Register autostart with `--minimized` arg.
   </Cards.Card>
-  <Cards.Card title="Handle deep link" href="/docs/v0.1/recipes/handle-deep-link">
+  <Cards.Card title="Handle deep link" href="/docs/v0.2/recipes/handle-deep-link">
     React to `myapp://…` URLs on cold start and duplicate launch.
   </Cards.Card>
-  <Cards.Card title="Detect online/offline" href="/docs/v0.1/recipes/detect-online">
+  <Cards.Card title="Detect online/offline" href="/docs/v0.2/recipes/detect-online">
     Periodic connectivity probe — no backend polling.
   </Cards.Card>
-  <Cards.Card title="Copy to clipboard" href="/docs/v0.1/recipes/copy-to-clipboard">
+  <Cards.Card title="Copy to clipboard" href="/docs/v0.2/recipes/copy-to-clipboard">
     Text, image (RGBA), HTML.
   </Cards.Card>
-  <Cards.Card title="Download with progress" href="/docs/v0.1/recipes/progress-download">
+  <Cards.Card title="Download with progress" href="/docs/v0.2/recipes/progress-download">
     Stream to disk, render a progress bar.
   </Cards.Card>
-  <Cards.Card title="Run a shell command" href="/docs/v0.1/recipes/run-shell-command">
+  <Cards.Card title="Run a shell command" href="/docs/v0.2/recipes/run-shell-command">
     Safe exec, shell exec, cancel on timeout.
   </Cards.Card>
-  <Cards.Card title="Embed a sidecar" href="/docs/v0.1/recipes/embed-sidecar">
+  <Cards.Card title="Embed a sidecar" href="/docs/v0.2/recipes/embed-sidecar">
     Bundle `ffmpeg`; resolve its path at runtime.
   </Cards.Card>
-  <Cards.Card title="Sync with OS dark mode" href="/docs/v0.1/recipes/dark-mode-sync">
+  <Cards.Card title="Sync with OS dark mode" href="/docs/v0.2/recipes/dark-mode-sync">
     Read `os.isDarkMode()`; update on change.
   </Cards.Card>
-  <Cards.Card title="Single instance + argv" href="/docs/v0.1/recipes/single-instance-argv">
+  <Cards.Card title="Single instance + argv" href="/docs/v0.2/recipes/single-instance-argv">
     Forward launch args to the primary instance.
   </Cards.Card>
-  <Cards.Card title="Confirm before quit" href="/docs/v0.1/recipes/confirm-before-quit">
+  <Cards.Card title="Confirm before quit" href="/docs/v0.2/recipes/confirm-before-quit">
     Show "unsaved changes" dialog on close.
   </Cards.Card>
 </Cards>
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/confirm-before-quit
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/confirm-before-quit
 TITLE: Confirm Before Quit
 DESCRIPTION: Intercept the close request; show a native confirm dialog if there are unsaved changes.
 
@@ -6366,11 +6366,11 @@ const choice = await dialog.openFile({
 
 Tynd's `dialog.confirm` is 2-button (OK / Cancel). For Save/Discard/Cancel, use an in-app HTML modal.
 
-**Related:** [tyndWindow events](/docs/v0.1/api/os/window) · [dialog API](/docs/v0.1/api/os/dialog).
+**Related:** [tyndWindow events](/docs/v0.2/api/os/window) · [dialog API](/docs/v0.2/api/os/dialog).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/copy-to-clipboard
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/copy-to-clipboard
 TITLE: Copy to Clipboard
 DESCRIPTION: Text, image, and HTML. Native OS clipboard.
 
@@ -6424,11 +6424,11 @@ Paste into a rich-text target (email, Google Doc) → formatted content. Plain-t
 await clipboard.clear();
 ```
 
-**Related:** [clipboard API](/docs/v0.1/api/os/clipboard).
+**Related:** [clipboard API](/docs/v0.2/api/os/clipboard).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/dark-mode-sync
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/dark-mode-sync
 TITLE: Sync with OS Dark Mode
 DESCRIPTION: Read the OS dark-mode preference and react to theme changes.
 
@@ -6485,11 +6485,11 @@ Or rely on pure CSS via `@media (prefers-color-scheme: dark)` — matches the sa
 
 Both work. Pick JS if you need programmatic access or want to override (user toggles "always light"); pick CSS if OS-synced behavior is all you need.
 
-**Related:** [os API](/docs/v0.1/api/os/os) · [tyndWindow events](/docs/v0.1/api/os/window).
+**Related:** [os API](/docs/v0.2/api/os/os) · [tyndWindow events](/docs/v0.2/api/os/window).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/detect-online
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/detect-online
 TITLE: Detect Online / Offline
 DESCRIPTION: Periodic connectivity probe. The DOM `navigator.onLine` lies; use a real network check.
 
@@ -6538,11 +6538,11 @@ const off = watchConnectivity((online) => {
 - `https://www.cloudflare.com/cdn-cgi/trace` — Cloudflare equivalent.
 - Your own API's `/health` endpoint — gives you "the server is up" not just "internet works".
 
-**Related:** [http API](/docs/v0.1/api/os/http).
+**Related:** [http API](/docs/v0.2/api/os/http).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/embed-sidecar
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/embed-sidecar
 TITLE: Embed and Run a Sidecar
 DESCRIPTION: Bundle `ffmpeg` (or any CLI) inside your app binary; resolve the extracted path at runtime.
 
@@ -6628,11 +6628,11 @@ Sidecars **don't** get zstd-compressed — they inflate your binary by their raw
 - **Download on first launch** — ship a lean binary, `http.download` the sidecar to `os.dataDir()` the first time the user needs it.
 - **Use the system binary if available** — `process.exec("ffmpeg", …)` first; fall back to bundled.
 
-**Related:** [sidecar API](/docs/v0.1/api/os/sidecar) · [Sidecars guide](/docs/v0.1/guides/sidecars).
+**Related:** [sidecar API](/docs/v0.2/api/os/sidecar) · [Sidecars guide](/docs/v0.2/guides/sidecars).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/handle-deep-link
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/handle-deep-link
 TITLE: Handle Deep Link (myapp://)
 DESCRIPTION: React to custom-scheme URLs on both cold start and duplicate launch.
 
@@ -6689,11 +6689,11 @@ function handleDeepLink(url: URL) {
 }
 ```
 
-**Related:** [Deep Linking guide](/docs/v0.1/guides/deep-linking) · [singleInstance API](/docs/v0.1/api/os/single-instance).
+**Related:** [Deep Linking guide](/docs/v0.2/guides/deep-linking) · [singleInstance API](/docs/v0.2/api/os/single-instance).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/launch-on-boot
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/launch-on-boot
 TITLE: Launch on System Boot
 DESCRIPTION: Register the app to start at login; pass `--minimized` so it lands in the tray.
 
@@ -6724,15 +6724,15 @@ if (minimized) {
 }
 ```
 
-Combine with [Minimize to Tray](/docs/v0.1/recipes/minimize-to-tray) so the window stays hidden on boot.
+Combine with [Minimize to Tray](/docs/v0.2/recipes/minimize-to-tray) so the window stays hidden on boot.
 
 **Platform storage:** Windows registry `Run` key, macOS `LaunchAgents`, Linux XDG autostart. All user-scoped — no UAC prompt.
 
-**Related:** [autolaunch API](/docs/v0.1/api/os/autolaunch).
+**Related:** [autolaunch API](/docs/v0.2/api/os/autolaunch).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/minimize-to-tray
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/minimize-to-tray
 TITLE: Minimize to Tray
 DESCRIPTION: Hide window on close; restore on tray icon click. Keeps the app alive in the background.
 
@@ -6787,11 +6787,11 @@ menu.onClick("quit", async () => {
 
 **Gotcha** — `app.exit(0)` triggers `onCloseRequested` too. The `quitting` flag lets it through.
 
-**Related:** [tray API](/docs/v0.1/api/os/tray) · [tyndWindow API](/docs/v0.1/api/os/window).
+**Related:** [tray API](/docs/v0.2/api/os/tray) · [tyndWindow API](/docs/v0.2/api/os/window).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/progress-download
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/progress-download
 TITLE: Download with Progress
 DESCRIPTION: Stream a file to disk, render a progress bar, handle cancellation.
 
@@ -6842,11 +6842,11 @@ function formatBytes(n: number) {
 - `onProgress` throttled to ~50 ms on the Rust side — no DOM thrash.
 - No cancel method yet — if you need it, wrap the call in an `AbortController` + switch to `fetch` with manual streaming (at the cost of no disk-streaming).
 
-**Related:** [http API](/docs/v0.1/api/os/http) · [Binary Data guide](/docs/v0.1/guides/binary-data).
+**Related:** [http API](/docs/v0.2/api/os/http) · [Binary Data guide](/docs/v0.2/guides/binary-data).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/remember-window-size
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/remember-window-size
 TITLE: Remember Window Size
 DESCRIPTION: Persist window dimensions + position to `store`; restore on next launch.
 
@@ -6896,11 +6896,11 @@ trackWindowState();
 
 **Debounced** — avoid writing on every pixel of a resize drag. 200 ms delay is enough to coalesce without feeling laggy.
 
-**Related:** [tyndWindow API](/docs/v0.1/api/os/window) · [store API](/docs/v0.1/api/os/store).
+**Related:** [tyndWindow API](/docs/v0.2/api/os/window) · [store API](/docs/v0.2/api/os/store).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/run-shell-command
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/run-shell-command
 TITLE: Run a Shell Command
 DESCRIPTION: Direct `exec` (safe, no shell interpolation) vs `execShell` (pipes + globs). With timeout and output capture.
 
@@ -6945,7 +6945,7 @@ try {
 }
 ```
 
-For explicit cancel mid-run, use [`terminal.spawn`](/docs/v0.1/api/os/terminal) instead — it returns a handle with `kill()`.
+For explicit cancel mid-run, use [`terminal.spawn`](/docs/v0.2/api/os/terminal) instead — it returns a handle with `kill()`.
 
 ## Environment
 
@@ -6961,11 +6961,11 @@ await process.exec("node", {
 
 `env` is **merged** with the current environment. Pass a single key to add to PATH / override a var; other vars remain.
 
-**Related:** [process API](/docs/v0.1/api/os/process) · [terminal API](/docs/v0.1/api/os/terminal) · [sidecar API](/docs/v0.1/api/os/sidecar).
+**Related:** [process API](/docs/v0.2/api/os/process) · [terminal API](/docs/v0.2/api/os/terminal) · [sidecar API](/docs/v0.2/api/os/sidecar).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/recipes/single-instance-argv
+URL: https://tynd.kvnpetit.com/docs/v0.2/recipes/single-instance-argv
 TITLE: Single Instance + argv Forwarding
 DESCRIPTION: Duplicate launch focuses the primary; its argv reaches the primary's handler.
 
@@ -7017,13 +7017,13 @@ singleInstance.acquire("com.example.myapp");   // ✓
 singleInstance.acquire("MyApp-v1.0.0");         // ✗ — version breaks upgrade UX
 ```
 
-**Related:** [Single Instance guide](/docs/v0.1/guides/single-instance) · [singleInstance API](/docs/v0.1/api/os/single-instance).
+**Related:** [Single Instance guide](/docs/v0.2/guides/single-instance) · [singleInstance API](/docs/v0.2/api/os/single-instance).
 
 ----
 
 --- SECTION: API Reference ---
 
-URL: https://tynd.dev/docs/v0.1/api
+URL: https://tynd.kvnpetit.com/docs/v0.2/api
 TITLE: API Reference
 DESCRIPTION: Every public Tynd surface — backend, frontend RPC, and 26 OS APIs — with signatures and examples.
 
@@ -7036,44 +7036,44 @@ Every Tynd app has three surfaces:
 - **OS APIs** (`@tynd/core/client`) — direct bridge from the frontend to the Rust host: dialog, window, clipboard, shell, notification, tray, process, fs, http, websocket, sql, sidecar, terminal, store, os, path, compute, and more.
 
 <Callout type="info">
-  **Lite vs full parity.** All OS APIs live in Rust (`packages/host-rs/src/os/`) so both runtimes expose the exact same surface. See [Runtime Modes](/docs/v0.1/runtimes) for JS-runtime differences.
+  **Lite vs full parity.** All OS APIs live in Rust (`packages/host-rs/src/os/`) so both runtimes expose the exact same surface. See [Runtime Modes](/docs/v0.2/runtimes) for JS-runtime differences.
 </Callout>
 
 ## Backend
 
-- [`@tynd/core`](/docs/v0.1/api/backend) — `app.start`, `app.onReady`, `app.onClose`, `createEmitter`, `AppConfig`, `WindowConfig`, menu/tray config.
-- [Streaming RPC](/docs/v0.1/api/streaming-rpc) — async-generator handlers.
+- [`@tynd/core`](/docs/v0.2/api/backend) — `app.start`, `app.onReady`, `app.onClose`, `createEmitter`, `AppConfig`, `WindowConfig`, menu/tray config.
+- [Streaming RPC](/docs/v0.2/api/streaming-rpc) — async-generator handlers.
 
 ## OS APIs
 
 <Cards>
-  <Cards.Card title="app" href="/docs/v0.1/api/os/app">Name, version, exit, relaunch.</Cards.Card>
-  <Cards.Card title="tyndWindow" href="/docs/v0.1/api/os/window">Window control, events, multi-window.</Cards.Card>
-  <Cards.Card title="monitors" href="/docs/v0.1/api/os/monitor">Enumerate displays, scale factors.</Cards.Card>
-  <Cards.Card title="dialog" href="/docs/v0.1/api/os/dialog">Native pickers, message / confirm.</Cards.Card>
-  <Cards.Card title="clipboard" href="/docs/v0.1/api/os/clipboard">Text / image / HTML.</Cards.Card>
-  <Cards.Card title="shell" href="/docs/v0.1/api/os/shell">Open URLs and files in default handler.</Cards.Card>
-  <Cards.Card title="notification" href="/docs/v0.1/api/os/notification">Native OS notifications.</Cards.Card>
-  <Cards.Card title="tray" href="/docs/v0.1/api/os/tray">System tray + menu.</Cards.Card>
-  <Cards.Card title="menu" href="/docs/v0.1/api/os/menu">App menu bar click handlers.</Cards.Card>
-  <Cards.Card title="shortcuts" href="/docs/v0.1/api/os/shortcuts">Global system-wide hotkeys.</Cards.Card>
-  <Cards.Card title="fs" href="/docs/v0.1/api/os/fs">Filesystem — text, binary, watcher.</Cards.Card>
-  <Cards.Card title="path" href="/docs/v0.1/api/os/path">Cross-OS path helpers.</Cards.Card>
-  <Cards.Card title="os" href="/docs/v0.1/api/os/os">Platform, arch, system dirs.</Cards.Card>
-  <Cards.Card title="process" href="/docs/v0.1/api/os/process">Subprocess exec + shell exec.</Cards.Card>
-  <Cards.Card title="sidecar" href="/docs/v0.1/api/os/sidecar">Bundled binaries — resolve runtime path.</Cards.Card>
-  <Cards.Card title="store" href="/docs/v0.1/api/os/store">Persistent JSON k/v.</Cards.Card>
-  <Cards.Card title="sql" href="/docs/v0.1/api/os/sql">Embedded SQLite.</Cards.Card>
-  <Cards.Card title="http" href="/docs/v0.1/api/os/http">HTTP client, upload/download progress.</Cards.Card>
-  <Cards.Card title="websocket" href="/docs/v0.1/api/os/websocket">WebSocket client.</Cards.Card>
-  <Cards.Card title="terminal" href="/docs/v0.1/api/os/terminal">Real PTY — cross-OS.</Cards.Card>
-  <Cards.Card title="workers" href="/docs/v0.1/api/os/workers">Offload CPU-bound JS to OS threads.</Cards.Card>
-  <Cards.Card title="compute" href="/docs/v0.1/api/os/compute">Rust-native hash + CSPRNG.</Cards.Card>
-  <Cards.Card title="keyring" href="/docs/v0.1/api/os/keyring">OS-encrypted secret storage.</Cards.Card>
-  <Cards.Card title="autolaunch" href="/docs/v0.1/api/os/autolaunch">Start at system boot.</Cards.Card>
-  <Cards.Card title="singleInstance" href="/docs/v0.1/api/os/single-instance">Single-launch lock + deep links.</Cards.Card>
-  <Cards.Card title="updater" href="/docs/v0.1/api/os/updater">Ed25519-signed auto-update.</Cards.Card>
-  <Cards.Card title="web" href="/docs/v0.1/api/os/web">Fetch, WebSocket, crypto, URL — Web globals.</Cards.Card>
+  <Cards.Card title="app" href="/docs/v0.2/api/os/app">Name, version, exit, relaunch.</Cards.Card>
+  <Cards.Card title="tyndWindow" href="/docs/v0.2/api/os/window">Window control, events, multi-window.</Cards.Card>
+  <Cards.Card title="monitors" href="/docs/v0.2/api/os/monitor">Enumerate displays, scale factors.</Cards.Card>
+  <Cards.Card title="dialog" href="/docs/v0.2/api/os/dialog">Native pickers, message / confirm.</Cards.Card>
+  <Cards.Card title="clipboard" href="/docs/v0.2/api/os/clipboard">Text / image / HTML.</Cards.Card>
+  <Cards.Card title="shell" href="/docs/v0.2/api/os/shell">Open URLs and files in default handler.</Cards.Card>
+  <Cards.Card title="notification" href="/docs/v0.2/api/os/notification">Native OS notifications.</Cards.Card>
+  <Cards.Card title="tray" href="/docs/v0.2/api/os/tray">System tray + menu.</Cards.Card>
+  <Cards.Card title="menu" href="/docs/v0.2/api/os/menu">App menu bar click handlers.</Cards.Card>
+  <Cards.Card title="shortcuts" href="/docs/v0.2/api/os/shortcuts">Global system-wide hotkeys.</Cards.Card>
+  <Cards.Card title="fs" href="/docs/v0.2/api/os/fs">Filesystem — text, binary, watcher.</Cards.Card>
+  <Cards.Card title="path" href="/docs/v0.2/api/os/path">Cross-OS path helpers.</Cards.Card>
+  <Cards.Card title="os" href="/docs/v0.2/api/os/os">Platform, arch, system dirs.</Cards.Card>
+  <Cards.Card title="process" href="/docs/v0.2/api/os/process">Subprocess exec + shell exec.</Cards.Card>
+  <Cards.Card title="sidecar" href="/docs/v0.2/api/os/sidecar">Bundled binaries — resolve runtime path.</Cards.Card>
+  <Cards.Card title="store" href="/docs/v0.2/api/os/store">Persistent JSON k/v.</Cards.Card>
+  <Cards.Card title="sql" href="/docs/v0.2/api/os/sql">Embedded SQLite.</Cards.Card>
+  <Cards.Card title="http" href="/docs/v0.2/api/os/http">HTTP client, upload/download progress.</Cards.Card>
+  <Cards.Card title="websocket" href="/docs/v0.2/api/os/websocket">WebSocket client.</Cards.Card>
+  <Cards.Card title="terminal" href="/docs/v0.2/api/os/terminal">Real PTY — cross-OS.</Cards.Card>
+  <Cards.Card title="workers" href="/docs/v0.2/api/os/workers">Offload CPU-bound JS to OS threads.</Cards.Card>
+  <Cards.Card title="compute" href="/docs/v0.2/api/os/compute">Rust-native hash + CSPRNG.</Cards.Card>
+  <Cards.Card title="keyring" href="/docs/v0.2/api/os/keyring">OS-encrypted secret storage.</Cards.Card>
+  <Cards.Card title="autolaunch" href="/docs/v0.2/api/os/autolaunch">Start at system boot.</Cards.Card>
+  <Cards.Card title="singleInstance" href="/docs/v0.2/api/os/single-instance">Single-launch lock + deep links.</Cards.Card>
+  <Cards.Card title="updater" href="/docs/v0.2/api/os/updater">Ed25519-signed auto-update.</Cards.Card>
+  <Cards.Card title="web" href="/docs/v0.2/api/os/web">Fetch, WebSocket, crypto, URL — Web globals.</Cards.Card>
 </Cards>
 
 ## Web-platform re-exports
@@ -7097,7 +7097,7 @@ Behavior matches the Web spec in both runtimes. In `lite` they point at Tynd's p
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/backend
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/backend
 TITLE: Backend (@tynd/core)
 DESCRIPTION: Backend API — app.start, app.onReady, app.onClose, createEmitter, AppConfig, WindowConfig, MenuSubmenu, TrayConfig.
 
@@ -7226,7 +7226,7 @@ app.start({
 });
 ```
 
-React to clicks from the frontend with the [`menu`](/docs/v0.1/api/os/menu) API:
+React to clicks from the frontend with the [`menu`](/docs/v0.2/api/os/menu) API:
 
 ```ts
 import { menu } from "@tynd/core/client";
@@ -7255,7 +7255,7 @@ app.start({
 });
 ```
 
-Handle clicks with the [`tray`](/docs/v0.1/api/os/tray) API:
+Handle clicks with the [`tray`](/docs/v0.2/api/os/tray) API:
 
 ```ts
 import { tray } from "@tynd/core/client";
@@ -7280,17 +7280,17 @@ api.once("progress", (evt) => { /* … */ });
 
 - Types flow from `typeof backend` — no codegen.
 - Errors thrown on the backend surface as rejected promises with `{ name, message }` preserved.
-- `async function*` backend handlers return [StreamCall](/docs/v0.1/api/streaming-rpc) handles — awaitable + async-iterable.
+- `async function*` backend handlers return [StreamCall](/docs/v0.2/api/streaming-rpc) handles — awaitable + async-iterable.
 
 ## Next
 
-- [Streaming RPC](/docs/v0.1/api/streaming-rpc)
-- [Backend RPC guide](/docs/v0.1/guides/backend-rpc)
-- [OS API reference](/docs/v0.1/api)
+- [Streaming RPC](/docs/v0.2/api/streaming-rpc)
+- [Backend RPC guide](/docs/v0.2/guides/backend-rpc)
+- [OS API reference](/docs/v0.2/api)
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/app
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/app
 TITLE: app
 DESCRIPTION: App identity, exit, and relaunch — the process-level controls.
 
@@ -7358,12 +7358,12 @@ Pass a non-zero code to signal an error to the invoking shell / installer. Defau
 
 ## Related
 
-- [Single Instance guide](/docs/v0.1/guides/single-instance) — argv forwarding.
-- [Updater](/docs/v0.1/api/os/updater) — `install({ relaunch: true })` uses `app.relaunch` internally.
+- [Single Instance guide](/docs/v0.2/guides/single-instance) — argv forwarding.
+- [Updater](/docs/v0.2/api/os/updater) — `install({ relaunch: true })` uses `app.relaunch` internally.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/autolaunch
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/autolaunch
 TITLE: autolaunch
 DESCRIPTION: Register / unregister the app to start at system boot.
 
@@ -7439,11 +7439,11 @@ const current = await autolaunch.isEnabled();
 
 ## Related
 
-- [singleInstance](/docs/v0.1/api/os/single-instance) — argv forwarding.
+- [singleInstance](/docs/v0.2/api/os/single-instance) — argv forwarding.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/clipboard
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/clipboard
 TITLE: clipboard
 DESCRIPTION: Read / write text, base64-PNG images, and HTML on the system clipboard.
 
@@ -7511,11 +7511,11 @@ await clipboard.clear();
 
 ## Related
 
-- [shell.openExternal](/docs/v0.1/api/os/shell) — for "copy link + open" flows.
+- [shell.openExternal](/docs/v0.2/api/os/shell) — for "copy link + open" flows.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/compute
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/compute
 TITLE: compute
 DESCRIPTION: Rust-native CPU helpers — hash (blake3/sha256/384/512) and CSPRNG. Runs off the JS event loop.
 
@@ -7541,7 +7541,7 @@ const sha256 = await compute.hash(bytes, { algo: "sha256" });
 - `blake3` (default) — fast, cryptographically secure, ~4 GB/s on modern CPUs.
 - `sha256`, `sha384`, `sha512`.
 
-Bytes travel via the [binary IPC channel](/docs/v0.1/guides/binary-data) — no base64 overhead.
+Bytes travel via the [binary IPC channel](/docs/v0.2/guides/binary-data) — no base64 overhead.
 
 Digest is always returned as **base64**; convert to hex in userland if needed:
 
@@ -7577,11 +7577,11 @@ const token = await compute.randomBytes(32);
 ## Related
 
 - Web `crypto.getRandomValues` / `crypto.subtle.digest` — works on both runtimes; same semantics as `compute` for the overlap.
-- [Binary Data guide](/docs/v0.1/guides/binary-data).
+- [Binary Data guide](/docs/v0.2/guides/binary-data).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/dialog
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/dialog
 TITLE: dialog
 DESCRIPTION: Native file pickers and message / confirm / warn / error dialogs. 
 
@@ -7698,11 +7698,11 @@ File-picker-specific:
 
 ## Related
 
-- [fs](/docs/v0.1/api/os/fs) — read/write the picked path.
+- [fs](/docs/v0.2/api/os/fs) — read/write the picked path.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/fs
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/fs
 TITLE: fs
 DESCRIPTION: Filesystem — read / write text and binary, walk directories, watch for changes.
 
@@ -7712,7 +7712,7 @@ DESCRIPTION: Filesystem — read / write text and binary, walk directories, watc
 import { fs } from "@tynd/core/client";
 ```
 
-Cross-OS filesystem operations. Binary I/O uses the [zero-copy binary channel](/docs/v0.1/guides/binary-data).
+Cross-OS filesystem operations. Binary I/O uses the [zero-copy binary channel](/docs/v0.2/guides/binary-data).
 
 ## Text I/O
 
@@ -7738,7 +7738,7 @@ const bytes = await fs.readBinary("image.png");           // Uint8Array
 await fs.writeBinary("copy.png", bytes, { createDirs: true });
 ```
 
-Uses the `tynd-bin://` channel — no base64, zero-copy. Accepts `Uint8Array | ArrayBuffer`. See the [Binary Data guide](/docs/v0.1/guides/binary-data).
+Uses the `tynd-bin://` channel — no base64, zero-copy. Accepts `Uint8Array | ArrayBuffer`. See the [Binary Data guide](/docs/v0.2/guides/binary-data).
 
 ## Metadata
 
@@ -7835,13 +7835,13 @@ await watcher.unwatch();
 
 ## Related
 
-- [path](/docs/v0.1/api/os/path) — path helpers.
-- [os](/docs/v0.1/api/os/os) — `dataDir`, `configDir`, `cacheDir`, `tmpDir`.
-- [Binary Data guide](/docs/v0.1/guides/binary-data).
+- [path](/docs/v0.2/api/os/path) — path helpers.
+- [os](/docs/v0.2/api/os/os) — `dataDir`, `configDir`, `cacheDir`, `tmpDir`.
+- [Binary Data guide](/docs/v0.2/guides/binary-data).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/http
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/http
 TITLE: http
 DESCRIPTION: HTTP client with upload / download progress. TLS is bundled — no OpenSSL runtime dep.
 
@@ -7951,12 +7951,12 @@ Non-2xx responses **don't throw** — inspect `status` yourself.
 
 ## Related
 
-- [websocket](/docs/v0.1/api/os/websocket) — full-duplex.
+- [websocket](/docs/v0.2/api/os/websocket) — full-duplex.
 - Web `fetch` — `import { fetch } from "@tynd/core/client"` for the spec API.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/keyring
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/keyring
 TITLE: keyring
 DESCRIPTION: OS-encrypted credential storage. Keychain on macOS, Credential Manager + DPAPI on Windows, Secret Service on Linux.
 
@@ -8037,12 +8037,12 @@ async function getOrRefreshToken() {
 
 ## Related
 
-- [store](/docs/v0.1/api/os/store) — plaintext k/v.
-- [Persistence guide](/docs/v0.1/guides/persistence).
+- [store](/docs/v0.2/api/os/store) — plaintext k/v.
+- [Persistence guide](/docs/v0.2/guides/persistence).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/menu
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/menu
 TITLE: menu
 DESCRIPTION: Handle clicks on the native app menu bar. Items are declared in `app.start({ menu: … })`.
 
@@ -8144,7 +8144,7 @@ Roles don't need `id` / `accelerator` — the OS provides both.
 
 ## Accelerators
 
-Use the standard accelerator syntax's format — same as [`shortcuts`](/docs/v0.1/api/os/shortcuts):
+Use the standard accelerator syntax's format — same as [`shortcuts`](/docs/v0.2/api/os/shortcuts):
 
 - `CmdOrCtrl+S` — ⌘S on macOS, Ctrl+S elsewhere
 - `Alt+F4`
@@ -8160,12 +8160,12 @@ Accelerators on menu items fire **only when your app is focused** (unlike `short
 
 ## Related
 
-- [tray](/docs/v0.1/api/os/tray) — tray menu handlers share the same `menu.onClick` dispatcher.
-- [shortcuts](/docs/v0.1/api/os/shortcuts) — global hotkeys (fire unfocused).
+- [tray](/docs/v0.2/api/os/tray) — tray menu handlers share the same `menu.onClick` dispatcher.
+- [shortcuts](/docs/v0.2/api/os/shortcuts) — global hotkeys (fire unfocused).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/monitor
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/monitor
 TITLE: monitors
 DESCRIPTION: Enumerate displays; read per-monitor DPI scale and position.
 
@@ -8237,11 +8237,11 @@ Or just `tyndWindow.center()` — the Rust side does the math.
 
 ## Related
 
-- [tyndWindow](/docs/v0.1/api/os/window) — `setPosition`, `setSize`, `scaleFactor`, `center`.
+- [tyndWindow](/docs/v0.2/api/os/window) — `setPosition`, `setSize`, `scaleFactor`, `center`.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/notification
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/notification
 TITLE: notification
 DESCRIPTION: Send native OS toast notifications.
 
@@ -8290,11 +8290,11 @@ For those, wrap a platform-specific native tool via `process.exec` (e.g. `termin
 
 ## Related
 
-- [tray](/docs/v0.1/api/os/tray) — persistent tray icon + menu for recurring actions.
+- [tray](/docs/v0.2/api/os/tray) — persistent tray icon + menu for recurring actions.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/os
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/os
 TITLE: os
 DESCRIPTION: Platform / arch / OS version, common user directories, env var lookup, EOL, hostname, locale, dark-mode detection.
 
@@ -8402,12 +8402,12 @@ const key  = await os.env("API_KEY");
 
 ## Related
 
-- [path](/docs/v0.1/api/os/path) — `path.join` to compose per-app paths.
-- [store](/docs/v0.1/api/os/store) — uses `configDir` automatically.
+- [path](/docs/v0.2/api/os/path) — `path.join` to compose per-app paths.
+- [store](/docs/v0.2/api/os/store) — uses `configDir` automatically.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/path
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/path
 TITLE: path
 DESCRIPTION: Cross-OS path helpers — join, dirname, basename, extname, sep. Synchronous.
 
@@ -8473,12 +8473,12 @@ path.extname("Makefile");    // ""
 
 ## Related
 
-- [fs](/docs/v0.1/api/os/fs) — every `fs.*` method accepts path strings.
-- [os](/docs/v0.1/api/os/os) — `homeDir`, `dataDir`, `tmpDir`, etc. for building absolute paths.
+- [fs](/docs/v0.2/api/os/fs) — every `fs.*` method accepts path strings.
+- [os](/docs/v0.2/api/os/os) — `homeDir`, `dataDir`, `tmpDir`, etc. for building absolute paths.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/process
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/process
 TITLE: process
 DESCRIPTION: Spawn subprocesses and capture stdout / stderr / exit code. Direct exec and shell exec.
 
@@ -8542,19 +8542,19 @@ interface ExecResult {
 
 ## Notes
 
-- **Buffered output.** stdout/stderr are fully captured and returned at the end — not suitable for long-running processes that print steadily (memory grows). Use [`terminal.spawn`](/docs/v0.1/api/os/terminal) for streaming.
+- **Buffered output.** stdout/stderr are fully captured and returned at the end — not suitable for long-running processes that print steadily (memory grows). Use [`terminal.spawn`](/docs/v0.2/api/os/terminal) for streaming.
 - Each call runs on a fresh Rust thread — JS event loop never blocks.
 - No direct cancel / kill while the call is pending. For cancellable processes, use `terminal.spawn` which gives you a handle with `kill()`.
 
 ## Related
 
-- [terminal](/docs/v0.1/api/os/terminal) — real PTY, streaming stdout.
-- [sidecar](/docs/v0.1/api/os/sidecar) — resolve a bundled binary's runtime path.
-- [shell](/docs/v0.1/api/os/shell) — OS default-handler launches.
+- [terminal](/docs/v0.2/api/os/terminal) — real PTY, streaming stdout.
+- [sidecar](/docs/v0.2/api/os/sidecar) — resolve a bundled binary's runtime path.
+- [shell](/docs/v0.2/api/os/shell) — OS default-handler launches.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/shell
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/shell
 TITLE: shell
 DESCRIPTION: Open URLs in the default browser and files in their OS-default handler.
 
@@ -8597,11 +8597,11 @@ await shell.openPath("C:\\Users\\Me\\spreadsheet.xlsx");
 
 ## Related
 
-- [process](/docs/v0.1/api/os/process) — `process.exec` for more control over what's launched.
+- [process](/docs/v0.2/api/os/process) — `process.exec` for more control over what's launched.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/shortcuts
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/shortcuts
 TITLE: shortcuts
 DESCRIPTION: Register system-wide global keyboard hotkeys that fire even when the app is unfocused.
 
@@ -8672,15 +8672,15 @@ Key names: `A-Z`, `0-9`, `F1-F24`, `Space`, `Tab`, `Escape`, `Enter`, `Backspace
 - **macOS Input Monitoring** — first registration on macOS Monterey+ may prompt for Input Monitoring permission.
 - OS auto-releases registrations on process exit; calling `unregisterAll` in `app.onClose` is optional.
 
-See the [Keyboard Shortcuts guide](/docs/v0.1/guides/keyboard-shortcuts).
+See the [Keyboard Shortcuts guide](/docs/v0.2/guides/keyboard-shortcuts).
 
 ## Related
 
-- [menu](/docs/v0.1/api/os/menu) — menu accelerators (fire only when app focused).
+- [menu](/docs/v0.2/api/os/menu) — menu accelerators (fire only when app focused).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/sidecar
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/sidecar
 TITLE: sidecar
 DESCRIPTION: Resolve the on-disk path of a bundled sidecar binary extracted at launch.
 
@@ -8757,7 +8757,7 @@ Cross-compilation isn't supported. CI matrix pattern — stage the right binary 
     esac
 ```
 
-See the [Sidecars guide](/docs/v0.1/guides/sidecars).
+See the [Sidecars guide](/docs/v0.2/guides/sidecars).
 
 ## Notes
 
@@ -8767,13 +8767,13 @@ See the [Sidecars guide](/docs/v0.1/guides/sidecars).
 
 ## Related
 
-- [process](/docs/v0.1/api/os/process) — invoke the sidecar.
-- [terminal](/docs/v0.1/api/os/terminal) — long-running sidecars streaming stdout.
-- [TYNDPKG format](/docs/v0.1/concepts/tyndpkg).
+- [process](/docs/v0.2/api/os/process) — invoke the sidecar.
+- [terminal](/docs/v0.2/api/os/terminal) — long-running sidecars streaming stdout.
+- [TYNDPKG format](/docs/v0.2/concepts/tyndpkg).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/single-instance
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/single-instance
 TITLE: singleInstance
 DESCRIPTION: Prevent duplicate launches, forward argv / cwd to the primary, and auto-focus the existing window.
 
@@ -8859,12 +8859,12 @@ When declaring `protocols: ["myapp"]` in `tynd.config.ts`, these schemes are **r
 
 ## Related
 
-- [Single Instance guide](/docs/v0.1/guides/single-instance).
-- [Deep Linking guide](/docs/v0.1/guides/deep-linking).
+- [Single Instance guide](/docs/v0.2/guides/single-instance).
+- [Deep Linking guide](/docs/v0.2/guides/deep-linking).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/sql
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/sql
 TITLE: sql
 DESCRIPTION: Embedded SQLite via the SQLite driver — no system dependency, bundled with your binary.
 
@@ -8970,7 +8970,7 @@ Type coercion:
 
 ## BLOBs
 
-`BLOB` columns come back as **base64 strings** over the JSON IPC channel. For large blobs, store a path in the table and use [`fs.readBinary`](/docs/v0.1/api/os/fs) on the payload.
+`BLOB` columns come back as **base64 strings** over the JSON IPC channel. For large blobs, store a path in the table and use [`fs.readBinary`](/docs/v0.2/api/os/fs) on the payload.
 
 ## Migrations
 
@@ -9021,13 +9021,13 @@ try {
 
 ## Related
 
-- [store](/docs/v0.1/api/os/store) — k/v, simpler for flat preferences.
-- [fs](/docs/v0.1/api/os/fs) — for large BLOBs stored out-of-row.
-- [Persistence guide](/docs/v0.1/guides/persistence).
+- [store](/docs/v0.2/api/os/store) — k/v, simpler for flat preferences.
+- [fs](/docs/v0.2/api/os/fs) — for large BLOBs stored out-of-row.
+- [Persistence guide](/docs/v0.2/guides/persistence).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/store
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/store
 TITLE: store
 DESCRIPTION: Persistent JSON key-value store under the OS config directory.
 
@@ -9091,11 +9091,11 @@ The directory is created lazily on first write.
 ## Durability
 
 - Each `set` / `delete` / `clear` **flushes synchronously** before resolving. On resolve, the change is on disk.
-- **No atomic multi-key writes.** For transactional semantics across keys, use [`sql`](/docs/v0.1/api/os/sql) with a single `UPDATE` statement, or write a flat JSON blob with one key.
+- **No atomic multi-key writes.** For transactional semantics across keys, use [`sql`](/docs/v0.2/api/os/sql) with a single `UPDATE` statement, or write a flat JSON blob with one key.
 
 ## Security
 
-**Not encrypted.** Plain JSON readable by any process with user-level access. For sensitive data (tokens, passwords, API keys), use [`keyring`](/docs/v0.1/api/os/keyring).
+**Not encrypted.** Plain JSON readable by any process with user-level access. For sensitive data (tokens, passwords, API keys), use [`keyring`](/docs/v0.2/api/os/keyring).
 
 ## Example — per-instance cache + preferences
 
@@ -9113,13 +9113,13 @@ Each namespace is a separate file.
 
 ## Related
 
-- [keyring](/docs/v0.1/api/os/keyring) — encrypted secrets.
-- [sql](/docs/v0.1/api/os/sql) — relational + transactional.
-- [fs](/docs/v0.1/api/os/fs) — raw file writes for custom formats.
+- [keyring](/docs/v0.2/api/os/keyring) — encrypted secrets.
+- [sql](/docs/v0.2/api/os/sql) — relational + transactional.
+- [fs](/docs/v0.2/api/os/fs) — raw file writes for custom formats.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/terminal
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/terminal
 TITLE: terminal
 DESCRIPTION: Real PTY inside your app — cross-OS (ConPTY on Windows, POSIX elsewhere).
 
@@ -9237,12 +9237,12 @@ new ResizeObserver(() => {
 
 ## Related
 
-- [process](/docs/v0.1/api/os/process) — one-shot `exec` with buffered output.
-- [sidecar](/docs/v0.1/api/os/sidecar) — run a bundled binary as a PTY.
+- [process](/docs/v0.2/api/os/process) — one-shot `exec` with buffered output.
+- [sidecar](/docs/v0.2/api/os/sidecar) — run a bundled binary as a PTY.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/tray
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/tray
 TITLE: tray
 DESCRIPTION: System tray icon + menu event handling. The tray is configured in `app.start`, this API handles clicks.
 
@@ -9300,12 +9300,12 @@ The `id` matches the `id` field you set on the tray menu item.
 
 ## Related
 
-- [menu](/docs/v0.1/api/os/menu) — app menu bar click handling.
-- [Backend API](/docs/v0.1/api/backend) — tray config shape.
+- [menu](/docs/v0.2/api/os/menu) — app menu bar click handling.
+- [Backend API](/docs/v0.2/api/backend) — tray config shape.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/updater
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/updater
 TITLE: updater
 DESCRIPTION: Check for, download, verify, and install Ed25519-signed auto-updates. Tauri-compatible manifest format.
 
@@ -9477,16 +9477,16 @@ export const UPDATER_PUB_KEY = "cFpG...RVDv/RQ=";
 - Delta updates (binary diff).
 - Rollback on failure.
 
-See the [Auto-Updates guide](/docs/v0.1/guides/auto-updates).
+See the [Auto-Updates guide](/docs/v0.2/guides/auto-updates).
 
 ## Related
 
-- [`tynd keygen`](/docs/v0.1/cli/keygen) — generate the keypair.
-- [`tynd sign`](/docs/v0.1/cli/sign) — sign a file.
+- [`tynd keygen`](/docs/v0.2/cli/keygen) — generate the keypair.
+- [`tynd sign`](/docs/v0.2/cli/sign) — sign a file.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/web
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/web
 TITLE: web
 DESCRIPTION: Web-platform globals (fetch, WebSocket, crypto, URL, Blob…) re-exported as named exports — spec-identical in both `lite` and `full`.
 
@@ -9549,21 +9549,21 @@ behavior and portability to browser code.
 For workloads that benefit from a Rust-native fast path, prefer the dedicated
 Tynd APIs:
 
-- [`http`](/docs/v0.1/api/os/http) — request retries, download-with-progress
+- [`http`](/docs/v0.2/api/os/http) — request retries, download-with-progress
   events, no CORS.
-- [`websocket`](/docs/v0.1/api/os/websocket) — dedicated thread per session,
+- [`websocket`](/docs/v0.2/api/os/websocket) — dedicated thread per session,
   auto-reconnect helpers.
-- [`compute`](/docs/v0.1/api/os/compute) — `hash` (blake3/sha2) and
+- [`compute`](/docs/v0.2/api/os/compute) — `hash` (blake3/sha2) and
   `randomBytes` via Rust, ~3–10× faster than `crypto.subtle` on lite.
 
 ## Related
 
-- [Runtimes](/docs/v0.1/runtimes) — full vs lite parity matrix.
-- [Architecture](/docs/v0.1/concepts/architecture) — where polyfills fit.
+- [Runtimes](/docs/v0.2/runtimes) — full vs lite parity matrix.
+- [Architecture](/docs/v0.2/concepts/architecture) — where polyfills fit.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/websocket
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/websocket
 TITLE: websocket
 DESCRIPTION: Full-duplex WebSocket client with bundled TLS. Text + binary frames.
 
@@ -9650,11 +9650,11 @@ const ids = await websocket.list();
 
 ## Related
 
-- [http](/docs/v0.1/api/os/http) — for simple request/response.
+- [http](/docs/v0.2/api/os/http) — for simple request/response.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/window
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/window
 TITLE: tyndWindow
 DESCRIPTION: Window control, events, multi-window management. All methods auto-target the window they're called from.
 
@@ -9778,7 +9778,7 @@ const labels = await tyndWindow.all();     // ["main", "settings", …]
 await tyndWindow.close("settings");         // "main" cannot be closed this way
 ```
 
-See the [Multi-Window guide](/docs/v0.1/guides/multi-window).
+See the [Multi-Window guide](/docs/v0.2/guides/multi-window).
 
 ## Events
 
@@ -9848,13 +9848,13 @@ Every HTML response served through `tynd://` carries a baseline Content-Security
 
 ## Related
 
-- [monitors](/docs/v0.1/api/os/monitor) — multi-display enumeration.
-- [menu](/docs/v0.1/api/os/menu) — app menu bar click handling.
-- [Multi-Window guide](/docs/v0.1/guides/multi-window).
+- [monitors](/docs/v0.2/api/os/monitor) — multi-display enumeration.
+- [menu](/docs/v0.2/api/os/menu) — app menu bar click handling.
+- [Multi-Window guide](/docs/v0.2/guides/multi-window).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/os/workers
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/os/workers
 TITLE: workers
 DESCRIPTION: Offload CPU-bound JS to an isolated thread. Unified API across `lite` (embedded QuickJS) and `full` (`Bun.Worker`).
 
@@ -9906,7 +9906,7 @@ await w.terminate();
 - **Image / audio processing in pure JS** — keep the UI responsive.
 - **Computation without an event loop** — simulation loops, particle systems.
 
-For **Rust-backed compute** (hashing, CSPRNG), prefer [`compute`](/docs/v0.1/api/os/compute) — it's faster and doesn't round-trip through JSON.
+For **Rust-backed compute** (hashing, CSPRNG), prefer [`compute`](/docs/v0.2/api/os/compute) — it's faster and doesn't round-trip through JSON.
 
 ## Notes
 
@@ -9943,12 +9943,12 @@ async function parallelMap<I, O>(
 
 ## Related
 
-- [compute](/docs/v0.1/api/os/compute) — Rust-native hashing and RNG (faster for those tasks).
-- [Streaming RPC](/docs/v0.1/api/streaming-rpc) — if you need to stream intermediate results.
+- [compute](/docs/v0.2/api/os/compute) — Rust-native hashing and RNG (faster for those tasks).
+- [Streaming RPC](/docs/v0.2/api/streaming-rpc) — if you need to stream intermediate results.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/api/streaming-rpc
+URL: https://tynd.kvnpetit.com/docs/v0.2/api/streaming-rpc
 TITLE: Streaming RPC
 DESCRIPTION: Async-generator backend handlers stream yields + return values to the frontend with flow control and cancellation.
 
@@ -10007,7 +10007,7 @@ Three mechanisms keep streaming safe at arbitrary yield rates:
 2. **Yield batching** — Rust buffers yields and flushes every 10 ms or at 64 items. One `evaluate_script` per flush per webview.
 3. **Cleanup on window close** — the Rust host auto-cancels every active stream that originated in a closed window.
 
-See the [Streaming RPC guide](/docs/v0.1/guides/streaming) for details.
+See the [Streaming RPC guide](/docs/v0.2/guides/streaming) for details.
 
 ## Cancellation
 
@@ -10042,25 +10042,25 @@ Thrown errors in the generator propagate into both `for await` and `await stream
 - **Cancellable long task** — bind a cancel button to `stream.cancel()`.
 - **LLM tokens** — yield decoded fragments from `res.body.getReader()`.
 
-Examples: [Streaming RPC guide](/docs/v0.1/guides/streaming).
+Examples: [Streaming RPC guide](/docs/v0.2/guides/streaming).
 
 ## Limitations
 
 - No transferable objects; values are JSON-cloned each time.
 - Generator back-pressure is credit-based — not propagated to the producer's I/O source (it's a generator, not a stream).
-- For multi-MB binary chunks, yield handles/IDs over JSON and fetch the bytes separately via [binary IPC](/docs/v0.1/guides/binary-data).
+- For multi-MB binary chunks, yield handles/IDs over JSON and fetch the bytes separately via [binary IPC](/docs/v0.2/guides/binary-data).
 
 ## Next
 
-- [Streaming RPC guide](/docs/v0.1/guides/streaming)
-- [Backend RPC guide](/docs/v0.1/guides/backend-rpc)
-- [IPC model](/docs/v0.1/concepts/ipc)
+- [Streaming RPC guide](/docs/v0.2/guides/streaming)
+- [Backend RPC guide](/docs/v0.2/guides/backend-rpc)
+- [IPC model](/docs/v0.2/concepts/ipc)
 
 ----
 
 --- SECTION: CLI Reference ---
 
-URL: https://tynd.dev/docs/v0.1/cli
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli
 TITLE: CLI Reference
 DESCRIPTION: The `tynd` CLI — create, dev, start, build, clean, validate, info, upgrade, keygen, sign.
 
@@ -10075,22 +10075,22 @@ tynd <command> [options]
 ## Commands
 
 <Cards>
-  <Cards.Card title="tynd.config.ts" href="/docs/v0.1/cli/config">Full config schema.</Cards.Card>
-  <Cards.Card title="create" href="/docs/v0.1/cli/create">Scaffold a new project.</Cards.Card>
-  <Cards.Card title="init" href="/docs/v0.1/cli/init">Add Tynd to an existing project.</Cards.Card>
-  <Cards.Card title="dev" href="/docs/v0.1/cli/dev">Dev mode with HMR on frontend + backend.</Cards.Card>
-  <Cards.Card title="start" href="/docs/v0.1/cli/start">Classic build, then run. No HMR.</Cards.Card>
-  <Cards.Card title="build" href="/docs/v0.1/cli/build">Release binary + optional installers.</Cards.Card>
-  <Cards.Card title="clean" href="/docs/v0.1/cli/clean">
+  <Cards.Card title="tynd.config.ts" href="/docs/v0.2/cli/config">Full config schema.</Cards.Card>
+  <Cards.Card title="create" href="/docs/v0.2/cli/create">Scaffold a new project.</Cards.Card>
+  <Cards.Card title="init" href="/docs/v0.2/cli/init">Add Tynd to an existing project.</Cards.Card>
+  <Cards.Card title="dev" href="/docs/v0.2/cli/dev">Dev mode with HMR on frontend + backend.</Cards.Card>
+  <Cards.Card title="start" href="/docs/v0.2/cli/start">Classic build, then run. No HMR.</Cards.Card>
+  <Cards.Card title="build" href="/docs/v0.2/cli/build">Release binary + optional installers.</Cards.Card>
+  <Cards.Card title="clean" href="/docs/v0.2/cli/clean">
     Remove `.tynd/cache` and `release/`.
   </Cards.Card>
-  <Cards.Card title="validate" href="/docs/v0.1/cli/validate">Config + binary sanity check.</Cards.Card>
-  <Cards.Card title="info" href="/docs/v0.1/cli/info">Environment diagnostics.</Cards.Card>
-  <Cards.Card title="upgrade" href="/docs/v0.1/cli/upgrade">
+  <Cards.Card title="validate" href="/docs/v0.2/cli/validate">Config + binary sanity check.</Cards.Card>
+  <Cards.Card title="info" href="/docs/v0.2/cli/info">Environment diagnostics.</Cards.Card>
+  <Cards.Card title="upgrade" href="/docs/v0.2/cli/upgrade">
     Bump `@tynd/*` deps.
   </Cards.Card>
-  <Cards.Card title="keygen" href="/docs/v0.1/cli/keygen">Generate an Ed25519 keypair for updates.</Cards.Card>
-  <Cards.Card title="sign" href="/docs/v0.1/cli/sign">Sign a file with an updater private key.</Cards.Card>
+  <Cards.Card title="keygen" href="/docs/v0.2/cli/keygen">Generate an Ed25519 keypair for updates.</Cards.Card>
+  <Cards.Card title="sign" href="/docs/v0.2/cli/sign">Sign a file with an updater private key.</Cards.Card>
 </Cards>
 
 ## Global flags
@@ -10103,7 +10103,7 @@ tynd <command> [options]
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/build
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/build
 TITLE: tynd build
 DESCRIPTION: Produce a single-file native binary. With `--bundle`, also emit platform-native installers.
 
@@ -10145,7 +10145,7 @@ frontend build  ─▶  backend bundle  ─▶  pack TYNDPKG  ─▶  PE patch (
                                                       ─▶  icon embed  ─▶  sign  ─▶  bundlers
 ```
 
-See the [Build Pipeline](/docs/v0.1/concepts/build-pipeline).
+See the [Build Pipeline](/docs/v0.2/concepts/build-pipeline).
 
 ## Signing
 
@@ -10154,13 +10154,13 @@ When `bundle.sign` is declared in `tynd.config.ts`, the raw binary is signed **b
 - Windows — `signtool.exe`.
 - macOS — `codesign --options runtime` + optional `notarytool submit` + `stapler`.
 
-See the [Code Signing guide](/docs/v0.1/guides/code-signing).
+See the [Code Signing guide](/docs/v0.2/guides/code-signing).
 
 ## Cross-compilation
 
 **Not supported.** Each host produces installers only for its own OS. Use a GitHub Actions matrix with `windows-latest` + `macos-latest` + `ubuntu-latest` runners.
 
-See the [Bundling guide](/docs/v0.1/guides/bundling).
+See the [Bundling guide](/docs/v0.2/guides/bundling).
 
 ## Auto-downloaded tools
 
@@ -10174,14 +10174,14 @@ Cached to `.tynd/cache/tools/<tool>/<version>/`. `rpmbuild` must be installed se
 
 ## Related
 
-- [Build Pipeline](/docs/v0.1/concepts/build-pipeline).
-- [TYNDPKG Format](/docs/v0.1/concepts/tyndpkg).
-- [Bundling guide](/docs/v0.1/guides/bundling).
-- [Code Signing guide](/docs/v0.1/guides/code-signing).
+- [Build Pipeline](/docs/v0.2/concepts/build-pipeline).
+- [TYNDPKG Format](/docs/v0.2/concepts/tyndpkg).
+- [Bundling guide](/docs/v0.2/guides/bundling).
+- [Code Signing guide](/docs/v0.2/guides/code-signing).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/clean
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/clean
 TITLE: tynd clean
 DESCRIPTION: Remove build artifacts. Useful when the cache gets in the way or before a fresh release build.
 
@@ -10217,12 +10217,12 @@ Global flags: `--verbose`, `--quiet`.
 
 ## Related
 
-- [Build Pipeline](/docs/v0.1/concepts/build-pipeline) — how caching works.
-- [`tynd build`](/docs/v0.1/cli/build).
+- [Build Pipeline](/docs/v0.2/concepts/build-pipeline) — how caching works.
+- [`tynd build`](/docs/v0.2/cli/build).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/config
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/config
 TITLE: tynd.config.ts
 DESCRIPTION: Full reference for the `TyndConfig` schema — runtime, paths, protocols, bundle metadata, signing.
 
@@ -10242,7 +10242,7 @@ export default {
 ```
 
 <Callout type="info">
-  **Window / menu / tray config lives in the backend**, not in `tynd.config.ts`. Each spawned window can configure itself programmatically, so `app.start({ window: {...}, menu: [...], tray: {...} })` is the authoritative place. See [Backend API](/docs/v0.1/api/backend).
+  **Window / menu / tray config lives in the backend**, not in `tynd.config.ts`. Each spawned window can configure itself programmatically, so `app.start({ window: {...}, menu: [...], tray: {...} })` is the authoritative place. See [Backend API](/docs/v0.2/api/backend).
 </Callout>
 
 ## Top-level fields
@@ -10275,7 +10275,7 @@ sidecars: [
 - `name` — resolved at runtime via `sidecar.path(name)`.
 - `path` — relative to the project root at build time.
 
-See the [Sidecars guide](/docs/v0.1/guides/sidecars).
+See the [Sidecars guide](/docs/v0.2/guides/sidecars).
 
 ## `protocols`
 
@@ -10289,7 +10289,7 @@ Must match `/^[a-zA-Z][a-zA-Z0-9+\-.]*$/`. Reserved schemes are rejected at conf
 
 `http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`
 
-See the [Deep Linking guide](/docs/v0.1/guides/deep-linking).
+See the [Deep Linking guide](/docs/v0.2/guides/deep-linking).
 
 ## `bundle`
 
@@ -10348,7 +10348,7 @@ macos: {
 }
 ```
 
-See the [Code Signing guide](/docs/v0.1/guides/code-signing).
+See the [Code Signing guide](/docs/v0.2/guides/code-signing).
 
 ## `env:NAME` references
 
@@ -10389,7 +10389,7 @@ Single source renders per-format:
 
 PNG source degrades to single-size. ICO source passes through to Windows only.
 
-See the [Bundling guide](/docs/v0.1/guides/bundling).
+See the [Bundling guide](/docs/v0.2/guides/bundling).
 
 ## Window / menu / tray
 
@@ -10410,7 +10410,7 @@ app.start({
 });
 ```
 
-Rationale: each spawned window can define its own settings programmatically; a static config file can't express that flexibility. See [Backend API](/docs/v0.1/api/backend).
+Rationale: each spawned window can define its own settings programmatically; a static config file can't express that flexibility. See [Backend API](/docs/v0.2/api/backend).
 
 ## Validation
 
@@ -10418,14 +10418,14 @@ Run `tynd validate` to typecheck the config + confirm the Rust host binary is di
 
 ## Related
 
-- [Backend API](/docs/v0.1/api/backend) — `app.start`, window/menu/tray config.
-- [Bundling](/docs/v0.1/guides/bundling).
-- [Code Signing](/docs/v0.1/guides/code-signing).
-- [Deep Linking](/docs/v0.1/guides/deep-linking).
+- [Backend API](/docs/v0.2/api/backend) — `app.start`, window/menu/tray config.
+- [Bundling](/docs/v0.2/guides/bundling).
+- [Code Signing](/docs/v0.2/guides/code-signing).
+- [Deep Linking](/docs/v0.2/guides/deep-linking).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/create
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/create
 TITLE: tynd create
 DESCRIPTION: Scaffold a new Tynd project — interactive or flag-driven.
 
@@ -10496,13 +10496,13 @@ my-app/
 
 ## Related
 
-- [Frontend Frameworks guide](/docs/v0.1/guides/frontend-frameworks).
-- [`tynd init`](/docs/v0.1/cli/init) — add Tynd to an existing project.
-- [Project Structure](/docs/v0.1/getting-started/project-structure).
+- [Frontend Frameworks guide](/docs/v0.2/guides/frontend-frameworks).
+- [`tynd init`](/docs/v0.2/cli/init) — add Tynd to an existing project.
+- [Project Structure](/docs/v0.2/getting-started/project-structure).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/dev
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/dev
 TITLE: tynd dev
 DESCRIPTION: Dev mode with HMR on both frontend and backend. Native window stays alive across backend restarts.
 
@@ -10573,12 +10573,12 @@ Ctrl+C stops the dev server and the host cleanly.
 
 ## Related
 
-- [`tynd start`](/docs/v0.1/cli/start) — classic build without HMR.
-- [Development Workflow](/docs/v0.1/getting-started/dev-workflow).
+- [`tynd start`](/docs/v0.2/cli/start) — classic build without HMR.
+- [Development Workflow](/docs/v0.2/getting-started/dev-workflow).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/info
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/info
 TITLE: tynd info
 DESCRIPTION: Print environment diagnostics — Bun version, Rust toolchain, WebView2 status (Windows), OS, cache paths.
 
@@ -10613,12 +10613,12 @@ Global flags: `--verbose`, `--quiet`.
 
 ## Related
 
-- [`tynd validate`](/docs/v0.1/cli/validate) — config + binary sanity check.
-- [Troubleshooting](/docs/v0.1/troubleshooting).
+- [`tynd validate`](/docs/v0.2/cli/validate) — config + binary sanity check.
+- [Troubleshooting](/docs/v0.2/troubleshooting).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/init
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/init
 TITLE: tynd init
 DESCRIPTION: Add Tynd to an existing frontend project — detects the build tool and wires up config automatically.
 
@@ -10684,12 +10684,12 @@ bun run dev
 
 ## Related
 
-- [Frontend Frameworks guide](/docs/v0.1/guides/frontend-frameworks).
-- [`tynd create`](/docs/v0.1/cli/create) — start from scratch.
+- [Frontend Frameworks guide](/docs/v0.2/guides/frontend-frameworks).
+- [`tynd create`](/docs/v0.2/cli/create) — start from scratch.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/keygen
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/keygen
 TITLE: tynd keygen
 DESCRIPTION: Generate an Ed25519 keypair for the auto-updater.
 
@@ -10768,13 +10768,13 @@ Users who haven't applied the migration are stuck on the old trust root — ther
 
 ## Related
 
-- [`tynd sign`](/docs/v0.1/cli/sign) — sign files with the generated key.
-- [updater API](/docs/v0.1/api/os/updater) — runtime verification.
-- [Auto-Updates guide](/docs/v0.1/guides/auto-updates).
+- [`tynd sign`](/docs/v0.2/cli/sign) — sign files with the generated key.
+- [updater API](/docs/v0.2/api/os/updater) — runtime verification.
+- [Auto-Updates guide](/docs/v0.2/guides/auto-updates).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/sign
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/sign
 TITLE: tynd sign
 DESCRIPTION: Sign a file with an Ed25519 private key generated by `tynd keygen`.
 
@@ -10857,16 +10857,16 @@ Update your manifest JSON with the base64 signature:
 }
 ```
 
-See the [Auto-Updates guide](/docs/v0.1/guides/auto-updates).
+See the [Auto-Updates guide](/docs/v0.2/guides/auto-updates).
 
 ## Related
 
-- [`tynd keygen`](/docs/v0.1/cli/keygen) — generate the keypair.
-- [updater API](/docs/v0.1/api/os/updater) — runtime verification.
+- [`tynd keygen`](/docs/v0.2/cli/keygen) — generate the keypair.
+- [updater API](/docs/v0.2/api/os/updater) — runtime verification.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/start
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/start
 TITLE: tynd start
 DESCRIPTION: Run the app from cached bundles without rebuild or hot reload. Classic build-then-run.
 
@@ -10916,13 +10916,13 @@ Decisions printed on `--verbose`. Flush with `tynd clean`.
 
 ## Related
 
-- [`tynd dev`](/docs/v0.1/cli/dev) — with HMR.
-- [`tynd build`](/docs/v0.1/cli/build) — produce a release binary.
-- [`tynd clean`](/docs/v0.1/cli/clean) — flush the cache.
+- [`tynd dev`](/docs/v0.2/cli/dev) — with HMR.
+- [`tynd build`](/docs/v0.2/cli/build) — produce a release binary.
+- [`tynd clean`](/docs/v0.2/cli/clean) — flush the cache.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/upgrade
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/upgrade
 TITLE: tynd upgrade
 DESCRIPTION: Bump `@tynd/cli`, `@tynd/core`, and `@tynd/host` to the latest versions.
 
@@ -10957,12 +10957,12 @@ Global flags: `--verbose`, `--quiet`.
 
 ## Related
 
-- [`tynd clean`](/docs/v0.1/cli/clean) — flush cache after upgrade.
-- [Troubleshooting](/docs/v0.1/troubleshooting).
+- [`tynd clean`](/docs/v0.2/cli/clean) — flush cache after upgrade.
+- [Troubleshooting](/docs/v0.2/troubleshooting).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/cli/validate
+URL: https://tynd.kvnpetit.com/docs/v0.2/cli/validate
 TITLE: tynd validate
 DESCRIPTION: Typecheck `tynd.config.ts` against the `TyndConfig` schema and confirm the Rust host binary is discoverable.
 
@@ -11015,15 +11015,15 @@ Fail (binary):
 
 ## Related
 
-- [tynd.config.ts](/docs/v0.1/cli/config).
-- [Troubleshooting](/docs/v0.1/troubleshooting).
-- [`tynd info`](/docs/v0.1/cli/info) — broader environment diagnostics.
+- [tynd.config.ts](/docs/v0.2/cli/config).
+- [Troubleshooting](/docs/v0.2/troubleshooting).
+- [`tynd info`](/docs/v0.2/cli/info) — broader environment diagnostics.
 
 ----
 
 --- SECTION: Runtimes ---
 
-URL: https://tynd.dev/docs/v0.1/runtimes
+URL: https://tynd.kvnpetit.com/docs/v0.2/runtimes
 TITLE: Runtimes
 DESCRIPTION: `lite` vs `full` parity table — what each exposes, when to pick which.
 
@@ -11037,7 +11037,7 @@ export default {
 }
 ```
 
-This page focuses on the JS surface. For the architectural difference (subprocess vs in-process), see [Runtime Modes](/docs/v0.1/concepts/runtimes).
+This page focuses on the JS surface. For the architectural difference (subprocess vs in-process), see [Runtime Modes](/docs/v0.2/concepts/runtimes).
 
 ## Default to lite
 
@@ -11097,7 +11097,7 @@ All 26 OS APIs are Rust-backed and work the same way:
 
 `app`, `tyndWindow`, `monitors`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `shortcuts`, `fs`, `path`, `os`, `process`, `sidecar`, `store`, `sql`, `http`, `websocket`, `terminal`, `workers`, `compute`, `keyring`, `autolaunch`, `singleInstance`, `updater`.
 
-See the [API reference](/docs/v0.1/api).
+See the [API reference](/docs/v0.2/api).
 
 ## Size + startup
 
@@ -11163,14 +11163,14 @@ See the [API reference](/docs/v0.1/api).
 
 ## Related
 
-- [Runtime Modes concept](/docs/v0.1/concepts/runtimes).
-- [API reference](/docs/v0.1/api).
+- [Runtime Modes concept](/docs/v0.2/concepts/runtimes).
+- [API reference](/docs/v0.2/api).
 
 ----
 
 --- SECTION: Comparisons ---
 
-URL: https://tynd.dev/docs/v0.1/compare
+URL: https://tynd.kvnpetit.com/docs/v0.2/compare
 TITLE: Comparisons
 DESCRIPTION: Tynd vs Tauri, Electron, Wails — how to choose and where each excels.
 
@@ -11221,13 +11221,13 @@ Tynd sits in the same category as Tauri, Wails, and Electron — a framework for
 ## Detailed comparisons
 
 <Cards>
-  <Cards.Card title="vs Tauri v2" href="/docs/v0.1/compare/vs-tauri">
+  <Cards.Card title="vs Tauri v2" href="/docs/v0.2/compare/vs-tauri">
     Shared stack (wry + tao); Tauri has plugins and mobile, Tynd keeps TS-only and zero-codegen.
   </Cards.Card>
-  <Cards.Card title="vs Electron" href="/docs/v0.1/compare/vs-electron">
+  <Cards.Card title="vs Electron" href="/docs/v0.2/compare/vs-electron">
     Tynd's native WebView vs Electron's bundled Chromium — 25× binary size difference, different API surfaces.
   </Cards.Card>
-  <Cards.Card title="vs Wails" href="/docs/v0.1/compare/vs-wails">
+  <Cards.Card title="vs Wails" href="/docs/v0.2/compare/vs-wails">
     Both target native WebView with a non-Rust backend language; different ecosystems, different IPC transports.
   </Cards.Card>
 </Cards>
@@ -11238,7 +11238,7 @@ The Tynd monorepo ships a **500-row, 39-category matrix** at [`COMPARISON.md`](h
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/compare/vs-electron
+URL: https://tynd.kvnpetit.com/docs/v0.2/compare/vs-electron
 TITLE: Tynd vs Electron
 DESCRIPTION: Native WebView vs bundled Chromium — 25× binary-size difference, completely different surface areas.
 
@@ -11314,12 +11314,12 @@ Porting Tynd → Electron:
 
 ## Related
 
-- [Comparisons overview](/docs/v0.1/compare).
+- [Comparisons overview](/docs/v0.2/compare).
 - [Full 500-row matrix](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md).
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/compare/vs-tauri
+URL: https://tynd.kvnpetit.com/docs/v0.2/compare/vs-tauri
 TITLE: Tynd vs Tauri v2
 DESCRIPTION: Shared stack, different philosophies. Tauri has 30 plugins + mobile + capability ACLs; Tynd keeps TypeScript-only with zero-codegen typed RPC.
 
@@ -11383,12 +11383,12 @@ Porting Tynd → Tauri:
 
 ## Related
 
-- [Comparisons overview](/docs/v0.1/compare).
+- [Comparisons overview](/docs/v0.2/compare).
 - [Full 500-row matrix](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md) in the repo.
 
 ----
 
-URL: https://tynd.dev/docs/v0.1/compare/vs-wails
+URL: https://tynd.kvnpetit.com/docs/v0.2/compare/vs-wails
 TITLE: Tynd vs Wails v3
 DESCRIPTION: Both target native WebView with a non-Rust backend language. Wails uses Go; Tynd uses TypeScript.
 
@@ -11453,14 +11453,14 @@ Porting Tynd → Wails:
 
 ## Related
 
-- [Comparisons overview](/docs/v0.1/compare).
+- [Comparisons overview](/docs/v0.2/compare).
 - [Full 500-row matrix](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md).
 
 ----
 
 --- SECTION: Production Checklist ---
 
-URL: https://tynd.dev/docs/v0.1/production-checklist
+URL: https://tynd.kvnpetit.com/docs/v0.2/production-checklist
 TITLE: Production Checklist
 DESCRIPTION: Pre-release checklist — binary, installers, signing, updater, telemetry, accessibility, i18n, and smoke tests.
 
@@ -11477,7 +11477,7 @@ Run through before every release. Each item links to the relevant guide.
 - [ ] `lite` (~6.5 MB) is default-correct for most apps.
 - [ ] `full` (~44 MB) only if you need native npm bindings, a CPU-bound JS hot path, full `Intl.*`, HTTP/2, or specific Bun/Node APIs.
 
-See [Runtimes](/docs/v0.1/runtimes).
+See [Runtimes](/docs/v0.2/runtimes).
 
 ### `tynd.config.ts` is complete
 
@@ -11486,7 +11486,7 @@ See [Runtimes](/docs/v0.1/runtimes).
 - [ ] `bundle.identifier` is reverse-DNS (`com.yourco.appname`).
 - [ ] `package.json` has `name`, `version`, `description`, `author`, `homepage` — used for installer metadata.
 
-See [tynd.config.ts](/docs/v0.1/cli/config).
+See [tynd.config.ts](/docs/v0.2/cli/config).
 
 ### Icon is SVG and square
 
@@ -11494,7 +11494,7 @@ See [tynd.config.ts](/docs/v0.1/cli/config).
 - [ ] Square canvas. Non-square SVGs are auto-wrapped but design-intent matters.
 - [ ] Flattened text (convert `<text>` to paths).
 
-See [Icons & Branding](/docs/v0.1/guides/icons-branding).
+See [Icons & Branding](/docs/v0.2/guides/icons-branding).
 
 ### Installers produce on every target host
 
@@ -11502,7 +11502,7 @@ See [Icons & Branding](/docs/v0.1/guides/icons-branding).
 - [ ] Linux runner → `.deb` + `.rpm` (if `rpmbuild` available) + `.AppImage`
 - [ ] Windows runner → NSIS `.exe` setup + `.msi`
 
-See [Bundling](/docs/v0.1/guides/bundling).
+See [Bundling](/docs/v0.2/guides/bundling).
 
 </Steps>
 
@@ -11529,7 +11529,7 @@ See [Bundling](/docs/v0.1/guides/bundling).
 - [ ] Detached `.sig` for `.AppImage` / `.deb` / `.rpm` (gpg), or accept unsigned Linux.
 - [ ] Public key documented in your release notes.
 
-See [Code Signing](/docs/v0.1/guides/code-signing).
+See [Code Signing](/docs/v0.2/guides/code-signing).
 
 </Steps>
 
@@ -11555,7 +11555,7 @@ See [Code Signing](/docs/v0.1/guides/code-signing).
 - [ ] Manifest hosted at a stable HTTPS URL.
 - [ ] CI signs every release artifact with `tynd sign` and writes the `.sig` into the manifest.
 
-See [Auto-Updates](/docs/v0.1/guides/auto-updates).
+See [Auto-Updates](/docs/v0.2/guides/auto-updates).
 
 </Steps>
 
@@ -11582,15 +11582,15 @@ See [Auto-Updates](/docs/v0.1/guides/auto-updates).
 
 ### Secrets in `keyring`, not `store`
 
-- [ ] OAuth tokens, API keys, session cookies, passwords all in [`keyring`](/docs/v0.1/api/os/keyring).
-- [ ] Nothing sensitive in [`store`](/docs/v0.1/api/os/store) (plain JSON on disk).
+- [ ] OAuth tokens, API keys, session cookies, passwords all in [`keyring`](/docs/v0.2/api/os/keyring).
+- [ ] Nothing sensitive in [`store`](/docs/v0.2/api/os/store) (plain JSON on disk).
 
 ### CSP tight
 
 - [ ] Default CSP kept (no `'unsafe-inline'` / `'unsafe-eval'`).
 - [ ] Custom CSP via `<meta http-equiv>` only on pages that genuinely need it.
 
-See [Security](/docs/v0.1/concepts/security).
+See [Security](/docs/v0.2/concepts/security).
 
 </Steps>
 
@@ -11600,7 +11600,7 @@ See [Security](/docs/v0.1/concepts/security).
 
 ### Window state persisted
 
-- [ ] Width, height, position saved and restored. See the [Remember Window Size recipe](/docs/v0.1/recipes/remember-window-size).
+- [ ] Width, height, position saved and restored. See the [Remember Window Size recipe](/docs/v0.2/recipes/remember-window-size).
 
 ### Dark mode respected
 
@@ -11608,7 +11608,7 @@ See [Security](/docs/v0.1/concepts/security).
 - [ ] `tyndWindow.onThemeChanged` applied at runtime.
 - [ ] CSS `@media (prefers-color-scheme)` tested in both.
 
-See [Sync with OS Dark Mode](/docs/v0.1/recipes/dark-mode-sync).
+See [Sync with OS Dark Mode](/docs/v0.2/recipes/dark-mode-sync).
 
 ### Accessibility
 
@@ -11618,7 +11618,7 @@ See [Sync with OS Dark Mode](/docs/v0.1/recipes/dark-mode-sync).
 - [ ] `prefers-reduced-motion` respected.
 - [ ] Focus visible on every interactive element.
 
-See [Accessibility](/docs/v0.1/guides/accessibility).
+See [Accessibility](/docs/v0.2/guides/accessibility).
 
 ### i18n
 
@@ -11627,7 +11627,7 @@ See [Accessibility](/docs/v0.1/guides/accessibility).
 - [ ] `Intl.*` alternatives shipped if targeting `lite` (`date-fns`, `numbro`).
 - [ ] RTL tested if you ship Arabic / Hebrew.
 
-See [Internationalization](/docs/v0.1/guides/i18n).
+See [Internationalization](/docs/v0.2/guides/i18n).
 
 </Steps>
 
@@ -11645,7 +11645,7 @@ See [Internationalization](/docs/v0.1/guides/i18n).
 - [ ] Binary launches and stays alive ≥ 2 s in CI.
 - [ ] Exit code 0 or SIGTERM expected.
 
-See [Testing](/docs/v0.1/guides/testing).
+See [Testing](/docs/v0.2/guides/testing).
 
 ### Manual QA matrix
 
@@ -11723,17 +11723,17 @@ See [Testing](/docs/v0.1/guides/testing).
 
 ## Related
 
-- [Bundling](/docs/v0.1/guides/bundling).
-- [Code Signing](/docs/v0.1/guides/code-signing).
-- [Auto-Updates](/docs/v0.1/guides/auto-updates).
-- [Testing](/docs/v0.1/guides/testing).
-- [Accessibility](/docs/v0.1/guides/accessibility).
+- [Bundling](/docs/v0.2/guides/bundling).
+- [Code Signing](/docs/v0.2/guides/code-signing).
+- [Auto-Updates](/docs/v0.2/guides/auto-updates).
+- [Testing](/docs/v0.2/guides/testing).
+- [Accessibility](/docs/v0.2/guides/accessibility).
 
 ----
 
 --- SECTION: FAQ ---
 
-URL: https://tynd.dev/docs/v0.1/faq
+URL: https://tynd.kvnpetit.com/docs/v0.2/faq
 TITLE: FAQ
 DESCRIPTION: Common questions about Tynd — runtime choice, Bun requirement, mobile, licensing, production readiness.
 
@@ -11766,7 +11766,7 @@ One-line switch in `tynd.config.ts`. Same source code runs on both.
 
 ## Does Tynd support mobile (iOS / Android)?
 
-No. Desktop only. If you need mobile, look at [Tauri v2](/docs/v0.1/compare/vs-tauri) (its big differentiator).
+No. Desktop only. If you need mobile, look at [Tauri v2](/docs/v0.2/compare/vs-tauri) (its big differentiator).
 
 ## What's the binary size?
 
@@ -11779,7 +11779,7 @@ Your frontend + backend + sidecars add to this. The Bun binary in `full` is zstd
 
 ## Is it production ready?
 
-Phase-1 features (OS APIs, IPC, streaming RPC, TYNDPKG, installers, signing, updater) are solid and tested — see [Production Checklist](/docs/v0.1/production-checklist). Some advanced surfaces (mobile, cross-compile, macOS `.app` auto-updater install, capability ACLs) aren't implemented. See the [vs Tauri/Electron matrix](/docs/v0.1/compare) for specifics.
+Phase-1 features (OS APIs, IPC, streaming RPC, TYNDPKG, installers, signing, updater) are solid and tested — see [Production Checklist](/docs/v0.2/production-checklist). Some advanced surfaces (mobile, cross-compile, macOS `.app` auto-updater install, capability ACLs) aren't implemented. See the [vs Tauri/Electron matrix](/docs/v0.2/compare) for specifics.
 
 ## What's the license?
 
@@ -11791,23 +11791,23 @@ If it builds to a pure SPA, yes. Run `tynd init` in the project. Compatible: Vit
 
 ## How does Tynd compare to Tauri?
 
-Same IPC stack (`wry` + `tao`). Different backend language — TypeScript vs Rust. Smaller binary option (`lite`). No mobile, no capability ACLs, no 30-plugin ecosystem. Full detail: [vs Tauri](/docs/v0.1/compare/vs-tauri).
+Same IPC stack (`wry` + `tao`). Different backend language — TypeScript vs Rust. Smaller binary option (`lite`). No mobile, no capability ACLs, no 30-plugin ecosystem. Full detail: [vs Tauri](/docs/v0.2/compare/vs-tauri).
 
 ## How does it compare to Electron?
 
-~25× smaller binary. Native WebView, not bundled Chromium. Zero-codegen typed RPC out of the box. No `desktopCapturer`, no `printToPDF`, no Chrome extensions — those are Chromium-bundled features. Full detail: [vs Electron](/docs/v0.1/compare/vs-electron).
+~25× smaller binary. Native WebView, not bundled Chromium. Zero-codegen typed RPC out of the box. No `desktopCapturer`, no `printToPDF`, no Chrome extensions — those are Chromium-bundled features. Full detail: [vs Electron](/docs/v0.2/compare/vs-electron).
 
 ## How do I sign my app?
 
-Declare `bundle.sign` in `tynd.config.ts`. Windows uses `signtool`, macOS uses `codesign` + optional `notarytool`. See the [Code Signing guide](/docs/v0.1/guides/code-signing).
+Declare `bundle.sign` in `tynd.config.ts`. Windows uses `signtool`, macOS uses `codesign` + optional `notarytool`. See the [Code Signing guide](/docs/v0.2/guides/code-signing).
 
 ## How does auto-update work?
 
-Ed25519-signed manifests (Tauri-compatible format). Tynd ships `tynd keygen` / `tynd sign` — no third-party signing tool needed. The public key is baked into your app; a compromised manifest server can't serve an unverifiable binary. See the [Auto-Updates guide](/docs/v0.1/guides/auto-updates).
+Ed25519-signed manifests (Tauri-compatible format). Tynd ships `tynd keygen` / `tynd sign` — no third-party signing tool needed. The public key is baked into your app; a compromised manifest server can't serve an unverifiable binary. See the [Auto-Updates guide](/docs/v0.2/guides/auto-updates).
 
 ## Can I bundle a native binary (ffmpeg, etc.)?
 
-Yes — `sidecars` in `tynd.config.ts`. See [Sidecars guide](/docs/v0.1/guides/sidecars) and the [Embed a Sidecar recipe](/docs/v0.1/recipes/embed-sidecar).
+Yes — `sidecars` in `tynd.config.ts`. See [Sidecars guide](/docs/v0.2/guides/sidecars) and the [Embed a Sidecar recipe](/docs/v0.2/recipes/embed-sidecar).
 
 ## Does it work offline?
 
@@ -11815,7 +11815,7 @@ Yes — the WebView serves your frontend from the `tynd://` custom scheme (no ne
 
 ## How do I store secrets?
 
-Use [`keyring`](/docs/v0.1/api/os/keyring) — OS Keychain / Credential Manager / Secret Service. Never put tokens / passwords / session cookies in [`store`](/docs/v0.1/api/os/store) (plain JSON on disk).
+Use [`keyring`](/docs/v0.2/api/os/keyring) — OS Keychain / Credential Manager / Secret Service. Never put tokens / passwords / session cookies in [`store`](/docs/v0.2/api/os/store) (plain JSON on disk).
 
 ## Can I open DevTools in production?
 
@@ -11823,7 +11823,7 @@ No. DevTools are compiled out of release builds. Use `tynd dev` or build debug a
 
 ## How do I debug on a user's machine?
 
-Ship a "Export diagnostics" feature: output of `os.info()`, `app.getVersion()`, recent logs from a file sink. See the [Debugging guide](/docs/v0.1/guides/debugging).
+Ship a "Export diagnostics" feature: output of `os.info()`, `app.getVersion()`, recent logs from a file sink. See the [Debugging guide](/docs/v0.2/guides/debugging).
 
 ## Can I cross-compile (build Windows from Linux)?
 
@@ -11831,11 +11831,11 @@ Ship a "Export diagnostics" feature: output of `os.info()`, `app.getVersion()`, 
 
 ## Does the IPC touch the network?
 
-No. `tynd://` + `tynd-bin://` are native custom schemes — no TCP, no loopback port, no firewall prompt. See [IPC model](/docs/v0.1/concepts/ipc).
+No. `tynd://` + `tynd-bin://` are native custom schemes — no TCP, no loopback port, no firewall prompt. See [IPC model](/docs/v0.2/concepts/ipc).
 
 ## How do I test my app?
 
-`bun test` for unit tests. Mock OS APIs at the module boundary. Smoke-test the built binary in CI (spawn, wait 2 s, expect no crash). No Playwright / WebdriverIO support — `tynd://` isn't a browser-reachable URL. See [Testing guide](/docs/v0.1/guides/testing).
+`bun test` for unit tests. Mock OS APIs at the module boundary. Smoke-test the built binary in CI (spawn, wait 2 s, expect no crash). No Playwright / WebdriverIO support — `tynd://` isn't a browser-reachable URL. See [Testing guide](/docs/v0.2/guides/testing).
 
 ## Can I use server-sent events / WebSockets?
 
@@ -11869,7 +11869,7 @@ Yes — see [CONTRIBUTING.md](https://github.com/kvnpetit/tynd/blob/main/CONTRIB
 
 --- SECTION: Glossary ---
 
-URL: https://tynd.dev/docs/v0.1/glossary
+URL: https://tynd.kvnpetit.com/docs/v0.2/glossary
 TITLE: Glossary
 DESCRIPTION: Definitions for every Tynd-specific term — runtimes, IPC primitives, build artifacts, and Rust-side concepts.
 
@@ -11983,7 +11983,7 @@ Tynd's typed-RPC model. Types flow from `typeof backend` — no `.d.ts` generati
 
 --- SECTION: Troubleshooting ---
 
-URL: https://tynd.dev/docs/v0.1/troubleshooting
+URL: https://tynd.kvnpetit.com/docs/v0.2/troubleshooting
 TITLE: Troubleshooting
 DESCRIPTION: Common errors and how to fix them. If yours isn't here, run `tynd info --verbose` and open an issue.
 
@@ -12061,14 +12061,14 @@ WebView2 runtime is missing. Windows 11 ships it; some locked-down Windows 10 VM
 Binary isn't code-signed. Options:
 
 - Click "More info → Run anyway" for local testing.
-- Sign the binary — see the [Code Signing guide](/docs/v0.1/guides/code-signing).
+- Sign the binary — see the [Code Signing guide](/docs/v0.2/guides/code-signing).
 
 ### macOS: "can't be opened because it is from an unidentified developer"
 
 Gatekeeper rejects unsigned apps. Options:
 
 - Right-click the `.app` → Open → Open (one-time override).
-- Sign + notarize — see [Code Signing](/docs/v0.1/guides/code-signing).
+- Sign + notarize — see [Code Signing](/docs/v0.2/guides/code-signing).
 
 ### Linux: `libwebkit2gtk-4.1.so.0` missing
 
@@ -12102,7 +12102,7 @@ Use the pure-SPA variant — plain React (Vite), plain Svelte, plain Solid, etc.
 
 ### `backend is not a string` / config validation error
 
-`tynd.config.ts` is validated with [valibot](https://valibot.dev). The error message lists the offending field. Required: `runtime`. See the [config reference](/docs/v0.1/cli/config).
+`tynd.config.ts` is validated with [valibot](https://valibot.dev). The error message lists the offending field. Required: `runtime`. See the [config reference](/docs/v0.2/cli/config).
 
 ### `tynd dev` shows a blank window, no errors
 
@@ -12129,7 +12129,7 @@ tynd build --bundle app,dmg,deb,appimage,nsis,msi
 
 ### React Fast Refresh triggers full reloads
 
-React Compiler (React 19+) conflicts with Vite's Fast Refresh. Either disable the Compiler in dev mode, or accept full reloads. See [Frontend Frameworks](/docs/v0.1/guides/frontend-frameworks).
+React Compiler (React 19+) conflicts with Vite's Fast Refresh. Either disable the Compiler in dev mode, or accept full reloads. See [Frontend Frameworks](/docs/v0.2/guides/frontend-frameworks).
 
 ---
 

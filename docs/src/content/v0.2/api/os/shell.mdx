@@ -1,0 +1,45 @@
+---
+title: shell
+description: "Open URLs in the default browser and files in their OS-default handler."
+---
+
+# `shell`
+
+```ts
+import { shell } from "@tynd/core/client";
+```
+
+Launch URLs / files through the OS's default handler.
+
+## `openExternal(url): Promise<void>`
+
+Opens the URL in the default browser.
+
+```ts
+await shell.openExternal("https://example.com");
+await shell.openExternal("mailto:hi@example.com");
+```
+
+**Scheme allowlist** — only `http://`, `https://`, `mailto:` are accepted. Passing `file://`, `javascript:`, `data:`, or a registered custom scheme throws.
+
+## `openPath(path): Promise<void>`
+
+Opens a filesystem path in the OS default handler for that file type.
+
+```ts
+await shell.openPath("/Users/me/document.pdf");
+await shell.openPath("C:\\Users\\Me\\spreadsheet.xlsx");
+```
+
+- Absolute paths only (relative paths resolve against the app's cwd, which is unreliable).
+- The OS decides what app handles the file type.
+- Returns when the launch is initiated, not when the target app is ready.
+
+## Notes
+
+- Reveal-in-file-manager isn't exposed yet — workaround: `process.exec("explorer", { args: [folder] })` on Windows, `open` on macOS, `xdg-open` on Linux.
+- Neither function throws on missing files / unreachable URLs — the OS handler surfaces those errors to the user.
+
+## Related
+
+- [process](/docs/v0.2/api/os/process) — `process.exec` for more control over what's launched.

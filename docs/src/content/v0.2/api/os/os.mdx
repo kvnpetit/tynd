@@ -1,0 +1,111 @@
+---
+title: os
+description: "Platform / arch / OS version, common user directories, env var lookup, EOL, hostname, locale, dark-mode detection."
+---
+
+# `os`
+
+```ts
+import { os } from "@tynd/core/client";
+```
+
+Platform info and OS-blessed directories. ## `os.info(): Promise<OsInfo>`
+
+```ts
+interface OsInfo {
+  platform: "linux" | "macos" | "windows" | string;
+  arch:     string;
+  family:   string;
+  version:  string | null;
+}
+
+const info = await os.info();
+```
+
+## `os.hostname(): Promise<string | null>`
+
+```ts
+const host = await os.hostname();
+```
+
+## `os.locale(): Promise<string | null>`
+
+BCP-47 locale tag, e.g. `"en-US"`, `"fr-FR"`. `null` if not derivable.
+
+```ts
+const locale = await os.locale();
+```
+
+## `os.isDarkMode(): Promise<boolean>`
+
+```ts
+if (await os.isDarkMode()) applyDarkStyles();
+```
+
+Per-OS detection:
+
+- macOS — `NSApplication.effectiveAppearance`.
+- Windows — `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme`.
+- Linux — GTK theme name heuristic.
+
+## `os.eol(): Promise<string>`
+
+`"\r\n"` on Windows, `"\n"` elsewhere.
+
+```ts
+console.log(`a${await os.eol()}b`);
+```
+
+## Directories
+
+All return `Promise<string | null>` — `null` if the OS doesn't define the directory. `tmpDir` is the only always-available one (returns `Promise<string>`).
+
+```ts
+const home       = await os.homeDir();       // $HOME / USERPROFILE
+const tmp        = await os.tmpDir();        // always set
+const config     = await os.configDir();     // ~/.config, Library/Preferences, %APPDATA%
+const data       = await os.dataDir();       // ~/.local/share, Library/Application Support, %LOCALAPPDATA%
+const cache      = await os.cacheDir();      // ~/.cache, Library/Caches, %LOCALAPPDATA%\Caches
+
+const desktop    = await os.desktopDir();
+const documents  = await os.documentsDir();
+const downloads  = await os.downloadsDir();
+const pictures   = await os.picturesDir();
+const music      = await os.musicDir();
+const video      = await os.videoDir();      // note: singular — not `videosDir`
+```
+
+## `os.exePath(): Promise<string | null>`
+
+Path to the running executable.
+
+```ts
+const exe = await os.exePath();
+```
+
+## `os.cwd(): Promise<string | null>`
+
+Current working directory.
+
+```ts
+const wd = await os.cwd();
+```
+
+## `os.env(key: string): Promise<string | null>`
+
+Environment variable lookup.
+
+```ts
+const home = await os.env("HOME");
+const key  = await os.env("API_KEY");
+```
+
+## Notes
+
+- Every directory getter returns `null` when the OS doesn't define that path (rare on desktop). Always handle `null` when composing absolute paths.
+- For per-app paths, join with your reverse-DNS identifier: `await path.join(await os.configDir() ?? "", "com.example.myapp", "settings.json")`.
+
+## Related
+
+- [path](/docs/v0.2/api/os/path) — `path.join` to compose per-app paths.
+- [store](/docs/v0.2/api/os/store) — uses `configDir` automatically.

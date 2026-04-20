@@ -1,0 +1,89 @@
+---
+title: singleInstance
+description: "Prevent duplicate launches, forward argv / cwd to the primary, and auto-focus the existing window."
+---
+
+# `singleInstance`
+
+```ts
+import { singleInstance } from "@tynd/core/client";
+```
+
+Cross-OS exclusive lock + argv/cwd forwarding.
+
+## `acquire(id): Promise<SingleInstanceResult>`
+
+```ts
+interface SingleInstanceResult {
+  acquired: boolean;
+  already:  boolean;   // true if another instance currently holds the lock
+}
+
+const { acquired, already } = await singleInstance.acquire("com.example.myapp");
+if (!acquired) {
+  // Duplicate launch. The primary has already been focused and notified.
+  process.exit(0);
+}
+```
+
+- `id` — stable reverse-DNS identifier. Doubles as the OS lock name and the local socket name.
+- When `acquired: false`, `already: true` means a peer instance is running. Both fields coincide for the typical case; `already` exists to distinguish "lock unavailable for some other reason" when debugging.
+
+## `isAcquired(): Promise<boolean>`
+
+Whether this process currently holds the lock.
+
+```ts
+if (await singleInstance.isAcquired()) { /* we're the primary */ }
+```
+
+## `onSecondLaunch(handler): () => void`
+
+Fires in the **primary** instance whenever a duplicate launch is detected.
+
+```ts
+interface SecondLaunchPayload {
+  argv: string[];   // duplicate's argv (argv[0] is the exe path)
+  cwd:  string;
+}
+
+singleInstance.onSecondLaunch(({ argv, cwd }) => {
+  console.log("reopened with", argv.slice(1), "at", cwd);
+});
+```
+
+## `onOpenUrl(handler): () => void`
+
+Fires when the app is opened via a registered URL scheme (declared in `tynd.config.ts::protocols`). Fires both on cold start (argv has the URL) and on duplicate launch.
+
+```ts
+singleInstance.onOpenUrl((url) => {
+  // url = "myapp://invite/abc123"
+  const parsed = new URL(url);
+  router.navigate(parsed.pathname);
+});
+```
+
+## Backing mechanisms
+
+- **Windows** — named pipe (`\\.\pipe\<id>`) + the single-instance lock for the lock.
+- **Linux** — abstract socket + kernel-managed lock. Auto-released on process exit.
+- **macOS** — CFMessagePort + Mach-kernel-backed port.
+
+Argv/cwd forwarding uses the local socket library for the local socket — one JSON line, then close.
+
+## Reserved schemes
+
+When declaring `protocols: ["myapp"]` in `tynd.config.ts`, these schemes are **rejected at config-validation time**:
+
+`http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`
+
+## Notes
+
+- Use a stable id — **don't include the version**. Users upgrading need the old version to auto-focus before it shuts down.
+- `acquire()` should be called **before** rendering any UI or starting background work. The return value determines the entire process lifecycle.
+
+## Related
+
+- [Single Instance guide](/docs/v0.2/guides/single-instance).
+- [Deep Linking guide](/docs/v0.2/guides/deep-linking).

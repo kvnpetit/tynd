@@ -1,0 +1,207 @@
+---
+title: Testing
+description: "Unit-test backend logic with `bun test`, exercise OS APIs in isolation, and run integration smoke tests with the native host."
+---
+
+# Testing
+
+Tynd apps are plain TypeScript with a native runtime attached. The testing strategy has three layers:
+
+| Layer | What it covers | Tool |
+|---|---|---|
+| **Unit** | Pure functions, backend logic, reducers, validators | `bun test` |
+| **OS API integration** | `fs`, `sql`, `store`, `compute`, `http` round-trips | `bun test` + a running `tynd-lite` / `tynd-full` binary |
+| **GUI / end-to-end** | Window rendering, IPC across the native bridge, menus, tray | Manual + a playground harness |
+
+## Unit tests — `bun test`
+
+Bun ships a Jest-compatible test runner. No install needed.
+
+```ts filename="backend/add.test.ts"
+import { test, expect, describe } from "bun:test";
+import { add } from "./add";
+
+describe("add", () => {
+  test("sums two numbers", () => {
+    expect(add(2, 3)).toBe(5);
+  });
+
+  test("handles negatives", () => {
+    expect(add(-1, 1)).toBe(0);
+  });
+});
+```
+
+Run:
+
+```bash
+bun test
+bun test --watch
+bun test backend/add.test.ts
+```
+
+## Testing backend RPC in isolation
+
+Export your RPC functions from a module the test can import:
+
+```ts filename="backend/users.ts"
+export async function createUser(name: string) {
+  if (!name.trim()) throw new Error("name is required");
+  return { id: crypto.randomUUID(), name };
+}
+```
+
+```ts filename="backend/users.test.ts"
+import { test, expect } from "bun:test";
+import { createUser } from "./users";
+
+test("createUser rejects empty names", async () => {
+  await expect(createUser("")).rejects.toThrow("name is required");
+});
+
+test("createUser returns id + name", async () => {
+  const u = await createUser("Alice");
+  expect(u.name).toBe("Alice");
+  expect(u.id).toMatch(/^[0-9a-f-]{36}$/);
+});
+```
+
+No host needed — you're testing pure business logic.
+
+## Testing OS API-using code
+
+OS APIs (`fs`, `sql`, `store`, `compute`, `http`) dispatch through the Rust host. Two options:
+
+### Option A — launch against a running host
+
+Run `tynd start` in one terminal, then run tests in another that hit the same process. Good for one-off verification, awkward for CI.
+
+### Option B — mock at the module boundary
+
+Wrap OS calls in a thin adapter layer your tests can swap out:
+
+```ts filename="backend/data-store.ts"
+import { createStore } from "@tynd/core/client";
+
+export interface Storage {
+  get<T>(key: string): Promise<T | null>;
+  set(key: string, value: unknown): Promise<void>;
+}
+
+export function createRealStorage(ns: string): Storage {
+  return createStore(ns);
+}
+
+export function createMemoryStorage(): Storage {
+  const m = new Map<string, unknown>();
+  return {
+    get: async (k) => (m.get(k) as unknown) ?? null,
+    set: async (k, v) => void m.set(k, v),
+  };
+}
+```
+
+```ts filename="backend/app.ts"
+import { type Storage } from "./data-store";
+
+export async function saveTheme(storage: Storage, theme: string) {
+  await storage.set("theme", theme);
+}
+```
+
+```ts filename="backend/app.test.ts"
+import { test, expect } from "bun:test";
+import { createMemoryStorage } from "./data-store";
+import { saveTheme } from "./app";
+
+test("saveTheme writes to storage", async () => {
+  const storage = createMemoryStorage();
+  await saveTheme(storage, "dark");
+  expect(await storage.get<string>("theme")).toBe("dark");
+});
+```
+
+The real storage and the memory storage share the same interface. Unit tests use the fake; a smoke test exercises the real one.
+
+## Integration smoke tests
+
+The simplest "does the binary actually launch" check:
+
+```ts filename="scripts/smoke.ts"
+import { spawn } from "bun";
+
+const proc = spawn(["./release/my-app"], {
+  stdout: "pipe",
+  stderr: "pipe",
+});
+
+await Bun.sleep(2000);
+proc.kill();
+
+const exitCode = await proc.exited;
+if (exitCode !== 0 && exitCode !== 143 /* SIGTERM */) {
+  console.error(await new Response(proc.stderr).text());
+  process.exit(1);
+}
+
+console.log("smoke ok");
+```
+
+```bash
+bun run scripts/smoke.ts
+```
+
+Do this after `tynd build` in CI to catch "launches but immediately crashes" regressions.
+
+## GUI / IPC end-to-end
+
+WebView-driven tests (Playwright, WebdriverIO) don't work — `tynd://` isn't a browser-reachable URL, and the native window isn't a Chromium DevTools target.
+
+Options:
+
+- **Keep it manual.** Run `tynd dev`, exercise the app, use browser devtools (`await tyndWindow.openDevTools()`).
+- **Headless probe.** Spawn the binary and poke RPC through a backend-internal test harness you expose under a debug flag.
+- **Future.** A dedicated `tynd-test-runner` is on the backlog — not shipping in this version.
+
+## Testing in CI
+
+```yaml filename=".github/workflows/test.yml"
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Linux WebView deps
+        if: runner.os == 'Linux'
+        run: sudo apt install -y libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libxdo-dev
+      - run: bun install
+      - run: bun test
+      - run: bunx tynd build
+      - run: bun run scripts/smoke.ts
+```
+
+## What to test
+
+- **Business logic** — validators, reducers, formatters, calculators. `bun test` covers this.
+- **RPC payload shapes** — if the backend returns a complex object, test that it serializes round-trip correctly. JSON-serialize, parse back, assert deep-equal.
+- **Error paths** — every `throw` in the backend. The frontend sees a rejected promise; tests confirm the message is correct.
+- **Store / SQL schema migrations** — run the migration from an empty DB, assert table shapes.
+- **Signature verification** — if you ship `updater`, write a test that verifies a known-good signature passes and a tampered one fails.
+
+## What not to test
+
+- **GUI pixel-perfect layouts** — rendering is the WebView's job. Trust it.
+- **The Rust host itself** — pre-tested by the Tynd project CI. You don't need to re-verify `fs.readText` works.
+- **End-to-end click scenarios in CI** — too flaky for its cost. Keep those manual.
+
+## Related
+
+- [Performance](/docs/v0.2/guides/performance) — profiling and optimization.
+- [Debugging](/docs/v0.2/guides/debugging) — devtools, logs, verbose mode.
+- [CONTRIBUTING.md](https://github.com/kvnpetit/tynd/blob/main/CONTRIBUTING.md) — how the Tynd monorepo tests itself.

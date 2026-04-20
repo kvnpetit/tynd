@@ -1,0 +1,39 @@
+---
+title: tynd clean
+description: "Remove build artifacts. Useful when the cache gets in the way or before a fresh release build."
+---
+
+# `tynd clean`
+
+```bash
+tynd clean             # removes .tynd/cache and release/ (prompts first)
+tynd clean -y          # skip confirmation
+tynd clean --dry-run   # show what would be deleted without deleting
+```
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `-y, --yes` | Skip confirmation prompt |
+| `-n, --dry-run` | Preview without deleting |
+
+Global flags: `--verbose`, `--quiet`.
+
+## What gets removed
+
+- `.tynd/cache/frontend/`, `.tynd/cache/backend/`, `.tynd/cache/backend-dev/`
+- `.tynd/cache/tools/` (auto-downloaded installer tools)
+- `release/*` (the raw binary + any installers)
+
+## What's kept
+
+- `node_modules/`
+- Your `dist/` / framework output directory
+- Anything outside `.tynd/cache` and `release/`
+
+## Related
+
+- [Build Pipeline](/docs/v0.2/concepts/build-pipeline) — how caching works.
+- [`tynd build`](/docs/v0.2/cli/build).

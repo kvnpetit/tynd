@@ -1,0 +1,121 @@
+---
+title: terminal
+description: "Real PTY inside your app — cross-OS (ConPTY on Windows, POSIX elsewhere)."
+---
+
+# `terminal`
+
+```ts
+import { terminal } from "@tynd/core/client";
+```
+
+Real PTY sessions. ConPTY on Windows, POSIX PTY elsewhere. Pair with [xterm.js](https://xtermjs.org/) for a full interactive terminal UI.
+
+## `spawn(opts?): Promise<TerminalHandle>`
+
+```ts
+interface TerminalSpawnOptions {
+  shell?: string;       // default: $SHELL on Unix, %COMSPEC% on Windows
+  args?:  string[];
+  cwd?:   string;
+  env?:   Record<string, string>;
+  cols?:  number;       // default 80
+  rows?:  number;       // default 24
+}
+
+const t = await terminal.spawn({ cols: 120, rows: 30 });
+```
+
+<Callout type="info">
+  **Option name is `shell`**, not `command`.
+</Callout>
+
+## `TerminalHandle`
+
+```ts
+interface TerminalHandle {
+  id: number;
+  write(data: string | Uint8Array): Promise<void>;
+  resize(cols: number, rows: number): Promise<void>;
+  kill(): Promise<void>;
+  onData(handler: (chunk: Uint8Array) => void): () => void;
+  onExit(handler: (code: number | null) => void): () => void;
+}
+```
+
+### `onData(handler)`
+
+Streams raw PTY bytes (base64-encoded on the IPC channel; decoded to `Uint8Array` for you).
+
+```ts
+t.onData((bytes) => xterm.write(bytes));
+```
+
+### `onExit(handler)`
+
+Fires once on child exit. `code` is `null` if killed by a signal (e.g. via `kill()`).
+
+```ts
+t.onExit((code) => console.log("shell exited:", code));
+```
+
+### `write(data)`
+
+```ts
+await t.write("ls -la\n");
+await t.write(new Uint8Array([0x03]));   // Ctrl+C
+```
+
+### `resize(cols, rows)`
+
+Call after the user resizes the terminal UI.
+
+### `kill()`
+
+Force-close the session. `onExit` fires with `null`.
+
+## `list(): Promise<number[]>`
+
+IDs of currently-open sessions.
+
+```ts
+const ids = await terminal.list();
+```
+
+## Example — xterm.js integration
+
+```ts
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { terminal } from "@tynd/core/client";
+import "@xterm/xterm/css/xterm.css";
+
+const xterm = new Terminal();
+const fit = new FitAddon();
+xterm.loadAddon(fit);
+xterm.open(document.getElementById("terminal")!);
+fit.fit();
+
+const pty = await terminal.spawn({ cols: xterm.cols, rows: xterm.rows });
+
+pty.onData((bytes) => xterm.write(bytes));
+pty.onExit((code) => xterm.writeln(`\r\n[process exited: ${code ?? "killed"}]`));
+
+xterm.onData((data) => pty.write(data));
+
+new ResizeObserver(() => {
+  fit.fit();
+  void pty.resize(xterm.cols, xterm.rows);
+}).observe(document.getElementById("terminal")!);
+```
+
+## Notes
+
+- Output from the PTY is base64-encoded on the IPC channel.
+- Multiple concurrent sessions are supported — each gets its own thread and id.
+- Long-lived sessions survive across calls; handles live in a `Mutex<HashMap<id, _>>` inside `os::terminal`.
+
+## Related
+
+- [process](/docs/v0.2/api/os/process) — one-shot `exec` with buffered output.
+- [sidecar](/docs/v0.2/api/os/sidecar) — run a bundled binary as a PTY.

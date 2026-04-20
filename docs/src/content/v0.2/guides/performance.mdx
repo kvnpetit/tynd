@@ -1,0 +1,170 @@
+---
+title: Performance
+description: "Startup latency, IPC overhead, binary size, and CPU-bound hot paths — how to profile and optimize a Tynd app."
+---
+
+# Performance
+
+Most Tynd apps are I/O-bound (IPC round-trips, disk, network). The CPU-bound case matters when you hit it. This guide covers where time actually goes, how to measure, and how to fix it.
+
+## Typical timings
+
+| Operation | `lite` | `full` |
+|---|---|---|
+| Cold start (blank app) | ~40-80 ms | ~200-500 ms (spawn Bun) |
+| Frontend first paint | ~100-200 ms after window creation | same |
+| RPC round-trip (JSON, under 1 KB) | ~0.2-1 ms | ~0.5-2 ms |
+| OS call (`fs.readText` for a 10 KB file) | ~1-3 ms | same |
+| Binary IPC (`fs.readBinary` 10 MB) | ~20-40 ms | same |
+| Backend hot reload (dev) | ~100-300 ms | ~200-500 ms |
+
+These are reference points on a mid-range machine (M2, Ryzen 7). Your mileage varies.
+
+## Startup
+
+The biggest pain point is cold-start-to-first-pixel.
+
+### What happens at launch
+
+1. OS loads the binary (~10-50 ms, dominated by AV scan on Windows).
+2. TYNDPKG trailer read; frontend assets pre-warmed on a background thread.
+3. Backend bundle loaded:
+   - **lite** — QuickJS eval's `bundle.js` (~20-50 ms for typical app).
+   - **full** — Bun binary extracted (cached across launches) + subprocess spawned (~200-500 ms).
+4. Window created, WebView initialized.
+5. Frontend entry executes; first RPC can round-trip.
+
+### Shrinking startup
+
+- **Pick `lite`** when you can. 10× faster cold start, smaller binary, smaller RAM footprint.
+- **Keep the backend bundle small.** Every 100 KB of backend code is ~5-15 ms of eval time in lite. Audit your deps with `bun build --target=bun backend/main.ts --minify` and check the output size.
+- **Defer OS calls.** `app.onReady` fires after the WebView is alive. Don't block it with synchronous-looking loops — move work into the first user interaction.
+- **Lazy-load frontend routes.** Use your framework's code-splitting (Vite's dynamic `import()`). The TYNDPKG scheme serves assets on-demand — smaller initial chunk = faster first paint.
+- **Pre-warm caches.** If your app reads a config file at startup, let Rust cache it (the frontend asset cache is already pre-warmed) or start the read early from a background initializer.
+
+### Measuring cold start
+
+```ts filename="src/main.ts"
+const t0 = performance.now();
+// ... bootstrap your app ...
+console.log("frontend ready in", performance.now() - t0, "ms");
+```
+
+For the full end-to-end, launch from a shell wrapper that prints its own time around the binary:
+
+```bash
+time ./release/my-app --exit-after-ready   # if you add a debug flag
+```
+
+## IPC overhead
+
+A typical JSON RPC round-trip is **~0.5-2 ms**. That's fast for one call but adds up quickly.
+
+**Bad:**
+
+```ts
+// 100 RPC calls for one user action
+for (const file of files) {
+  await api.processOne(file);
+}
+```
+
+**Good:**
+
+```ts
+// One RPC call
+await api.processAll(files);
+```
+
+### Batching guidance
+
+- If you catch yourself calling RPC in a tight loop, batch on the backend.
+- If the call returns a lot of small objects, consider streaming (`async function*`) so the UI can render progressively.
+- For multi-MB binary, use [`tynd-bin://`](/docs/v0.2/guides/binary-data) — `fs.readBinary` / `compute.hash`. Don't encode binary as base64 through the JSON channel.
+
+## CPU-bound JS
+
+QuickJS (lite) is an interpreter — ~5-30× slower than V8 / JSC on tight JS loops (parsing, crypto, image processing). Three options:
+
+1. **Move the hot path to Rust.** `compute.hash` is 10× faster than a JS implementation. Same pattern for hash, compression, parsing — if it's hot and deterministic, a Rust API is a better answer.
+2. **Offload to a worker.** `workers.spawn(fn)` runs on its own thread. UI stays responsive, but the JS is still interpreted — pure CPU work gains little from just threading.
+3. **Switch to `full`.** Bun's JSC JIT closes the gap. Costs ~37 MB of binary size; worth it for apps where the JS itself is the bottleneck.
+
+```ts
+// ❌ lite — 200 ms to parse 50 MB of JSON on mid-range
+const data = JSON.parse(text);
+
+// ✅ lite — offload
+const data = await workers.spawn((s: string) => JSON.parse(s)).then((w) => w.run(text));
+
+// ✅ full — JIT handles it in ~40 ms, no offload needed
+const data = JSON.parse(text);
+```
+
+## Memory
+
+- Lite baseline: ~30-60 MB at idle.
+- Full baseline: ~80-120 MB at idle (Bun subprocess adds ~50 MB).
+- WebView memory depends entirely on your frontend — React + state libraries easily reach 100 MB before your data does.
+
+### Leaks to watch
+
+- **Event listeners not unsubscribed.** Every `api.on(…)`, `tyndWindow.onResized(…)`, `singleInstance.onSecondLaunch(…)` returns an unsubscribe. Call it.
+- **Unbounded streams.** Async generators whose consumers disappeared. Window-close-cancel handles it for secondary windows; for in-app stream handles, `stream.cancel()` when done.
+- **Cached query results in `sql`.** No auto-eviction. If you read 100k rows into memory every query, you'll feel it.
+
+### Measuring
+
+```ts
+console.log(performance.memory);   // available in full (Bun JSC) and most WebViews
+```
+
+For Rust-side memory (the host), use your OS's task manager — `tynd-full` / `tynd-lite` is visible as a process.
+
+## Binary size
+
+| Runtime | Host | Typical app |
+|---|---|---|
+| `lite` | ~6.4 MB | ~7-12 MB (+frontend + backend + sidecars) |
+| `full` | ~6.4 MB + ~37 MB Bun (zstd) | ~44-60 MB |
+
+**Shrink the bundle:**
+
+- Avoid `moment`, `lodash` — use native `Intl.DateTimeFormat` (lite has a stub; use `date-fns`) or per-function imports.
+- Tree-shake aggressively. `bun build --minify --tree-shaking` at bundle time.
+- Strip source maps for release (`--sourcemap=none`).
+- Sidecars dominate — if you ship a 60 MB ffmpeg, your "~10 MB lite app" becomes ~70 MB. Consider auto-download on first launch instead.
+
+## Profiling
+
+### Backend
+
+- **Full mode** — `bun --inspect-brk` on the backend spawn command; attach Chrome DevTools.
+- **Lite mode** — no inspector yet. Add `performance.now()` around suspect sections. Or switch to `full` temporarily for profiling.
+
+### Frontend
+
+Your framework's tools work normally. React DevTools, Vue DevTools — load them as browser extensions into the WebView (debug builds only) via `await tyndWindow.openDevTools()`.
+
+### Rust host
+
+You usually don't need to profile the host unless you're a Tynd contributor. If you do:
+
+```bash
+cargo build --release -p tynd-lite --features tracing
+# Run with TYND_LOG=debug to see IPC traffic + timing
+```
+
+## Anti-patterns
+
+- **`await` in a loop** — 10 awaits = 10 ms of latency. Use `Promise.all` for independent work.
+- **Round-tripping binary through JSON RPC** — kills throughput. Use `fs.readBinary` / `compute.hash`.
+- **Re-parsing JSON every render** — cache the parsed object.
+- **Polling `fs.stat` instead of `fs.watch`** — watch is cheaper.
+- **Loading the whole SQL table into memory** — paginate or stream.
+
+## Related
+
+- [Binary Data](/docs/v0.2/guides/binary-data) — zero-copy multi-MB IPC.
+- [Streaming RPC](/docs/v0.2/guides/streaming) — progressive delivery.
+- [Runtimes](/docs/v0.2/runtimes) — lite vs full tradeoff.

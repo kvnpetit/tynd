@@ -1,0 +1,179 @@
+---
+title: updater
+description: "Check for, download, verify, and install Ed25519-signed auto-updates. Tauri-compatible manifest format."
+---
+
+# `updater`
+
+```ts
+import { updater } from "@tynd/core/client";
+```
+
+Auto-update checker + signed binary downloader. Verifies Ed25519 signatures over the raw downloaded bytes.
+
+## `check(opts): Promise<UpdateInfo | null>`
+
+Fetch the manifest and return metadata if a newer version is available.
+
+```ts
+interface UpdaterCheckOptions {
+  endpoint:       string;   // URL of the update.json manifest
+  currentVersion: string;   // semver
+}
+
+interface UpdateInfo {
+  version:   string;
+  notes:     string | null;
+  pubDate:   string | null;     // ISO-8601 if the manifest has one
+  url:       string;
+  signature: string;             // base64 Ed25519
+  platform:  string;             // e.g. "windows-x86_64"
+}
+
+const info = await updater.check({
+  endpoint: "https://releases.example.com/update.json",
+  currentVersion: "1.0.0",
+});
+
+if (info) console.log(`Update available: ${info.version}`);
+```
+
+Returns `null` when already up to date.
+
+## `downloadAndVerify(opts): Promise<UpdaterDownloadResult>`
+
+Streams the artifact to a temp file while hashing, then verifies the Ed25519 signature over the full downloaded bytes.
+
+```ts
+interface UpdaterDownloadOptions {
+  url:         string;
+  signature:   string;   // base64 Ed25519
+  pubKey:      string;   // raw 32-byte Ed25519 pubkey, base64
+  progressId?: string;   // scopes onProgress events to this download
+}
+
+interface UpdaterDownloadResult {
+  path: string;
+  size: number;
+}
+
+const off = updater.onProgress(({ phase, loaded, total }) => {
+  console.log(`${phase}: ${loaded}/${total ?? "?"}`);
+});
+
+const { path, size } = await updater.downloadAndVerify({
+  url:       info.url,
+  signature: info.signature,
+  pubKey:    UPDATER_PUB_KEY,
+  progressId: "update-download",
+});
+
+off();
+```
+
+Rejects with a `signature check failed` error if verification fails.
+
+## `onProgress(fn): () => void`
+
+Fires during download + verification. Throttled ~50 ms.
+
+```ts
+interface UpdaterProgress {
+  id?:    string;
+  phase:  "download" | "verified";
+  loaded: number;
+  total:  number | null;
+}
+
+const off = updater.onProgress((p) => {
+  console.log(p.phase, p.loaded, p.total);
+});
+```
+
+## `install(opts): Promise<UpdaterInstallResult>`
+
+Swaps the downloaded binary for the running one and optionally relaunches.
+
+```ts
+interface UpdaterInstallOptions {
+  path:      string;
+  relaunch?: boolean;   // defaults to true
+}
+
+interface UpdaterInstallResult {
+  installed: boolean;
+  path:      string;   // final on-disk path of the running binary
+  relaunch:  boolean;
+}
+
+const result = await updater.install({ path, relaunch: true });
+```
+
+### Platform semantics
+
+- **Windows** — delegates to a short cmd script (`timeout /t 2 /nobreak > nul & move /y <new> <current> & start ""`). Lets the current `.exe` unlock, then swaps + relaunches.
+- **Linux** (AppImage + any single-file binary) — `fs::rename` + chmod +x + spawn + exit. Linux keeps the old inode mapped while the exe is live.
+- **macOS** — **not yet implemented.** `.app` bundles are directories; callers manage the swap manually using the returned `path`.
+
+Returns just before the current process exits. Don't rely on any state after `install` resolves.
+
+## Manifest format (Tauri-compatible)
+
+```json
+{
+  "version":  "1.2.3",
+  "notes":    "Bug fixes & perf.",
+  "pub_date": "2026-04-19T12:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url":       "https://.../MyApp-1.2.3-setup.exe",
+      "signature": "<base64 Ed25519>"
+    },
+    "darwin-aarch64": {
+      "url":       "https://.../MyApp-1.2.3.dmg",
+      "signature": "<base64 Ed25519>"
+    },
+    "linux-x86_64": {
+      "url":       "https://.../MyApp-1.2.3.AppImage",
+      "signature": "<base64 Ed25519>"
+    }
+  }
+}
+```
+
+Platform key: `<os>-<arch>`, where `os ∈ { windows | darwin | linux }` (macos → darwin for GitHub Releases / Tauri parity) and `arch ∈ { x86_64 | aarch64 }`.
+
+## Trust model
+
+- Manifest served plain HTTPS (no meta-signature).
+- Each platform entry carries an Ed25519 signature over the raw artifact bytes.
+- Public key is baked into the app — a compromised manifest server can only redirect to a URL whose bytes still verify against the local pubkey.
+
+## Signing workflow
+
+```bash
+tynd keygen --out release/updater
+tynd sign release/MyApp-1.2.3-setup.exe \
+  --key release/updater.key \
+  --out release/MyApp-1.2.3-setup.exe.sig
+```
+
+Bake the pubkey into your app source:
+
+```ts filename="src/updater-key.ts"
+export const UPDATER_PUB_KEY = "cFpG...RVDv/RQ=";
+```
+
+## Not yet handled
+
+- macOS `.app` swap (extract from `.dmg` / `.tar.gz`).
+- Periodic auto-check — roll your own `setInterval`.
+- Delta updates (binary diff).
+- Rollback on failure.
+
+See the [Auto-Updates guide](/docs/v0.2/guides/auto-updates).
+
+## Related
+
+- [`tynd keygen`](/docs/v0.2/cli/keygen) — generate the keypair.
+- [`tynd sign`](/docs/v0.2/cli/sign) — sign a file.

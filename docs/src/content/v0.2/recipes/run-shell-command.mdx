@@ -1,0 +1,63 @@
+---
+title: Run a Shell Command
+description: "Direct `exec` (safe, no shell interpolation) vs `execShell` (pipes + globs). With timeout and output capture."
+---
+
+# Run a Shell Command
+
+## Direct exec — safest
+
+```ts
+import { process } from "@tynd/core/client";
+
+const { stdout, stderr, code } = await process.exec("git", {
+  args: ["status", "--short"],
+  cwd: "/path/to/repo",
+  timeoutMs: 5000,
+});
+
+if (code !== 0) throw new Error(stderr);
+console.log(stdout);
+```
+
+Arguments are passed as an array — **no shell interpolation**. Safe against injection.
+
+## Shell exec — when you need pipes
+
+```ts
+const { stdout } = await process.execShell("ls -la | grep tynd | wc -l");
+```
+
+Interpolates through `cmd.exe /c` (Windows) or `sh -c` (elsewhere). Pipes, globs, shell builtins work.
+
+**Never pass user input directly** — that's a shell injection. Quote aggressively or switch back to `process.exec` with array arguments.
+
+## Cancellation / timeout
+
+`timeoutMs` is the cleanest option:
+
+```ts
+try {
+  const res = await process.exec("slow-tool", { timeoutMs: 10_000 });
+} catch (err) {
+  // timed out — process was killed, output captured up to the kill is in the err
+}
+```
+
+For explicit cancel mid-run, use [`terminal.spawn`](/docs/v0.2/api/os/terminal) instead — it returns a handle with `kill()`.
+
+## Environment
+
+```ts
+await process.exec("node", {
+  args: ["build.js"],
+  env: {
+    NODE_ENV: "production",
+    PATH: "/custom/path:/usr/bin",
+  },
+});
+```
+
+`env` is **merged** with the current environment. Pass a single key to add to PATH / override a var; other vars remain.
+
+**Related:** [process API](/docs/v0.2/api/os/process) · [terminal API](/docs/v0.2/api/os/terminal) · [sidecar API](/docs/v0.2/api/os/sidecar).

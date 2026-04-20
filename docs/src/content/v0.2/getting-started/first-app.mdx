@@ -1,0 +1,154 @@
+---
+title: Your First App
+description: "Build a minimal Tynd app from scratch — backend function, frontend call, typed RPC, and a production binary."
+---
+
+# Your First App
+
+Walk through every surface of Tynd — the TypeScript backend, the typed RPC proxy on the frontend, and the native OS APIs that the frontend can call directly.
+
+## Scaffold
+
+```bash
+bunx @tynd/cli create hello-tynd
+cd hello-tynd
+```
+
+Pick any frontend framework. Examples below use framework-agnostic TypeScript — swap `document.getElementById` for your framework's idiomatic equivalent (`useState` in React, `ref()` in Vue, `$state` in Svelte, etc.).
+
+## Backend — your TypeScript functions
+
+```ts filename="backend/main.ts"
+import { app, createEmitter } from "@tynd/core";
+
+export const events = createEmitter<{
+  tick: { count: number };
+}>();
+
+export async function greet(name: string): Promise<string> {
+  return `Hello, ${name}!`;
+}
+
+export async function add(a: number, b: number): Promise<number> {
+  return a + b;
+}
+
+app.onReady(() => {
+  let count = 0;
+  setInterval(() => {
+    count += 1;
+    events.emit("tick", { count });
+  }, 1000);
+});
+
+app.start({
+  frontendDir: import.meta.dir + "/../dist",
+  window: {
+    title: "Hello Tynd",
+    width: 1000,
+    height: 700,
+    center: true,
+  },
+});
+```
+
+Every exported function and emitter is **automatically callable from the frontend** — no codegen, no `.d.ts` generation, no glue.
+
+## Frontend — typed RPC proxy
+
+```ts filename="src/main.ts"
+import { createBackend } from "@tynd/core/client";
+import type * as backend from "../backend/main";
+
+const api = createBackend<typeof backend>();
+
+async function render() {
+  const greeting = await api.greet("Alice");
+  document.getElementById("greeting")!.textContent = greeting;
+
+  const sum = await api.add(2, 3);
+  document.getElementById("sum")!.textContent = String(sum);
+}
+
+api.on("tick", ({ count }) => {
+  document.getElementById("count")!.textContent = String(count);
+});
+
+render();
+```
+
+Types come from `typeof backend`. Rename `greet` to `sayHello` in the backend — the compiler lights up every stale call on the frontend.
+
+## OS APIs — no round-trip to the backend
+
+Native things (dialogs, clipboard, notifications) are callable directly from the frontend. No IPC round-trip through your backend, no boilerplate:
+
+```ts filename="src/main.ts"
+import {
+  dialog,
+  tyndWindow,
+  clipboard,
+  notification,
+} from "@tynd/core/client";
+
+document.getElementById("open")!.addEventListener("click", async () => {
+  const path = await dialog.openFile({
+    filters: [{ name: "Text", extensions: ["txt", "md"] }],
+  });
+  if (path) {
+    await notification.send("File picked", { body: path });
+    await clipboard.writeText(path);
+  }
+});
+
+document.getElementById("max")!.addEventListener("click", async () => {
+  await tyndWindow.toggleMaximize();
+});
+```
+
+<Callout type="info">
+  OS calls bypass the TypeScript backend entirely — the frontend talks straight to the Rust host over the native IPC channel. See [IPC Model](/docs/v0.2/concepts/ipc).
+</Callout>
+
+## Run it
+
+```bash
+bun run dev
+```
+
+A native window opens. Save `backend/main.ts` — the backend hot-reloads without tearing down the window. Save frontend files — the frontend HMR reloads in place.
+
+## Build it
+
+```bash
+tynd build
+```
+
+Single-file binary under `release/`:
+
+- `lite` runtime — ~6.5 MB
+- `full` runtime — ~44 MB (Bun zstd-packed)
+
+No installer, no runtime to install on the user's machine, no Node/Bun on the target.
+
+### Ship it as an installer
+
+```bash
+tynd build --bundle
+```
+
+Produces platform-native installers:
+
+| Host OS | Output |
+|---|---|
+| macOS | `MyApp.app` + `MyApp-1.0.0.dmg` |
+| Linux | `.deb` + `.rpm` (if `rpmbuild` is available) + `.AppImage` |
+| Windows | NSIS `.exe` setup + `.msi` |
+
+See [Bundling & Distribution](/docs/v0.2/guides/bundling) for the full workflow.
+
+## Next
+
+- [Project Structure](/docs/v0.2/getting-started/project-structure)
+- [Backend RPC guide](/docs/v0.2/guides/backend-rpc)
+- [API Reference](/docs/v0.2/api)

@@ -1,0 +1,203 @@
+---
+title: Auto-Updates
+description: "Ship Ed25519-signed auto-updates with a Tauri-compatible manifest. The CLI handles keygen, signing, and verification."
+---
+
+# Auto-Updates
+
+Tynd ships a first-class auto-updater with **Ed25519 signature verification**. The CLI has `tynd keygen` + `tynd sign` so you can produce signed manifests without third-party tools.
+
+## Flow
+
+```
+┌───────────────────┐   GET /update.json    ┌─────────────────────┐
+│  Running app      │──────────────────────▶│  Your update server │
+│                   │◀──────────────────────│  (any HTTPS host)   │
+│  currentVersion   │   manifest JSON       └─────────────────────┘
+│  = 1.0.0          │
+│                   │   download url
+│                   │──────────────────────▶ artifact (MyApp-1.2.3.exe)
+│                   │   verify Ed25519 sig
+│                   │   over raw bytes
+│                   │
+│   match? install. │
+└───────────────────┘
+```
+
+## Generate an updater keypair
+
+```bash
+tynd keygen --out release/updater
+```
+
+Produces:
+
+- `release/updater.key` — PKCS#8 private key. **Store offline, never commit.**
+- `release/updater.pub` — raw 32-byte public key (base64). Commit this into your app source.
+
+## Bake the public key into your app
+
+```ts filename="src/updater-key.ts"
+export const UPDATER_PUB_KEY = "cFpG...RVDv/RQ=";
+```
+
+Import and pass to `updater.downloadAndVerify`:
+
+```ts
+import { updater } from "@tynd/core/client";
+import { UPDATER_PUB_KEY } from "./updater-key";
+
+const info = await updater.check({
+  endpoint: "https://releases.example.com/update.json",
+  currentVersion: "1.0.0",
+});
+
+if (info) {
+  const off = updater.onProgress(({ phase, loaded, total }) => {
+    console.log(`${phase}: ${loaded}/${total ?? "?"}`);
+  });
+  const { path } = await updater.downloadAndVerify({
+    url: info.url,
+    signature: info.signature,
+    pubKey: UPDATER_PUB_KEY,
+  });
+  off();
+  await updater.install({ path });   // swaps binary + relaunches
+}
+```
+
+## Publish a release
+
+<Steps>
+
+### Build the signed artifact
+
+```bash
+tynd build --bundle nsis   # or app, msi, deb, etc.
+```
+
+### Sign it
+
+```bash
+tynd sign release/MyApp-1.2.3-setup.exe \
+  --key release/updater.key \
+  --out release/MyApp-1.2.3-setup.exe.sig
+```
+
+Outputs a base64 signature over the raw bytes of the artifact.
+
+### Write the manifest
+
+Tauri-compatible format:
+
+```json filename="update.json"
+{
+  "version":  "1.2.3",
+  "notes":    "Bug fixes & perf.",
+  "pub_date": "2026-04-19T12:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url":       "https://releases.example.com/MyApp-1.2.3-setup.exe",
+      "signature": "<base64 Ed25519 — contents of .sig file>"
+    },
+    "darwin-aarch64": {
+      "url":       "https://releases.example.com/MyApp-1.2.3.dmg",
+      "signature": "<base64 Ed25519>"
+    },
+    "linux-x86_64": {
+      "url":       "https://releases.example.com/MyApp-1.2.3.AppImage",
+      "signature": "<base64 Ed25519>"
+    }
+  }
+}
+```
+
+### Publish both the manifest and the artifact
+
+Host the manifest at a stable URL (`https://releases.example.com/update.json`). Upload the signed artifacts alongside. Serve both over HTTPS.
+
+</Steps>
+
+## Manifest details
+
+- **Platform key** — `<os>-<arch>`, where `os ∈ { windows | darwin | linux }` and `arch ∈ { x86_64 | aarch64 }`. `macos` is `darwin` for parity with GitHub Releases / Tauri.
+- **Version comparison** — semver. An update is offered iff `manifest.version` is **strictly newer** than `currentVersion`.
+- **Manifest is plain HTTPS** — no meta-signature. Trust model: a compromised manifest server can only redirect to a URL whose bytes still have to verify against your local pubkey.
+
+## Install semantics
+
+`install({ path, relaunch? = true })`:
+
+- **Windows** — `cmd /c timeout 2 & move /y <new> <current> & start <current>`. The timeout lets the current process exit so the `.exe` unlocks, then cmd replaces the binary and relaunches.
+- **Linux** (AppImage + any single-file binary) — `fs::rename` + chmod +x + spawn + exit. Linux keeps the old inode mapped as long as the exe is live, so this is safe mid-run.
+- **macOS** — **not yet implemented.** `.app` bundles are directories and updates ship as archives; handle the swap manually via the returned `path` for now.
+
+Returns just before the current process exits. Your frontend code should not rely on any state after `install` resolves.
+
+## Trust model
+
+- The **public key** travels bundled with the app. Rotating it requires shipping a new build — an attacker who compromises your release server can't replace the key without also signing with the current private key.
+- The **private key** never touches your build server. Sign artifacts on a trusted workstation (or a hardened CI runner) and upload the `.sig` alongside the artifact.
+- `downloadAndVerify` streams the artifact to disk while hashing; verification happens over the **full downloaded bytes** before `install` touches anything.
+
+## CI pattern
+
+```yaml
+# .github/workflows/release.yml (partial)
+- name: Sign artifact
+  env:
+    UPDATER_KEY: ${{ secrets.UPDATER_KEY }}   # base64-encoded PKCS#8 from tynd keygen
+  run: |
+    echo "$UPDATER_KEY" | base64 -d > /tmp/updater.key
+    bunx tynd sign release/MyApp-1.2.3-setup.exe \
+      --key /tmp/updater.key \
+      --out release/MyApp-1.2.3-setup.exe.sig
+    rm /tmp/updater.key
+
+- name: Upload to release
+  uses: softprops/action-gh-release@v2
+  with:
+    files: |
+      release/MyApp-1.2.3-setup.exe
+      release/MyApp-1.2.3-setup.exe.sig
+```
+
+Generate the `update.json` manifest as the last step of the release job (or regenerate on any publish via a small script that reads the signature files).
+
+## Periodic checks — do it yourself
+
+```ts
+import { updater } from "@tynd/core/client";
+import pkg from "../package.json";
+
+async function checkForUpdates() {
+  try {
+    const info = await updater.check({
+      endpoint: "https://releases.example.com/update.json",
+      currentVersion: pkg.version,
+    });
+    if (info) showUpdatePrompt(info);
+  } catch (err) {
+    console.warn("update check failed:", err.message);
+  }
+}
+
+// Check at startup, then every 6 hours.
+void checkForUpdates();
+setInterval(checkForUpdates, 6 * 60 * 60 * 1000);
+```
+
+## Not yet handled
+
+- macOS `.app` swap (extract from `.dmg` / `.tar.gz`).
+- Delta updates (binary diff).
+- Rollback on failed install.
+- Signed manifest (double-sig).
+
+For macOS today, download the artifact, extract it manually, then tell the user where to drop the new `.app`.
+
+## Next
+
+- [updater API](/docs/v0.2/api/os/updater)
+- [tynd keygen](/docs/v0.2/cli/keygen)
+- [tynd sign](/docs/v0.2/cli/sign)

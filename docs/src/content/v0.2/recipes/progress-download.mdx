@@ -1,0 +1,53 @@
+---
+title: Download with Progress
+description: "Stream a file to disk, render a progress bar, handle cancellation."
+---
+
+# Download with Progress
+
+```ts
+import { http, os, path } from "@tynd/core/client";
+
+export async function downloadWithProgress(
+  url: string,
+  filename: string,
+  onProgress: (pct: number, loaded: number, total: number | null) => void,
+) {
+  const downloads = (await os.downloadsDir()) ?? (await os.homeDir());
+  const dest = path.join(downloads ?? "", filename);
+
+  await http.download(url, dest, {
+    onProgress: ({ loaded, total }) => {
+      const pct = total ? (loaded / total) * 100 : 0;
+      onProgress(pct, loaded, total);
+    },
+  });
+
+  return dest;
+}
+
+// usage
+const saved = await downloadWithProgress(
+  "https://example.com/big.zip",
+  "big.zip",
+  (pct, loaded, total) => {
+    progressBar.style.width = `${pct.toFixed(1)}%`;
+    label.textContent = total
+      ? `${formatBytes(loaded)} / ${formatBytes(total)} (${pct.toFixed(1)}%)`
+      : formatBytes(loaded);
+  },
+);
+
+function formatBytes(n: number) {
+  const u = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(1)} ${u[i]}`;
+}
+```
+
+- Bytes stream **straight to disk** — never round-tripped through JS memory.
+- `onProgress` throttled to ~50 ms on the Rust side — no DOM thrash.
+- No cancel method yet — if you need it, wrap the call in an `AbortController` + switch to `fetch` with manual streaming (at the cost of no disk-streaming).
+
+**Related:** [http API](/docs/v0.2/api/os/http) · [Binary Data guide](/docs/v0.2/guides/binary-data).

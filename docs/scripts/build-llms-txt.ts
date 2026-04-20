@@ -21,13 +21,14 @@ const PROJECT = join(__dirname, "..");
 const CONTENT = join(PROJECT, "src", "content");
 const PUBLIC = join(PROJECT, "public");
 
-const SITE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://tynd.dev";
+const SITE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL ?? "https://tynd.kvnpetit.com";
 const SITE_NAME = "Tynd";
 const SITE_TAGLINE =
   "Desktop apps in TypeScript. Small native binaries, zero-codegen typed RPC.";
 
 /** Latest version slug — must match lib/versions.ts. */
-const LATEST_VERSION = "v0.1";
+const LATEST_VERSION = "v0.2";
 
 interface Page {
   filePath: string;

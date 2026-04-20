@@ -1,0 +1,38 @@
+---
+title: tynd info
+description: "Print environment diagnostics — Bun version, Rust toolchain, WebView2 status (Windows), OS, cache paths."
+---
+
+# `tynd info`
+
+```bash
+tynd info            # human-readable
+tynd info --json     # machine-readable
+```
+
+Dumps everything Tynd can see about the current environment. Paste into a GitHub issue when reporting bugs.
+
+## What's reported
+
+- **Bun version** — `bun --version` output.
+- **Rust toolchain** — `rustc --version` if present (not required for end users).
+- **Tynd CLI version** — from `@tynd/cli` package.json.
+- **OS** — platform / arch / version.
+- **WebView** — WebView2 on Windows (version + runtime status), WKWebView on macOS (N/A), WebKitGTK on Linux (version).
+- **Binary discovery** — where `tynd-full` / `tynd-lite` were found (or "not found" + searched paths).
+- **Project paths** — detected `backend`, `frontendDir`, `runtime` from `tynd.config.ts`.
+- **Cache paths** — `.tynd/cache/` contents.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `--json` | Machine-readable output |
+
+Global flags: `--verbose`, `--quiet`.
+
+## Related
+
+- [`tynd validate`](/docs/v0.2/cli/validate) — config + binary sanity check.
+- [Troubleshooting](/docs/v0.2/troubleshooting).

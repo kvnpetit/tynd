@@ -1,0 +1,57 @@
+---
+title: tynd validate
+description: "Typecheck `tynd.config.ts` against the `TyndConfig` schema and confirm the Rust host binary is discoverable."
+---
+
+# `tynd validate`
+
+```bash
+tynd validate
+tynd validate --json
+```
+
+Runs two checks:
+
+1. **Config schema** — typechecks `tynd.config.ts` via [valibot](https://valibot.dev). Invalid shape fails fast with the offending field name.
+2. **Host binary** — confirms `tynd-full` / `tynd-lite` is discoverable via the CLI's lookup order:
+   - workspace `target/release/`
+   - `target/debug/`
+   - `node_modules/@tynd/host/bin/<plat>-<arch>/`
+   - system `PATH`
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `--json` | Machine-readable output |
+
+Global flags: `--verbose`, `--quiet`.
+
+## Example output
+
+Pass:
+
+```
+✓ tynd.config.ts schema valid
+✓ tynd-lite found at node_modules/@tynd/host/bin/windows-x64/tynd-lite.exe
+```
+
+Fail (schema):
+
+```
+✗ tynd.config.ts:
+  ∟ bundle.identifier: required
+```
+
+Fail (binary):
+
+```
+✗ tynd-lite not found. Try: bun install
+```
+
+## Related
+
+- [tynd.config.ts](/docs/v0.2/cli/config).
+- [Troubleshooting](/docs/v0.2/troubleshooting).
+- [`tynd info`](/docs/v0.2/cli/info) — broader environment diagnostics.

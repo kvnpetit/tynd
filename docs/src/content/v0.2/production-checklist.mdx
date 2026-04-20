@@ -1,0 +1,269 @@
+---
+title: Production Checklist
+description: "Pre-release checklist — binary, installers, signing, updater, telemetry, accessibility, i18n, and smoke tests."
+---
+
+# Production Checklist
+
+Run through before every release. Each item links to the relevant guide.
+
+## Build & package
+
+<Steps>
+
+### Pick your runtime consciously
+
+- [ ] `lite` (~6.5 MB) is default-correct for most apps.
+- [ ] `full` (~44 MB) only if you need native npm bindings, a CPU-bound JS hot path, full `Intl.*`, HTTP/2, or specific Bun/Node APIs.
+
+See [Runtimes](/docs/v0.2/runtimes).
+
+### `tynd.config.ts` is complete
+
+- [ ] `runtime`, `backend`, `frontendDir` set.
+- [ ] `window.title`, `width`, `height` set.
+- [ ] `bundle.identifier` is reverse-DNS (`com.yourco.appname`).
+- [ ] `package.json` has `name`, `version`, `description`, `author`, `homepage` — used for installer metadata.
+
+See [tynd.config.ts](/docs/v0.2/cli/config).
+
+### Icon is SVG and square
+
+- [ ] One file in `public/` (SVG preferred).
+- [ ] Square canvas. Non-square SVGs are auto-wrapped but design-intent matters.
+- [ ] Flattened text (convert `<text>` to paths).
+
+See [Icons & Branding](/docs/v0.2/guides/icons-branding).
+
+### Installers produce on every target host
+
+- [ ] macOS runner → `.app` + `.dmg`
+- [ ] Linux runner → `.deb` + `.rpm` (if `rpmbuild` available) + `.AppImage`
+- [ ] Windows runner → NSIS `.exe` setup + `.msi`
+
+See [Bundling](/docs/v0.2/guides/bundling).
+
+</Steps>
+
+## Signing & distribution
+
+<Steps>
+
+### Windows is signed
+
+- [ ] `bundle.sign.windows.certificate` set (`.pfx` or cert-store ref).
+- [ ] `bundle.sign.windows.password` via `env:NAME`.
+- [ ] `bundle.sign.windows.timestampUrl` set (default `http://timestamp.digicert.com`).
+- [ ] `signtool verify /pa /v release/*.exe` passes.
+
+### macOS is signed + notarized
+
+- [ ] `bundle.sign.macos.identity` = your `Developer ID Application`.
+- [ ] `bundle.sign.macos.entitlements` includes `com.apple.security.cs.allow-jit`.
+- [ ] `bundle.sign.macos.notarize` configured with `env:APPLE_ID`, `env:APPLE_APP_PASSWORD`, `env:APPLE_TEAM_ID`.
+- [ ] `spctl --assess -vv release/YourApp.app` reports `source=Notarized Developer ID`.
+
+### Linux signing decided
+
+- [ ] Detached `.sig` for `.AppImage` / `.deb` / `.rpm` (gpg), or accept unsigned Linux.
+- [ ] Public key documented in your release notes.
+
+See [Code Signing](/docs/v0.2/guides/code-signing).
+
+</Steps>
+
+## Auto-update
+
+<Steps>
+
+### Keypair generated, private key offline
+
+- [ ] `tynd keygen --out release/updater` run once.
+- [ ] `release/updater.key` **never committed**. Stored in password manager / HSM / CI secrets as base64.
+- [ ] `release/updater.pub` baked into the app source:
+
+  ```ts
+  export const UPDATER_PUB_KEY = "cFpG...RVDv/RQ=";
+  ```
+
+### Updater wired up
+
+- [ ] `updater.check({ endpoint, currentVersion })` at app startup + periodic interval.
+- [ ] `updater.downloadAndVerify({ url, signature, pubKey: UPDATER_PUB_KEY })`.
+- [ ] `updater.install({ path })` swaps + relaunches on user confirm.
+- [ ] Manifest hosted at a stable HTTPS URL.
+- [ ] CI signs every release artifact with `tynd sign` and writes the `.sig` into the manifest.
+
+See [Auto-Updates](/docs/v0.2/guides/auto-updates).
+
+</Steps>
+
+## Safety & reliability
+
+<Steps>
+
+### Single instance
+
+- [ ] `singleInstance.acquire("com.yourco.myapp")` at app startup.
+- [ ] Second launch `process.exit(0)`.
+- [ ] `onSecondLaunch` / `onOpenUrl` handlers registered in the primary.
+
+### Unsaved-changes handling
+
+- [ ] `tyndWindow.onCloseRequested` guards against losing user work.
+- [ ] 500 ms watchdog understood; `cancelClose()` used for async confirms.
+
+### Crash reporter
+
+- [ ] `window.addEventListener("error", …)` posts uncaught exceptions to your crash endpoint.
+- [ ] `window.addEventListener("unhandledrejection", …)` same for promises.
+- [ ] Backend uncaught errors logged to a file sink.
+
+### Secrets in `keyring`, not `store`
+
+- [ ] OAuth tokens, API keys, session cookies, passwords all in [`keyring`](/docs/v0.2/api/os/keyring).
+- [ ] Nothing sensitive in [`store`](/docs/v0.2/api/os/store) (plain JSON on disk).
+
+### CSP tight
+
+- [ ] Default CSP kept (no `'unsafe-inline'` / `'unsafe-eval'`).
+- [ ] Custom CSP via `<meta http-equiv>` only on pages that genuinely need it.
+
+See [Security](/docs/v0.2/concepts/security).
+
+</Steps>
+
+## UX polish
+
+<Steps>
+
+### Window state persisted
+
+- [ ] Width, height, position saved and restored. See the [Remember Window Size recipe](/docs/v0.2/recipes/remember-window-size).
+
+### Dark mode respected
+
+- [ ] `os.isDarkMode()` read at startup.
+- [ ] `tyndWindow.onThemeChanged` applied at runtime.
+- [ ] CSS `@media (prefers-color-scheme)` tested in both.
+
+See [Sync with OS Dark Mode](/docs/v0.2/recipes/dark-mode-sync).
+
+### Accessibility
+
+- [ ] Keyboard-only navigation works.
+- [ ] Screen reader tests pass (VoiceOver / Narrator / Orca).
+- [ ] Color contrast AA minimum (4.5:1 body, 3:1 large text).
+- [ ] `prefers-reduced-motion` respected.
+- [ ] Focus visible on every interactive element.
+
+See [Accessibility](/docs/v0.2/guides/accessibility).
+
+### i18n
+
+- [ ] `os.locale()` read at startup.
+- [ ] UI strings externalized to catalogs.
+- [ ] `Intl.*` alternatives shipped if targeting `lite` (`date-fns`, `numbro`).
+- [ ] RTL tested if you ship Arabic / Hebrew.
+
+See [Internationalization](/docs/v0.2/guides/i18n).
+
+</Steps>
+
+## Testing
+
+<Steps>
+
+### Unit tests
+
+- [ ] Pure backend logic covered with `bun test`.
+- [ ] OS APIs mocked at a module boundary (interface-based).
+
+### Integration smoke test
+
+- [ ] Binary launches and stays alive ≥ 2 s in CI.
+- [ ] Exit code 0 or SIGTERM expected.
+
+See [Testing](/docs/v0.2/guides/testing).
+
+### Manual QA matrix
+
+- [ ] Windows 11 (latest) + WebView2 present.
+- [ ] macOS 14+ (x64 + arm64 if you ship both).
+- [ ] Ubuntu 22.04 LTS.
+- [ ] Fedora 40 (or equivalent RPM target).
+- [ ] Offline launch (no internet).
+- [ ] First-run without the updater being reachable.
+
+</Steps>
+
+## Release
+
+<Steps>
+
+### Version bump
+
+- [ ] `package.json::version` incremented.
+- [ ] Conventional Commit format used (for release-please).
+
+### Tag + CI
+
+- [ ] `git tag v<version>`; push the tag.
+- [ ] Build-host workflow produces binaries for every target.
+- [ ] Signing runs for every platform (check the artifacts' signatures).
+- [ ] `.sig` files uploaded alongside each release artifact.
+- [ ] Update manifest JSON regenerated from the new `.sig` values.
+- [ ] GitHub Release is **published** (not draft) so the postinstall downloader works.
+
+### Post-release
+
+- [ ] Docs site deployed (auto via `deploy-docs.yml` after binaries publish).
+- [ ] npm packages published (`@tynd/cli`, `@tynd/core`, `@tynd/host`).
+- [ ] CHANGELOG published.
+- [ ] Update-check confirmed from a shipped copy of the previous version.
+
+</Steps>
+
+## Telemetry (optional)
+
+<Steps>
+
+### Respect privacy
+
+- [ ] Opt-in, not opt-out.
+- [ ] Exposed in Settings / Preferences with a clear description.
+- [ ] Default off.
+
+### Minimal payload
+
+- [ ] Crash reports: stack + OS version + app version.
+- [ ] Usage: event name + app version. No PII.
+- [ ] Collected via HTTPS POST — no third-party SDKs unless you need them.
+
+</Steps>
+
+## Deprecation plan
+
+<Steps>
+
+### Document supported OS versions
+
+- [ ] Windows 10 build 19041+ (or just "Windows 10/11 with WebView2").
+- [ ] macOS 11+ (or the minimum you're testing).
+- [ ] Ubuntu 20.04+ / equivalent with WebKitGTK 4.1.
+
+### Document runtime requirements
+
+- [ ] End users need nothing (runtime bundled).
+- [ ] Linux users need `libwebkit2gtk-4.1-0`.
+- [ ] Windows users need WebView2 runtime (install or bundle the Evergreen Bootstrapper).
+
+</Steps>
+
+## Related
+
+- [Bundling](/docs/v0.2/guides/bundling).
+- [Code Signing](/docs/v0.2/guides/code-signing).
+- [Auto-Updates](/docs/v0.2/guides/auto-updates).
+- [Testing](/docs/v0.2/guides/testing).
+- [Accessibility](/docs/v0.2/guides/accessibility).

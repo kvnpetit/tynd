@@ -1,0 +1,135 @@
+---
+title: Runtime Modes
+description: "The difference between `lite` (embedded QuickJS, ~6.5 MB) and `full` (Bun subprocess, ~44 MB) and how to pick between them."
+---
+
+# Runtime Modes
+
+Tynd ships **two backend runtimes** from the same TypeScript source. Switch between them with a single config line:
+
+```ts filename="tynd.config.ts"
+export default {
+  runtime: "full",  // or "lite"
+}
+```
+
+## What each runtime is
+
+- **`full`** spawns a **Bun subprocess**. You get the entire Bun + Node.js + Web-API environment: `fetch`, `WebSocket`, `Bun.*`, `node:*` imports, native npm packages, JSC JIT. Binary overhead: ~37 MB (Bun packed + zstd-compressed at build time).
+- **`lite`** embeds **QuickJS** inside the Rust host. QuickJS provides the ES2023 language (Promises, classes, Proxy, BigInt, Maps/Sets, …). Tynd layers a strict **Web-standards polyfill layer** on top — nothing Node-specific, nothing Bun-specific. Target binary: ~6 MB, single self-contained executable.
+
+Both runtimes expose the **same 26 Tynd OS APIs** (`fs`, `http`, `sql`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`, `menu`, `shortcuts`, `keyring`, `autolaunch`, `monitor`, `updater`, `websocket`, `app`, `os`, `path`) via `@tynd/core/client`. They're Rust-backed and behave identically.
+
+## Pick lite by default
+
+**Default to `lite`.** Most desktop apps only need:
+
+- the Web-standard surface (`fetch`, `WebSocket`, `crypto.subtle.digest`, `URL`, `Blob`, `TextEncoder`, …),
+- plus Tynd's OS APIs.
+
+A ~6.5 MB binary with no Bun download is a real UX win on every platform. Lite is strictly a restricted surface — the things it doesn't expose are absent, not broken. Everything listed in the table below behaves the same on both runtimes.
+
+## Switch to full when
+
+Pick `full` if any of these apply:
+
+- Your dependency graph contains an **npm with native bindings** you can't replace (`sharp`, `better-sqlite3`, `canvas`, `bcrypt-native`, `rocksdb`).
+- You have a **JS hot path** profiled as the bottleneck — JSC JIT is often 10-100× faster than QuickJS interpretation on tight loops.
+- You depend on **specific Bun or Node APIs** not exposed as Web standards or Tynd OS APIs.
+- You need **full `Intl.*` locale data** (DateTimeFormat, Collator, Segmenter, RelativeTimeFormat) and can't ship `date-fns`.
+- You need **HTTP/2 or HTTP/3** (lite's fetch is HTTP/1.1 only).
+- You need **dynamic `import(path)`** at runtime — lite ships a single eval'd bundle.
+
+## Absences in lite — read before shipping
+
+Most code written against Web standards runs unchanged on both runtimes. The table below lists the behavioral differences most likely to bite when porting code from `full` to `lite`:
+
+| What | Behavior in lite | Fix |
+|---|---|---|
+| **`Response.clone()` / `Request.clone()`** | Throws `"not supported in lite runtime"`. | Consume the body once, stash the bytes, rebuild as needed. |
+| **HTTP/2, HTTP/3** | Not supported — lite's fetch is HTTP/1.1 only. | Upgrade your server to HTTP/1.1 fallback, or switch to `full`. |
+| **`WritableStream` / `TransformStream`** | Not implemented — only `ReadableStream` (for fetch body). | `web-streams-polyfill`. |
+| **Streaming upload with backpressure** | `ReadableStream` body is drained into memory before sending. | Chunk manually via `http.request` + multiple calls, or switch to `full`. |
+| **`structuredClone` with `{ transfer }`** | Throws — transfer lists unsupported. | Drop the transfer list; or use `workers` message passing. |
+| **`CompressionStream` / `DecompressionStream`** | Absent. | [`fflate`](https://github.com/101arrowz/fflate). |
+| **`crypto.subtle` asym sign/verify, AES encrypt/decrypt** | Only HMAC + digest; AES / RSA / ECDSA throw. | [`@noble/ciphers`](https://github.com/paulmillr/noble-ciphers) + [`@noble/curves`](https://github.com/paulmillr/noble-curves). |
+| **Dynamic `import(path)` at runtime** | Not supported. | Bundle all modules at build time. |
+| **`SharedArrayBuffer` / `Atomics` / `WeakRef` / `FinalizationRegistry`** | QuickJS limitation. | Use `workers` with JSON message passing. |
+| **Full `Intl.*` locale data** | QuickJS ships a stub. | `date-fns` / `dayjs` / `i18next`. |
+
+## Parity table (JS surface)
+
+| JS surface | `lite` | `full` |
+|---|---|---|
+| ES2023 language (Promises, classes, Proxy, BigInt, Maps/Sets) | ✓ | ✓ |
+| `fetch` + `Request` / `Response` / `Headers` | ✓ HTTP/1.1 | ✓ HTTP/1/2/3 |
+| `ReadableStream` (fetch body) | ✓ | ✓ |
+| `WritableStream` / `TransformStream` / `CompressionStream` | ✗ | ✓ |
+| `WebSocket` | ✓ | ✓ |
+| `EventSource` | ✓ | ✓ |
+| `AbortController` / `AbortSignal` / `AbortSignal.timeout` | ✓ | ✓ |
+| `crypto.getRandomValues` / `crypto.randomUUID` | ✓ | ✓ |
+| `crypto.subtle.digest` (SHA-256/384/512) | ✓ | ✓ |
+| `crypto.subtle.sign` / `verify` / `importKey` — HMAC | ✓ | ✓ |
+| `crypto.subtle` AES / RSA / ECDSA | ✗ | ✓ |
+| `TextEncoder` / `TextDecoder` | ✓ | ✓ |
+| `URL` / `URLSearchParams` | ✓ | ✓ |
+| `Blob` / `File` / `FormData` | ✓ | ✓ |
+| `atob` / `btoa` | ✓ | ✓ |
+| `structuredClone` | ✓ (no transfer list) | ✓ |
+| `performance.now()` | ✓ | ✓ |
+| `Bun.*`, `Deno.*`, `node:*` | ✗ | ✓ |
+| `Buffer` (Node global) | ✗ | ✓ |
+| `process.*` (Node global) | ✗ | ✓ |
+| Dynamic `import(path)` | ✗ | ✓ |
+| `SharedArrayBuffer` / `Atomics` | ✗ | ✓ |
+| Chrome DevTools inspector | ✗ | ✓ |
+
+## Parity table (Tynd OS APIs)
+
+**All identical on both runtimes** — implemented in Rust, called the same way from the same `@tynd/core/client` import. See the [API Reference](/docs/v0.2/api) for the complete list.
+
+## Size and startup
+
+| | `lite` | `full` |
+|---|---|---|
+| Binary size (Windows x64 release) | ~6.5 MB host + packed assets | ~6.4 MB host + ~37 MB Bun (zstd) |
+| Typical shipped app | ~8-10 MB | ~44 MB |
+| Cold start | sub-50ms (everything in-process) | ~200-500ms (spawns Bun) |
+
+## Detecting the runtime at compile time
+
+Tynd's CLI injects a compile-time constant so the bundler dead-code-eliminates the unused branch per-runtime:
+
+```ts
+// In @tynd/core internals — don't reintroduce dynamic checks that defeat DCE.
+declare const __TYND_RUNTIME__: "full" | "lite";
+
+if (__TYND_RUNTIME__ === "full") {
+  _startFull();
+} else {
+  _startLite();
+}
+```
+
+In your app, prefer conditional imports or capability checks (`"clone" in Response.prototype`) over runtime branching on a mode flag.
+
+## Runtime-specific npm dependencies
+
+You can still ship code that only works in one mode — just make sure the opposite path is runtime-safe. Pattern:
+
+```ts
+async function hash(data: Uint8Array) {
+  // Tynd OS API works in both modes — prefer this.
+  const { compute } = await import("@tynd/core/client");
+  return compute.hash(data, { algo: "sha256" });
+}
+```
+
+For Web-standard work that lite doesn't polyfill, see [Alternatives (pure-JS libs)](https://github.com/kvnpetit/tynd/blob/main/ALTERNATIVES.md) in the repo.
+
+## Next
+
+- [Architecture](/docs/v0.2/concepts/architecture)
+- [Full runtime reference page](/docs/v0.2/runtimes)
+- [Compare Tynd vs other frameworks](/docs/v0.2/compare)

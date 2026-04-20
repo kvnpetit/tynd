@@ -1,0 +1,15 @@
+export default {
+  index: "Overview",
+  "remember-window-size": "Remember Window Size",
+  "minimize-to-tray": "Minimize to Tray",
+  "launch-on-boot": "Launch on System Boot",
+  "handle-deep-link": "Handle Deep Link (myapp://)",
+  "detect-online": "Detect Online / Offline",
+  "copy-to-clipboard": "Copy to Clipboard (text, image)",
+  "progress-download": "Download with Progress",
+  "run-shell-command": "Run a Shell Command",
+  "embed-sidecar": "Embed and Run a Sidecar",
+  "dark-mode-sync": "Sync with OS Dark Mode",
+  "single-instance-argv": "Single Instance + argv Forwarding",
+  "confirm-before-quit": "Confirm Before Quit (dirty state)",
+};

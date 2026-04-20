@@ -8,5 +8,6 @@
 //   showcase:  { title: "Showcase",  type: "page" }
 //   changelog: { title: "Changelog", type: "page" }
 export default {
+  "v0.2": { display: "hidden" },
   "v0.1": { display: "hidden" },
 };

@@ -1,0 +1,69 @@
+---
+title: tynd init
+description: "Add Tynd to an existing frontend project — detects the build tool and wires up config automatically."
+---
+
+# `tynd init`
+
+```bash
+bunx @tynd/cli init
+```
+
+Adds Tynd to an existing project. Inspects `package.json` to detect the build tool and fills `frontendDir` / dev command accordingly.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory (default: current) |
+| `-r, --runtime <r>` | `full` or `lite`. Prompts if missing. |
+| `-f, --force` | Overwrite existing `tynd.config.ts` / `backend/main.ts` |
+
+## What it does
+
+<Steps>
+
+### Detects the build tool
+
+Reads `package.json` dependencies:
+
+| Build tool | Trigger | `outDir` default |
+|---|---|---|
+| Vite | `vite` / `@vitejs/*` | `dist` |
+| CRA | `react-scripts` | `build` |
+| Angular CLI | `@angular/cli` | `dist/<project>/browser` |
+| Parcel | `parcel` | `dist` |
+| Rsbuild | `@rsbuild/core` | `dist` |
+| Webpack | `webpack` + `webpack-cli` | `dist` |
+
+### Rejects SSR frameworks
+
+Fails fast on `next`, `nuxt`, `@sveltejs/kit`, `@remix-run/*`, `gatsby`, `@solidjs/start`, `@angular/platform-server`, etc.
+
+### Writes `tynd.config.ts`
+
+Minimal config with detected build tool's `outDir` and dev URL. `--force` overwrites an existing config.
+
+### Creates `backend/main.ts`
+
+Minimal `app.start` + one greeting function.
+
+### Patches `package.json`
+
+Adds `@tynd/cli`, `@tynd/core`, `@tynd/host` to deps, merges scripts, and appends `"@tynd/host"` to `trustedDependencies` so Bun runs its postinstall (which downloads the native host binary) on the next `bun install` without a manual `bun pm trust` step.
+
+</Steps>
+
+## Example
+
+```bash
+cd my-existing-app
+bunx @tynd/cli init -r lite
+bun install
+bun run dev
+```
+
+## Related
+
+- [Frontend Frameworks guide](/docs/v0.2/guides/frontend-frameworks).
+- [`tynd create`](/docs/v0.2/cli/create) — start from scratch.

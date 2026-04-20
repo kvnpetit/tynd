@@ -1,0 +1,132 @@
+---
+title: FAQ
+description: "Common questions about Tynd — runtime choice, Bun requirement, mobile, licensing, production readiness."
+---
+
+# FAQ
+
+## Do I need to know Rust?
+
+**No.** The native host is prebuilt and downloaded by `@tynd/host`'s postinstall — `tynd-full` / `tynd-lite` binaries ship as GitHub Releases. You write only TypeScript.
+
+## Why Bun, not Node?
+
+Tynd is **Bun-first** — the CLI, bundler, dev server, and `full` runtime all run on Bun. Reasons:
+
+- Fast: Bun's bundler is ~10× faster than Node + esbuild for the typical backend bundle.
+- Pure Bun primitives: `Bun.file`, `Bun.hash.wyhash` drop dozens of polyfill dependencies from the CLI.
+- Bun is a single binary we can pack into `full` binaries with zstd compression.
+
+Your app's users don't need Bun — the runtime is packed into the distributed binary.
+
+## Can I use Node instead of Bun?
+
+Not currently. Could the CLI run under Node? Probably, with porting work. Is it on the roadmap? No. Tynd embraces Bun-first defaults.
+
+## Why two runtimes?
+
+- **`lite`** — ~6.5 MB binary. QuickJS + Web standards + all 26 Tynd OS APIs. Perfect for the 80 % of desktop apps that don't need the full Node/Bun surface.
+- **`full`** — ~44 MB binary. Bun subprocess + JIT + full npm ecosystem (including native bindings). Use when you need `sharp`, `better-sqlite3`, a CPU-bound JS hot path, or a full `Intl.*`.
+
+One-line switch in `tynd.config.ts`. Same source code runs on both.
+
+## Does Tynd support mobile (iOS / Android)?
+
+No. Desktop only. If you need mobile, look at [Tauri v2](/docs/v0.2/compare/vs-tauri) (its big differentiator).
+
+## What's the binary size?
+
+| Runtime | Empty app |
+|---|---|
+| `lite` | ~6.5-10 MB |
+| `full` | ~44-50 MB |
+
+Your frontend + backend + sidecars add to this. The Bun binary in `full` is zstd-compressed inside TYNDPKG, extracted on first launch.
+
+## Is it production ready?
+
+Phase-1 features (OS APIs, IPC, streaming RPC, TYNDPKG, installers, signing, updater) are solid and tested — see [Production Checklist](/docs/v0.2/production-checklist). Some advanced surfaces (mobile, cross-compile, macOS `.app` auto-updater install, capability ACLs) aren't implemented. See the [vs Tauri/Electron matrix](/docs/v0.2/compare) for specifics.
+
+## What's the license?
+
+Apache-2.0. Ship commercial apps, modify the source, no royalties.
+
+## Can I use my existing frontend?
+
+If it builds to a pure SPA, yes. Run `tynd init` in the project. Compatible: Vite + React / Vue / Svelte / Solid / Preact / Lit / Angular, CRA, Parcel, Rsbuild, Webpack. **Blocked:** SSR frameworks (Next.js, Nuxt, SvelteKit, Remix, Gatsby, SolidStart, Astro, Qwik City, …). Use the SPA variant.
+
+## How does Tynd compare to Tauri?
+
+Same IPC stack (`wry` + `tao`). Different backend language — TypeScript vs Rust. Smaller binary option (`lite`). No mobile, no capability ACLs, no 30-plugin ecosystem. Full detail: [vs Tauri](/docs/v0.2/compare/vs-tauri).
+
+## How does it compare to Electron?
+
+~25× smaller binary. Native WebView, not bundled Chromium. Zero-codegen typed RPC out of the box. No `desktopCapturer`, no `printToPDF`, no Chrome extensions — those are Chromium-bundled features. Full detail: [vs Electron](/docs/v0.2/compare/vs-electron).
+
+## How do I sign my app?
+
+Declare `bundle.sign` in `tynd.config.ts`. Windows uses `signtool`, macOS uses `codesign` + optional `notarytool`. See the [Code Signing guide](/docs/v0.2/guides/code-signing).
+
+## How does auto-update work?
+
+Ed25519-signed manifests (Tauri-compatible format). Tynd ships `tynd keygen` / `tynd sign` — no third-party signing tool needed. The public key is baked into your app; a compromised manifest server can't serve an unverifiable binary. See the [Auto-Updates guide](/docs/v0.2/guides/auto-updates).
+
+## Can I bundle a native binary (ffmpeg, etc.)?
+
+Yes — `sidecars` in `tynd.config.ts`. See [Sidecars guide](/docs/v0.2/guides/sidecars) and the [Embed a Sidecar recipe](/docs/v0.2/recipes/embed-sidecar).
+
+## Does it work offline?
+
+Yes — the WebView serves your frontend from the `tynd://` custom scheme (no network required). Your app's logic can still call `fetch` / `http.get` for online features when connectivity is available.
+
+## How do I store secrets?
+
+Use [`keyring`](/docs/v0.2/api/os/keyring) — OS Keychain / Credential Manager / Secret Service. Never put tokens / passwords / session cookies in [`store`](/docs/v0.2/api/os/store) (plain JSON on disk).
+
+## Can I open DevTools in production?
+
+No. DevTools are compiled out of release builds. Use `tynd dev` or build debug artifacts for troubleshooting on your own machine.
+
+## How do I debug on a user's machine?
+
+Ship a "Export diagnostics" feature: output of `os.info()`, `app.getVersion()`, recent logs from a file sink. See the [Debugging guide](/docs/v0.2/guides/debugging).
+
+## Can I cross-compile (build Windows from Linux)?
+
+**No.** `tynd build` targets the host OS only. Use a GitHub Actions matrix with `windows-latest` + `macos-latest` + `ubuntu-latest` runners.
+
+## Does the IPC touch the network?
+
+No. `tynd://` + `tynd-bin://` are native custom schemes — no TCP, no loopback port, no firewall prompt. See [IPC model](/docs/v0.2/concepts/ipc).
+
+## How do I test my app?
+
+`bun test` for unit tests. Mock OS APIs at the module boundary. Smoke-test the built binary in CI (spawn, wait 2 s, expect no crash). No Playwright / WebdriverIO support — `tynd://` isn't a browser-reachable URL. See [Testing guide](/docs/v0.2/guides/testing).
+
+## Can I use server-sent events / WebSockets?
+
+Yes — both work. `EventSource` is built on `fetch` streaming (both runtimes). `WebSocket` is available as the Web standard (`new WebSocket(url)`) and as the richer Tynd API (`websocket.connect`).
+
+## My `lite` app complains about `Buffer` / `process.*`
+
+You imported a npm lib that uses Node globals. Options:
+
+1. Find a browser-compatible alternative. See [Alternatives](https://github.com/kvnpetit/tynd/blob/main/ALTERNATIVES.md).
+2. Polyfill `Buffer` (the `buffer` npm package is ~5 KB).
+3. Switch to `full` runtime.
+
+## How do I deploy the docs themselves?
+
+`docs/` is a Next.js + Nextra site. Build with `bun run build`, static-export to Cloudflare Workers. CI is already wired: a GitHub Actions workflow deploys docs after every release. See the repo's `.github/workflows/deploy-docs.yml`.
+
+## Where do I report bugs?
+
+[GitHub Issues](https://github.com/kvnpetit/tynd/issues). Include the output of `tynd info --verbose` and `tynd validate`.
+
+## Where do I ask questions?
+
+[GitHub Discussions](https://github.com/kvnpetit/tynd/discussions).
+
+## Can I contribute?
+
+Yes — see [CONTRIBUTING.md](https://github.com/kvnpetit/tynd/blob/main/CONTRIBUTING.md) in the repo. The monorepo is hybrid Bun + Cargo; contributions to both sides welcome.
