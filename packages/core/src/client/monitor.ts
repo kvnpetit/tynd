@@ -25,4 +25,12 @@ export const monitors = {
   current(): Promise<Monitor | null> {
     return osCall("window", "currentMonitor")
   },
+  /** Monitor containing a given virtual-desktop point (physical pixels). */
+  fromPoint(x: number, y: number): Promise<Monitor | null> {
+    return osCall("window", "monitorFromPoint", { x, y })
+  },
+  /** Global cursor position in the virtual desktop (physical pixels). */
+  cursorPosition(): Promise<{ x: number; y: number }> {
+    return osCall("window", "globalCursorPosition")
+  },
 }
