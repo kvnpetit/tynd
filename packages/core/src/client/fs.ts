@@ -1,4 +1,4 @@
-import { binFetch, binUpload, osCall } from "./_internal.js"
+import { base64ToBytes, binFetch, binUpload, bytesToBase64, osCall } from "./_internal.js"
 
 export interface FileStat {
   size: number
@@ -29,6 +29,29 @@ export interface WatchHandle {
   id: number
   /** Stop receiving events and release the OS watcher. */
   unwatch(): Promise<boolean>
+}
+
+export interface OpenOptions {
+  /** Default true. */
+  read?: boolean
+  write?: boolean
+  append?: boolean
+  create?: boolean
+  truncate?: boolean
+}
+
+export type SeekFrom = "start" | "current" | "end"
+
+export interface FileHandle {
+  id: number
+  /** Move the cursor; returns the new absolute position. */
+  seek(offset: number, from?: SeekFrom): Promise<number>
+  /** Read up to `length` bytes at the current position. */
+  read(length: number): Promise<{ bytes: Uint8Array; read: number }>
+  /** Write `content` at the current position; returns bytes written. */
+  write(content: Uint8Array | ArrayBuffer): Promise<number>
+  /** Release the OS handle. Calling again is a no-op. */
+  close(): Promise<boolean>
 }
 
 export const fs = {
@@ -62,6 +85,58 @@ export const fs = {
   /** Move to the OS recycle bin / Trash. Reversible unlike `remove()`. */
   trash(path: string): Promise<void> {
     return osCall("fs", "trash", { path })
+  },
+  /** Recursive directory copy — file contents only, symlinks skipped. */
+  copyDir(from: string, to: string): Promise<void> {
+    return osCall("fs", "copyDir", { from, to })
+  },
+
+  /** Create a symbolic link at `link` pointing to `target`. */
+  symlink(target: string, link: string): Promise<void> {
+    return osCall("fs", "symlink", { target, link })
+  },
+  /** Read the target of a symbolic link. */
+  readlink(path: string): Promise<string> {
+    return osCall("fs", "readlink", { path })
+  },
+  /** Create a hard link at `link` pointing to `original`. */
+  hardlink(original: string, link: string): Promise<void> {
+    return osCall("fs", "hardlink", { original, link })
+  },
+
+  /**
+   * Open a file handle for stateful seek / read / write. Returns a
+   * `FileHandle` that must be `close()`d. Binary payloads travel base64
+   * over JSON — for multi-MB I/O prefer `readBinary` / `writeBinary`.
+   */
+  async open(path: string, options?: OpenOptions): Promise<FileHandle> {
+    const { id } = await osCall<{ id: number }>("fs", "open", { path, ...options })
+    return {
+      id,
+      async seek(offset, from = "start") {
+        const { position } = await osCall<{ position: number }>("fs", "seek", {
+          id,
+          offset,
+          from,
+        })
+        return position
+      },
+      async read(length) {
+        const res = await osCall<{ bytes: string; read: number }>("fs", "read", { id, length })
+        return { bytes: base64ToBytes(res.bytes), read: res.read }
+      },
+      async write(content) {
+        const bytes = content instanceof ArrayBuffer ? new Uint8Array(content) : content
+        const { written } = await osCall<{ written: number }>("fs", "write", {
+          id,
+          bytes: bytesToBase64(bytes),
+        })
+        return written
+      },
+      close() {
+        return osCall("fs", "close", { id })
+      },
+    }
   },
   readBinary(path: string): Promise<Uint8Array> {
     return binFetch("fs/readBinary", { path })

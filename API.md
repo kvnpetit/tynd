@@ -501,6 +501,17 @@ const bytes = await fs.readBinary("image.png")
 await fs.writeBinary("copy.png", bytes)
 
 await fs.trash("old.log") // move to recycle bin / Trash (reversible)
+await fs.copyDir("./src-assets", "./dist/assets")
+await fs.symlink("/etc/hosts", "/tmp/hosts-link")
+await fs.hardlink("./data.db", "./data.bak")
+const target = await fs.readlink("/tmp/hosts-link")
+
+// Stateful file handle for seek / partial I/O.
+const h = await fs.open("big.bin", { read: true, write: true, create: true })
+await h.seek(1024)
+const chunk = await h.read(256)
+await h.write(new Uint8Array([1, 2, 3]))
+await h.close()
 
 // Watch for changes (ReadDirectoryChangesW / FSEvents / inotify).
 const watcher = await fs.watch("./notes", { recursive: true }, (event) => {
