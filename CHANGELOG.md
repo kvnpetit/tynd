@@ -1,5 +1,75 @@
 # Changelog
 
+## [0.3.0](https://github.com/kvnpetit/tynd/compare/v0.2.0...v0.3.0) (2026-04-21)
+
+
+### Features
+
+* **app:** getFrameworkVersion + getBundleIdentifier ([344b711](https://github.com/kvnpetit/tynd/commit/344b7119b0f6d9ca0647061ef7ac62e12bb5039a))
+* **app:** resourceDir + quitOnLastWindowClosed flag ([a991b65](https://github.com/kvnpetit/tynd/commit/a991b6553f712f3726f808e3287242cc91f58764))
+* **backend:** evalInFrontend(script, label?) ([7b4d228](https://github.com/kvnpetit/tynd/commit/7b4d228892e1479678e4fc4cdffdcda9d83aab83))
+* **clipboard:** onChange polling monitor ([8cf7e54](https://github.com/kvnpetit/tynd/commit/8cf7e542b980414cba2d842fd9f2f9156b09b451))
+* **core:** add log API with JSON-lines file + size rotation ([1199fdd](https://github.com/kvnpetit/tynd/commit/1199fddd69b6bbeb0701e1fe477befc365c4c8e6))
+* **core:** frontend -&gt; backend events via createFrontendEmitter ([c91e101](https://github.com/kvnpetit/tynd/commit/c91e1011e92945e304277407f3c084f0e02cec5a))
+* **dialog:** canCreateDirectories option (macOS) ([135cd42](https://github.com/kvnpetit/tynd/commit/135cd420b4609a82d97d6b64e3bfa9d0683322e5))
+* **events:** emitter.emitTo(label) targets a single window ([5f97fd9](https://github.com/kvnpetit/tynd/commit/5f97fd9b823534e0ae77be6773c44f1d91364f33))
+* **fs:** file handle, symlink, hardlink, copyDir ([5004f62](https://github.com/kvnpetit/tynd/commit/5004f6261f4e898b96889fa5681f63efe82397af))
+* **host:** add shell.revealInFolder and fs.trash ([eccbea9](https://github.com/kvnpetit/tynd/commit/eccbea9a306fb3e3aef6457be6402c60857cb3d9))
+* **host:** emit native drag-drop events (window:drop, window:drag-*) ([ec59183](https://github.com/kvnpetit/tynd/commit/ec59183863f1cffb84b4b2e9be97c79936fa2076))
+* **log:** captureConsole bridges console.* into log.write ([dc0b21e](https://github.com/kvnpetit/tynd/commit/dc0b21ea8cae7843a8383ba9a6bfd4bc2f9e7648))
+* **menu:** add programmatic context menu (Windows) ([065e5c0](https://github.com/kvnpetit/tynd/commit/065e5c04a75534c31aac6ce412e4ce8c172b2dee))
+* **monitor:** fromPoint + cursorPosition ([f9f70e0](https://github.com/kvnpetit/tynd/commit/f9f70e057a03d411fe001ca2152106c61cb271c1))
+* **notification:** add icon, sound, action buttons + onAction ([7aa76cd](https://github.com/kvnpetit/tynd/commit/7aa76cdd4b855dd65d8f62b2ae898d662eb00a79))
+* **notification:** checkPermission + schedule + cancel ([a636b99](https://github.com/kvnpetit/tynd/commit/a636b99ccdd35e40b98ef4560f5fc40d1c156559))
+* **power:** add power.getIdleTime (cross-platform) ([fa36385](https://github.com/kvnpetit/tynd/commit/fa363850a8287c7fd51214839d0f05f844c03052))
+* **rpc:** listenN + once helpers for ad-hoc events ([96b821f](https://github.com/kvnpetit/tynd/commit/96b821ff050055294cd3ea433ef5cb217d0efc3e))
+* **rpc:** withTimeout + abortable helpers ([ed7dab0](https://github.com/kvnpetit/tynd/commit/ed7dab00f58d17df8e43937e3656dd647d436c33))
+* **security:** add opt-in capability ACL for fs + http ([640e66c](https://github.com/kvnpetit/tynd/commit/640e66ccf7395426bc98749a27a6417bd6e0d408))
+* **tray:** onEnter/onMove/onLeave mouse events ([dcb55b3](https://github.com/kvnpetit/tynd/commit/dcb55b3b33111966014c53c90b56266326fb24be))
+* **tray:** runtime setIcon/setTooltip/setTitle/setMenu/setVisible ([5d4983e](https://github.com/kvnpetit/tynd/commit/5d4983e73671803e8eac905b88f233f544352470))
+* **tray:** setIconAsTemplate (macOS) ([b10e062](https://github.com/kvnpetit/tynd/commit/b10e0625a6f1b023a3fbacadc789e2407a2ac2f3))
+* **updater:** periodic check + proxy + custom headers + allowDowngrade ([c91ed86](https://github.com/kvnpetit/tynd/commit/c91ed860df5392df06d5a9445b7022e9cce79510))
+* **webview:** userAgent + onNavigation + onPageLoad ([118a780](https://github.com/kvnpetit/tynd/commit/118a780c510ccbffcc34eaa8b3d7516015802e66))
+* **window:** add findInPage + stopFindInPage ([cf9cad4](https://github.com/kvnpetit/tynd/commit/cf9cad4ef665d31c3f34090f2e5c9455ebaf004c))
+* **window:** add print, navigate, loadHtml, getUrl ([2a9e93a](https://github.com/kvnpetit/tynd/commit/2a9e93a0bef5f91c3740b5f78e314206b9d3c757))
+* **window:** appearance polish (theme, bg, shadow, progress, badge, skip taskbar) ([2e7f1cf](https://github.com/kvnpetit/tynd/commit/2e7f1cf4846c2c90d69eb19ff50a5cde7e041558))
+* **window:** closeSelf helper ([c31baf3](https://github.com/kvnpetit/tynd/commit/c31baf3d9810c04106d1d36632337549a3c85c9b))
+* **window:** cursor & mouse API (whole §6 category) ([bcd5ea2](https://github.com/kvnpetit/tynd/commit/bcd5ea2cde506fedf5962bc57934c6087daab2d3))
+* **window:** getTitle getter ([9a485f3](https://github.com/kvnpetit/tynd/commit/9a485f3e515ea9f6c3faebe2edbcd25437d14904))
+* **window:** getZoom cached getter ([6c662c1](https://github.com/kvnpetit/tynd/commit/6c662c1a5a5699ab9b7f0a902212f1c704848b37))
+* **window:** hideOnFocusLost + hideOnEscape config flags ([ac1de16](https://github.com/kvnpetit/tynd/commit/ac1de16b887fde708a08fe1a5052ffa9dfeddf9e))
+* **window:** macOS titlebar transparent + fullsize content + traffic light inset ([01eb849](https://github.com/kvnpetit/tynd/commit/01eb849ecb08565b2c8f827b2a400cdc6f2dcab8))
+* **window:** modalTo parent handle on create (Win+macOS) ([88af830](https://github.com/kvnpetit/tynd/commit/88af83006a5eb2ee1aa1dacc956f3df5582f0068))
+* **window:** positionAt(preset) — 13-preset positioner ([bb26ce7](https://github.com/kvnpetit/tynd/commit/bb26ce7cc8cedb54140453850da3341beb0106ee))
+* **window:** setFocusable + setEnabled (Windows) ([30b2a04](https://github.com/kvnpetit/tynd/commit/30b2a04a9607ab9ca05a849f8d00fc826716b350))
+* **window:** setShadow (macOS) + setWindowIcon runtime ([207373a](https://github.com/kvnpetit/tynd/commit/207373a85fc9b38858c8f01d92f7ae319e2e344e))
+* **window:** setVisibleOnAllWorkspaces (macOS) ([fc64b1c](https://github.com/kvnpetit/tynd/commit/fc64b1c0cdb87cadc151a4726b802cfccbd9ca88))
+* **window:** Windows 11 Mica/Acrylic/Tabbed system backdrop ([0ba282f](https://github.com/kvnpetit/tynd/commit/0ba282f6fc9f6fbce95f07a589665eb9ba245027))
+
+
+### Bug Fixes
+
+* audit-surfaced bugs + document RPC helpers ([6661cd1](https://github.com/kvnpetit/tynd/commit/6661cd104d13a83b9dcec2b921721468950e94b9))
+* **menu:** cross-OS context menu (macOS + Linux) ([1a35713](https://github.com/kvnpetit/tynd/commit/1a35713da647954044be8dbdfd45a471aee02460))
+* **notification:** action callbacks on all OS ([0290319](https://github.com/kvnpetit/tynd/commit/0290319d86fb55f50950f912dc7d3edf57784c1e))
+
+
+### Documentation
+
+* **comparison:** mark window-scoped listeners supported via emitTo ([5672ce7](https://github.com/kvnpetit/tynd/commit/5672ce707d23991b648666808cb2022a653ca458))
+* point homepage fields to tynd.kvnpetit.com ([5483a59](https://github.com/kvnpetit/tynd/commit/5483a5936955b3afb5532b5c69f99bc715f96bd1))
+* **readme:** strip emoji from headings + tables ([09cbd49](https://github.com/kvnpetit/tynd/commit/09cbd49fee0568ca414a078e938d983618663f98))
+* scaffold v0.2, fix version picker dropdown ([46dbf5b](https://github.com/kvnpetit/tynd/commit/46dbf5b1879592fba9a509a40fdf6c0a85d8d4c1))
+* sync README/RUNTIMES/API with log/power/security + all v3 window APIs ([54b7a9b](https://github.com/kvnpetit/tynd/commit/54b7a9bc2b3fb9100d7a2ef964b69f5b6d5d8851))
+* **v0.3:** cut new latest version with all v3 features ([c818ac1](https://github.com/kvnpetit/tynd/commit/c818ac191fd9062f60fc39e1fdf18e286ad3d7d2))
+
+
+### Continuous Integration
+
+* add Next.js + node_modules caching to workflows ([8d5b842](https://github.com/kvnpetit/tynd/commit/8d5b842da399f149d2791e499c7b5fdfa90bc299))
+* move release-please title pattern into the package block ([69c3423](https://github.com/kvnpetit/tynd/commit/69c342371da0e139e149eda7b26a02f22e1285d4))
+* pin release-please PR title to `chore: release <version>` ([c7c6abe](https://github.com/kvnpetit/tynd/commit/c7c6abec0a12a2c9de3cc3e8d31a2c7ef3532795))
+
 ## [0.2.0](https://github.com/kvnpetit/tynd/compare/v0.1.0...v0.2.0) (2026-04-20)
 
 
