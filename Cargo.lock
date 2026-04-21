@@ -4254,6 +4254,7 @@ dependencies = [
  "dirs 6.0.0",
  "ed25519-dalek",
  "global-hotkey",
+ "gtk",
  "image",
  "interprocess",
  "keyring",

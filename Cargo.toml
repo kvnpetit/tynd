@@ -72,6 +72,10 @@ trash         = "5"
 # User idle time — GetLastInputInfo (Win), CGEventSource (macOS), XScreenSaver (Linux).
 user-idle     = "0.6"
 
+# Linux-only gtk3 bindings — needed so we can upcast tao's gtk::ApplicationWindow
+# to the gtk::Window that muda's show_context_menu_for_gtk_window expects.
+gtk           = "0.18"
+
 # Launch-at-boot — registry on Windows, Launch Agents on macOS, autostart
 # .desktop on Linux.
 auto-launch = "0.5"
