@@ -1,6 +1,6 @@
 {
   "name": "@tynd/host",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Pre-built native host binaries for Tynd. Downloads the right binary for the user's platform on install.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
