@@ -381,6 +381,14 @@ export const tyndWindow = {
   setVisibleOnAllWorkspaces(visible: boolean): Promise<void> {
     return osCall("window", "setVisibleOnAllWorkspaces", { visible })
   },
+  /** macOS: toggle the native drop shadow. Other OS: no-op. */
+  setShadow(enabled: boolean): Promise<void> {
+    return osCall("window", "setShadow", { enabled })
+  },
+  /** Replace the window icon at runtime. Pass `null` to clear. */
+  setWindowIcon(path: string | null): Promise<void> {
+    return osCall("window", "setWindowIcon", { path })
+  },
 
   /**
    * Cmd+F-style in-page search. Uses the built-in `window.find()` present
