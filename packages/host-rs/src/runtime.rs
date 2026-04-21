@@ -95,6 +95,9 @@ pub struct BackendConfig {
     pub menu: Vec<MenuItemDef>,
     /// System tray configuration
     pub tray: Option<TrayConfig>,
+    /// When true, exit as soon as the last open window closes (tray-only
+    /// apps leave this off so closing every window keeps the tray alive).
+    pub quit_on_last_window_closed: bool,
 }
 
 /// A single menu item — separator, action, submenu, or native role.

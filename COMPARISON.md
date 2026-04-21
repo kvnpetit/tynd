@@ -499,7 +499,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Get default window icon | ❌ | ✅ | ❌ | ❌ |
 | Show / hide app (macOS dock) | ❌ | ✅ | ✅ | ✅ |
 | Set dock visibility (macOS) | ❌ | ✅ | ✅ | ✅ |
-| App quits after last window closed | ❌ | ❌ | ✅ | ✅ |
+| App quits after last window closed | ✅ | ❌ | ✅ | ✅ |
 | About / info panel | ❌ | ❌ | ✅ | ✅ |
 | exit(code) | ✅ | ✅ | ✅ | ✅ |
 | relaunch() | ✅ | ✅ | ❌ | ✅ |
@@ -533,7 +533,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 |---|---|---|---|---|
 | App data / local data dir | ✅ | ✅ | ❌ | ✅ |
 | App config / cache / log dir | ✅ | ✅ | ❌ | ✅ |
-| App resource dir | ❌ | ✅ | ❌ | ✅ |
+| App resource dir | ✅ | ✅ | ❌ | ✅ |
 | Home / temp dir | ✅ | ✅ | ❌ | ✅ |
 | Desktop / Downloads / Documents | ✅ | ✅ | ❌ | ✅ |
 | Pictures / Music / Video | ✅ | ✅ | ❌ | ✅ |
@@ -802,9 +802,9 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Autolaunch | 3/3 | 3/3 | 0/3 | 3/3 |
 | Persistent storage | 5/10 | 7/10 | 3/10 | 7/10 |
 | Logging | 4/5 | 5/5 | 4/5 | 2/5 |
-| App-level APIs | 6/14 | 11/14 | 7/14 | 11/14 |
+| App-level APIs | 7/14 | 11/14 | 7/14 | 11/14 |
 | OS & Environment | 8/12 | 11/12 | 5/12 | 11/12 |
-| Path utilities | 8/13 | 13/13 | 0/13 | 11/13 |
+| Path utilities | 9/13 | 13/13 | 0/13 | 11/13 |
 | Security & permissions | 6/13 | 8/13 | 0/13 | 6/13 |
 | Mobile | 0/8 | 8/8 | 0/8 | 0/8 |
 | Build & distribution | 6/26 | 19/26 | 13/26 | 21/26 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~230/503 (46%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~232/503 (46%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 

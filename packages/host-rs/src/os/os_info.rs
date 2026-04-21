@@ -21,6 +21,10 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "exePath" => Ok(std::env::current_exe()
             .ok()
             .map_or(Value::Null, |p| path_to_value(&p))),
+        "resourceDir" => Ok(std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+            .map_or(Value::Null, |p| path_to_value(&p))),
         "cwd" => Ok(std::env::current_dir()
             .ok()
             .map_or(Value::Null, |p| path_to_value(&p))),

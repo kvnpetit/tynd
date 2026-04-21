@@ -29,6 +29,8 @@ enum BunMsg {
         #[serde(default)]
         menu: Vec<MenuItemDef>,
         tray: Option<TrayConfig>,
+        #[serde(default, rename = "quitOnLastWindowClosed")]
+        quit_on_last_window_closed: bool,
     },
     #[serde(rename = "return")]
     Return {
@@ -280,6 +282,7 @@ fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> Result<Back
                 frontend_dir,
                 menu,
                 tray,
+                quit_on_last_window_closed,
             }) => {
                 let icon_path = std::env::var("TYND_ICON_PATH").ok();
                 return Ok(BackendConfig {
@@ -289,6 +292,7 @@ fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> Result<Back
                     icon_path,
                     menu,
                     tray,
+                    quit_on_last_window_closed,
                 });
             },
             Ok(other) => return Err(format!("Expected tynd:config, got: {other:?}")),

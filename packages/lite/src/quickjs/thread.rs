@@ -304,6 +304,10 @@ fn parse_config(json: &str) -> Option<BackendConfig> {
     let frontend_dir = v
         .get("frontendDir")
         .and_then(|d| d.as_str().map(String::from));
+    let quit_on_last_window_closed = v
+        .get("quitOnLastWindowClosed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     Some(BackendConfig {
         window,
         dev_url,
@@ -311,5 +315,6 @@ fn parse_config(json: &str) -> Option<BackendConfig> {
         icon_path: None,
         menu,
         tray,
+        quit_on_last_window_closed,
     })
 }

@@ -75,6 +75,7 @@ export function startFull(config: AppConfig): void {
     frontendDir: process.env["TYND_FRONTEND_DIR"] ?? config.frontendDir,
     menu: config.menu ?? [],
     tray: config.tray ?? null,
+    quitOnLastWindowClosed: config.quitOnLastWindowClosed ?? false,
   })
   process.stdout.write(`${configMsg}\n`)
 

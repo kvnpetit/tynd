@@ -648,6 +648,17 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                         window_id_to_label.remove(&entry.window.id());
                         drop(entry);
                     }
+                    // `quitOnLastWindowClosed`: when the primary is already
+                    // hidden and no secondaries remain, the app has nothing
+                    // left to show. Exit cleanly.
+                    if config.quit_on_last_window_closed
+                        && secondaries.is_empty()
+                        && !native_window.is_visible()
+                        && !exit_started.swap(true, Ordering::SeqCst)
+                    {
+                        crate::cleanup::run();
+                        std::process::exit(0);
+                    }
                     return;
                 }
                 // Primary window: frontend/backend get 500ms to call
