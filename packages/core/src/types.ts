@@ -117,6 +117,11 @@ export const AppConfigSchema = v.object({
   tray: v.optional(TrayConfigSchema),
   devUrl: v.optional(v.pipe(v.string(), v.url())),
   frontendDir: v.optional(v.pipe(v.string(), v.minLength(1))),
+  /**
+   * Exit the process as soon as the last window closes. Leave off (default)
+   * for tray-only apps that should stay alive after all windows are hidden.
+   */
+  quitOnLastWindowClosed: v.optional(v.boolean()),
 })
 export type AppConfig = v.InferOutput<typeof AppConfigSchema>
 

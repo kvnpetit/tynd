@@ -63,6 +63,10 @@ export const os = {
   exePath(): Promise<string | null> {
     return osCall("os", "exePath")
   },
+  /** Directory of the currently running binary (resources packed next to it). */
+  resourceDir(): Promise<string | null> {
+    return osCall("os", "resourceDir")
+  },
   cwd(): Promise<string | null> {
     return osCall("os", "cwd")
   },

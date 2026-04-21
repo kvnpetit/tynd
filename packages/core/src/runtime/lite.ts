@@ -24,6 +24,7 @@ export function startLite(config: AppConfig): void {
     // devUrl / frontendDir from app.start() — CLI args take priority in quickjs::start()
     devUrl: config.devUrl ?? null,
     frontendDir: config.frontendDir ?? null,
+    quitOnLastWindowClosed: config.quitOnLastWindowClosed ?? false,
   })
 
   // Look up on every emit — if tests or alt hosts inject it late, events
