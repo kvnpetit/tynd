@@ -1,10 +1,6 @@
-use notify_rust::Notification;
-use serde_json::Value;
+use serde_json::{json, Value};
 
-#[cfg(all(unix, not(target_os = "macos")))]
 use super::events;
-#[cfg(all(unix, not(target_os = "macos")))]
-use serde_json::json;
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -33,11 +29,27 @@ fn send(args: &Value) -> Result<Value, String> {
         })
         .unwrap_or_default();
 
-    let app_name = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-        .unwrap_or_else(|| "tynd".to_string());
+    send_platform(title, body, icon, sound, actions)
+}
 
+fn emit_action(id: &str) {
+    events::emit("notification:action", &json!({ "action": id }));
+}
+
+// ---- Linux (libnotify via notify-rust) ----------------------------------
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[allow(clippy::needless_pass_by_value)] // signature stays uniform across OS branches
+fn send_platform(
+    title: &str,
+    body: &str,
+    icon: Option<&str>,
+    sound: Option<&str>,
+    actions: Vec<(String, String)>,
+) -> Result<Value, String> {
+    use notify_rust::Notification;
+
+    let app_name = exe_stem();
     let mut n = Notification::new();
     n.appname(&app_name).summary(title).body(body);
     if let Some(p) = icon {
@@ -50,25 +62,119 @@ fn send(args: &Value) -> Result<Value, String> {
         n.action(id, label);
     }
 
-    // Wait-for-action runs an async loop on xdg — move to a thread so the
-    // call pool is never parked. Win/macOS don't surface clicks through this
-    // API, so the `notification:action` event only fires on Linux today.
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        let handle = n.show().map_err(|e| e.to_string())?;
-        if !actions.is_empty() {
-            std::thread::spawn(move || {
-                handle.wait_for_action(|action| {
-                    events::emit("notification:action", &json!({ "action": action }));
-                });
-            });
+    let handle = n.show().map_err(|e| e.to_string())?;
+    if !actions.is_empty() {
+        std::thread::spawn(move || {
+            handle.wait_for_action(|action| emit_action(action));
+        });
+    }
+    Ok(Value::Null)
+}
+
+// ---- Windows (WinRT toasts via tauri-winrt-notification) -----------------
+
+#[cfg(target_os = "windows")]
+#[allow(clippy::needless_pass_by_value)] // signature stays uniform across OS branches
+fn send_platform(
+    title: &str,
+    body: &str,
+    icon: Option<&str>,
+    sound: Option<&str>,
+    actions: Vec<(String, String)>,
+) -> Result<Value, String> {
+    use std::str::FromStr as _;
+    use tauri_winrt_notification::{IconCrop, Sound, Toast};
+
+    let app_id = exe_stem();
+    let mut toast = Toast::new(&app_id).title(title).text1(body);
+
+    if let Some(p) = icon {
+        toast = toast.icon(std::path::Path::new(p), IconCrop::Square, "");
+    }
+    if let Some(s) = sound {
+        if let Ok(snd) = Sound::from_str(s) {
+            toast = toast.sound(Some(snd));
         }
     }
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    {
-        let _ = &actions;
-        n.show().map_err(|e| e.to_string())?;
+    for (id, label) in &actions {
+        // `action` arg on the button is what `on_activated` receives when
+        // the user clicks — use our public id as the payload.
+        toast = toast.add_button(label, id);
+    }
+    if !actions.is_empty() {
+        toast = toast.on_activated(move |arg| {
+            if let Some(action) = arg {
+                emit_action(&action);
+            }
+            Ok(())
+        });
     }
 
+    toast.show().map_err(|e| format!("notification: {e:?}"))?;
     Ok(Value::Null)
+}
+
+// ---- macOS (NSUserNotificationCenter via mac-notification-sys) ----------
+
+#[cfg(target_os = "macos")]
+fn send_platform(
+    title: &str,
+    body: &str,
+    icon: Option<&str>,
+    sound: Option<&str>,
+    actions: Vec<(String, String)>,
+) -> Result<Value, String> {
+    use mac_notification_sys::{MainButton, Notification, NotificationResponse};
+
+    // Owned strings so we can move them into the action-waiting thread.
+    let title_owned = title.to_string();
+    let body_owned = body.to_string();
+    let icon_owned = icon.map(str::to_string);
+    let sound_owned = sound.map(str::to_string);
+
+    let build = move |actions: &[(String, String)]| -> Result<NotificationResponse, String> {
+        let labels: Vec<&str> = actions.iter().map(|(_, l)| l.as_str()).collect();
+        let mut n = Notification::new();
+        n.title(&title_owned).message(&body_owned);
+        if let Some(ref s) = sound_owned {
+            n.sound(s);
+        }
+        if let Some(ref p) = icon_owned {
+            n.content_image(p);
+        }
+        match labels.len() {
+            0 => {},
+            1 => {
+                n.main_button(MainButton::SingleAction(labels[0]));
+            },
+            _ => {
+                n.main_button(MainButton::DropdownActions("Actions", &labels));
+            },
+        }
+        n.send().map_err(|e| e.to_string())
+    };
+
+    if actions.is_empty() {
+        let _ = build(&[])?;
+    } else {
+        // `send()` blocks until the user clicks or the banner is dismissed.
+        // Off-thread so the call pool keeps serving unrelated requests.
+        std::thread::spawn(move || {
+            if let Ok(response) = build(&actions) {
+                if let NotificationResponse::ActionButton(label) = response {
+                    if let Some((id, _)) = actions.iter().find(|(_, l)| *l == label) {
+                        emit_action(id);
+                    }
+                }
+            }
+        });
+    }
+    Ok(Value::Null)
+}
+
+fn exe_stem() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| "tynd".to_string())
 }

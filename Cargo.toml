@@ -76,6 +76,13 @@ user-idle     = "0.6"
 # to the gtk::Window that muda's show_context_menu_for_gtk_window expects.
 gtk           = "0.18"
 
+# Platform-specific notification backends with action callbacks — notify-rust
+# only surfaces them on Linux. Windows: tauri-winrt-notification adds WinRT
+# toasts + on_activated. macOS: mac-notification-sys adds action buttons +
+# blocking send() whose return value tells us which button was clicked.
+tauri-winrt-notification = "0.7"
+mac-notification-sys     = "0.6"
+
 # Launch-at-boot — registry on Windows, Launch Agents on macOS, autostart
 # .desktop on Linux.
 auto-launch = "0.5"

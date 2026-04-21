@@ -417,7 +417,8 @@ import { notification } from "@tynd/core/client"
 
 await notification.send("Build Complete", { body: "0 errors." })
 
-// Actions (Linux-only callback, shown on all platforms)
+// Actions with click callback — now works on all OS (Linux via libnotify,
+// Windows via WinRT toasts, macOS via NSUserNotification).
 await notification.send("New message", {
   body: "From Alice",
   icon: "/abs/path/avatar.png",

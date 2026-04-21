@@ -14,8 +14,9 @@ export const notification = {
     })
   },
   /**
-   * Fires when the user clicks an action button. Linux only — Windows /
-   * macOS don't surface notification clicks through this API.
+   * Fires when the user clicks an action button. Works on all OS —
+   * Linux via libnotify, Windows via WinRT toasts, macOS via
+   * NSUserNotification dropdown actions.
    */
   onAction(handler: (event: NotificationActionEvent) => void): () => void {
     return window.__tynd__.os_on("notification:action", (raw) =>
