@@ -56,6 +56,7 @@ project pages.
 - global-hotkey    (Apache-2.0 / MIT) — https://github.com/tauri-apps/global-hotkey
 - auto-launch      (MIT)              — https://github.com/zzzgydi/auto-launch
 - keyring          (MIT / Apache-2.0) — https://github.com/open-source-cooperative/keyring-rs
+- trash            (MIT)              — https://github.com/Byron/trash-rs
 - rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
 - tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
 - rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite

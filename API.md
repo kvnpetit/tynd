@@ -386,6 +386,7 @@ import { shell } from "@tynd/core/client"
 
 await shell.openExternal("https://example.com")
 await shell.openPath("/home/user/document.pdf")
+await shell.revealInFolder("/home/user/download.zip") // Explorer /select, Finder -R
 ```
 
 ### `notification`
@@ -428,6 +429,8 @@ const info = await fs.stat("data.json")
 
 const bytes = await fs.readBinary("image.png")
 await fs.writeBinary("copy.png", bytes)
+
+await fs.trash("old.log") // move to recycle bin / Trash (reversible)
 
 // Watch for changes (ReadDirectoryChangesW / FSEvents / inotify).
 const watcher = await fs.watch("./notes", { recursive: true }, (event) => {

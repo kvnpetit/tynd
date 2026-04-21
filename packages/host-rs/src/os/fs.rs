@@ -20,6 +20,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "remove" => remove(args),
         "rename" => rename(args),
         "copy" => copy(args),
+        "trash" => trash_path(args),
         "watch" => watch(args),
         "unwatch" => unwatch(args),
         // readBinary / writeBinary intentionally route through the
@@ -222,6 +223,12 @@ fn copy(args: &Value) -> Result<Value, String> {
     let from = path_arg(args, "from")?;
     let to = path_arg(args, "to")?;
     fs::copy(from, to).map_err(|e| format!("fs.copy({from} -> {to}): {e}"))?;
+    Ok(Value::Null)
+}
+
+fn trash_path(args: &Value) -> Result<Value, String> {
+    let path = path_arg(args, "path")?;
+    trash::delete(path).map_err(|e| format!("fs.trash({path}): {e}"))?;
     Ok(Value::Null)
 }
 

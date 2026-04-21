@@ -59,6 +59,10 @@ export const fs = {
   copy(from: string, to: string): Promise<void> {
     return osCall("fs", "copy", { from, to })
   },
+  /** Move to the OS recycle bin / Trash. Reversible unlike `remove()`. */
+  trash(path: string): Promise<void> {
+    return osCall("fs", "trash", { path })
+  },
   readBinary(path: string): Promise<Uint8Array> {
     return binFetch("fs/readBinary", { path })
   },
