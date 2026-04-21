@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/kvnpetit/tynd/compare/v0.3.0...v0.3.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* **ci:** add libxss-dev for user-idle's XScreenSaver probe ([44fadcf](https://github.com/kvnpetit/tynd/commit/44fadcfcdcc49d52a1c29af54adc3d9f8f88b527))
+* **host:** macOS + Linux clippy nits (release profile) ([bf94658](https://github.com/kvnpetit/tynd/commit/bf946589bee436ecbbd37a0f6b666c2466c11135))
+
 ## [0.3.0](https://github.com/kvnpetit/tynd/compare/v0.2.0...v0.3.0) (2026-04-21)
 
 
