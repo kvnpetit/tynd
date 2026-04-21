@@ -122,6 +122,21 @@ export type AppConfig = v.InferOutput<typeof AppConfigSchema>
 export interface NotificationOptions {
   /** Notification body text */
   body?: string
+  /** Absolute path to an icon file (PNG / ICO). */
+  icon?: string
+  /** System sound name (`default`, `alarm`, ...). Platform-dependent. */
+  sound?: string
+  /**
+   * Action buttons. Click emits `notification:action` with the clicked
+   * `id`. Fully supported on Linux (libnotify); Windows / macOS show the
+   * buttons but don't surface clicks back through this API.
+   */
+  actions?: { id: string; label: string }[]
+}
+
+export interface NotificationActionEvent {
+  /** The `id` of the clicked action. */
+  action: string
 }
 
 export type EmitterMap = Record<string, unknown>

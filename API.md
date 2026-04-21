@@ -395,6 +395,20 @@ await shell.revealInFolder("/home/user/download.zip") // Explorer /select, Finde
 import { notification } from "@tynd/core/client"
 
 await notification.send("Build Complete", { body: "0 errors." })
+
+// Actions (Linux-only callback, shown on all platforms)
+await notification.send("New message", {
+  body: "From Alice",
+  icon: "/abs/path/avatar.png",
+  sound: "default",
+  actions: [
+    { id: "reply", label: "Reply" },
+    { id: "mark-read", label: "Mark as read" },
+  ],
+})
+notification.onAction(({ action }) => {
+  if (action === "reply") openReplyWindow()
+})
 ```
 
 ### `tray`
