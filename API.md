@@ -359,6 +359,14 @@ await tyndWindow.print() // opens the system print dialog
 const hit = tyndWindow.findInPage("invoice", { caseSensitive: false })
 tyndWindow.stopFindInPage()
 
+// Webview hooks
+tyndWindow.onNavigation(({ url, allowed }) => {
+  if (!allowed) log.warn("navigation blocked by security policy", { url })
+})
+tyndWindow.onPageLoad(({ phase, url }) => {
+  if (phase === "finished") hideSplash()
+})
+
 // Appearance runtime knobs
 await tyndWindow.setTheme("dark")
 await tyndWindow.setBackgroundColor({ r: 20, g: 20, b: 28 })

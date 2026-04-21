@@ -26,6 +26,19 @@ export interface CreateWindowOptions {
   resizable?: boolean
   decorations?: boolean
   alwaysOnTop?: boolean
+  /** Custom User-Agent string for requests issued by this webview. */
+  userAgent?: string
+}
+
+export interface NavigationEvent extends WindowEventBase {
+  url: string
+  /** `false` when the security policy blocked this navigation. */
+  allowed: boolean
+}
+
+export interface PageLoadEvent extends WindowEventBase {
+  phase: "started" | "finished"
+  url: string
 }
 
 export interface WindowEventBase {
@@ -449,6 +462,27 @@ export const tyndWindow = {
   /** Drag cancelled or left the window. */
   onDragLeave(handler: () => void): () => void {
     return onWindow("drag-leave", handler as (e: WindowEventBase) => void)
+  },
+
+  /**
+   * Fires before each navigation. Emits `allowed: false` when the active
+   * `security` policy blocked the URL. Observation-only — to block a URL,
+   * configure `security.configure({ http: { deny: [...] } })` instead.
+   */
+  onNavigation(handler: (e: NavigationEvent) => void): () => void {
+    return window.__tynd__.os_on("webview:navigation", (raw) => {
+      const data = raw as NavigationEvent
+      if (data.label !== getWindowLabel()) return
+      handler(data)
+    })
+  },
+  /** Fires on document start + finish load. */
+  onPageLoad(handler: (e: PageLoadEvent) => void): () => void {
+    return window.__tynd__.os_on("webview:page-load", (raw) => {
+      const data = raw as PageLoadEvent
+      if (data.label !== getWindowLabel()) return
+      handler(data)
+    })
   },
   /** Files dropped onto the window. `paths` are native OS paths. */
   onDrop(handler: (e: DragDropEvent) => void): () => void {

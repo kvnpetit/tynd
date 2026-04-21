@@ -7,7 +7,7 @@ use tao::{
     event_loop::{ControlFlow, EventLoopBuilder, EventLoopWindowTarget},
     window::{Theme, Window, WindowBuilder, WindowId},
 };
-use wry::{http::Request, DragDropEvent, WebView, WebViewBuilder};
+use wry::{http::Request, DragDropEvent, PageLoadEvent, WebView, WebViewBuilder};
 
 use crate::{
     ipc, menu, os,
@@ -226,7 +226,13 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         .with_ipc_handler(move |req: Request<String>| {
             dispatch::handle_ipc_body(req.into_body(), PRIMARY_LABEL, &call_tx_ipc, &proxy_for_ipc);
         })
-        .with_drag_drop_handler(drag_drop_handler(PRIMARY_LABEL));
+        .with_drag_drop_handler(drag_drop_handler(PRIMARY_LABEL))
+        .with_navigation_handler(navigation_handler(PRIMARY_LABEL))
+        .with_on_page_load_handler(page_load_handler(PRIMARY_LABEL));
+
+    if let Some(ref ua) = config.window.user_agent {
+        wb = wb.with_user_agent(ua);
+    }
 
     if debug {
         wb = wb.with_devtools(true);
@@ -805,6 +811,37 @@ fn drag_drop_handler(label: &str) -> impl Fn(DragDropEvent) -> bool + 'static {
     }
 }
 
+/// Navigation hook — emits `webview:navigation` and blocks the load when the
+/// security policy explicitly denies the URL. Empty / unconfigured policy
+/// lets everything through.
+fn navigation_handler(label: &str) -> impl Fn(String) -> bool + 'static {
+    let label = label.to_string();
+    move |url: String| {
+        let allowed = os::security::check_http(&url).is_ok();
+        os::events::emit(
+            "webview:navigation",
+            &json!({ "label": label, "url": url, "allowed": allowed }),
+        );
+        allowed
+    }
+}
+
+/// Page-load observer — fires once when the document starts loading and
+/// once when it finishes. Frontend listens via `tyndWindow.onPageLoad`.
+fn page_load_handler(label: &str) -> impl Fn(PageLoadEvent, String) + 'static {
+    let label = label.to_string();
+    move |event, url| {
+        let phase = match event {
+            PageLoadEvent::Started => "started",
+            PageLoadEvent::Finished => "finished",
+        };
+        os::events::emit(
+            "webview:page-load",
+            &json!({ "label": label, "phase": phase, "url": url }),
+        );
+    }
+}
+
 /// Init script injected into every webview so frontend code knows which window
 /// it's running in (for filtering broadcast `window:*` events by label).
 fn inject_window_label(label: &str) -> String {
@@ -882,7 +919,13 @@ fn create_secondary(
         .with_ipc_handler(move |req: Request<String>| {
             dispatch::handle_ipc_body(req.into_body(), &label_for_ipc, &call_tx, &proxy);
         })
-        .with_drag_drop_handler(drag_drop_handler(&label));
+        .with_drag_drop_handler(drag_drop_handler(&label))
+        .with_navigation_handler(navigation_handler(&label))
+        .with_on_page_load_handler(page_load_handler(&label));
+
+    if let Some(ua) = args.get("userAgent").and_then(Value::as_str) {
+        wvb = wvb.with_user_agent(ua);
+    }
     if debug {
         wvb = wvb.with_devtools(true);
         wvb = wvb.with_initialization_script(ipc::JS_DEV_FLAG);
