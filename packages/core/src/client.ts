@@ -15,9 +15,12 @@ export {
 } from "./client/dialog.js"
 export {
   type DirEntry,
+  type FileHandle,
   type FileStat,
   type FsChangeEvent,
   fs,
+  type OpenOptions,
+  type SeekFrom,
   type WatchHandle,
 } from "./client/fs.js"
 export {

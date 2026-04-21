@@ -1,7 +1,10 @@
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine as _;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher as _};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::fs;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
@@ -20,7 +23,16 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "remove" => remove(args),
         "rename" => rename(args),
         "copy" => copy(args),
+        "copyDir" => copy_dir(args),
         "trash" => trash_path(args),
+        "symlink" => symlink(args),
+        "readlink" => readlink(args),
+        "hardlink" => hardlink(args),
+        "open" => open_handle(args),
+        "seek" => seek_handle(args),
+        "read" => read_handle(args),
+        "write" => write_handle(args),
+        "close" => close_handle(args),
         "watch" => watch(args),
         "unwatch" => unwatch(args),
         // readBinary / writeBinary intentionally route through the
@@ -28,6 +40,164 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         // not JSON IPC — they're zero-copy on the wire.
         _ => Err(format!("fs.{method}: unknown method")),
     }
+}
+
+// --- File handles -------------------------------------------------------
+// Stateful seek/read/write — each `open` returns a numeric id that
+// subsequent ops reference. Closed explicitly by `close`. Base64 on the
+// wire for binary payloads (matches other small-blob APIs); for multi-MB
+// payloads prefer `readBinary` / `writeBinary` via the bin scheme.
+
+static HANDLES: OnceLock<Mutex<ahash::HashMap<u64, File>>> = OnceLock::new();
+static NEXT_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
+
+fn handles() -> &'static Mutex<ahash::HashMap<u64, File>> {
+    HANDLES.get_or_init(|| Mutex::new(ahash::HashMap::default()))
+}
+
+fn open_handle(args: &Value) -> Result<Value, String> {
+    let path = path_arg(args, "path")?;
+    let read = args.get("read").and_then(Value::as_bool).unwrap_or(true);
+    let write = args.get("write").and_then(Value::as_bool).unwrap_or(false);
+    let append = args.get("append").and_then(Value::as_bool).unwrap_or(false);
+    let create = args.get("create").and_then(Value::as_bool).unwrap_or(false);
+    let truncate = args
+        .get("truncate")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let file = OpenOptions::new()
+        .read(read)
+        .write(write)
+        .append(append)
+        .create(create)
+        .truncate(truncate)
+        .open(path)
+        .map_err(|e| format!("fs.open({path}): {e}"))?;
+
+    let id = NEXT_HANDLE_ID.fetch_add(1, Ordering::SeqCst);
+    handles().lock().insert(id, file);
+    Ok(json!({ "id": id }))
+}
+
+fn with_handle<R>(args: &Value, f: impl FnOnce(&mut File) -> R) -> Result<R, String> {
+    let id = args
+        .get("id")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "fs: missing 'id'".to_string())?;
+    let mut map = handles().lock();
+    let file = map
+        .get_mut(&id)
+        .ok_or_else(|| format!("fs: handle {id} not open"))?;
+    Ok(f(file))
+}
+
+fn seek_handle(args: &Value) -> Result<Value, String> {
+    let offset = args
+        .get("offset")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| "fs.seek: missing 'offset'".to_string())?;
+    let from = match args.get("from").and_then(Value::as_str).unwrap_or("start") {
+        "current" => SeekFrom::Current(offset),
+        "end" => SeekFrom::End(offset),
+        _ => SeekFrom::Start(offset.max(0) as u64),
+    };
+    let new = with_handle(args, |f| f.seek(from))?.map_err(|e| format!("fs.seek: {e}"))?;
+    Ok(json!({ "position": new }))
+}
+
+fn read_handle(args: &Value) -> Result<Value, String> {
+    let len = args
+        .get("length")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "fs.read: missing 'length'".to_string())? as usize;
+    let mut buf = vec![0u8; len];
+    let n = with_handle(args, |f| f.read(&mut buf))?.map_err(|e| format!("fs.read: {e}"))?;
+    buf.truncate(n);
+    Ok(json!({ "bytes": STANDARD.encode(&buf), "read": n }))
+}
+
+fn write_handle(args: &Value) -> Result<Value, String> {
+    let b64 = args
+        .get("bytes")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "fs.write: missing 'bytes'".to_string())?;
+    let bytes = STANDARD
+        .decode(b64)
+        .map_err(|e| format!("fs.write: bad base64 — {e}"))?;
+    let n = with_handle(args, |f| f.write(&bytes))?.map_err(|e| format!("fs.write: {e}"))?;
+    Ok(json!({ "written": n }))
+}
+
+fn close_handle(args: &Value) -> Result<Value, String> {
+    let id = args
+        .get("id")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "fs.close: missing 'id'".to_string())?;
+    Ok(Value::Bool(handles().lock().remove(&id).is_some()))
+}
+
+fn copy_dir(args: &Value) -> Result<Value, String> {
+    let from = path_arg(args, "from")?;
+    let to = path_arg(args, "to")?;
+    copy_dir_recursive(Path::new(from), Path::new(to))
+        .map_err(|e| format!("fs.copyDir({from} -> {to}): {e}"))?;
+    Ok(Value::Null)
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let src_child = entry.path();
+        let dst_child = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&src_child, &dst_child)?;
+        } else if ty.is_file() {
+            fs::copy(&src_child, &dst_child)?;
+        }
+        // symlinks skipped — explicit `symlink` API handles those.
+    }
+    Ok(())
+}
+
+fn symlink(args: &Value) -> Result<Value, String> {
+    let target = path_arg(args, "target")?;
+    let link = path_arg(args, "link")?;
+    platform_symlink(target, link).map_err(|e| format!("fs.symlink: {e}"))?;
+    Ok(Value::Null)
+}
+
+#[cfg(unix)]
+fn platform_symlink(target: &str, link: &str) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn platform_symlink(target: &str, link: &str) -> std::io::Result<()> {
+    // Windows distinguishes file vs dir symlinks — choose based on what the
+    // target currently is. If the target doesn't exist, fall back to file
+    // (most common) so a later `mkdir` doesn't break the link.
+    let p = Path::new(target);
+    if p.is_dir() {
+        std::os::windows::fs::symlink_dir(target, link)
+    } else {
+        std::os::windows::fs::symlink_file(target, link)
+    }
+}
+
+fn readlink(args: &Value) -> Result<Value, String> {
+    let path = path_arg(args, "path")?;
+    let target = fs::read_link(path).map_err(|e| format!("fs.readlink({path}): {e}"))?;
+    Ok(Value::String(target.to_string_lossy().into_owned()))
+}
+
+fn hardlink(args: &Value) -> Result<Value, String> {
+    let original = path_arg(args, "original")?;
+    let link = path_arg(args, "link")?;
+    fs::hard_link(original, link).map_err(|e| format!("fs.hardlink: {e}"))?;
+    Ok(Value::Null)
 }
 
 // --- FS watcher ---------------------------------------------------------
@@ -284,5 +454,58 @@ mod tests {
     #[test]
     fn missing_path_arg_errors() {
         assert!(read_text(&json!({})).is_err());
+    }
+
+    #[test]
+    fn file_handle_round_trip() {
+        let p = tmp_path("handle.bin");
+        let open = open_handle(&json!({
+            "path": &p,
+            "read": true,
+            "write": true,
+            "create": true,
+            "truncate": true,
+        }))
+        .unwrap();
+        let id = open["id"].as_u64().unwrap();
+
+        let write = write_handle(&json!({ "id": id, "bytes": STANDARD.encode(b"hello") })).unwrap();
+        assert_eq!(write["written"].as_u64().unwrap(), 5);
+
+        seek_handle(&json!({ "id": id, "offset": 0, "from": "start" })).unwrap();
+        let read = read_handle(&json!({ "id": id, "length": 5 })).unwrap();
+        assert_eq!(read["read"].as_u64().unwrap(), 5);
+        let bytes = STANDARD.decode(read["bytes"].as_str().unwrap()).unwrap();
+        assert_eq!(bytes, b"hello");
+
+        assert_eq!(
+            close_handle(&json!({ "id": id })).unwrap(),
+            Value::Bool(true)
+        );
+        fs::remove_file(&p).unwrap();
+    }
+
+    #[test]
+    fn copy_dir_copies_nested_files() {
+        let src = tmp_path("copysrc");
+        let dst = tmp_path("copydst");
+        let nested = format!("{src}/a/b");
+        mkdir(&json!({ "path": &nested, "recursive": true })).unwrap();
+        write_text(&json!({ "path": format!("{nested}/f.txt"), "content": "x" })).unwrap();
+        copy_dir(&json!({ "from": &src, "to": &dst })).unwrap();
+        assert_eq!(fs::read_to_string(format!("{dst}/a/b/f.txt")).unwrap(), "x");
+        remove(&json!({ "path": &src, "recursive": true })).unwrap();
+        remove(&json!({ "path": &dst, "recursive": true })).unwrap();
+    }
+
+    #[test]
+    fn hardlink_creates_second_path_same_content() {
+        let a = tmp_path("orig.txt");
+        let b = tmp_path("link.txt");
+        write_text(&json!({ "path": &a, "content": "same" })).unwrap();
+        hardlink(&json!({ "original": &a, "link": &b })).unwrap();
+        assert_eq!(fs::read_to_string(&b).unwrap(), "same");
+        fs::remove_file(&a).unwrap();
+        fs::remove_file(&b).unwrap();
     }
 }
