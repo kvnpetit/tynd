@@ -17,7 +17,7 @@ Linux only — WebView deps:
 sudo apt-get install -y \
   libgtk-3-dev libwebkit2gtk-4.1-dev \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
-  libxdo-dev
+  libxdo-dev libxss-dev
 ```
 
 ## 🪴 Scaffold a project
