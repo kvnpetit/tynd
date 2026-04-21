@@ -102,6 +102,21 @@ export const events = createEmitter<{
 }>()
 
 events.emit("fileChanged", { path: "/foo.ts" })
+
+// Target a single window (other windows don't receive the event).
+events.emitTo("settings", "progress", { percent: 42 })
+```
+
+### `evalInFrontend(script, label?)`
+
+Run raw JavaScript in a webview from the backend. When `label` is omitted
+the script runs on every open window.
+
+```typescript
+import { evalInFrontend } from "@tynd/core"
+
+evalInFrontend(`document.body.classList.add('debug')`)
+evalInFrontend(`location.reload()`, "settings")
 ```
 
 ### Frontend -> backend events (`createFrontendEmitter` + `onFrontendEmit`)
@@ -394,6 +409,27 @@ await tyndWindow.setProgressBar("normal", 42) // 42% in taskbar/dock
 await tyndWindow.setBadge({ label: "3" })      // macOS dock / Linux launcher
 await tyndWindow.setSkipTaskbar(true)          // Windows/Linux
 await tyndWindow.setContentProtection(true)    // blocks screenshots / capture
+await tyndWindow.setShadow(false)              // macOS only
+await tyndWindow.setWindowIcon("/abs/new-icon.png")
+await tyndWindow.setVisibleOnAllWorkspaces(true) // macOS Spaces
+await tyndWindow.setSystemBackdrop("mica")     // Windows 11 Mica/Acrylic/Tabbed
+await tyndWindow.setTitlebarTransparent(true)  // macOS
+await tyndWindow.setFullsizeContentView(true)  // macOS HTML under titlebar
+await tyndWindow.setTrafficLightInset(12, 18)  // macOS
+await tyndWindow.setFocusable(false)
+await tyndWindow.setEnabled(false)             // Windows only
+
+// Getters + positioner
+const title = await tyndWindow.getTitle()
+const zoom  = await tyndWindow.getZoom()
+await tyndWindow.positionAt("topRight", 20)    // 13 presets — see WindowPreset
+
+// Monitors: fromPoint + live cursor position
+const under = await monitors.fromPoint(100, 100)
+const { x, y } = await monitors.cursorPosition()
+
+// Close just this window (no-op on primary — use app.exit()).
+await tyndWindow.closeSelf()
 
 // Cursor control — click-through windows, drag zones, custom game cursors.
 await tyndWindow.setCursorIcon("grab")
@@ -672,6 +708,28 @@ import { os, path } from "@tynd/core/client"
 const { platform, arch } = await os.info()
 const home = await os.homeDir()
 const cfgFile = path.join(await os.configDir() ?? "", "myapp", "config.json")
+
+// Where the running binary lives — handy for bundled resources next to it.
+const res = await os.resourceDir()
+```
+
+### RPC helpers — timeout / cancel / once / listenN
+
+```typescript
+import { withTimeout, abortable, once, listenN } from "@tynd/core/client"
+
+// Reject the call if the backend takes longer than 2s.
+const user = await withTimeout(api.getUser("alice"), 2000)
+
+// Race against an AbortSignal.
+const ctrl = new AbortController()
+const result = await abortable(api.compute(), ctrl.signal)
+ctrl.abort()
+
+// Fire once, unsub automatically.
+once("app:ready", () => hideSplash())
+// Or up to N times — then auto-unsub.
+listenN("progress", 100, (p) => render(p))
 ```
 
 ### `http`
