@@ -75,7 +75,7 @@ Tynd is a desktop-app framework with a TypeScript backend, a native WebView fron
 
 ## API Reference
 
-- [API Reference](https://tynd.kvnpetit.com/docs/v0.3/api): Every public Tynd surface — backend, frontend RPC, and 26 OS APIs — with signatures and examples.
+- [API Reference](https://tynd.kvnpetit.com/docs/v0.3/api): Every public Tynd surface — backend, frontend RPC, and 30 OS APIs — with signatures and examples.
 - [Backend (@tynd/core)](https://tynd.kvnpetit.com/docs/v0.3/api/backend): Backend API — app.start, app.onReady, app.onClose, createEmitter, AppConfig, WindowConfig, MenuSubmenu, TrayConfig.
 - [app](https://tynd.kvnpetit.com/docs/v0.3/api/os/app): App identity, exit, and relaunch — the process-level controls.
 - [autolaunch](https://tynd.kvnpetit.com/docs/v0.3/api/os/autolaunch): Register / unregister the app to start at system boot.

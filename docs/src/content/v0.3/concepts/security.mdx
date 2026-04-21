@@ -19,7 +19,8 @@ Tynd targets a single-user desktop environment. The primary concerns:
 What's **not** in scope:
 
 - Protecting app secrets from a user with admin access on their own machine. Disk-encryption + OS-level isolation are the right answer, not app-level obfuscation.
-- Fine-grained permission ACLs (capability system). That's a Tauri v2 differentiator; Tynd currently has none.
+
+For fine-grained permission ACLs (capability system), Tynd now ships an opt-in [`security` API](/docs/v0.3/api/os/security) with glob allow / deny rules and a default-deny mode — guarding every `fs.*` call, `http.request`/`download`, and navigation in the WebView.
 
 ## Transport — no TCP, no firewall prompt
 
@@ -138,13 +139,25 @@ Consequences:
 - **No drift** — there is no second config file describing "what RPC calls are allowed" that could fall out of date.
 - **Grep-auditable** — search for `export async function` or `export const events =` to enumerate the entire surface.
 
+## Capability ACL (`security`) — opt-in since v0.3
+
+```ts
+import { security } from "@tynd/core/client";
+
+await security.configure({
+  fs:   { allow: ["${dataDir}/myapp/**"], deny: ["**/.ssh/**"] },
+  http: { allow: ["https://api.myapp.com/**"] },
+  defaultDeny: true,
+});
+```
+
+Deny beats allow. Globs: `*` (intra-segment) + `**` (cross-segment). Paths normalized; case-insensitive on Windows. Full reference: [security API](/docs/v0.3/api/os/security).
+
 ## What Tynd does NOT offer (yet)
 
-- **Capability-based ACL** (per-command / per-path / per-URL permissions) — Tauri v2 has this; Tynd doesn't.
 - **Context isolation** (renderer ↔ preload boundary) — N/A because there is no Node/Bun in the renderer; the only injected globals are the Tynd IPC shims.
 - **Renderer sandbox mode** — no configurable sandbox; the WebView runs with the OS's default web-content permissions.
 - **Permission request handlers** (camera, mic, geolocation prompts) — the WebView handles them per the OS default, Tynd doesn't intercept.
-- **Scoped FS / HTTP access patterns** — your backend is what enforces access control.
 
 ## Security checklist for shipping an app
 

@@ -728,7 +728,7 @@ A Tynd app has **three surfaces**:
 │  (WebView)               │◄──IPC─►│  (native layer)          │◄──IPC─►│  (Bun or QuickJS)        │
 │                          │        │                          │        │                          │
 │  • Your UI               │        │  • Window + event loop   │        │  • Your exported fns     │
-│  • @tynd/core/client     │        │  • 26 OS APIs (Rust)     │        │  • createEmitter         │
+│  • @tynd/core/client     │        │  • 30 OS APIs (Rust)     │        │  • createEmitter         │
 │  • createBackend<T>()    │        │  • tynd:// + tynd-bin:// │        │  • app.start(config)     │
 │  • OS calls (direct)     │        │  • Streaming RPC         │        │  • Lifecycle hooks       │
 └──────────────────────────┘        └──────────────────────────┘        └──────────────────────────┘
@@ -752,17 +752,17 @@ Three imports:
 
 Built from two crates:
 
-- **`tynd-host`** (library) — the native event loop, the IPC bridge, and the 26 OS APIs. Shared between both runtimes.
+- **`tynd-host`** (library) — the native event loop, the IPC bridge, and the 30 OS APIs. Shared between both runtimes.
 - **`tynd-full`** / **`tynd-lite`** (binaries) — one of them is the actual executable. `full` spawns a Bun subprocess; `lite` embeds QuickJS in-process.
 
-OS APIs (`dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `fs`, `http`, `websocket`, `sql`, `process`, `sidecar`, `store`, `terminal`, `compute`, `workers`, `keyring`, `autolaunch`, `monitor`, `single-instance`, `shortcuts`, `updater`, `app`, `os`, `path`) all live in Rust. They're called from the **frontend directly** — no round-trip through the TypeScript backend.
+OS APIs (`dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `fs`, `http`, `websocket`, `sql`, `process`, `sidecar`, `store`, `terminal`, `compute`, `workers`, `keyring`, `autolaunch`, `monitor`, `single-instance`, `shortcuts`, `updater`, `log`, `power`, `security`, `app`, `os`, `path`) all live in Rust. They're called from the **frontend directly** — no round-trip through the TypeScript backend.
 
 ### 3. Backend — your TypeScript
 
 Your exported functions, your typed emitters, your lifecycle hooks. Runs in one of two environments:
 
 - **`full`** — a Bun subprocess. You get full Bun + Node.js globals (`fetch`, `Bun.*`, `node:*`), JIT, and native npm bindings.
-- **`lite`** — embedded QuickJS inside the Rust host. You get **Web standards only** (WHATWG + W3C + TC39), plus all 26 Tynd OS APIs. No `Buffer`, no `process.*`, no `Bun.*`.
+- **`lite`** — embedded QuickJS inside the Rust host. You get **Web standards only** (WHATWG + W3C + TC39), plus all 30 Tynd OS APIs. No `Buffer`, no `process.*`, no `Bun.*`.
 
 Same TypeScript, same frontend. The only difference is what JS-level globals you can reach inside backend code. See [Runtime Modes](/docs/v0.3/concepts/runtimes).
 
@@ -795,7 +795,7 @@ Frontend (WebView)  ──postMessage──►  Rust host (IPC handler)  ──d
 
 **Shared (identical lite + full):**
 
-- All 26 OS APIs (`@tynd/core/client`) — they're Rust, independent of the JS runtime.
+- All 30 OS APIs (`@tynd/core/client`) — they're Rust, independent of the JS runtime.
 - The RPC wire format (`{ type: "call", id, fn, args }` / `{ type: "return", id, value }`).
 - The streaming RPC mechanism (per-stream credit, yield batching, cancellation on window close).
 - The `tynd://` frontend scheme + the `tynd-bin://` binary IPC scheme.
@@ -1165,7 +1165,7 @@ export default {
 - **`full`** spawns a **Bun subprocess**. You get the entire Bun + Node.js + Web-API environment: `fetch`, `WebSocket`, `Bun.*`, `node:*` imports, native npm packages, JSC JIT. Binary overhead: ~37 MB (Bun packed + zstd-compressed at build time).
 - **`lite`** embeds **QuickJS** inside the Rust host. QuickJS provides the ES2023 language (Promises, classes, Proxy, BigInt, Maps/Sets, …). Tynd layers a strict **Web-standards polyfill layer** on top — nothing Node-specific, nothing Bun-specific. Target binary: ~6 MB, single self-contained executable.
 
-Both runtimes expose the **same 26 Tynd OS APIs** (`fs`, `http`, `sql`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`, `menu`, `shortcuts`, `keyring`, `autolaunch`, `monitor`, `updater`, `websocket`, `app`, `os`, `path`) via `@tynd/core/client`. They're Rust-backed and behave identically.
+Both runtimes expose the **same 30 Tynd OS APIs** (`fs`, `http`, `sql`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`, `menu`, `shortcuts`, `keyring`, `autolaunch`, `monitor`, `updater`, `websocket`, `app`, `os`, `path`, `log`, `power`, `security`) via `@tynd/core/client`. They're Rust-backed and behave identically.
 
 ## Pick lite by default
 
@@ -1303,7 +1303,8 @@ Tynd targets a single-user desktop environment. The primary concerns:
 What's **not** in scope:
 
 - Protecting app secrets from a user with admin access on their own machine. Disk-encryption + OS-level isolation are the right answer, not app-level obfuscation.
-- Fine-grained permission ACLs (capability system). That's a Tauri v2 differentiator; Tynd currently has none.
+
+For fine-grained permission ACLs (capability system), Tynd now ships an opt-in [`security` API](/docs/v0.3/api/os/security) with glob allow / deny rules and a default-deny mode — guarding every `fs.*` call, `http.request`/`download`, and navigation in the WebView.
 
 ## Transport — no TCP, no firewall prompt
 
@@ -1422,13 +1423,25 @@ Consequences:
 - **No drift** — there is no second config file describing "what RPC calls are allowed" that could fall out of date.
 - **Grep-auditable** — search for `export async function` or `export const events =` to enumerate the entire surface.
 
+## Capability ACL (`security`) — opt-in since v0.3
+
+```ts
+import { security } from "@tynd/core/client";
+
+await security.configure({
+  fs:   { allow: ["${dataDir}/myapp/**"], deny: ["**/.ssh/**"] },
+  http: { allow: ["https://api.myapp.com/**"] },
+  defaultDeny: true,
+});
+```
+
+Deny beats allow. Globs: `*` (intra-segment) + `**` (cross-segment). Paths normalized; case-insensitive on Windows. Full reference: [security API](/docs/v0.3/api/os/security).
+
 ## What Tynd does NOT offer (yet)
 
-- **Capability-based ACL** (per-command / per-path / per-URL permissions) — Tauri v2 has this; Tynd doesn't.
 - **Context isolation** (renderer ↔ preload boundary) — N/A because there is no Node/Bun in the renderer; the only injected globals are the Tynd IPC shims.
 - **Renderer sandbox mode** — no configurable sandbox; the WebView runs with the OS's default web-content permissions.
 - **Permission request handlers** (camera, mic, geolocation prompts) — the WebView handles them per the OS default, Tynd doesn't intercept.
-- **Scoped FS / HTTP access patterns** — your backend is what enforces access control.
 
 ## Security checklist for shipping an app
 
@@ -7029,7 +7042,7 @@ singleInstance.acquire("MyApp-v1.0.0");         // ✗ — version breaks upgrad
 
 URL: https://tynd.kvnpetit.com/docs/v0.3/api
 TITLE: API Reference
-DESCRIPTION: Every public Tynd surface — backend, frontend RPC, and 26 OS APIs — with signatures and examples.
+DESCRIPTION: Every public Tynd surface — backend, frontend RPC, and 30 OS APIs — with signatures and examples.
 
 # API Reference
 
@@ -11561,9 +11574,9 @@ A ~6.5 MB binary with no Bun to download is a real UX win. Lite doesn't silently
 
 ## Tynd OS APIs — identical on both runtimes
 
-All 26 OS APIs are Rust-backed and work the same way:
+All 30 OS APIs are Rust-backed and work the same way:
 
-`app`, `tyndWindow`, `monitors`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `shortcuts`, `fs`, `path`, `os`, `process`, `sidecar`, `store`, `sql`, `http`, `websocket`, `terminal`, `workers`, `compute`, `keyring`, `autolaunch`, `singleInstance`, `updater`.
+`app`, `tyndWindow`, `monitors`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `shortcuts`, `fs`, `path`, `os`, `process`, `sidecar`, `store`, `sql`, `http`, `websocket`, `terminal`, `workers`, `compute`, `keyring`, `autolaunch`, `singleInstance`, `updater`, `log`, `power`, `security`.
 
 See the [API reference](/docs/v0.3/api).
 
@@ -12349,7 +12362,7 @@ The npm package that provides the `tynd` command. Includes `create`, `init`, `de
 
 ## `@tynd/core`
 
-The runtime-facing npm package. Exports `app`, `createEmitter` (backend), and 26 OS APIs + Web re-exports from `@tynd/core/client` (frontend).
+The runtime-facing npm package. Exports `app`, `createEmitter`, `onFrontendEmit`, `evalInFrontend` (backend), and 30 OS APIs + Web re-exports from `@tynd/core/client` (frontend).
 
 ## `@tynd/host`
 

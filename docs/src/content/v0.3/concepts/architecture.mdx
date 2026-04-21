@@ -13,7 +13,7 @@ A Tynd app has **three surfaces**:
 │  (WebView)               │◄──IPC─►│  (native layer)          │◄──IPC─►│  (Bun or QuickJS)        │
 │                          │        │                          │        │                          │
 │  • Your UI               │        │  • Window + event loop   │        │  • Your exported fns     │
-│  • @tynd/core/client     │        │  • 26 OS APIs (Rust)     │        │  • createEmitter         │
+│  • @tynd/core/client     │        │  • 30 OS APIs (Rust)     │        │  • createEmitter         │
 │  • createBackend<T>()    │        │  • tynd:// + tynd-bin:// │        │  • app.start(config)     │
 │  • OS calls (direct)     │        │  • Streaming RPC         │        │  • Lifecycle hooks       │
 └──────────────────────────┘        └──────────────────────────┘        └──────────────────────────┘
@@ -37,17 +37,17 @@ Three imports:
 
 Built from two crates:
 
-- **`tynd-host`** (library) — the native event loop, the IPC bridge, and the 26 OS APIs. Shared between both runtimes.
+- **`tynd-host`** (library) — the native event loop, the IPC bridge, and the 30 OS APIs. Shared between both runtimes.
 - **`tynd-full`** / **`tynd-lite`** (binaries) — one of them is the actual executable. `full` spawns a Bun subprocess; `lite` embeds QuickJS in-process.
 
-OS APIs (`dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `fs`, `http`, `websocket`, `sql`, `process`, `sidecar`, `store`, `terminal`, `compute`, `workers`, `keyring`, `autolaunch`, `monitor`, `single-instance`, `shortcuts`, `updater`, `app`, `os`, `path`) all live in Rust. They're called from the **frontend directly** — no round-trip through the TypeScript backend.
+OS APIs (`dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `fs`, `http`, `websocket`, `sql`, `process`, `sidecar`, `store`, `terminal`, `compute`, `workers`, `keyring`, `autolaunch`, `monitor`, `single-instance`, `shortcuts`, `updater`, `log`, `power`, `security`, `app`, `os`, `path`) all live in Rust. They're called from the **frontend directly** — no round-trip through the TypeScript backend.
 
 ### 3. Backend — your TypeScript
 
 Your exported functions, your typed emitters, your lifecycle hooks. Runs in one of two environments:
 
 - **`full`** — a Bun subprocess. You get full Bun + Node.js globals (`fetch`, `Bun.*`, `node:*`), JIT, and native npm bindings.
-- **`lite`** — embedded QuickJS inside the Rust host. You get **Web standards only** (WHATWG + W3C + TC39), plus all 26 Tynd OS APIs. No `Buffer`, no `process.*`, no `Bun.*`.
+- **`lite`** — embedded QuickJS inside the Rust host. You get **Web standards only** (WHATWG + W3C + TC39), plus all 30 Tynd OS APIs. No `Buffer`, no `process.*`, no `Bun.*`.
 
 Same TypeScript, same frontend. The only difference is what JS-level globals you can reach inside backend code. See [Runtime Modes](/docs/v0.3/concepts/runtimes).
 
@@ -80,7 +80,7 @@ Frontend (WebView)  ──postMessage──►  Rust host (IPC handler)  ──d
 
 **Shared (identical lite + full):**
 
-- All 26 OS APIs (`@tynd/core/client`) — they're Rust, independent of the JS runtime.
+- All 30 OS APIs (`@tynd/core/client`) — they're Rust, independent of the JS runtime.
 - The RPC wire format (`{ type: "call", id, fn, args }` / `{ type: "return", id, value }`).
 - The streaming RPC mechanism (per-stream credit, yield batching, cancellation on window close).
 - The `tynd://` frontend scheme + the `tynd-bin://` binary IPC scheme.

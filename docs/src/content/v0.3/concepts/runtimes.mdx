@@ -18,7 +18,7 @@ export default {
 - **`full`** spawns a **Bun subprocess**. You get the entire Bun + Node.js + Web-API environment: `fetch`, `WebSocket`, `Bun.*`, `node:*` imports, native npm packages, JSC JIT. Binary overhead: ~37 MB (Bun packed + zstd-compressed at build time).
 - **`lite`** embeds **QuickJS** inside the Rust host. QuickJS provides the ES2023 language (Promises, classes, Proxy, BigInt, Maps/Sets, …). Tynd layers a strict **Web-standards polyfill layer** on top — nothing Node-specific, nothing Bun-specific. Target binary: ~6 MB, single self-contained executable.
 
-Both runtimes expose the **same 26 Tynd OS APIs** (`fs`, `http`, `sql`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`, `menu`, `shortcuts`, `keyring`, `autolaunch`, `monitor`, `updater`, `websocket`, `app`, `os`, `path`) via `@tynd/core/client`. They're Rust-backed and behave identically.
+Both runtimes expose the **same 30 Tynd OS APIs** (`fs`, `http`, `sql`, `process`, `store`, `compute`, `workers`, `terminal`, `sidecar`, `singleInstance`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `tyndWindow`, `menu`, `shortcuts`, `keyring`, `autolaunch`, `monitor`, `updater`, `websocket`, `app`, `os`, `path`, `log`, `power`, `security`) via `@tynd/core/client`. They're Rust-backed and behave identically.
 
 ## Pick lite by default
 
