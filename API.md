@@ -420,6 +420,17 @@ tray.onClick(() => tyndWindow.show())
 tray.onRightClick(() => { /* ... */ })
 tray.onDoubleClick(() => tyndWindow.show())
 tray.onMenu("quit", () => process.exit(0))
+
+// Runtime mutation — requires an initial `tray` block in tynd.config.ts.
+await tray.setIcon("/abs/path/active.png")
+await tray.setTooltip(`${unread} unread`)
+await tray.setMenu([
+  { id: "open", label: "Open" },
+  { type: "separator" },
+  { id: "quit", label: "Quit", role: "quit" },
+])
+await tray.setTitle("42") // macOS menu bar only
+await tray.setVisible(false)
 ```
 
 ### `process`

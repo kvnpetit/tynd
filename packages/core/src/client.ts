@@ -50,7 +50,7 @@ export {
   type TerminalSpawnOptions,
   terminal,
 } from "./client/terminal.js"
-export { tray } from "./client/tray.js"
+export { tray, type TrayMenuItem } from "./client/tray.js"
 export {
   type UpdateInfo,
   type UpdaterCheckOptions,

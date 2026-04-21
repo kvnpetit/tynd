@@ -45,6 +45,12 @@ enum UserEvent {
         method: String,
         args: Value,
     },
+    TrayCmd {
+        label: String,
+        id: String,
+        method: String,
+        args: Value,
+    },
     /// Sent by a timeout thread when on_close takes too long
     ForceExit,
     /// Sent 500ms after CloseRequested if `cancelClose()` wasn't called.
@@ -170,7 +176,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         }
     };
 
-    let _system_tray: Option<tray_icon::TrayIcon> =
+    let system_tray: Option<tray_icon::TrayIcon> =
         config.tray.as_ref().and_then(|tc| match tray::build(tc) {
             Ok(tray) => {
                 let proxy = proxy.clone();
@@ -475,6 +481,28 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                             None => (false, Value::String(format!("window '{label}' not found"))),
                         }
                     },
+                };
+                let script = ipc::eval_os_result(&id, ok, &value);
+                let _ = webview_for(&label, &webview, &secondaries).evaluate_script(&script);
+            },
+
+            Event::UserEvent(UserEvent::TrayCmd {
+                label,
+                id,
+                method,
+                args,
+            }) => {
+                let (ok, value) = match system_tray.as_ref() {
+                    Some(t) => match tray::dispatch(t, &method, &args) {
+                        Ok(v) => (true, v),
+                        Err(e) => (false, Value::String(e)),
+                    },
+                    None => (
+                        false,
+                        Value::String(
+                            "tray: no tray configured — set `tray` in tynd.config.ts first".into(),
+                        ),
+                    ),
                 };
                 let script = ipc::eval_os_result(&id, ok, &value);
                 let _ = webview_for(&label, &webview, &secondaries).evaluate_script(&script);
