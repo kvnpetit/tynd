@@ -377,6 +377,10 @@ export const tyndWindow = {
   setEnabled(enabled: boolean): Promise<void> {
     return osCall("window", "setEnabled", { enabled })
   },
+  /** macOS: show this window on every Space. Other OS: no-op. */
+  setVisibleOnAllWorkspaces(visible: boolean): Promise<void> {
+    return osCall("window", "setVisibleOnAllWorkspaces", { visible })
+  },
 
   /**
    * Cmd+F-style in-page search. Uses the built-in `window.find()` present
