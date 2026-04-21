@@ -128,8 +128,9 @@ export interface NotificationOptions {
   sound?: string
   /**
    * Action buttons. Click emits `notification:action` with the clicked
-   * `id`. Fully supported on Linux (libnotify); Windows / macOS show the
-   * buttons but don't surface clicks back through this API.
+   * `id`. Works on all OS — Linux via libnotify, Windows via WinRT
+   * toasts, macOS via NSUserNotification (single button = direct action,
+   * 2+ = native dropdown).
    */
   actions?: { id: string; label: string }[]
 }
