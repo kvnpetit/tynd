@@ -27,6 +27,13 @@ export const tray = {
   setVisible(visible: boolean): Promise<void> {
     return osCall("tray", "setVisible", { visible })
   },
+  /**
+   * macOS: render the tray icon as a template so it adapts to light / dark
+   * menu bar automatically. No-op on Windows / Linux.
+   */
+  setIconAsTemplate(template: boolean): Promise<void> {
+    return osCall("tray", "setIconAsTemplate", { template })
+  },
   /** Replace the entire tray menu. Pass `[]` to clear. */
   setMenu(items: TrayMenuItem[]): Promise<void> {
     return osCall("tray", "setMenu", { items })

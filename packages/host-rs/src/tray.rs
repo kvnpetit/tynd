@@ -69,6 +69,16 @@ pub(crate) fn dispatch(
             tray.set_menu(Some(Box::new(new_menu)));
             Ok(Value::Null)
         },
+        "setIconAsTemplate" => {
+            // macOS: template icons automatically adapt to light / dark menu
+            // bar without requiring a separate image. No-op on Win / Linux.
+            let is_template = args
+                .get("template")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            tray.set_icon_as_template(is_template);
+            Ok(Value::Null)
+        },
         _ => Err(format!("tray.{method}: unknown method")),
     }
 }
