@@ -128,7 +128,7 @@ fn send_platform(
     {
         ACTION_WAITERS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         std::thread::spawn(move || {
-            handle.wait_for_action(|action| emit_action(action));
+            handle.wait_for_action(emit_action);
             ACTION_WAITERS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         });
     }
@@ -224,11 +224,9 @@ fn send_platform(
         // `send()` blocks until the user clicks or the banner is dismissed.
         // Off-thread so the call pool keeps serving unrelated requests.
         std::thread::spawn(move || {
-            if let Ok(response) = build(&actions) {
-                if let NotificationResponse::ActionButton(label) = response {
-                    if let Some((id, _)) = actions.iter().find(|(_, l)| *l == label) {
-                        emit_action(id);
-                    }
+            if let Ok(NotificationResponse::ActionButton(label)) = build(&actions) {
+                if let Some((id, _)) = actions.iter().find(|(_, l)| *l == label) {
+                    emit_action(id);
                 }
             }
         });
@@ -236,7 +234,11 @@ fn send_platform(
     Ok(Value::Null)
 }
 
+#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"))))]
 fn exe_stem() -> String {
+    // Only Windows + Linux platform branches use this helper — macOS reaches
+    // identity via mac-notification-sys' `set_application` instead. Gating the
+    // function prevents dead_code lints on the unused macOS build.
     std::env::current_exe()
         .ok()
         .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))

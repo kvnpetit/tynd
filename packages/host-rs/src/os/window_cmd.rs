@@ -405,9 +405,11 @@ fn set_skip_taskbar(win: &Window, skip: bool) -> Result<Value, String> {
 }
 
 #[cfg(target_os = "macos")]
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn set_skip_taskbar(_win: &Window, _skip: bool) -> Result<Value, String> {
     // macOS has no per-window Dock hide — see `app.setDockVisible`.
+    // Signature matches the Windows + Linux branches so the caller can
+    // `?`-propagate uniformly.
     Ok(Value::Null)
 }
 
