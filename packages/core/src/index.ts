@@ -21,6 +21,8 @@ import { startFull } from "./runtime/full.ts"
 import { startLite } from "./runtime/lite.ts"
 import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types.js"
 
+export { onFrontendEmit } from "./frontend-events.js"
+
 /**
  * Create a typed event emitter. Export the result from your backend module.
  * The frontend subscribes via `api.on("eventName", handler)`.

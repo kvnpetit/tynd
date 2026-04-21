@@ -108,6 +108,16 @@ globalThis.__tynd_mod__ = globalThis;
     step();
   }
   globalThis.__tynd_call__ = function (id, fnName, argsJson) {
+    // Reserved: frontend -> backend emit bus. Dispatches to listeners
+    // registered via `onFrontendEmit` without touching the user module.
+    if (fnName === '__tynd_fe_emit__') {
+      var a;
+      try { a = JSON.parse(argsJson); } catch (_) { a = []; }
+      var dispatcher = globalThis.__tynd_fe_dispatch__;
+      if (typeof dispatcher === 'function') dispatcher(a[0], a[1]);
+      __tynd_return__(id, true, 'null');
+      return;
+    }
     var mod = globalThis.__tynd_mod__;
     var fn = mod && mod[fnName];
     if (typeof fn !== 'function') {
