@@ -848,7 +848,7 @@ Backed by the `single-instance` crate for the OS lock (named pipe on Windows, ab
 
 Use a stable reverse-DNS id — it doubles as the OS lock name and the socket name.
 
-### `updater` — auto-update with Ed25519 verify
+### `updater` — auto-update with Ed25519 verify + periodic check
 
 ```typescript
 import { updater } from "@tynd/core/client"
