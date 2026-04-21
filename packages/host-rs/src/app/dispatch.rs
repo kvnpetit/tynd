@@ -113,6 +113,14 @@ pub(super) fn handle_ipc_body(
                 method,
                 args,
             });
+        } else if api == "tray" {
+            // Tray mutations need the main thread (TrayIcon isn't Sync on Win/macOS).
+            let _ = proxy.send_event(UserEvent::TrayCmd {
+                label: label.into(),
+                id,
+                method,
+                args,
+            });
         } else {
             // Bounded pool absorbs bursts; overflow falls back to a
             // one-shot thread so urgent calls don't queue behind
