@@ -2,7 +2,7 @@ use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tao::{
     dpi::{LogicalPosition, LogicalSize, PhysicalPosition},
-    window::Window,
+    window::{CursorIcon, ResizeDirection, Window},
 };
 
 use crate::window;
@@ -196,8 +196,105 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             Ok(Value::Null)
         },
 
+        "setCursorIcon" => {
+            let name = args
+                .get("icon")
+                .and_then(Value::as_str)
+                .unwrap_or("default");
+            win.set_cursor_icon(parse_cursor(name));
+            Ok(Value::Null)
+        },
+        "setCursorPosition" => {
+            let x = args.get("x").and_then(Value::as_f64).unwrap_or(0.0);
+            let y = args.get("y").and_then(Value::as_f64).unwrap_or(0.0);
+            win.set_cursor_position(LogicalPosition::new(x, y))
+                .map_err(|e| format!("setCursorPosition: {e}"))?;
+            Ok(Value::Null)
+        },
+        "setCursorVisible" => {
+            let visible = args.get("visible").and_then(Value::as_bool).unwrap_or(true);
+            win.set_cursor_visible(visible);
+            Ok(Value::Null)
+        },
+        "setIgnoreCursorEvents" => {
+            let ignore = args.get("ignore").and_then(Value::as_bool).unwrap_or(false);
+            win.set_ignore_cursor_events(ignore)
+                .map_err(|e| format!("setIgnoreCursorEvents: {e}"))?;
+            Ok(Value::Null)
+        },
+        "startDragging" => {
+            win.drag_window()
+                .map_err(|e| format!("startDragging: {e}"))?;
+            Ok(Value::Null)
+        },
+        "startResizeDragging" => {
+            let dir = args
+                .get("direction")
+                .and_then(Value::as_str)
+                .unwrap_or("southEast");
+            win.drag_resize_window(parse_resize_direction(dir)?)
+                .map_err(|e| format!("startResizeDragging: {e}"))?;
+            Ok(Value::Null)
+        },
+
         _ => Err(format!("window.{method}: unknown method")),
     }
+}
+
+/// Map an API string to tao's `CursorIcon`. Unknown names fall back to
+/// `Default` so apps don't hard-crash on typos.
+fn parse_cursor(name: &str) -> CursorIcon {
+    match name {
+        "crosshair" => CursorIcon::Crosshair,
+        "hand" => CursorIcon::Hand,
+        "arrow" => CursorIcon::Arrow,
+        "move" => CursorIcon::Move,
+        "text" => CursorIcon::Text,
+        "wait" => CursorIcon::Wait,
+        "help" => CursorIcon::Help,
+        "progress" => CursorIcon::Progress,
+        "notAllowed" => CursorIcon::NotAllowed,
+        "contextMenu" => CursorIcon::ContextMenu,
+        "cell" => CursorIcon::Cell,
+        "verticalText" => CursorIcon::VerticalText,
+        "alias" => CursorIcon::Alias,
+        "copy" => CursorIcon::Copy,
+        "noDrop" => CursorIcon::NoDrop,
+        "grab" => CursorIcon::Grab,
+        "grabbing" => CursorIcon::Grabbing,
+        "allScroll" => CursorIcon::AllScroll,
+        "zoomIn" => CursorIcon::ZoomIn,
+        "zoomOut" => CursorIcon::ZoomOut,
+        "eResize" => CursorIcon::EResize,
+        "nResize" => CursorIcon::NResize,
+        "neResize" => CursorIcon::NeResize,
+        "nwResize" => CursorIcon::NwResize,
+        "sResize" => CursorIcon::SResize,
+        "seResize" => CursorIcon::SeResize,
+        "swResize" => CursorIcon::SwResize,
+        "wResize" => CursorIcon::WResize,
+        "ewResize" => CursorIcon::EwResize,
+        "nsResize" => CursorIcon::NsResize,
+        "neswResize" => CursorIcon::NeswResize,
+        "nwseResize" => CursorIcon::NwseResize,
+        "colResize" => CursorIcon::ColResize,
+        "rowResize" => CursorIcon::RowResize,
+        _ => CursorIcon::Default,
+    }
+}
+
+fn parse_resize_direction(dir: &str) -> Result<ResizeDirection, String> {
+    Ok(match dir {
+        "east" => ResizeDirection::East,
+        "north" => ResizeDirection::North,
+        "northEast" => ResizeDirection::NorthEast,
+        "northWest" => ResizeDirection::NorthWest,
+        "south" => ResizeDirection::South,
+        "southEast" => ResizeDirection::SouthEast,
+        "southWest" => ResizeDirection::SouthWest,
+        "west" => ResizeDirection::West,
+        other => return Err(format!("unknown resize direction '{other}'")),
+    })
 }
 
 fn monitor_to_json(m: &tao::monitor::MonitorHandle, is_primary: bool) -> Value {

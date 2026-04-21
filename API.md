@@ -359,6 +359,13 @@ await tyndWindow.print() // opens the system print dialog
 const hit = tyndWindow.findInPage("invoice", { caseSensitive: false })
 tyndWindow.stopFindInPage()
 
+// Cursor control — click-through windows, drag zones, custom game cursors.
+await tyndWindow.setCursorIcon("grab")
+await tyndWindow.setCursorVisible(false)
+await tyndWindow.setIgnoreCursorEvents(true) // clicks pass through to window behind
+dragHandle.addEventListener("mousedown", () => void tyndWindow.startDragging())
+resizeCorner.addEventListener("mousedown", () => void tyndWindow.startResizeDragging("southEast"))
+
 // Native file drop — paths are real OS paths, not browser File objects.
 const offDrop = tyndWindow.onDrop(({ paths, x, y }) => {
   for (const p of paths) void openFile(p)
