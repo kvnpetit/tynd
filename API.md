@@ -421,6 +421,10 @@ import { clipboard } from "@tynd/core/client"
 
 const text = await clipboard.readText()
 await clipboard.writeText("Hello!")
+
+// Polls the clipboard and fires on every change. Returns an unsubscribe fn.
+const unsub = await clipboard.onChange(({ text }) => updateSnippetPreview(text))
+// Later: await unsub()
 ```
 
 ### `shell`

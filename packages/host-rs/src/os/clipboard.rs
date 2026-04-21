@@ -1,7 +1,12 @@
 use arboard::{Clipboard, ImageData};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use image::{ImageBuffer, ImageFormat, Rgba};
+use parking_lot::Mutex;
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
+
+use super::events;
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -12,6 +17,8 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "readImage" => read_image(),
         "writeImage" => write_image(args),
         "clear" => clear(),
+        "startMonitoring" => start_monitoring(args),
+        "stopMonitoring" => stop_monitoring(),
         _ => Err(format!("clipboard.{method}: unknown method")),
     }
 }
@@ -120,4 +127,68 @@ fn clear() -> Result<Value, String> {
     let mut cb = new_cb()?;
     cb.clear().map_err(|e| format!("clipboard.clear: {e}"))?;
     Ok(Value::Null)
+}
+
+// --- Change monitoring --------------------------------------------------
+// No cross-OS event API for the clipboard — poll on a background thread.
+// 200ms is fast enough for typical paste flows and cheap (single text read
+// + hash compare). Image changes are detected too, via the same text path:
+// arboard returns an error when the clipboard holds a non-text payload, so
+// the "last seen" marker just notes transitions.
+
+static MONITORING: AtomicBool = AtomicBool::new(false);
+static LAST_HASH: OnceLock<Mutex<u64>> = OnceLock::new();
+const DEFAULT_POLL_MS: u64 = 200;
+
+fn last_hash() -> &'static Mutex<u64> {
+    LAST_HASH.get_or_init(|| Mutex::new(0))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn start_monitoring(args: &Value) -> Result<Value, String> {
+    if MONITORING.swap(true, Ordering::SeqCst) {
+        return Ok(Value::Null);
+    }
+    let interval = args
+        .get("intervalMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(DEFAULT_POLL_MS)
+        .max(50);
+
+    // Seed with the current content so the first tick doesn't fire spuriously.
+    if let Ok(initial) = Clipboard::new().and_then(|mut c| c.get_text()) {
+        *last_hash().lock() = hash(initial.as_bytes());
+    }
+
+    std::thread::spawn(move || {
+        while MONITORING.load(Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(interval));
+            let Ok(mut cb) = Clipboard::new() else {
+                continue;
+            };
+            let text = cb.get_text().unwrap_or_default();
+            let h = hash(text.as_bytes());
+            let mut last = last_hash().lock();
+            if h != *last {
+                *last = h;
+                drop(last);
+                events::emit("clipboard:change", &json!({ "text": text }));
+            }
+        }
+    });
+    Ok(Value::Null)
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn stop_monitoring() -> Result<Value, String> {
+    MONITORING.store(false, Ordering::SeqCst);
+    Ok(Value::Null)
+}
+
+fn hash(bytes: &[u8]) -> u64 {
+    // ahash = non-crypto, collision-resistant enough for change detection.
+    use std::hash::{BuildHasher as _, Hasher as _};
+    let mut h = ahash::RandomState::with_seeds(1, 2, 3, 4).build_hasher();
+    h.write(bytes);
+    h.finish()
 }
