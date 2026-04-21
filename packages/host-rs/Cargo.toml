@@ -65,6 +65,15 @@ gtk.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tauri-winrt-notification.workspace = true
+# Direct Win32 access for runtime-only features tao doesn't surface: DWM
+# system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Com",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys.workspace = true

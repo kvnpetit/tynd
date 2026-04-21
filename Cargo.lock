@@ -4282,6 +4282,7 @@ dependencies = [
  "tungstenite",
  "ureq",
  "user-idle",
+ "windows-sys 0.59.0",
  "wry",
  "zstd",
 ]
