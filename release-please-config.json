@@ -25,6 +25,6 @@
     { "type": "test", "section": "Tests", "hidden": true },
     { "type": "style", "section": "Style", "hidden": true }
   ],
-  "separate-pull-requests": false,
+  "separate-pull-requests": true,
   "include-component-in-tag": false
 }
