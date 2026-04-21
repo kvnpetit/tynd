@@ -245,7 +245,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Left-click event | ✅ | ✅ | ✅ | ✅ |
 | Right-click event | ✅ | ✅ | ✅ | ✅ |
 | Double-click event | ✅ | ✅ | ✅ | ✅ |
-| Mouse enter / move / leave | ❌ | ✅ | ✅ | ✅ |
+| Mouse enter / move / leave | ✅ | ✅ | ✅ | ✅ |
 | Menu item click | ✅ | ✅ | ✅ | ✅ |
 | Dynamic icon update | ✅ | ✅ | ✅ | ✅ |
 | Title text next to icon (macOS) | ✅ | ✅ | ✅ | ✅ |
@@ -788,7 +788,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Monitors & screens | 7/8 | 7/8 | 6/8 | 7/8 |
 | Drag & drop | 2/4 | 3/4 | 4/4 | 3/4 |
 | Dialogs | 10/18 | 13/18 | 14/18 | 14/18 |
-| System tray | 10/20 | 15/20 | 18/20 | 14/20 |
+| System tray | 11/20 | 15/20 | 18/20 | 14/20 |
 | Menu bar (app) | 8/19 | 15/19 | 15/19 | 13/19 |
 | Context menu | 1/4 | 3/4 | 4/4 | 3/4 |
 | Clipboard | 7/9 | 8/9 | 2/9 | 8/9 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~223/503 (44%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~224/503 (45%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
