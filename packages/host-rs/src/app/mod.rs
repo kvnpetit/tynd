@@ -283,6 +283,9 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     // Per-window yield buffer — flushed in batches so a 10k-yield burst ends
     // up as ~30 `evaluate_script` calls instead of 10k. See YIELD_BATCH_MAX.
     let mut yield_buffer: HashMap<String, Vec<(String, Value)>> = HashMap::new();
+    // Last zoom level passed to `setZoom`, keyed by window label. wry has no
+    // getter so we cache the write.
+    let mut zoom_levels: HashMap<String, f64> = HashMap::new();
     let flush_scheduled = std::sync::Arc::new(AtomicBool::new(false));
 
     event_loop.run(move |event, target, control_flow| {
@@ -438,10 +441,17 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                         let z = args.get("level").and_then(Value::as_f64).unwrap_or(1.0);
                         let wv = webview_for(&label, &webview, &secondaries);
                         match wv.zoom(z) {
-                            Ok(()) => (true, Value::Null),
+                            Ok(()) => {
+                                zoom_levels.insert(label.clone(), z);
+                                (true, Value::Null)
+                            },
                             Err(e) => (false, Value::String(format!("setZoom: {e}"))),
                         }
                     },
+                    "getZoom" => (
+                        true,
+                        Value::from(zoom_levels.get(&label).copied().unwrap_or(1.0)),
+                    ),
                     "openDevTools" => {
                         let wv = webview_for(&label, &webview, &secondaries);
                         #[cfg(debug_assertions)]
