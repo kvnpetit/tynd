@@ -334,6 +334,28 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             set_has_shadow(win, enabled);
             Ok(Value::Null)
         },
+        "setTitlebarTransparent" => {
+            let t = args
+                .get("transparent")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            set_titlebar_transparent(win, t);
+            Ok(Value::Null)
+        },
+        "setFullsizeContentView" => {
+            let f = args
+                .get("fullsize")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            set_fullsize_content_view(win, f);
+            Ok(Value::Null)
+        },
+        "setTrafficLightInset" => {
+            let x = args.get("x").and_then(Value::as_f64).unwrap_or(0.0);
+            let y = args.get("y").and_then(Value::as_f64).unwrap_or(0.0);
+            set_traffic_light_inset(win, x, y);
+            Ok(Value::Null)
+        },
         "setWindowIcon" => {
             // Passing null clears the icon; a path reloads it.
             match args.get("path").and_then(Value::as_str) {
@@ -414,6 +436,30 @@ fn set_has_shadow(_win: &Window, _enabled: bool) {
     // Windows / Linux: no runtime API to toggle the native drop shadow.
     // Callers control this via the `decorations` flag at build time.
 }
+
+#[cfg(target_os = "macos")]
+fn set_titlebar_transparent(win: &Window, transparent: bool) {
+    use tao::platform::macos::WindowExtMacOS;
+    win.set_titlebar_transparent(transparent);
+}
+#[cfg(not(target_os = "macos"))]
+fn set_titlebar_transparent(_win: &Window, _transparent: bool) {}
+
+#[cfg(target_os = "macos")]
+fn set_fullsize_content_view(win: &Window, fullsize: bool) {
+    use tao::platform::macos::WindowExtMacOS;
+    win.set_fullsize_content_view(fullsize);
+}
+#[cfg(not(target_os = "macos"))]
+fn set_fullsize_content_view(_win: &Window, _fullsize: bool) {}
+
+#[cfg(target_os = "macos")]
+fn set_traffic_light_inset(win: &Window, x: f64, y: f64) {
+    use tao::platform::macos::WindowExtMacOS;
+    win.set_traffic_light_inset(LogicalPosition::new(x, y));
+}
+#[cfg(not(target_os = "macos"))]
+fn set_traffic_light_inset(_win: &Window, _x: f64, _y: f64) {}
 
 /// Map an API string to tao's `CursorIcon`. Unknown names fall back to
 /// `Default` so apps don't hard-crash on typos.
