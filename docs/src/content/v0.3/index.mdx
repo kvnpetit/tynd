@@ -1,0 +1,113 @@
+---
+title: Introduction
+description: "Tynd is a desktop-app framework with a TypeScript backend, a native WebView front-end, and small native binaries. One language end-to-end, zero codegen, two runtime modes."
+---
+
+# Tynd
+
+**Desktop apps in TypeScript. One language, native binary, no glue code.**
+
+Tynd is a desktop-app framework with a **TypeScript backend** and a native WebView front-end. Your frontend and backend are both TypeScript. RPC types flow from `typeof backend` — no codegen, no IDL, no schema file. Build produces a small self-contained binary: `~6.5 MB` for the `lite` runtime, `~44 MB` for `full` (Bun packed).
+
+```bash
+bunx @tynd/cli create my-app
+```
+
+<Callout type="info">
+  **New here?** Start with the [5-minute quickstart](/docs/v0.3/getting-started) — scaffold an app, run it with HMR, ship a binary.
+</Callout>
+
+<Callout type="success">
+  **v0.3 highlights.** Three new OS APIs (`log`, `power`, `security`), runtime tray mutation + mouse events, Windows 11 Mica/Acrylic backdrop, macOS titlebar control, cursor API, native drag-drop paths, FS handles + `trash` + `symlink`/`hardlink` + `copyDir`, clipboard change monitor, notification actions + schedule, updater periodic check + proxy + headers, webview `setUserAgent` / `onNavigation` / `onPageLoad`, backend ↔ frontend events (`emitTo`, `createFrontendEmitter`, `onFrontendEmit`), `evalInFrontend`, window positioner (13 presets), modal child windows, `hideOnFocusLost` / `hideOnEscape`, `quitOnLastWindowClosed` config, `withTimeout` + `abortable` + `once` + `listenN` RPC helpers. See [COMPARISON.md](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md) for the full matrix — Tynd now covers ~46 % of 503 desktop-framework rows.
+</Callout>
+
+## At a glance
+
+- **TypeScript top to bottom.** Backend, frontend, IPC, config — same language, no codegen.
+- **Two runtime modes, one API.** Start with `lite` (~6.5 MB binary, embedded QuickJS). Switch to `full` with one config line when you need Bun's JIT or native npm bindings.
+- **Native window, zero network.** No HTTP server, no loopback TCP port, no firewall prompt. Frontend and IPC ride a native custom scheme.
+- **30 OS APIs, identical in both modes** — `fs` (+ watcher, handles, symlinks, trash), `sql`, `http`, `websocket`, `terminal` (real PTY), `compute`, `dialog`, `tray` (runtime mutation + mouse events), `menu` (+ context menu), `notification` (icon/sound/actions/schedule), `clipboard` (+ change monitor), `shell` (+ reveal), `process`, `sidecar`, `singleInstance`, `shortcuts`, `keyring`, `autolaunch`, `store`, `updater` (+ periodic check), `log` (JSON-lines + rotation + console capture), `power` (idle time), `security` (capability ACL), `workers`, `app`, `os`, `path`, `tyndWindow` (cursor + Mica/Acrylic + findInPage + positioner), plus typed emitters (bidirectional) and streaming RPC.
+- **Zero-copy binary IPC.** Multi-MB payloads skip JSON/base64 — `ArrayBuffer` end-to-end, 5-10× faster than the usual webview-framework binary path.
+- **First-class installers.** `.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS, MSI. Build tools auto-download on first build. Built-in code signing + macOS notarization.
+- **Framework-agnostic.** React, Vue, Svelte, Solid, Preact, Lit, Angular — anything that outputs a pure SPA.
+
+## Why Tynd
+
+Most desktop-app frameworks force you to pick a language for the native side (Rust for Tauri, Go for Wails, or the entire Chromium for Electron). Tynd keeps the native layer invisible: **you write TypeScript, you get a native binary**.
+
+<Cards>
+  <Cards.Card title="TypeScript end-to-end" href="/docs/v0.3/concepts/architecture">
+    Backend, frontend, RPC — same language, same types.
+  </Cards.Card>
+  <Cards.Card title="Two runtimes, same API" href="/docs/v0.3/runtimes">
+    `lite` for a 6.5 MB binary, `full` for the full Node/Bun surface.
+  </Cards.Card>
+  <Cards.Card title="Zero-network IPC" href="/docs/v0.3/concepts/ipc">
+    RPC and assets never touch TCP — no loopback port, no firewall prompt.
+  </Cards.Card>
+  <Cards.Card title="Complete API reference" href="/docs/v0.3/api">
+    Every backend, frontend, and OS API with signatures and examples.
+  </Cards.Card>
+</Cards>
+
+## How it works
+
+```
+TypeScript backend                         Native OS window
+──────────────────────────                 ─────────────────────────
+  export async function greet()  ◄── IPC ─ await api.greet("Alice")
+  events.emit("ready", payload)  ─── push ─► api.on("ready", handler)
+         │
+         ▼
+  tynd-full  — your TypeScript runs on Bun, wrapped in a native host
+  tynd-lite  — your TypeScript runs inside the native host, no extra runtime
+```
+
+Frontend assets and IPC ride a native custom scheme — no HTTP server, no loopback port, no firewall prompt. Multi-MB binary payloads (`fs.readBinary`, `fs.writeBinary`, `compute.hash`) skip JSON entirely via a dedicated binary channel.
+
+## Two runtime modes
+
+| | `lite` | `full` |
+|---|---|---|
+| JS runtime | embedded QuickJS — ships inside the native binary | Bun, packed into the native binary |
+| Hot JS speed | interpreter — fine for IPC glue, slower on tight loops | **Bun JIT — often 10-100× faster on CPU-bound JS** |
+| IPC overhead | in-process, no serialization hop | one serialization hop (OS pipe) |
+| Tynd OS APIs (`fs`, `http`, `sql`, …) | ✓ | ✓ |
+| Web-standard globals (`fetch`, `WebSocket`, `crypto.subtle`) | ✓ polyfilled | ✓ native |
+| JS-level `Bun.*` / `node:*` | ✗ | ✓ |
+| npm with native bindings | ✗ | ✓ |
+| Binary size | smaller (~6.5 MB) | larger (~44 MB, Bun compressed) |
+| Startup | faster (everything in-process) | slower (spawns Bun) |
+
+See [Runtimes](/docs/v0.3/runtimes) for the full parity table.
+
+## Requirements
+
+**[Bun](https://bun.sh) is required for app developers.** Tynd is a Bun-first framework — the CLI, the dev server, and the full runtime all run on Bun. Node.js is not supported as a replacement.
+
+```bash
+# macOS / Linux
+curl -fsSL https://bun.sh/install | bash
+
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+**End users of your built app need nothing** — whichever runtime you shipped is already packed into the distributed binary.
+
+## What to read next
+
+<Cards>
+  <Cards.Card title="Getting Started" href="/docs/v0.3/getting-started">
+    Scaffold a project, run it with HMR, produce a release binary.
+  </Cards.Card>
+  <Cards.Card title="Architecture" href="/docs/v0.3/concepts/architecture">
+    Frontend, Rust host, TS backend — how the three surfaces fit.
+  </Cards.Card>
+  <Cards.Card title="Guides" href="/docs/v0.3/guides">
+    Recipes for streaming, multi-window, auto-update, signing, bundling.
+  </Cards.Card>
+  <Cards.Card title="Comparisons" href="/docs/v0.3/compare">
+    Tynd vs Tauri, Electron, Wails — 39 categories, 503 rows.
+  </Cards.Card>
+</Cards>

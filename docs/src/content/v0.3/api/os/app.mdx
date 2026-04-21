@@ -1,0 +1,91 @@
+---
+title: app
+description: "App identity, exit, and relaunch — the process-level controls."
+---
+
+# `app`
+
+```ts
+import { app } from "@tynd/core/client";
+```
+
+App identity and lifecycle. Callable from both frontend and backend.
+
+## `app.setInfo({ name, version, bundleId })`
+
+Sets the app's identity. Typically called once from the backend at startup using fields from `package.json`:
+
+```ts
+import pkg from "../package.json";
+await app.setInfo({
+  name:     pkg.name,
+  version:  pkg.version,
+  bundleId: "com.acme.myapp",   // reverse-DNS identifier
+});
+```
+
+Used by other APIs (notifications, tray tooltip, OS integration) to identify the app consistently.
+
+## `app.getName(): Promise<string>`
+
+Returns the registered name. Falls back to the binary file stem if `setInfo` wasn't called.
+
+```ts
+const name = await app.getName();
+```
+
+## `app.getVersion(): Promise<string>`
+
+Returns the registered version. Falls back to `"0.0.0"`.
+
+```ts
+const version = await app.getVersion();
+```
+
+## `app.getFrameworkVersion(): Promise<string>`
+
+Version of the Tynd host binary, baked in at compile time via `CARGO_PKG_VERSION`. Surface it in About dialogs + crash reports without rolling your own constant.
+
+```ts
+const tynd = await app.getFrameworkVersion();
+```
+
+## `app.getBundleIdentifier(): Promise<string | null>`
+
+Returns the reverse-DNS identifier set via `setInfo({ bundleId })`, or `null` if none was set.
+
+```ts
+const id = await app.getBundleIdentifier();
+```
+
+## `app.relaunch(): Promise<void>`
+
+Spawns a fresh copy of the current binary and exits the current process. Equivalent to user-initiated relaunch.
+
+```ts
+await app.relaunch();
+```
+
+Useful after applying an update, toggling a runtime flag, or loading a new backend.
+
+## `app.exit(code?: number): Promise<void>`
+
+Exits the app gracefully. The `app.onClose` hook runs (with its usual 2-second watchdog) before the process terminates.
+
+```ts
+await app.exit(0);
+```
+
+Pass a non-zero code to signal an error to the invoking shell / installer. Default is `0`.
+
+## Notes
+
+- `app.exit(0)` is preferable to `process.exit(0)` — the former runs lifecycle hooks, the latter doesn't.
+- On Windows, `relaunch` uses `cmd /c start` so the current `.exe` unlocks before the new one runs.
+- On Linux, `relaunch` re-exec's via `/proc/self/exe`.
+- On macOS, `relaunch` spawns via `NSWorkspace.openApplication`.
+
+## Related
+
+- [Single Instance guide](/docs/v0.3/guides/single-instance) — argv forwarding.
+- [Updater](/docs/v0.3/api/os/updater) — `install({ relaunch: true })` uses `app.relaunch` internally.

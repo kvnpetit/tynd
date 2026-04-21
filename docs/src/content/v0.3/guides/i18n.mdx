@@ -1,0 +1,180 @@
+---
+title: Internationalization
+description: "Detect the user's locale, localize UI strings, format dates and numbers — in both `lite` (stubbed Intl) and `full` (full ICU)."
+---
+
+# Internationalization
+
+Tynd exposes the OS locale via `os.locale()` and the dark-mode preference via `os.isDarkMode()`. Beyond that, i18n is just "pick a lib and go" — with one caveat: **`Intl.*` is stubbed in lite**.
+
+## Detect the user's locale
+
+```ts
+import { os } from "@tynd/core/client";
+
+const locale = await os.locale();   // "en-US", "fr-FR", "ja-JP", …
+```
+
+BCP-47 tag, matches what the OS reports. Read at app startup; re-read if you support "language" preference changes (OS-level language changes require app restart on all three OSes).
+
+## UI strings — pick a lib
+
+Any pure-JS i18n library works:
+
+| Lib | Size | Notes |
+|---|---|---|
+| [`i18next`](https://www.i18next.com) | ~40 KB | Ecosystem leader. React-i18next, Vue-i18n integrations. |
+| [`format-message`](https://formatjs.io/docs/format-js/) | ~15 KB | ICU MessageFormat syntax. |
+| [`@lingui/core`](https://lingui.dev) | ~10 KB | Lightweight; compile-time extraction. |
+| **Rolling your own** | ~0 KB | Flat JSON + a `t("key")` function — fine for small apps. |
+
+### Minimal roll-your-own
+
+```ts filename="src/i18n.ts"
+import { os } from "@tynd/core/client";
+import en from "./locales/en.json";
+import fr from "./locales/fr.json";
+
+const catalogs: Record<string, Record<string, string>> = { en, fr };
+
+let currentLocale = "en";
+
+export async function initI18n() {
+  const full = await os.locale();
+  const short = full.split("-")[0];
+  currentLocale = catalogs[short] ? short : "en";
+}
+
+export function t(key: string, vars?: Record<string, string>) {
+  let s = catalogs[currentLocale][key] ?? key;
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      s = s.replace(`{${k}}`, v);
+    }
+  }
+  return s;
+}
+```
+
+```json filename="src/locales/en.json"
+{
+  "greeting": "Hello, {name}!",
+  "save": "Save",
+  "cancel": "Cancel"
+}
+```
+
+```json filename="src/locales/fr.json"
+{
+  "greeting": "Bonjour, {name} !",
+  "save": "Enregistrer",
+  "cancel": "Annuler"
+}
+```
+
+## Dates + numbers
+
+### Full runtime
+
+`Intl.DateTimeFormat`, `Intl.NumberFormat`, `Intl.RelativeTimeFormat`, `Intl.Collator`, `Intl.Segmenter` — all available, with full ICU locale data.
+
+```ts
+const formatter = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" });
+formatter.format(new Date());   // "25 avril 2026"
+```
+
+### Lite runtime
+
+QuickJS ships a **stub** — `Intl.DateTimeFormat` exists but ignores locale-specific rules. Workaround: bundle a pure-JS date lib.
+
+```ts
+import { format } from "date-fns";
+import { fr, ja, enUS } from "date-fns/locale";
+
+const localeMap = { fr, ja, en: enUS };
+const locale = localeMap[currentLocale.split("-")[0]] ?? enUS;
+
+format(new Date(), "PPP", { locale });   // "25 avril 2026"
+```
+
+For numbers, [`numbro`](https://numbrojs.com/) or rolling your own with a locale-specific separator map works.
+
+See [Alternatives](https://github.com/kvnpetit/tynd/blob/main/ALTERNATIVES.md) for the full list of pure-JS libs that replace `Intl`.
+
+## RTL layouts
+
+The WebView handles `dir="rtl"` natively:
+
+```html
+<html lang="ar" dir="rtl">
+```
+
+Toggle at runtime by setting `document.dir = "rtl" | "ltr"` when the user switches language.
+
+CSS logical properties make this easier:
+
+```css
+.card {
+  padding-inline-start: 1rem;   /* margin-left in LTR, margin-right in RTL */
+  border-inline-end: 1px solid #ccc;
+}
+```
+
+## Plurals
+
+ICU MessageFormat (`{count, plural, one {# item} other {# items}}`) is the standard. `format-message`, `i18next`, `@lingui/core` all support it. Rolling your own for plurals is harder than for basic substitution — reach for a lib.
+
+## Persisting the user's choice
+
+```ts
+import { createStore } from "@tynd/core/client";
+
+const prefs = createStore("com.example.myapp");
+
+export async function setLanguage(lang: string) {
+  await prefs.set("lang", lang);
+  currentLocale = lang;
+  // re-render the app
+}
+
+export async function initI18n() {
+  const saved = await prefs.get<string>("lang");
+  const full = await os.locale();
+  currentLocale = saved ?? full.split("-")[0];
+}
+```
+
+## Installer / bundle metadata
+
+The NSIS bundler on Windows accepts a list of languages:
+
+```ts filename="tynd.config.ts"
+bundle: {
+  nsis: {
+    languages: ["English", "French", "Japanese"],
+  },
+}
+```
+
+This controls the installer wizard's language, not the app's. Your app's language is whatever you initialize from `os.locale()` / user preference.
+
+## OS-integrated surfaces
+
+Some UI is system-rendered and uses the OS language regardless of your app's preference:
+
+- **Native dialogs** (`dialog.openFile`, `dialog.confirm`) — button labels ("Open", "Save", "Cancel") come from the OS.
+- **System tray** — OS-native.
+- **Notifications** — your title/body are shown as-is, but "Quit" on an interactive notification (if you add one in a future release) uses the OS language.
+- **Auto-update** — you control the user-facing strings; OS-level installer dialogs (MSI, notarization on macOS) are OS-localized.
+
+## Accessibility intersects
+
+- Screen readers read text in the page's `lang`. Set `<html lang>` correctly or VoiceOver / Narrator may mispronounce.
+- RTL users expect RTL focus order — use logical CSS, not hard-coded left/right.
+
+See [Accessibility](/docs/v0.3/guides/accessibility).
+
+## Related
+
+- [os.locale API](/docs/v0.3/api/os/os).
+- [Runtimes](/docs/v0.3/runtimes) — what's in `Intl` per runtime.

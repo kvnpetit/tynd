@@ -1,0 +1,77 @@
+---
+title: notification
+description: "Native OS notifications with icon, sound, action buttons, click callback, and scheduling."
+---
+
+# `notification`
+
+```ts
+import { notification } from "@tynd/core/client";
+```
+
+## `send(title, opts?): Promise<void>`
+
+Fire a native notification.
+
+```ts
+await notification.send("Build Complete", { body: "0 errors." });
+```
+
+### Options
+
+```ts
+interface NotificationOptions {
+  body?:    string;
+  icon?:    string;   // absolute path to PNG / ICO
+  sound?:   string;   // platform sound name (e.g. "default")
+  actions?: { id: string; label: string }[];
+}
+```
+
+### Action buttons (cross-OS)
+
+Click emits `notification:action` with the clicked `id`.
+
+```ts
+await notification.send("New message", {
+  body: "From Alice",
+  icon: "/abs/avatar.png",
+  sound: "default",
+  actions: [
+    { id: "reply",     label: "Reply" },
+    { id: "mark-read", label: "Mark as read" },
+  ],
+});
+
+notification.onAction(({ action }) => {
+  if (action === "reply") openReplyWindow();
+});
+```
+
+Linux uses libnotify's `wait_for_action`; Windows uses `tauri-winrt-notification`'s `on_activated`; macOS uses `mac-notification-sys`' `MainButton` (single action button shows directly; two or more become a native dropdown).
+
+## `schedule(title, delayMs, opts?): Promise<number>`
+
+Fire after `delayMs` ms. Returns a numeric id that `cancel()` aborts.
+
+```ts
+const id = await notification.schedule("Reminder", 60_000, { body: "Stand up!" });
+// later
+await notification.cancel(id); // true if the timer was still pending
+```
+
+`cancel()` aborts scheduled deliveries; it does **not** remove notifications that were already shown (platform APIs to reach already-delivered toasts aren't exposed yet).
+
+## `checkPermission() / requestPermission(): Promise<"granted">`
+
+Native OSes grant by default; these exist for web-API parity so the same code runs in a PWA and Tynd.
+
+```ts
+if ((await notification.checkPermission()) === "granted") {
+  await notification.send("hi");
+}
+```
+
+## Related
+
+- [tray](/docs/v0.3/api/os/tray) — persistent tray icon + menu.

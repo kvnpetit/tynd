@@ -1,0 +1,51 @@
+---
+title: Detect Online / Offline
+description: "Periodic connectivity probe. The DOM `navigator.onLine` lies; use a real network check."
+---
+
+# Detect Online / Offline
+
+`navigator.onLine` only reflects the local network state — a connected-but-no-internet laptop still reports `true`. For real connectivity, probe a known endpoint.
+
+```ts
+import { http } from "@tynd/core/client";
+
+async function isOnline(): Promise<boolean> {
+  try {
+    const res = await http.get("https://www.gstatic.com/generate_204", {
+      timeoutMs: 3000,
+    });
+    return res.status === 204;
+  } catch {
+    return false;
+  }
+}
+
+export function watchConnectivity(cb: (online: boolean) => void) {
+  let online = true;
+  const tick = async () => {
+    const now = await isOnline();
+    if (now !== online) {
+      online = now;
+      cb(now);
+    }
+  };
+  void tick();
+  const id = setInterval(tick, 30_000);
+  return () => clearInterval(id);
+}
+
+// usage
+const off = watchConnectivity((online) => {
+  console.log(online ? "back online" : "offline");
+});
+```
+
+`gstatic.com/generate_204` is Google's captive-portal probe — returns `204 No Content`, no body, ~150 bytes on the wire. Cheap to hit every 30 s.
+
+**Alternative endpoints:**
+
+- `https://www.cloudflare.com/cdn-cgi/trace` — Cloudflare equivalent.
+- Your own API's `/health` endpoint — gives you "the server is up" not just "internet works".
+
+**Related:** [http API](/docs/v0.3/api/os/http).

@@ -1,0 +1,55 @@
+---
+title: security
+description: "Opt-in capability ACL for fs + http. Glob allow/deny rules; deny overrides allow."
+---
+
+# `security`
+
+```ts
+import { security } from "@tynd/core/client";
+```
+
+Opt-in capability-based access control for the `fs` and `http` APIs. Until `configure` is called every API behaves as before.
+
+**Precedence:** deny rules always beat allow rules. An empty `allow` list means "allow everything" unless `defaultDeny` is on, in which case it means "deny everything".
+
+## `configure(policy): Promise<void>`
+
+```ts
+import { path } from "@tynd/core/client";
+
+await security.configure({
+  fs: {
+    allow: [`${await path.dataDir()}/myapp/**`],
+    deny: ["**/.ssh/**", "**/.env"],
+  },
+  http: {
+    allow: ["https://api.myapp.com/**", "https://cdn.myapp.com/**"],
+  },
+  defaultDeny: true,
+});
+```
+
+### Glob syntax
+
+- `*` — any run of characters within a segment (doesn't cross `/`).
+- `**` — any run of characters including `/`.
+- Everything else is a literal match.
+
+Paths are normalized to forward slashes before matching. Matching is **case-insensitive on Windows**, case-sensitive elsewhere.
+
+## `isFsAllowed(path): Promise<boolean>`
+## `isHttpAllowed(url): Promise<boolean>`
+
+Probe the active policy without triggering the underlying API. Handy for conditional UI.
+
+```ts
+if (await security.isHttpAllowed(target)) startSync(target);
+```
+
+## What's guarded
+
+- Every method in `fs.*` (including stateful handles and the `tynd-bin://` binary scheme).
+- `http.request` and `http.download`.
+
+WebView navigation is also gated by `security.check_http` via the `webview:navigation` hook — the host emits `{ url, allowed: false }` and blocks the load when the URL is denied.

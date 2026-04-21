@@ -1,0 +1,143 @@
+---
+title: Runtimes
+description: "`lite` vs `full` parity table — what each exposes, when to pick which."
+---
+
+# Runtimes
+
+Tynd ships **two backend runtimes** from the same TypeScript source. Switch with one config line:
+
+```ts filename="tynd.config.ts"
+export default {
+  runtime: "full",   // or "lite"
+}
+```
+
+This page focuses on the JS surface. For the architectural difference (subprocess vs in-process), see [Runtime Modes](/docs/v0.3/concepts/runtimes).
+
+## Default to lite
+
+Most desktop apps only need:
+
+- **Web standards** (`fetch`, `WebSocket`, `EventSource`, `URL`, `Blob`, `TextEncoder`, `crypto.subtle.digest`, …)
+- **Tynd OS APIs** (`fs`, `http`, `sql`, `process`, …)
+
+A ~6.5 MB binary with no Bun to download is a real UX win. Lite doesn't silently misbehave on the features it doesn't expose — they're **absent**, and your code either runs unmodified or fails fast.
+
+## Switch to full when
+
+- Your dep graph contains an npm with **native bindings** you can't replace (`sharp`, `better-sqlite3`, `canvas`, `bcrypt-native`, `rocksdb`).
+- You have a **CPU-bound JS hot path** profiled as the bottleneck — JSC JIT is often 10-100× faster than QuickJS interpretation.
+- You need **HTTP/2 or HTTP/3** client (lite's fetch is HTTP/1.1 only via the HTTP client).
+- You need **full `Intl.*`** (DateTimeFormat, Collator, Segmenter, RelativeTimeFormat).
+- You need **dynamic `import(path)`** at runtime — lite ships a single eval'd bundle.
+- You specifically depend on `Bun.*` / `node:*` APIs.
+
+## JS surface parity
+
+| Feature | `lite` | `full` |
+|---|---|---|
+| ES2023 language (Promises, classes, Proxy, BigInt, Maps/Sets) | ✓ | ✓ |
+| `fetch` + `Request` / `Response` / `Headers` | ✓ HTTP/1.1 | ✓ HTTP/1/2/3 |
+| `ReadableStream` (fetch body) | ✓ | ✓ |
+| `WritableStream` / `TransformStream` / `CompressionStream` | ✗ | ✓ |
+| `Response.clone()` / `Request.clone()` | ✗ throws | ✓ |
+| Streaming upload backpressure | ✗ drained first | ✓ |
+| `WebSocket` | ✓ | ✓ |
+| `EventSource` | ✓ | ✓ |
+| `AbortController` / `AbortSignal` / `AbortSignal.timeout` | ✓ | ✓ |
+| `crypto.getRandomValues` / `crypto.randomUUID` | ✓ | ✓ |
+| `crypto.subtle.digest` (SHA-256/384/512) | ✓ | ✓ |
+| `crypto.subtle.sign` / `verify` / `importKey` — HMAC | ✓ | ✓ |
+| `crypto.subtle` AES / RSA / ECDSA | ✗ | ✓ |
+| `TextEncoder` / `TextDecoder` | ✓ | ✓ |
+| `URL` / `URLSearchParams` | ✓ | ✓ |
+| `Blob` / `File` / `FormData` | ✓ | ✓ |
+| `atob` / `btoa` | ✓ | ✓ |
+| `structuredClone` (no transfer list) | ✓ | ✓ |
+| `structuredClone` with transfer list | ✗ throws | ✓ |
+| `performance.now()` | ✓ | ✓ |
+| `console.log/info/warn/error/debug` | ✓ | ✓ |
+| `setTimeout` / `setInterval` / `queueMicrotask` | ✓ | ✓ |
+| `Bun.*`, `Deno.*`, `node:*` | ✗ | ✓ |
+| `Buffer` (Node global) | ✗ | ✓ |
+| `process.*` (Node global) | ✗ | ✓ |
+| Dynamic `import(path)` | ✗ | ✓ |
+| `SharedArrayBuffer` / `Atomics` / `WeakRef` / `FinalizationRegistry` | ✗ | ✓ |
+| Chrome DevTools inspector | ✗ | ✓ |
+| Full `Intl.*` (DateTimeFormat, Collator, Segmenter, RelativeTimeFormat) | ✗ stub | ✓ ICU |
+
+## Tynd OS APIs — identical on both runtimes
+
+All 26 OS APIs are Rust-backed and work the same way:
+
+`app`, `tyndWindow`, `monitors`, `dialog`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `shortcuts`, `fs`, `path`, `os`, `process`, `sidecar`, `store`, `sql`, `http`, `websocket`, `terminal`, `workers`, `compute`, `keyring`, `autolaunch`, `singleInstance`, `updater`.
+
+See the [API reference](/docs/v0.3/api).
+
+## Size + startup
+
+| | `lite` | `full` |
+|---|---|---|
+| Binary (Windows x64 release) | ~6.5 MB host + packed assets | ~6.4 MB host + ~37 MB Bun (zstd) |
+| Typical shipped app | ~8-10 MB | ~44 MB |
+| Cold start | sub-50ms | ~200-500ms (spawns Bun) |
+
+## How to do X in lite
+
+| Task | Use |
+|---|---|
+| Read / write a file | `fs.readText` / `fs.writeText` |
+| Watch files | `fs.watch` |
+| Hash / RNG bytes | `compute.hash` / `compute.randomBytes` |
+| Spawn subprocess | `process.exec` |
+| Bundled binary (ffmpeg, etc.) | `process.exec(await sidecar.path("ffmpeg"))` |
+| Read env vars | `os.env("API_KEY")` |
+| Persistent k/v | `createStore(ns)` |
+| Embedded SQLite | `sql.open(path)` |
+| WebSocket | `new WebSocket(url)` or `websocket.connect` |
+| HTTP | `fetch(url)` or `http.request` |
+| File picker | `dialog.openFile` |
+| Tray + menu | `tray`, `menu` |
+| Notification | `notification.send` |
+| PTY terminal | `terminal.spawn` |
+| Isolated worker | `workers.spawn` |
+
+## What full offers that lite doesn't
+
+| Capability | Full only | Workaround in lite |
+|---|---|---|
+| JIT performance for CPU-bound JS | ✓ | Move hot paths to `compute`, `workers`, or a sidecar |
+| npm with native bindings (sharp, better-sqlite3, canvas, …) | ✓ | Pure-JS alternative (see below) or switch to full |
+| `Bun.*`, `Deno.*`, `node:*` | ✓ | Tynd OS APIs or pure-JS |
+| `Buffer` (Node global) | ✓ | Use `Uint8Array` — every Tynd API accepts it |
+| `process.env` / `process.exit` | ✓ | `os.env()`, app-lifecycle handlers |
+| Raw TCP / UDP sockets, HTTP server, DNS lookup | ✓ | Not exposed in lite yet |
+| HTTP/2, HTTP/3 | ✓ | Server must serve HTTP/1.1 fallback |
+| AES / RSA / ECDSA in `crypto.subtle` | ✓ | `@noble/ciphers`, `@noble/curves` |
+| Password hashing (argon2id, bcrypt) | ✓ | `@noble/hashes/argon2`, `bcryptjs` |
+| Full `Intl.*` | ✓ | `date-fns` / `dayjs` / `i18next` |
+| Dynamic `import()` at runtime | ✓ | Bundle all modules at build time |
+| `SharedArrayBuffer` / `Atomics` | ✓ | `workers` with message passing |
+
+## Pure-JS alternatives (lite-friendly)
+
+| Missing | Lib |
+|---|---|
+| AES, ChaCha20 | [`@noble/ciphers`](https://github.com/paulmillr/noble-ciphers) |
+| RSA, ECDSA, Ed25519 | [`@noble/curves`](https://github.com/paulmillr/noble-curves) |
+| argon2id | [`@noble/hashes`](https://github.com/paulmillr/noble-hashes) (argon2 module) |
+| bcrypt | [`bcryptjs`](https://github.com/dcodeIO/bcrypt.js) |
+| gzip / deflate | [`fflate`](https://github.com/101arrowz/fflate) |
+| brotli | [`brotli-dec-wasm`](https://github.com/httptoolkit/brotli-wasm) |
+| streams polyfill | [`web-streams-polyfill`](https://github.com/MattiasBuelens/web-streams-polyfill) |
+| `Intl.DateTimeFormat` | [`date-fns`](https://date-fns.org/) / [`dayjs`](https://day.js.org/) |
+| JWT | [`jose`](https://github.com/panva/jose) |
+| OAuth | [`oauth4webapi`](https://github.com/panva/oauth4webapi) |
+| Markdown | [`micromark`](https://github.com/micromark/micromark) / [`marked`](https://github.com/markedjs/marked) |
+| YAML | [`yaml`](https://github.com/eemeli/yaml) |
+
+## Related
+
+- [Runtime Modes concept](/docs/v0.3/concepts/runtimes).
+- [API reference](/docs/v0.3/api).

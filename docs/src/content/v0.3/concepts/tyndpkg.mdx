@@ -1,0 +1,148 @@
+---
+title: TYNDPKG Format
+description: "The self-extracting trailer appended to a Tynd binary — how your frontend, backend, Bun, and sidecars live inside a single .exe."
+---
+
+# TYNDPKG Format
+
+Every Tynd binary is **self-extracting**. `tynd build` appends a packed section to the host executable; at launch, the host reads its own tail, extracts assets to a temp directory, and runs the app.
+
+## Wire format
+
+```
+┌──────────────────────────────────┐
+│        host binary               │  (tynd-full or tynd-lite)
+│          ...                     │
+├──────────────────────────────────┤
+│  [file_count: u32 LE]            │  ← TYNDPKG trailer starts here
+│  per file:                       │
+│    [path_len: u16 LE]            │
+│    [path: UTF-8]                 │
+│    [data_len: u32 LE]            │
+│    [data: bytes]                 │
+│  ...                             │
+│  [section_size: u64 LE]          │
+│  [magic: "TYNDPKG\0"]            │  ← last 8 bytes of the file
+└──────────────────────────────────┘
+```
+
+At startup, the host seeks to the last 8 bytes, verifies the `TYNDPKG\0` magic, reads `section_size` to find the trailer offset, then iterates the file list.
+
+## What gets packed
+
+### Frontend assets
+
+Read from `frontendDir` (default `dist/`). Text files auto-compressed with zstd:
+
+- Extensions compressed: `html|htm|js|mjs|cjs|css|json|svg`
+- `.zst` is appended to the packed `rel` path (`index.html` → `index.html.zst`)
+- Binary assets (`png`, `jpg`, `woff2`, `wasm`, …) are packed raw
+
+Bun uses `node:zlib.zstdCompressSync` at pack time. Rust decompresses with the `zstd` crate when the asset is first requested (result cached in memory per launch).
+
+### Backend bundle
+
+- **`lite`** — `bundle.js` packed **raw** (not zstd). QuickJS reads it directly; a decompress step would add latency and memory.
+- **`full`** — `bundle.dist.js` packed raw as well (Bun reads it from the extracted path).
+
+### Bun (full mode only)
+
+Two entries, in this order (order matters — Rust reads `bun.version` first to decide cache path before reading `bun.zst`):
+
+1. `bun.version` — text file, the Bun version used at pack time.
+2. `bun.zst` — zstd-compressed Bun binary (`Bun.version` found at pack time on PATH).
+
+At launch, the full host extracts `bun.zst` to a versioned cache dir (`<data_dir>/bun/<version>/bun[.exe]`), reusing the already-extracted copy on subsequent launches.
+
+### Sidecars
+
+Declared in `tynd.config.ts`:
+
+```ts
+sidecars: [
+  { name: "ffmpeg.exe", path: "bin/ffmpeg.exe" },
+]
+```
+
+Packed under the `sidecar/` prefix (`sidecar/ffmpeg.exe`). At launch, the host extracts each one to `<temp_dir>/sidecar/<name>`, chmods it +755 on Unix, and registers the path in `os::sidecar`. Your TypeScript retrieves the path via `sidecar.path("ffmpeg.exe")`.
+
+## Extraction flow
+
+### Full mode
+
+1. Read TYNDPKG trailer.
+2. Extract `bundle.dist.js` to `<temp>/bundle.dist.js`.
+3. Extract Bun binary to `<data_dir>/bun/<version>/bun[.exe]` (cached across launches).
+4. Extract frontend assets to an in-memory cache (pre-warmed on a background thread before the WebView is built).
+5. Extract sidecars to `<temp>/sidecar/<name>`.
+6. Spawn Bun with `bundle.dist.js` as the entry, `TYND_ENTRY` / `TYND_FRONTEND_DIR` / `TYND_DEV_URL` env vars.
+7. Wait for the backend's `{ type: "tynd:config" }` first line on stdout.
+8. Build the WebView with the config.
+
+### Lite mode
+
+1. Read TYNDPKG trailer.
+2. Extract frontend assets to the in-memory cache.
+3. Extract sidecars to `<temp>/sidecar/<name>`.
+4. QuickJS eval's `bundle.js` (from memory — never written to disk).
+5. Read `globalThis.__tynd_config__` after eval to get window / menu / tray config.
+6. Build the WebView.
+
+## Platform tweaks
+
+### Windows — PE patching
+
+Two post-processing steps run on Windows `.exe` files:
+
+- **`patchPeSubsystem`** — flips the PE subsystem from `IMAGE_SUBSYSTEM_WINDOWS_CUI` (console) to `IMAGE_SUBSYSTEM_WINDOWS_GUI` (no console window on launch).
+- **`setWindowsExeIcon`** — embeds a multi-size ICO (16/32/48/256) as a Win32 resource via ResEdit. For **full mode**, the same ICO bytes are also embedded into the inner Bun copy **before** zstd compression, so Task Manager shows the app icon for the Bun subprocess.
+
+### Icon rendering
+
+Single source of truth: **one file in `public/`** (SVG preferred, PNG or ICO accepted).
+
+- **Windows ICO** — sizes `[16, 32, 48, 256]` via `renderIconPngSet` → `pngToIco`.
+- **macOS ICNS** — sizes `[32, 128, 256, 512, 1024]`.
+- **Linux hicolor** — sizes `[16, 32, 48, 64, 128, 256, 512]` dropped into `usr/share/icons/hicolor/<n>x<n>/apps/<name>.png` for `.deb` / `.rpm` / `.AppImage`.
+
+PNG source degrades to single-size (native resolution). ICO source passes through to Windows bundles and is skipped (with a warning) for macOS/Linux.
+
+Non-square SVGs are wrapped in a square viewBox before rasterising — Windows PE and macOS ICNS reject or distort non-square inputs.
+
+## Reading the trailer programmatically
+
+If you want to inspect a packed binary:
+
+```bash
+# Last 8 bytes must be TYNDPKG\0
+tail -c 8 release/my-app.exe | xxd
+
+# Full trailer layout — parse the last (8 + 8) bytes to get section_size,
+# then read the last (8 + 8 + section_size) bytes and walk the file list.
+```
+
+The Rust reader is `packages/{full,lite}/src/embed.rs`. Both runtimes share the wire format.
+
+## Size guidance
+
+| Component | Size (zstd where applicable) |
+|---|---|
+| Host (lite or full, Windows x64 release) | ~6.4 MB |
+| Bun binary (full mode, zstd-compressed) | ~37 MB |
+| Typical frontend (React SPA, 200KB text) | ~80 KB packed |
+| Typical backend bundle | ~30-200 KB depending on deps |
+| Sidecars | whatever the binary weighs |
+
+So a real `lite` app ships around ~6.5-10 MB; a `full` app ships around ~44-50 MB before sidecars.
+
+## What's not in TYNDPKG
+
+- **Frontend dev server** — in dev mode, `tynd://localhost` proxies to the framework's dev server (`http://localhost:5173/`, etc.). TYNDPKG is only used for builds.
+- **User data** — `store` writes to `<config_dir>/<ns>/store.json`, `sql.open(path)` takes an on-disk path. None of that lives inside the binary.
+- **Installer metadata** — `.app`'s `Info.plist`, NSIS `.nsi`, MSI `.wxs`, `.desktop` files — those are produced by the bundlers and live outside the raw binary.
+
+## Next
+
+- [Build Pipeline](/docs/v0.3/concepts/build-pipeline)
+- [Bundling guide](/docs/v0.3/guides/bundling)
+- [Sidecars guide](/docs/v0.3/guides/sidecars)

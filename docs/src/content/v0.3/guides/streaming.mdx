@@ -1,0 +1,240 @@
+---
+title: Streaming RPC
+description: "Async-generator backend handlers stream yields to the frontend with flow control, batched DOM updates, and cancellation — safe at 10k+ yields/sec."
+---
+
+# Streaming RPC
+
+If a backend export is an `async function*`, the frontend gets a **StreamCall** handle that's both awaitable and async-iterable. Cancellation propagates end-to-end.
+
+## Basic pattern
+
+```ts filename="backend/main.ts"
+export async function* processFiles(paths: string[]) {
+  let ok = 0;
+  for (const [i, path] of paths.entries()) {
+    await doWork(path);
+    ok++;
+    yield { path, progress: (i + 1) / paths.length };
+  }
+  return { ok, failed: paths.length - ok };
+}
+```
+
+```ts filename="src/main.ts"
+const stream = api.processFiles(["a.txt", "b.txt", "c.txt"]);
+
+for await (const chunk of stream) {
+  render(chunk.progress);   // yields: { path, progress }
+}
+
+const summary = await stream;   // return value: { ok, failed }
+console.log(summary);
+```
+
+- **Yields** come in through the async iterator.
+- **Return value** resolves on the `await stream` promise.
+- **Errors** reject both the iterator and the promise.
+
+## Cancellation
+
+```ts
+const stream = api.processFiles(hugeBatch);
+
+setTimeout(async () => {
+  await stream.cancel();   // stops the backend generator, rejects the iterator
+}, 3000);
+```
+
+`stream.cancel()` calls `iterator.return()` in the frontend, which sends a cancel IPC. Rust forwards it to the backend, the generator's next `yield` throws, and its `try/finally` cleanup runs.
+
+Also cancels automatically:
+
+- `break` out of `for await` — implicit `iterator.return()`.
+- The calling window closes — Rust walks `dispatch::call_labels()` and cancels every stream that originated in that window.
+
+## Flow control — three mechanisms
+
+Streaming is safe at arbitrary yield rates (10k+ tokens/s from an LLM, thousands of file-scan events per second) thanks to three layers.
+
+### 1. Per-stream credit
+
+- Backend generator starts with **64 credits** (`STREAM_CREDIT`).
+- Every yield decrements. At 0 credit the generator awaits a waiter.
+- The frontend replenishes by sending `{ type: "ack", id, n: 32 }` after every **32 consumed chunks** (`ACK_CHUNK`).
+- Bounded memory (≤ 64 × payload size) regardless of producer speed.
+
+### 2. Yield batching
+
+- Rust buffers `BackendEvent::Yield` per window.
+- Flushes either after **10 ms** or synchronously when any bucket hits **64 items** (`YIELD_BATCH_MAX`).
+- Single `evaluate_script` per webview per flush — not one per chunk.
+- Cuts per-chunk main-thread cost ~30× on bursty streams.
+
+### 3. Cleanup on window close
+
+- Secondary window closes → Rust cancels every active stream originating there.
+- Without this, closed Settings / About windows would leak generators on the backend.
+
+Combined guarantee: **10k+ yields/sec to the UI without freezing it**, bounded memory, correct multi-window routing.
+
+## Patterns
+
+### Progress with a final summary
+
+```ts
+export async function* uploadFiles(files: string[]) {
+  const results: string[] = [];
+  for (const file of files) {
+    const uploadId = await upload(file);
+    results.push(uploadId);
+    yield { file, uploadId };
+  }
+  return { results, total: files.length };
+}
+
+// frontend
+const stream = api.uploadFiles(files);
+for await (const { file, uploadId } of stream) {
+  updateRowStatus(file, uploadId);
+}
+const summary = await stream;
+showToast(`Uploaded ${summary.total} files`);
+```
+
+### Cancellable long task
+
+```ts
+export async function* searchFiles(root: string, pattern: string) {
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop()!;
+    for (const entry of await scan(dir)) {
+      if (entry.isDir) stack.push(entry.path);
+      else if (entry.name.match(pattern)) yield entry;
+    }
+  }
+}
+
+// frontend
+const stream = api.searchFiles("/home/me", "\\.ts$");
+
+const abort = () => stream.cancel();
+cancelButton.addEventListener("click", abort);
+
+try {
+  for await (const match of stream) {
+    if (results.length > 500) await stream.cancel();
+    results.push(match);
+  }
+} finally {
+  cancelButton.removeEventListener("click", abort);
+}
+```
+
+### LLM token streaming
+
+```ts
+import { fetch } from "@tynd/core/client";
+
+export async function* askLLM(prompt: string) {
+  const res = await fetch("https://api.example.com/chat", {
+    method: "POST",
+    body: JSON.stringify({ prompt, stream: true }),
+    headers: { "content-type": "application/json" },
+  });
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    yield decoder.decode(value, { stream: true });
+  }
+}
+
+// frontend
+const stream = api.askLLM("Hello");
+let text = "";
+for await (const chunk of stream) {
+  text += chunk;
+  messageEl.textContent = text;
+}
+```
+
+10k tokens/sec is fine — yield batching keeps the main thread responsive.
+
+### Fan-out to multiple consumers
+
+You can't share a single stream — each `await api.foo()` call creates a new backend generator. If you need fan-out, buffer on one consumer and re-broadcast:
+
+```ts
+const stream = api.subscribe();
+const listeners = new Set<(x: unknown) => void>();
+
+(async () => {
+  for await (const event of stream) {
+    for (const fn of listeners) fn(event);
+  }
+})();
+
+export function subscribe(fn: (x: unknown) => void) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+```
+
+## Error handling
+
+```ts
+export async function* flaky() {
+  yield 1;
+  yield 2;
+  throw new Error("oops");
+}
+
+// frontend
+try {
+  for await (const n of api.flaky()) {
+    console.log(n);   // 1, 2
+  }
+} catch (err) {
+  console.error(err.message);   // "oops"
+}
+```
+
+The error propagates into the `for await` loop and also rejects `await stream`.
+
+## Under the hood — wire format
+
+Per yield (full mode):
+
+```json
+{ "type": "yield", "id": "c42", "value": { "path": "a.txt", "progress": 0.33 } }
+```
+
+Per ACK (frontend → backend):
+
+```json
+{ "type": "ack", "id": "c42", "n": 32 }
+```
+
+Per return:
+
+```json
+{ "type": "return", "id": "c42", "value": { "ok": 3, "failed": 0 } }
+```
+
+Yield batches render as `__tynd_yield_batch__([[id, val], [id, val], …])` on the frontend side, delivered via a single `evaluate_script`.
+
+`BackendEvent::Return` flushes all pending yields before resolving, so the frontend iterator finalizes with every chunk in order.
+
+## Limitations
+
+- **No transferable objects** — values are JSON-serialized each time. For multi-MB binary chunks, use the [binary IPC channel](/docs/v0.3/guides/binary-data) separately and yield handles/IDs over JSON.
+- **No backpressure from the iterator back to the producer's I/O** — the generator is credit-paused, not paused at the network / disk level. If you're reading from a `fetch` body, the body reader is only called between yields, so the TCP buffer naturally backs up.
+
+## Next
+
+- [Binary Data](/docs/v0.3/guides/binary-data)
+- [Backend RPC](/docs/v0.3/guides/backend-rpc)
+- [IPC model](/docs/v0.3/concepts/ipc)

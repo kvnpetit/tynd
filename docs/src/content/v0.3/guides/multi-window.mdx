@@ -1,0 +1,146 @@
+---
+title: Multi-Window
+description: "Create secondary windows, route events per-window, and clean up state on close."
+---
+
+# Multi-Window
+
+The primary window has label `"main"`. Additional windows are created with a unique label and get their own WebView + IPC channel.
+
+## Create a secondary window
+
+```ts
+import { tyndWindow } from "@tynd/core/client";
+
+await tyndWindow.create({
+  label: "settings",
+  url: "/settings",         // optional — defaults to the primary entry
+  title: "Settings",
+  width: 600,
+  height: 480,
+});
+```
+
+Every `@tynd/core/client` API call **auto-targets the window it runs in** — no label argument needed.
+
+## Enumerate + close
+
+```ts
+const labels = await tyndWindow.all();   // ["main", "settings", ...]
+await tyndWindow.close("settings");       // "main" cannot be closed this way
+
+console.log(tyndWindow.label());          // "main" or "settings" depending on caller
+```
+
+## Event routing
+
+Window events (`onResized`, `onMoved`, `onFocused`, …) are broadcast to **every webview** with a `label` field in the payload. The `@tynd/core/client/window.ts` helper filters by `__TYND_WINDOW_LABEL__` (injected at WebView creation) so handlers only fire for their own window.
+
+```ts
+// Inside the settings window — handler only fires for "settings".
+tyndWindow.onResized(({ width, height }) => {
+  console.log("settings window resized to", width, height);
+});
+```
+
+<Callout type="info">
+  Don't try to "listen for the main window's events from the settings window" — the routing logic filters that out. Coordinate cross-window state via the backend instead.
+</Callout>
+
+## Cross-window coordination
+
+Two patterns:
+
+### Via the backend (recommended)
+
+The backend is a single JS context shared by every window. Use an emitter as the event bus:
+
+```ts filename="backend/main.ts"
+export const events = createEmitter<{
+  themeChanged: { theme: "light" | "dark" };
+}>();
+
+export async function setTheme(theme: "light" | "dark") {
+  events.emit("themeChanged", { theme });
+  // persist via store, etc.
+}
+```
+
+```ts
+// any window
+api.on("themeChanged", ({ theme }) => applyTheme(theme));
+api.setTheme("dark");
+```
+
+`emit` broadcasts to every subscribed webview. Combined with per-window event filtering, each window gets the update.
+
+### Via `store` + manual refresh
+
+For state that doesn't change often, write to `store` from the producer and re-read from the consumer on explicit refresh triggers.
+
+## Per-window routes
+
+Frontend routing (React Router, Vue Router, Svelte kit-free router, …) decides what's rendered inside each window. Pass the desired route as `url`:
+
+```ts
+await tyndWindow.create({ label: "about", url: "/about", title: "About" });
+```
+
+Inside the `about` window your router sees `window.location.pathname === "/about"` and renders the corresponding view.
+
+## Per-window RPC + streaming
+
+Every window uses the same `createBackend<typeof backend>()` import — each call / stream is independent. Streams originating in a window are automatically canceled when that window closes (`cancel_streams_for_label` in the Rust host).
+
+## Window lifecycle
+
+```ts
+// in any window
+tyndWindow.onCloseRequested((e) => {
+  if (hasUnsavedChanges()) {
+    e.preventDefault();
+    void showSavePrompt();
+  }
+});
+
+// manual cancel e.g. from a modal opened elsewhere during the 500ms window:
+await tyndWindow.cancelClose();
+```
+
+- `onCloseRequested` lets you preventDefault() synchronously to cancel the close.
+- If nothing cancels within 500 ms, the close proceeds.
+- If you `preventDefault`, call `tyndWindow.close(label)` or `tyndWindow.destroy()` yourself when ready.
+
+## Sizing, positioning, monitors
+
+Each window has its own geometry:
+
+```ts
+await tyndWindow.setSize(1400, 900);
+await tyndWindow.setPosition(100, 100);
+const pos = await tyndWindow.getPosition();
+const size = await tyndWindow.getSize();
+const dpi = await tyndWindow.scaleFactor();   // 1.0 / 1.5 / 2.0
+```
+
+Enumerate monitors:
+
+```ts
+import { monitors } from "@tynd/core/client";
+
+const all = await monitors.all();
+const primary = await monitors.primary();
+const current = await monitors.current();   // where the calling window is
+```
+
+## Gotchas
+
+- **`tyndWindow.close("main")`** is a no-op. To quit the app, call `app.exit(0)` from the backend or the user clicks the OS close button.
+- **Window events are broadcast**, not routed. Always rely on `tyndWindow.on*` helpers, not manually subscribing to raw `window:*` events, so the label filtering does its job.
+- **Streams don't survive window close.** If a user closes Settings mid-stream, the generator on the backend is canceled.
+
+## Next
+
+- [Window API reference](/docs/v0.3/api/os/window)
+- [Menu API](/docs/v0.3/api/os/menu)
+- [Monitor API](/docs/v0.3/api/os/monitor)

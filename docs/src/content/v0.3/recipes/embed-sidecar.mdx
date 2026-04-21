@@ -1,0 +1,88 @@
+---
+title: Embed and Run a Sidecar
+description: "Bundle `ffmpeg` (or any CLI) inside your app binary; resolve the extracted path at runtime."
+---
+
+# Embed a Sidecar
+
+## Declare at build time
+
+```ts filename="tynd.config.ts"
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  sidecars: [
+    { name: "ffmpeg", path: "bin/ffmpeg" },
+  ],
+} satisfies TyndConfig;
+```
+
+- `name` — what your code asks for at runtime.
+- `path` — where the file lives at build time, relative to project root.
+
+## Use at runtime
+
+```ts
+import { sidecar, process } from "@tynd/core/client";
+
+export async function transcode(input: string, output: string) {
+  const ffmpeg = await sidecar.path("ffmpeg");
+  const { stdout, stderr, code } = await process.exec(ffmpeg, {
+    args: ["-i", input, "-c:v", "libx264", "-y", output],
+  });
+  if (code !== 0) throw new Error(stderr);
+  return output;
+}
+```
+
+`sidecar.path()` returns the extracted on-disk path (chmod +755 on Unix, ready to execute).
+
+## Platform-specific binaries
+
+Tynd doesn't cross-compile. For CI matrix builds, stage the right binary per host before `tynd build`:
+
+```yaml
+- name: Stage ffmpeg
+  shell: bash
+  run: |
+    case "${{ matrix.target }}" in
+      windows-x64) curl -L -o bin/ffmpeg.exe https://…/ffmpeg-win.exe ;;
+      linux-x64)   curl -L -o bin/ffmpeg https://…/ffmpeg-linux ;;
+      macos-arm64) curl -L -o bin/ffmpeg https://…/ffmpeg-macos-arm64 ;;
+    esac
+    chmod +x bin/ffmpeg*
+
+- run: bunx tynd build --bundle
+```
+
+## Long-running sidecar (streaming output)
+
+```ts
+import { terminal, sidecar } from "@tynd/core/client";
+
+const ffmpeg = await sidecar.path("ffmpeg");
+const t = await terminal.spawn({
+  shell: ffmpeg,
+  args: ["-i", input, "-progress", "pipe:1", "-c:v", "libx264", output],
+});
+
+t.onData((bytes) => {
+  const text = new TextDecoder().decode(bytes);
+  const m = text.match(/out_time_ms=(\d+)/);
+  if (m) reportProgress(parseInt(m[1]) / 1_000_000);
+});
+
+t.onExit((code) => {
+  if (code !== 0 && code !== null) alert("ffmpeg failed");
+});
+```
+
+## Size tradeoff
+
+Sidecars **don't** get zstd-compressed — they inflate your binary by their raw size. A 60 MB ffmpeg-static ships in your installer. Alternatives:
+
+- **Download on first launch** — ship a lean binary, `http.download` the sidecar to `os.dataDir()` the first time the user needs it.
+- **Use the system binary if available** — `process.exec("ffmpeg", …)` first; fall back to bundled.
+
+**Related:** [sidecar API](/docs/v0.3/api/os/sidecar) · [Sidecars guide](/docs/v0.3/guides/sidecars).

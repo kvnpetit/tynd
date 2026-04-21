@@ -1,0 +1,38 @@
+---
+title: tynd upgrade
+description: "Bump `@tynd/cli`, `@tynd/core`, and `@tynd/host` to the latest versions."
+---
+
+# `tynd upgrade`
+
+```bash
+tynd upgrade
+tynd upgrade -y        # skip confirmation
+```
+
+Updates `@tynd/cli`, `@tynd/core`, and `@tynd/host` to the **latest** stable versions in the current project's `package.json`, then runs `bun install`.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `-y, --yes` | Skip the confirmation prompt |
+
+Global flags: `--verbose`, `--quiet`.
+
+## What it does
+
+1. Queries the npm registry for the newest `latest`-tagged version of each package.
+2. Writes the new versions into `package.json`.
+3. Runs `bun install` to update `bun.lock` and re-fetch binaries (`@tynd/host`'s postinstall re-downloads the matching native host).
+
+## After upgrading
+
+- **Major versions** — read the release notes for breaking changes.
+- **Flush the cache** — `tynd clean`. A new `@tynd/core` may invalidate bundled artifacts.
+- **Rebuild** — `tynd build` to confirm packaging and launch are clean.
+
+## Related
+
+- [`tynd clean`](/docs/v0.3/cli/clean) — flush cache after upgrade.
+- [Troubleshooting](/docs/v0.3/troubleshooting).

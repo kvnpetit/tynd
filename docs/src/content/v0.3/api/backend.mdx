@@ -1,0 +1,224 @@
+---
+title: Backend (@tynd/core)
+description: "Backend API — app.start, app.onReady, app.onClose, createEmitter, AppConfig, WindowConfig, MenuSubmenu, TrayConfig."
+---
+
+# Backend — `@tynd/core`
+
+The backend module drives the app's lifecycle and declares window/menu/tray config.
+
+## `app.start(config)`
+
+Call once at the bottom of your backend entry file. The host reads the config on stdout's first line, builds the window, and starts the event loop.
+
+```ts
+import { app } from "@tynd/core";
+
+app.start({
+  frontendDir: import.meta.dir + "/../dist",
+  window: {
+    title: "My App",
+    width: 1200,
+    height: 800,
+    center: true,
+  },
+});
+```
+
+### `AppConfig`
+
+| Field | Type | Description |
+|---|---|---|
+| `window` | `WindowConfig` | Window options (see below) |
+| `frontendDir` | `string` | Path to built frontend assets |
+| `devUrl` | `string` | Dev server URL (auto-detected; overrides `frontendDir` in dev) |
+| `menu` | `MenuSubmenu[]` | Native menu bar |
+| `tray` | `TrayConfig` | System tray |
+| `quitOnLastWindowClosed` | `boolean` (default `false`) | Exit when the last window closes. Leave off for tray-only apps that should stay alive in the background. |
+
+### `WindowConfig`
+
+| Field | Default | Description |
+|---|---|---|
+| `title` | `""` | Window title |
+| `width` | `1200` | Initial width |
+| `height` | `800` | Initial height |
+| `minWidth` / `minHeight` | — | Minimum size |
+| `maxWidth` / `maxHeight` | — | Maximum size |
+| `resizable` | `true` | Allow resize |
+| `decorations` | `true` | Show title bar |
+| `transparent` | `false` | Transparent background |
+| `alwaysOnTop` | `false` | Pin above other windows |
+| `center` | `false` | Center on screen at startup |
+| `fullscreen` | `false` | Start fullscreen |
+| `maximized` | `false` | Start maximized |
+| `userAgent` | — | Custom User-Agent string set on every webview request. |
+
+## `app.onReady(fn)`
+
+Fires on `__tynd_page_ready` — a one-shot `postMessage` sent from the `JS_PAGE_READY` init script on `DOMContentLoaded`.
+
+```ts
+app.onReady(() => {
+  console.log("window shown, WebView alive");
+});
+```
+
+## `app.onClose(fn)`
+
+Fires when the user closes the primary window. The window is hidden immediately; **you have 2 seconds** to run handlers before a watchdog force-exits.
+
+```ts
+app.onClose(() => {
+  // quick cleanup only — don't block
+});
+```
+
+## `createEmitter<T>()`
+
+Create a typed event bus. Exporting the result makes it subscribable from the frontend.
+
+```ts
+import { createEmitter } from "@tynd/core";
+
+export const events = createEmitter<{
+  fileChanged: { path: string };
+  progress: { percent: number };
+}>();
+
+events.emit("fileChanged", { path: "/foo.ts" });
+events.emit("progress", { percent: 42 });
+
+// Target a single window — other windows don't receive the event.
+events.emitTo("settings", "progress", { percent: 42 });
+```
+
+Frontend subscribes:
+
+```ts
+api.on("fileChanged", ({ path }) => { /* … */ });
+api.once("progress", ({ percent }) => { /* … */ });
+```
+
+<Callout type="info">
+  **Emitters must be `export`ed.** The frontend's type-only `typeof backend` import needs to see them for `api.on("…", …)` to type-check.
+</Callout>
+
+## Frontend -> backend events (`onFrontendEmit` + `createFrontendEmitter`)
+
+The mirror of `createEmitter`: frontend emits, backend listens. Reuses the same RPC pipe — no new transport.
+
+```ts filename="backend/main.ts"
+import { onFrontendEmit } from "@tynd/core";
+
+onFrontendEmit<string>("toast", (text) => log.info(text));
+```
+
+```ts filename="src/toast.ts"
+import { createFrontendEmitter } from "@tynd/core/client";
+
+const frontend = createFrontendEmitter<{ toast: string }>();
+frontend.emit("toast", "Saved!");
+```
+
+## `evalInFrontend(script, label?)`
+
+Run raw JavaScript in a webview from the backend. When `label` is omitted the script runs on every open window.
+
+```ts
+import { evalInFrontend } from "@tynd/core";
+
+evalInFrontend(`document.body.classList.add('debug')`);
+evalInFrontend(`location.reload()`, "settings");
+```
+
+## Native menu bar
+
+```ts
+app.start({
+  menu: [
+    {
+      type: "submenu",
+      label: "File",
+      items: [
+        { label: "New",  id: "file.new",  accelerator: "CmdOrCtrl+N" },
+        { label: "Open", id: "file.open", accelerator: "CmdOrCtrl+O" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    {
+      type: "submenu",
+      label: "Edit",
+      items: [
+        { role: "undo" }, { role: "redo" },
+        { type: "separator" },
+        { role: "cut" }, { role: "copy" }, { role: "paste" },
+      ],
+    },
+  ],
+  // ...
+});
+```
+
+React to clicks from the frontend with the [`menu`](/docs/v0.3/api/os/menu) API:
+
+```ts
+import { menu } from "@tynd/core/client";
+menu.onClick("file.new", () => createDocument());
+```
+
+### Menu item shapes
+
+- **Action** — `{ label, id, accelerator?, enabled?, checkbox?, radio? }`
+- **Separator** — `{ type: "separator" }`
+- **Role** — `{ role: "quit" | "copy" | "paste" | "undo" | "redo" | "cut" | "selectAll" | "minimize" | "close" | … }`
+
+## System tray
+
+```ts
+app.start({
+  tray: {
+    icon:    import.meta.dir + "/assets/tray.png",
+    tooltip: "My App",
+    menu: [
+      { label: "Show", id: "show" },
+      { label: "Quit", id: "quit" },
+    ],
+  },
+  // ...
+});
+```
+
+Handle clicks with the [`tray`](/docs/v0.3/api/os/tray) API:
+
+```ts
+import { tray } from "@tynd/core/client";
+tray.onClick(() => tyndWindow.show());
+tray.onMenu("quit", () => process.exit(0));
+```
+
+## Frontend RPC — `createBackend<T>()`
+
+From the frontend:
+
+```ts
+import { createBackend } from "@tynd/core/client";
+import type * as backend from "../../backend/main";
+
+const api = createBackend<typeof backend>();
+
+const msg = await api.greet("Alice");   // fully typed
+api.on("fileChanged", (evt) => { /* … */ });
+api.once("progress", (evt) => { /* … */ });
+```
+
+- Types flow from `typeof backend` — no codegen.
+- Errors thrown on the backend surface as rejected promises with `{ name, message }` preserved.
+- `async function*` backend handlers return [StreamCall](/docs/v0.3/api/streaming-rpc) handles — awaitable + async-iterable.
+
+## Next
+
+- [Streaming RPC](/docs/v0.3/api/streaming-rpc)
+- [Backend RPC guide](/docs/v0.3/guides/backend-rpc)
+- [OS API reference](/docs/v0.3/api)

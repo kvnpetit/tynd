@@ -1,0 +1,64 @@
+---
+title: compute
+description: "Rust-native CPU helpers — hash (blake3/sha256/384/512) and CSPRNG. Runs off the JS event loop."
+---
+
+# `compute`
+
+```ts
+import { compute } from "@tynd/core/client";
+```
+
+Fast Rust-native compute — avoids the JS event loop on hot paths. Works identically in `lite` and `full`.
+
+## `hash(bytes, opts?): Promise<string>`
+
+Returns a base64 digest of the bytes. Default algo: **blake3**.
+
+```ts
+const digest = await compute.hash(bytes);                        // blake3 by default
+const sha256 = await compute.hash(bytes, { algo: "sha256" });
+```
+
+### Algorithms
+
+- `blake3` (default) — fast, cryptographically secure, ~4 GB/s on modern CPUs.
+- `sha256`, `sha384`, `sha512`.
+
+Bytes travel via the [binary IPC channel](/docs/v0.3/guides/binary-data) — no base64 overhead.
+
+Digest is always returned as **base64**; convert to hex in userland if needed:
+
+```ts
+const digest = await compute.hash(bytes, { algo: "sha256" });
+const hex = [...Uint8Array.from(atob(digest), (c) => c.charCodeAt(0))]
+  .map((b) => b.toString(16).padStart(2, "0"))
+  .join("");
+```
+
+## `randomBytes(n): Promise<Uint8Array>`
+
+Fills `n` bytes from the OS CSPRNG (`getrandom` / `BCryptGenRandom` / `SecRandomCopyBytes`).
+
+```ts
+const token = await compute.randomBytes(32);
+```
+
+**Capped at 1 MiB per call** — if you genuinely need more, call in a loop or use `crypto.getRandomValues` from the Web API (identical semantics).
+
+## Why native?
+
+- **Speed** — blake3 in Rust hashes multi-GB files in seconds. In lite (QuickJS interpreter) the JS equivalent is slower; in full (JIT) it's closer but still limited by engine overhead.
+- **Off the event loop** — each call runs on a fresh Rust thread. Hashing a 500 MB file keeps your UI smooth.
+- **Uniform API** — same import, same behavior on lite + full. Web-standard `crypto.subtle.digest` works too (HMAC + digest are polyfilled in lite), but `compute.hash` is the fast path for large inputs.
+
+## Not exposed
+
+- **Compression** (`compute.compress`) — zstd is an internal TYNDPKG detail; use `fflate` (pure JS gzip) or similar at app level.
+- **AES / RSA / ECDSA** — use `@noble/ciphers` + `@noble/curves` in lite, or `crypto.subtle` in full.
+- **Password hashing** (argon2, bcrypt) — use `@noble/hashes/argon2` in lite, or a native binding in full.
+
+## Related
+
+- Web `crypto.getRandomValues` / `crypto.subtle.digest` — works on both runtimes; same semantics as `compute` for the overlap.
+- [Binary Data guide](/docs/v0.3/guides/binary-data).

@@ -1,0 +1,132 @@
+---
+title: Build Pipeline
+description: "How `tynd dev`, `tynd start`, and `tynd build` turn your TypeScript into frontend assets, a backend bundle, and a self-contained native binary."
+---
+
+# Build Pipeline
+
+The CLI exposes three run modes. All three share the same underlying build steps; they only differ in whether HMR is wired up and whether the final packing step runs.
+
+## The three modes
+
+```
+┌───────────────┐   frontend build   ┌──────────┐   backend bundle   ┌──────────┐   pack    ┌──────────┐
+│  tynd dev     │ ─────────────────▶ │   cache  │ ─────────────────▶ │   cache  │ ────(×)──▶│  binary  │
+│  tynd start   │ ─────────────────▶ │   cache  │ ─────────────────▶ │   cache  │ ────(×)──▶│  binary  │
+│  tynd build   │ ─────────────────▶ │   cache  │ ─────────────────▶ │   cache  │ ───(✓)───▶│ release/ │
+└───────────────┘                    └──────────┘                    └──────────┘            └──────────┘
+```
+
+- **`tynd dev`** runs the framework dev server (Vite, Angular CLI, …) + a backend watcher that rebuilds the dev backend on each file change. No final pack.
+- **`tynd start`** produces a clean frontend + backend build, then runs the host pointing at them. No HMR, no watcher. Good for smoke tests.
+- **`tynd build`** does the same, then runs the pack step to produce a self-contained binary under `release/`. With `--bundle`, also emits platform-native installers.
+
+## Frontend build
+
+The framework's native build command:
+
+- Vite apps: `vite build` → `dist/`
+- Angular: `ng build` → `dist/<project>/browser/` (Angular 17+ `@angular/build:application`) or `dist/<project>/` (older builders)
+- CRA: `react-scripts build` → `build/`
+- Parcel / Rsbuild / Webpack: tool-specific
+
+Tynd reads the framework from `package.json`'s dependency graph (`packages/cli/src/lib/detect.ts`). Config encodes `outDir` when the framework allows overriding it (Vite `outDir`, Angular `outputPath`, Rsbuild `distPath.root`).
+
+## Backend bundle
+
+Tynd bundles the backend using Bun's built-in bundler, with a runtime-specific entry and configuration:
+
+- **`lite`** — `.tynd/cache/bundle.dev.js` (dev) or `bundle.js` (build). A single ESM file that QuickJS eval's in-process. Any `node:*` / `Bun.*` reference fails at runtime.
+- **`full`** — `.tynd/cache/bundle.dist.js`. A single ESM file that Bun (subprocess) runs. Full Bun + Node globals available.
+
+### Runtime detection via compile-time define
+
+The CLI sets `globalThis.__TYND_RUNTIME__` as a literal string:
+
+```ts
+// @tynd/core internals
+if (globalThis.__TYND_RUNTIME__ === "full") _startFull();
+else _startLite();
+```
+
+Bun replaces the literal at bundle time (`define: { "globalThis.__TYND_RUNTIME__": '"lite"' }`). Dead-code elimination drops the unused branch entirely. **Don't introduce dynamic checks that defeat this** — use capability checks instead.
+
+## Cache
+
+All three modes cache by hashing source dirs + key config files into `.tynd/cache/`. Three keys:
+
+| Key | Covers | Used by |
+|---|---|---|
+| `frontend` | `src/**` + `vite.config.*` / `angular.json` / similar + framework version | `dev`, `start`, `build` |
+| `backend` | `backend/**` + `tynd.config.ts` + `@tynd/core` version | `start`, `build` |
+| `backend-dev` | same as `backend` + dev flag | `dev` (lite only) |
+
+When the hash matches and the output still exists, the step is skipped. On cache miss, the build runs and populates the cache.
+
+Flush with:
+
+```bash
+tynd clean           # removes .tynd/cache + release/
+```
+
+### Icon regeneration
+
+Icons are **not** cached — the source stays in `public/` and bundlers render the sizes they need on each build. SVG rendering is fast, and producing sharp per-DPI artwork every build is preferable to cache-drifted stale ICOs.
+
+## Pack step (`tynd build` only)
+
+After the frontend and backend builds succeed, `tynd build` concatenates them into a self-extracting binary by appending a **TYNDPKG** trailer to the host executable. See [TYNDPKG Format](/docs/v0.3/concepts/tyndpkg).
+
+Flow:
+
+1. Copy the host binary (`tynd-full` or `tynd-lite`) to `release/<app>.exe`.
+2. For `full`: pack `bun.version` + the local `Bun.version` binary as `bun.zst` (zstd-compressed).
+3. Pack `bundle.js` (never compressed — QuickJS reads it directly) or `bundle.dist.js`.
+4. Pack frontend assets — text files (`html|htm|js|mjs|cjs|css|json|svg`) auto-compressed with zstd, `.zst` appended to their `rel`. Binary assets passed through raw.
+5. Pack sidecars (declared in `tynd.config.ts::sidecars`) under `sidecar/<name>` prefix.
+6. Append the TYNDPKG trailer + magic bytes.
+7. Platform-specific post-processing:
+   - **Windows** — patch PE subsystem (console → GUI), embed multi-size ICO (16/32/48/256). Full mode also embeds the ICO into the inner packed Bun copy before zstd so Task Manager shows the right icon for the subprocess.
+   - **macOS** — nothing at raw-binary level; the `.app` bundler copies the binary into `Contents/MacOS/` and handles `Info.plist` + ICNS.
+   - **Linux** — nothing at raw-binary level; `.deb` / `.rpm` / `.AppImage` bundlers handle `.desktop` + hicolor icons.
+
+## Bundle step (`tynd build --bundle`)
+
+Opt-in. Turns the raw binary into platform-native installers:
+
+| Host OS | Formats | Tool |
+|---|---|---|
+| macOS | `.app` + `.dmg` | pure TS + `hdiutil` (ships with macOS) |
+| Linux | `.deb` + `.rpm` + `.AppImage` | pure TS (`.deb`) + `rpmbuild` (required) + auto-downloaded `appimagetool` |
+| Windows | NSIS `.exe` setup + `.msi` | auto-downloaded NSIS 3.09 + WiX v3.11.2 |
+
+Auto-downloaded tools cache to `.tynd/cache/tools/<tool>/<version>/`. No manual install needed except `rpmbuild`.
+
+Cross-compilation **is not supported** — each host produces installers only for its own OS. Use a GitHub Actions matrix to cover all three.
+
+See the [Bundling guide](/docs/v0.3/guides/bundling).
+
+## Code signing (`tynd build --bundle` with `bundle.sign`)
+
+When `bundle.sign` is declared in `tynd.config.ts`, the raw binary is signed right after pack, **before** any bundler copies it into an installer. Every downstream artifact (`.app`, NSIS setup, MSI, raw `.exe`) carries the signature. Bundlers also re-sign the **outer** artifact — Gatekeeper / SmartScreen ignore an inner signature when the outer wrapper is unsigned.
+
+- **Windows** → `signtool.exe` (auto-discovered: `SIGNTOOL` env var → Windows SDK → PATH).
+- **macOS** → `codesign --options runtime --timestamp` with optional `xcrun notarytool submit --wait` + `xcrun stapler staple`.
+
+See the [Code Signing guide](/docs/v0.3/guides/code-signing).
+
+## CLI flag summary
+
+| Command | Fast? (cache) | Produces |
+|---|---|---|
+| `tynd dev` | yes | in-memory dev server + watched backend |
+| `tynd start` | yes | runs the host against built `dist/` + bundled backend |
+| `tynd build` | yes | `release/<app>[.exe]` |
+| `tynd build --bundle` | yes | `release/<app>[.exe]` + installers |
+| `tynd clean` | N/A | deletes `.tynd/cache` + `release/` |
+
+## Next
+
+- [TYNDPKG Format](/docs/v0.3/concepts/tyndpkg)
+- [Security](/docs/v0.3/concepts/security)
+- [Bundling guide](/docs/v0.3/guides/bundling)

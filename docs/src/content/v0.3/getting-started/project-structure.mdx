@@ -1,0 +1,141 @@
+---
+title: Project Structure
+description: "The files and directories `tynd create` scaffolds, what each one does, and where your code goes."
+---
+
+# Project Structure
+
+A fresh `tynd create` project looks like this:
+
+<FileTree>
+  <FileTree.Folder name="my-app" defaultOpen>
+    <FileTree.File name="tynd.config.ts" />
+    <FileTree.File name="package.json" />
+    <FileTree.File name="tsconfig.json" />
+    <FileTree.File name="vite.config.ts" />
+    <FileTree.Folder name="backend" defaultOpen>
+      <FileTree.File name="main.ts" />
+    </FileTree.Folder>
+    <FileTree.Folder name="src" defaultOpen>
+      <FileTree.File name="main.ts" />
+      <FileTree.File name="App.tsx" />
+    </FileTree.Folder>
+    <FileTree.Folder name="public">
+      <FileTree.File name="favicon.svg" />
+    </FileTree.Folder>
+    <FileTree.Folder name="dist" />
+    <FileTree.Folder name=".tynd">
+      <FileTree.Folder name="cache" />
+    </FileTree.Folder>
+    <FileTree.Folder name="release" />
+  </FileTree.Folder>
+</FileTree>
+
+## Top-level files
+
+### `tynd.config.ts`
+
+Project config — runtime mode, backend entry, frontend directory, window defaults, bundle settings.
+
+```ts filename="tynd.config.ts"
+import type { TyndConfig } from "@tynd/cli";
+
+export default {
+  runtime: "lite",                  // "lite" | "full"
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  window: {
+    title: "My App",
+    width: 1200,
+    height: 800,
+    center: true,
+  },
+} satisfies TyndConfig;
+```
+
+See [tynd.config.ts reference](/docs/v0.3/cli/config) for every field.
+
+### `package.json`
+
+Standard Node package manifest. Tynd reads `name`, `version`, `description`, `author`, and `homepage` for installer metadata (unless overridden in `bundle`).
+
+### `tsconfig.json`
+
+Standard TS config. The `lite` runtime exposes **Web-standards only** — for lite projects the template includes the DOM / WebWorker lib but not `@types/node` / `@types/bun`.
+
+### `vite.config.ts`
+
+Only present for Vite-based frameworks. Tynd's dev flow proxies Vite's HMR server; your config is the source of truth for frontend bundling.
+
+## `backend/`
+
+The TypeScript side that runs in the `lite` QuickJS or `full` Bun runtime. Declared via the `backend` field in `tynd.config.ts`.
+
+- **Exported functions** become frontend RPC calls (via `createBackend<typeof backend>()`).
+- **Emitters from `createEmitter`** become frontend event sources (subscribed via `api.on`).
+- **`app.start(config)`** must be the final top-level call.
+
+See [Backend API](/docs/v0.3/api/backend).
+
+## `src/`
+
+Frontend source. The exact layout depends on your framework — `tynd create` scaffolds the standard Vite/Angular template for each.
+
+Imports from `@tynd/core/client` give you:
+
+- `createBackend<T>()` — typed RPC proxy
+- OS APIs: `dialog`, `tyndWindow`, `clipboard`, `shell`, `notification`, `tray`, `menu`, `fs`, `http`, `sql`, `store`, … (27 total)
+- Web-platform re-exports: `fetch`, `WebSocket`, `crypto`, `URL`, … (one import surface for everything)
+
+## `public/`
+
+Static assets copied verbatim into the frontend bundle. Tynd also reads this directory for **icon auto-detection**:
+
+- `public/favicon.svg` (preferred — renders pixel-perfect at every size),
+- `public/favicon.{png,ico}` (degraded fallbacks),
+- `public/{icon,logo}.{svg,png,ico}`, …
+
+Override via `icon` in `tynd.config.ts`.
+
+## `dist/`
+
+Frontend build output (auto-generated). For Vite-based apps this matches Vite's `build.outDir`. For Angular, Tynd reads `angular.json` and picks up `dist/<project>/browser` (Angular 17+) or `dist/<project>`.
+
+## `.tynd/cache/`
+
+Build cache. Three keys:
+
+- `frontend` — frontend build output hash,
+- `backend` — production backend bundle hash,
+- `backend-dev` — dev backend bundle hash (lite only).
+
+Source hashes + key config files feed the cache key. When the hash matches and the output still exists, the step is skipped.
+
+Delete with `tynd clean`.
+
+## `release/`
+
+Where `tynd build` drops its output:
+
+- the raw binary (`my-app.exe` on Windows, `my-app` elsewhere),
+- optionally any installer artifacts from `--bundle` (`.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS setup, MSI).
+
+Delete with `tynd clean`.
+
+## What's not committed
+
+Default `.gitignore` excludes:
+
+```
+node_modules/
+dist/
+.tynd/
+release/
+```
+
+Keep `tynd.config.ts`, `backend/`, `src/`, `public/`, and the root manifest/lockfile tracked.
+
+## Next
+
+- [Development Workflow](/docs/v0.3/getting-started/dev-workflow)
+- [Architecture](/docs/v0.3/concepts/architecture)

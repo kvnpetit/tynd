@@ -1,0 +1,51 @@
+---
+title: log
+description: "Structured JSON-lines logging with size-based rotation, shared between backend and frontend."
+---
+
+# `log`
+
+```ts
+import { log } from "@tynd/core/client";
+```
+
+JSON-lines format on disk, size-based rotation, identical surface on backend and frontend. Entries from both sides land in the same file.
+
+## `configure(options): Promise<void>`
+
+```ts
+await log.configure({
+  level: "info",              // "debug" | "info" | "warn" | "error"
+  file: "/abs/path/app.log",  // override; default is <cache_dir>/<app>/app.log
+  maxBytes: 2 * 1024 * 1024,  // rotate at 2 MiB (default 5 MiB)
+  maxFiles: 5,                // keep .log.1 .. .log.5 (default 3)
+});
+```
+
+## `debug|info|warn|error(message, fields?): Promise<void>`
+
+```ts
+await log.info("boot complete", { runtime: "full", ms: 142 });
+await log.error("http 500", { url: "/api/sync", code: 500 });
+```
+
+Entries below the configured level are dropped.
+
+## `path(): Promise<string>`
+
+Absolute path of the currently active log file.
+
+## `captureConsole(): void` — bridge `console.*` into the log
+
+Idempotent. Wraps every `console.log` / `info` / `warn` / `error` / `debug` so it still prints to DevTools but also lands in the log file at the mapped level.
+
+```ts
+log.captureConsole();
+console.warn("slow query", { ms: 812 }); // -> stderr AND log file
+```
+
+Call `log.restoreConsole()` to revert.
+
+## Default location
+
+`<cache_dir>/<app-name>/app.log`. Rotates to `app.log.1`, `app.log.2`, ... when `maxBytes` is reached, dropping anything past `maxFiles`.

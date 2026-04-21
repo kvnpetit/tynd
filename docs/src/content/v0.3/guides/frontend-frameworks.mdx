@@ -1,0 +1,164 @@
+---
+title: Frontend Frameworks
+description: "Tynd is framework-agnostic — any framework that builds to a pure SPA works. Detailed notes for React, Vue, Svelte, Solid, Preact, Lit, and Angular."
+---
+
+# Frontend Frameworks
+
+Tynd is **framework-agnostic at runtime** — the frontend is a plain folder of static assets served over `tynd://` in production (or a dev server in development). This guide covers which frameworks the CLI knows how to scaffold, detect, and drive, and what's blocked.
+
+## Summary matrix
+
+Scaffold and production build have been verified for each row. The HMR column reflects the **default** experience after `tynd create`.
+
+| Framework | `tynd create` | `tynd build` | Binary launches | Fast Refresh (HMR) | Scaffold source |
+|---|---|---|---|---|---|
+| React | ✅ | ✅ | ✅ | ⚠ OK; breaks if [React Compiler](#react) is enabled | Vite `react-ts` |
+| Vue | ✅ | ✅ | ✅ | ✅ | Vite `vue-ts` |
+| Svelte | ✅ | ✅ | ✅ | ✅ | Vite `svelte-ts` |
+| Solid | ✅ | ✅ | ✅ | ✅ | Vite `solid-ts` |
+| Preact | ✅ | ✅ | ✅ | ✅ | Vite `preact-ts` |
+| Lit | ✅ | ✅ | ✅ | ♻ Full reload — [by design](#lit) | Vite `lit-ts` |
+| Angular | ✅ | ✅ | ✅ | ♻ Full reload by default — [see note](#angular) | Angular CLI |
+
+```bash
+tynd create my-app --framework <react|vue|svelte|solid|preact|lit|angular> --runtime <full|lite>
+```
+
+## Build tools detected by `tynd init`
+
+`tynd init` adds Tynd to an existing project by inspecting `package.json`. It identifies the build tool from the dependency graph and fills `frontendDir` / dev command accordingly:
+
+| Build tool | Trigger dep | `devUrl` (default) | `outDir` (default) |
+|---|---|---|---|
+| Vite | `vite` or `@vitejs/*` | `http://localhost:5173` | `dist` |
+| Create React App | `react-scripts` | `http://localhost:3000` | `build` |
+| Angular CLI | `@angular/cli` | `http://localhost:4200` | `dist/<project>/browser` |
+| Parcel | `parcel` | `http://localhost:1234` | `dist` |
+| Rsbuild | `@rsbuild/core` | `http://localhost:3000` | `dist` |
+| Webpack | `webpack` + `webpack-cli` | `http://localhost:8080` | `dist` |
+
+## Blocked — SSR / server-owning frameworks
+
+Tynd owns the HTTP layer (`tynd://` custom protocol) and packages the app as a pure SPA. Frameworks that need Node/Deno/Bun running on the end-user's machine are incompatible:
+
+| Framework | SPA alternative |
+|---|---|
+| **Next.js** | Use Vite + React |
+| **Nuxt** | Use Vite + Vue |
+| **SvelteKit** | Plain Svelte (`tynd create … -f svelte`) |
+| **Remix** | Vite + React Router SPA |
+| **Gatsby** | Any other SSG → static `dist/` |
+| **SolidStart** | Plain Solid |
+| **Angular Universal** | Plain Angular |
+| **Qwik City**, **Astro**, **TanStack Start**, **Vike** | Their SPA variants |
+
+`tynd init` / `tynd dev` / `tynd build` exit with an error when any of these are found in `dependencies` / `devDependencies`.
+
+---
+
+## React
+
+- Scaffolded via `bun create vite@latest <name> --template react-ts` → React 19 + TypeScript.
+- HMR via `@vitejs/plugin-react@6` (oxc-based Fast Refresh).
+
+### React Compiler caveat
+
+The Vite template ships `babel-plugin-react-compiler` and `@rolldown/plugin-babel` as devDependencies, and the generated `vite.config.ts` wires them after `react()`:
+
+```ts
+plugins: [react(), babel({ presets: [reactCompilerPreset()] })]
+```
+
+**This breaks HMR in dev.** `@vitejs/plugin-react@6` uses oxc to inject Fast Refresh markers (`$RefreshReg$`, `$RefreshSig$`); `@rolldown/plugin-babel` then re-parses the output and strips them.
+
+Enable the Compiler **only in build mode** so dev HMR stays intact:
+
+```ts filename="vite.config.ts"
+import { defineConfig } from "vite";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+
+export default defineConfig(({ command }) => ({
+  plugins: [
+    react(),
+    ...(command === "build"
+      ? [babel({ presets: [reactCompilerPreset()] })]
+      : []),
+  ],
+}));
+```
+
+Tradeoff: dev components are not memoized (matches every pre-Compiler React app). Production output is.
+
+## Vue
+
+- Scaffolded via `bun create vite@latest <name> --template vue-ts` → Vue 3 + TypeScript + `vue-tsc`.
+- HMR via `@vitejs/plugin-vue`. No known issues.
+- `build:ui` script uses `vue-tsc -b && vite build`.
+
+## Svelte
+
+- Scaffolded via `bun create vite@latest <name> --template svelte-ts` → Svelte 5 + TypeScript + `svelte-check`.
+- HMR via `@sveltejs/vite-plugin-svelte`. No known issues.
+
+<Callout type="warning">
+  **Do not install `@sveltejs/kit`** — it's SSR and will be rejected by `tynd init` / `tynd dev` / `tynd build`.
+</Callout>
+
+## Solid
+
+- Scaffolded via `bun create vite@latest <name> --template solid-ts` → Solid 1.x + TypeScript.
+- HMR via `vite-plugin-solid`. No known issues.
+
+<Callout type="warning">
+  **Do not install `@solidjs/start`** — SSR framework, blocked.
+</Callout>
+
+## Preact
+
+- Scaffolded via `bun create vite@latest <name> --template preact-ts` → Preact + TypeScript.
+- HMR via `@preact/preset-vite`. Uses Preact's own refresh implementation (separate from React's Fast Refresh) — the React Compiler caveat above does **not** apply here.
+
+## Lit
+
+- Scaffolded via `bun create vite@latest <name> --template lit-ts` → Lit 3 + TypeScript.
+- **No Fast Refresh.** Vite performs a full page reload on any change. This is intentional: Web Components persist state in custom element registrations and shadow DOM, and cannot be hot-swapped safely.
+- Not a Tynd limitation — the same applies in a plain Vite + Lit project outside Tynd.
+
+## Angular
+
+- Scaffolded via `bunx @angular/cli@latest new <name> --defaults --skip-git --skip-install --ssr=false`.
+- Dev server: `bunx ng serve` on `http://localhost:4200`.
+- **HMR behavior.** `ng serve` **full-reloads by default**. Opt into component-level HMR via `devCommand`:
+
+  ```ts filename="tynd.config.ts"
+  export default {
+    // ...
+    devCommand: "bunx ng serve --hmr",
+  } satisfies TyndConfig;
+  ```
+
+  HMR reliability is version-dependent; test before relying on it.
+
+- **`frontendDir` resolution:** Tynd reads `angular.json`, finds the first `projectType: "application"`, and combines `outputPath` with the builder:
+  - `@angular/build:application` (Angular 17+) → `<outputPath>/browser`
+  - older builders → `<outputPath>`
+
+<Callout type="warning">
+  **Do not install `@angular/platform-server`, `@nguniversal/express-engine`, or `@analogjs/*`** — SSR variants, blocked.
+</Callout>
+
+## Adding a new framework
+
+Two extension points in the CLI source (see the Tynd monorepo):
+
+1. **`FRAMEWORKS` array** in `packages/cli/src/commands/create.ts` — what `tynd create` can scaffold.
+2. **`detectFrontend` + `TOOL_COMMANDS` + `DEFAULT_OUT_DIR`** in `packages/cli/src/lib/detect.ts` — what `tynd init` / `tynd dev` / `tynd build` recognize in an existing project.
+
+If the new framework is SSR (owns a server process at end-user runtime), add its entry package to `SERVER_FRAMEWORKS` instead — it will fail-fast with a clear message directing to the SPA alternative.
+
+## Next
+
+- [Backend RPC](/docs/v0.3/guides/backend-rpc)
+- [Development Workflow](/docs/v0.3/getting-started/dev-workflow)

@@ -1,0 +1,27 @@
+---
+title: power
+description: "User idle time via the OS (GetLastInputInfo / CGEventSource / XScreenSaver)."
+---
+
+# `power`
+
+```ts
+import { power } from "@tynd/core/client";
+```
+
+User idle time. Useful to pause sync, mute notifications, or swap to a screen-saver UI when the user is away.
+
+## `getIdleTime(): Promise<number>`
+
+Seconds since the last keyboard / mouse input, as reported by the OS.
+
+```ts
+const idle = await power.getIdleTime();
+if (idle > 300) pauseSync();
+```
+
+Backed by the [`user-idle`](https://github.com/olback/user-idle-rs) crate — `GetLastInputInfo` on Windows, `CGEventSource` on macOS, `XScreenSaver` on Linux.
+
+## Sleep / wake / lock events
+
+Not wired yet — they need per-OS subscriptions (`WM_POWERBROADCAST`, IOKit, `logind`). Poll `getIdleTime` on a timer until those land.

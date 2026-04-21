@@ -1,0 +1,302 @@
+---
+title: tyndWindow
+description: "Window control, events, multi-window management. All methods auto-target the window they're called from."
+---
+
+# `tyndWindow`
+
+```ts
+import { tyndWindow } from "@tynd/core/client";
+```
+
+Every call auto-targets the window it runs in. Each WebView has an injected `__TYND_WINDOW_LABEL__` used for routing. The primary window's label is `"main"`.
+
+## State getters
+
+```ts
+const isMax  = await tyndWindow.isMaximized();
+const isMin  = await tyndWindow.isMinimized();
+const isFull = await tyndWindow.isFullscreen();
+const isVis  = await tyndWindow.isVisible();
+const isRes  = await tyndWindow.isResizable();
+const isCls  = await tyndWindow.isClosable();
+const isFoc  = await tyndWindow.isFocused();
+const isDec  = await tyndWindow.isDecorated();
+const label  =       tyndWindow.label();           // sync — "main" / "settings" / …
+```
+
+## Title
+
+```ts
+await tyndWindow.setTitle("My App — Unsaved");
+```
+
+## Size & position
+
+Logical pixels — divide by `scaleFactor()` for device pixels.
+
+```ts
+await tyndWindow.setSize(1400, 900);
+const innerSize = await tyndWindow.getSize();        // { width, height } — client area
+const outerSize = await tyndWindow.getOuterSize();   // includes title bar + borders
+
+await tyndWindow.setPosition(100, 100);
+const { x, y } = await tyndWindow.getPosition();
+
+await tyndWindow.setMinSize(400, 300);
+await tyndWindow.setMaxSize(1920, 1080);
+
+const dpi = await tyndWindow.scaleFactor();          // 1.0 / 1.5 / 2.0
+```
+
+## Maximize / minimize / fullscreen
+
+```ts
+await tyndWindow.maximize();
+await tyndWindow.unmaximize();
+await tyndWindow.toggleMaximize();
+
+await tyndWindow.minimize();
+await tyndWindow.unminimize();
+
+await tyndWindow.setFullscreen(true);
+```
+
+## Visibility & focus
+
+```ts
+await tyndWindow.show();
+await tyndWindow.hide();
+await tyndWindow.setFocus();            // bring to front + keyboard focus
+await tyndWindow.requestAttention();    // flash taskbar / bounce Dock
+```
+
+## Resizable / closable / maximizable / minimizable
+
+```ts
+await tyndWindow.setResizable(false);
+await tyndWindow.setClosable(false);
+await tyndWindow.setMaximizable(false);
+await tyndWindow.setMinimizable(false);
+```
+
+## Decorations & always-on-top
+
+```ts
+await tyndWindow.setDecorations(false);   // no title bar (build your own via CSS)
+await tyndWindow.setAlwaysOnTop(true);
+await tyndWindow.center();
+```
+
+## WebView ops
+
+```ts
+await tyndWindow.reload();
+await tyndWindow.setZoom(1.25);
+const zoom = await tyndWindow.getZoom();
+await tyndWindow.openDevTools();      // debug builds only
+await tyndWindow.closeDevTools();
+
+// Runtime navigation + print (wry)
+await tyndWindow.navigate("/reports");
+await tyndWindow.loadHtml("<h1>Hello</h1>");
+const url = await tyndWindow.getUrl();
+await tyndWindow.print();             // opens the system print dialog
+
+// Cmd+F-style in-page search (synchronous; uses the WebView's window.find).
+const hit = tyndWindow.findInPage("invoice", { caseSensitive: false });
+tyndWindow.stopFindInPage();
+```
+
+## Title getter
+
+```ts
+await tyndWindow.setTitle("Pro · 12 files open");
+const title = await tyndWindow.getTitle();
+```
+
+## Appearance (runtime)
+
+```ts
+await tyndWindow.setTheme("dark");                           // "light" | "dark" | "system"
+await tyndWindow.setBackgroundColor({ r: 20, g: 20, b: 28 });
+await tyndWindow.setShadow(false);                            // macOS only
+await tyndWindow.setWindowIcon("/abs/new-icon.png");
+await tyndWindow.setProgressBar("normal", 42);                // taskbar / dock / Unity
+await tyndWindow.setBadge({ label: "3" });                    // macOS dock / Linux launcher
+await tyndWindow.setSkipTaskbar(true);                        // Windows / Linux
+await tyndWindow.setContentProtection(true);                  // blocks screenshots + capture
+await tyndWindow.setVisibleOnAllWorkspaces(true);             // macOS Spaces
+await tyndWindow.setSystemBackdrop("mica");                   // Windows 11: mica / acrylic / tabbed / none / auto
+await tyndWindow.setTitlebarTransparent(true);                // macOS
+await tyndWindow.setFullsizeContentView(true);                // macOS — HTML extends under titlebar
+await tyndWindow.setTrafficLightInset(12, 18);                // macOS — reposition window controls
+```
+
+## Focus / enable
+
+```ts
+await tyndWindow.setFocusable(false);
+await tyndWindow.setEnabled(false);  // Windows only (blocks mouse + keyboard input)
+```
+
+## Cursor & mouse
+
+```ts
+await tyndWindow.setCursorIcon("grab"); // 34 icons: grab, grabbing, zoomIn, text, wait, crosshair, ...
+await tyndWindow.setCursorPosition(320, 240);
+await tyndWindow.setCursorVisible(false);
+await tyndWindow.setIgnoreCursorEvents(true); // click-through — mouse passes to windows behind
+
+// Drag / resize from custom regions (no OS chrome).
+dragHandle.addEventListener("mousedown", () => void tyndWindow.startDragging());
+resizeCorner.addEventListener("mousedown", () =>
+  void tyndWindow.startResizeDragging("southEast"),
+);
+```
+
+## Native drag & drop (real OS paths)
+
+```ts
+tyndWindow.onDragEnter(({ paths }) => highlightDropZone(paths.length));
+tyndWindow.onDragOver(({ x, y }) => trackPosition(x, y));
+tyndWindow.onDragLeave(() => clearDropZone());
+tyndWindow.onDrop(({ paths }) => {
+  for (const p of paths) void openFile(p); // p is a real OS path, not a File
+});
+```
+
+## Webview hooks
+
+```ts
+tyndWindow.onNavigation(({ url, allowed }) => {
+  // allowed === false when the active `security` policy blocks the URL
+  if (!allowed) log.warn("navigation blocked", { url });
+});
+tyndWindow.onPageLoad(({ phase, url }) => {
+  if (phase === "finished") hideSplash();
+});
+```
+
+## Positioner — 13 presets
+
+```ts
+await tyndWindow.positionAt("topRight", 20);
+// "topLeft" | "topRight" | "topCenter" | "leftCenter" | "rightCenter"
+// | "bottomLeft" | "bottomRight" | "bottomCenter" | "center"
+// | "trayLeft" | "trayRight" | "trayCenter" | "trayBottomCenter"
+```
+
+## Close self
+
+```ts
+await tyndWindow.closeSelf(); // no-op on the primary window (use app.exit())
+```
+
+## Multi-window
+
+```ts
+interface CreateWindowOptions {
+  label:             string;    // unique; cannot be "main"
+  url?:              string;    // defaults to the primary window's entry
+  title?:            string;
+  width?:            number;
+  height?:           number;
+  resizable?:        boolean;
+  decorations?:      boolean;
+  alwaysOnTop?:      boolean;
+  /** Custom User-Agent string for requests issued by this webview. */
+  userAgent?:        string;
+  /** Attach to a parent window — Windows + macOS native owner; Linux falls back to alwaysOnTop. */
+  modalTo?:          string;
+  /** Auto-hide when this window loses focus (popover pattern). */
+  hideOnFocusLost?:  boolean;
+  /** Auto-hide when the user presses Escape. */
+  hideOnEscape?:     boolean;
+}
+
+await tyndWindow.create({
+  label:  "settings",
+  url:    "/settings",
+  title:  "Settings",
+  width:  600,
+  height: 480,
+});
+
+const labels = await tyndWindow.all();     // ["main", "settings", …]
+await tyndWindow.close("settings");         // "main" cannot be closed this way
+```
+
+See the [Multi-Window guide](/docs/v0.3/guides/multi-window).
+
+## Events
+
+All `on*` return `unsubscribe()`. Events are broadcast to every webview and **auto-filtered to the calling window's label** by the client helper — handlers only fire for their own window.
+
+```ts
+const offResize = tyndWindow.onResized(({ width, height }) => { /* … */ });
+const offMove   = tyndWindow.onMoved(({ x, y }) => { /* … */ });
+const offFocus  = tyndWindow.onFocused(() => { /* regained focus */ });
+const offBlur   = tyndWindow.onBlurred(() => { /* lost focus */ });
+const offTheme  = tyndWindow.onThemeChanged(({ theme }) => { /* "light" | "dark" */ });
+const offDpi    = tyndWindow.onDpiChanged(({ scale }) => { /* 1.5 on 150% */ });
+
+// State transitions — fire only on flip, not initial state.
+const offMin    = tyndWindow.onMinimized(() => {});
+const offUnmin  = tyndWindow.onUnminimized(() => {});
+const offMax    = tyndWindow.onMaximized(() => {});
+const offUnmax  = tyndWindow.onUnmaximized(() => {});
+const offFull   = tyndWindow.onFullscreen(() => {});
+const offUnfull = tyndWindow.onUnfullscreen(() => {});
+
+// Broadcast — receive events from every window (not filtered).
+const offClosed = tyndWindow.onClosed(({ label }) => console.log(label, "closed"));
+```
+
+### Preventable close
+
+`preventDefault()` must be called **synchronously** in the handler to cancel the close. The close proceeds after 500 ms if nothing cancels it.
+
+```ts
+interface CloseRequestedEvent {
+  preventDefault(): void;
+}
+
+tyndWindow.onCloseRequested((e) => {
+  if (hasUnsavedChanges()) {
+    e.preventDefault();                // must be synchronous
+    void showSavePromptThenMaybeClose();
+  }
+});
+```
+
+For an async confirm flow that exceeds 500 ms:
+
+```ts
+tyndWindow.onCloseRequested(async (e) => {
+  if (!dirty) return;
+  e.preventDefault();
+  await tyndWindow.cancelClose();      // explicit halt for async cases
+
+  const discard = await dialog.confirm("Unsaved changes. Close?");
+  if (discard) await tyndWindow.close(tyndWindow.label());
+});
+```
+
+## `cancelClose()`
+
+Cancel a pending close. Has effect during the 500 ms window after `close-requested` — after that, the app has already committed to exiting.
+
+```ts
+await tyndWindow.cancelClose();
+```
+
+## CSP
+
+Every HTML response served through `tynd://` carries a baseline Content-Security-Policy. Override per-page via `<meta http-equiv="Content-Security-Policy">`.
+
+## Related
+
+- [monitors](/docs/v0.3/api/os/monitor) — multi-display enumeration.
+- [menu](/docs/v0.3/api/os/menu) — app menu bar click handling.
+- [Multi-Window guide](/docs/v0.3/guides/multi-window).

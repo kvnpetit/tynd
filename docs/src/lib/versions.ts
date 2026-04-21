@@ -1,5 +1,6 @@
 export const VERSIONS = [
-  { slug: "v0.2", label: "v0.2", status: "latest" as const },
+  { slug: "v0.3", label: "v0.3", status: "latest" as const },
+  { slug: "v0.2", label: "v0.2", status: "archived" as const },
   { slug: "v0.1", label: "v0.1", status: "archived" as const },
 ] as const;
 

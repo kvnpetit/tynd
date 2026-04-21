@@ -1,0 +1,165 @@
+---
+title: Debugging
+description: "DevTools, verbose logs, backend inspector, and common diagnostic commands for Tynd apps."
+---
+
+# Debugging
+
+Three surfaces can go wrong — backend, frontend, or IPC between them. Each has its own tool.
+
+## Frontend — DevTools
+
+Open Chromium DevTools inside the WebView (debug builds only; release builds compile DevTools out):
+
+```ts
+import { tyndWindow } from "@tynd/core/client";
+
+await tyndWindow.openDevTools();
+await tyndWindow.closeDevTools();
+```
+
+Works like any browser DevTools — Console, Elements, Network (you'll see `tynd://localhost` and `tynd-bin://localhost` requests), Sources (set breakpoints), Performance.
+
+### Bind to a keyboard shortcut
+
+```ts
+import { shortcuts, tyndWindow } from "@tynd/core/client";
+
+if (import.meta.env.DEV) {
+  await shortcuts.register("CmdOrCtrl+Shift+I", () => {
+    void tyndWindow.openDevTools();
+  });
+}
+```
+
+## Backend — logs
+
+Both runtimes redirect `console.log` to stderr (so stdout stays clean for IPC). Watch them:
+
+```bash
+tynd dev --verbose       # prints IPC traffic, cache decisions, Rust events
+tynd start --verbose     # same, for the no-HMR mode
+```
+
+In a production binary, the backend still writes to stderr — redirect to a file if you want persistence:
+
+```bash
+./release/my-app 2> app.log
+```
+
+### Structured logging
+
+Default `console.*` works but gives you unstructured text. For production apps consider a small wrapper:
+
+```ts filename="backend/log.ts"
+type Level = "debug" | "info" | "warn" | "error";
+
+export function log(level: Level, msg: string, data?: Record<string, unknown>) {
+  console.error(JSON.stringify({
+    ts: new Date().toISOString(),
+    level,
+    msg,
+    ...data,
+  }));
+}
+
+log("info", "user signed in", { userId: "abc" });
+```
+
+Or use a lib — `pino` / `consola` work in `full`; in `lite`, any pure-JS lib is fine.
+
+## Backend — inspector (full only)
+
+`full` mode runs on Bun, which supports the Chrome DevTools inspector:
+
+```bash
+TYND_BUN_ARGS="--inspect-brk" tynd dev
+```
+
+Open `chrome://inspect` in Chrome and click the target. You get JS breakpoints, stepping, memory profiling — the full package.
+
+Not available in `lite` (QuickJS has no inspector protocol). Switch to `full` temporarily if you need step-debugging.
+
+## IPC traffic
+
+`tynd dev --verbose` / `tynd start --verbose` prints every RPC call, emit, and OS call with timing. Useful for answering "is the call going through? what did it return?".
+
+## Rust host errors
+
+The host writes its own errors to stderr with a `[tynd-host]` prefix:
+
+```
+[tynd-host] dispatch error: api=fs method=readText: No such file
+```
+
+Usually that's enough to figure out the issue. For deeper inspection:
+
+```bash
+TYND_LOG=debug tynd dev
+```
+
+Sets the host's `tracing` subscriber to debug level — you'll see every IPC hop and thread spawn. Verbose, but useful when something mysterious is happening.
+
+## Common symptoms
+
+### RPC call hangs forever
+
+- Backend didn't register the function (`export` missing, typo in name).
+- Backend crashed before the response (check stderr).
+- In `full`, the Bun subprocess exited (the host logs this).
+
+**Verify:** `tynd dev --verbose` shows `RPC call greet sent` but no corresponding `return`. Backend crashed.
+
+### Events don't arrive
+
+- Emitter not `export`ed from `backend/main.ts`.
+- Handler registered before `createBackend` set up the proxy (subscribe after page ready).
+- In `lite`, the host's `__tynd_emit__` shim missing — usually means you're running the lite bundle outside `tynd-lite`.
+
+### OS call rejects with "Permission denied"
+
+Look at the path. On macOS, the app may need an entitlement (disk access, network client, etc.). On Linux, `chmod +x` might be needed for a sidecar.
+
+### Backend hot reload stalls
+
+Usually a syntax error in the new backend file — the old backend stays alive because the bundler failed. Check `tynd dev` output for a bundle error.
+
+## `tynd info` + `tynd validate`
+
+Before digging deep, run these two:
+
+```bash
+tynd info --verbose    # Bun version, Rust, WebView2, host binary path, cache
+tynd validate          # tynd.config.ts schema, binary discoverability
+```
+
+They catch 90% of "it's not working" reports.
+
+## Remote / shipped-app debugging
+
+Once the app is on a user's machine, you don't have DevTools. Options:
+
+- **Ship a log file toggle.** Behind an "Advanced" / "Debug" settings pane, let the user enable verbose logging. Log to `os.dataDir() + "/logs/"`.
+- **Crash reporter.** Wire up a simple uncaught-error handler:
+
+  ```ts
+  window.addEventListener("error", (e) => {
+    // POST to your crash collector
+    void fetch("https://telemetry.example.com/crash", {
+      method: "POST",
+      body: JSON.stringify({
+        message: e.message,
+        stack: e.error?.stack,
+        version: await app.getVersion(),
+      }),
+    });
+  });
+  ```
+
+- **Log the user's environment.** `await os.info()` + `tynd info` output pasted into a bug report is usually enough.
+
+## Related
+
+- [Testing](/docs/v0.3/guides/testing) — catch bugs before users see them.
+- [Performance](/docs/v0.3/guides/performance) — profiling specifics.
+- [Troubleshooting](/docs/v0.3/troubleshooting) — common errors + fixes.

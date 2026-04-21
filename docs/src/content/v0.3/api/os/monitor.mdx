@@ -1,0 +1,91 @@
+---
+title: monitors
+description: "Enumerate displays; read per-monitor DPI scale and position."
+---
+
+# `monitors`
+
+```ts
+import { monitors } from "@tynd/core/client";
+```
+
+Inspect connected displays.
+
+## `monitors.all(): Promise<Monitor[]>`
+
+Every monitor connected to the machine.
+
+```ts
+const all = await monitors.all();
+```
+
+## `monitors.primary(): Promise<Monitor | null>`
+
+The OS's "primary" display (menu bar on macOS, taskbar start on Windows). `null` on headless / unusual setups.
+
+```ts
+const primary = await monitors.primary();
+```
+
+## `monitors.current(): Promise<Monitor | null>`
+
+Monitor hosting the primary window. `null` if the window isn't placed yet.
+
+```ts
+const current = await monitors.current();
+```
+
+## `Monitor` shape
+
+```ts
+interface Monitor {
+  name:      string | null;     // null on some Linux setups
+  position:  { x: number; y: number };
+  size:      { width: number; height: number };
+  scale:     number;             // 1.0 / 1.5 / 2.0
+  isPrimary: boolean;
+}
+```
+
+`position` and `size` are **physical pixels**. Divide by `scale` for logical pixels (what `tyndWindow.setSize` / `setPosition` use).
+
+## Example — centre on the current monitor
+
+```ts
+import { monitors, tyndWindow } from "@tynd/core/client";
+
+const m = await monitors.current();
+if (m) {
+  const [winW, winH] = [800, 600];
+  const logicalW = m.size.width  / m.scale;
+  const logicalH = m.size.height / m.scale;
+  await tyndWindow.setSize(winW, winH);
+  await tyndWindow.setPosition(
+    Math.round((logicalW - winW) / 2 + m.position.x / m.scale),
+    Math.round((logicalH - winH) / 2 + m.position.y / m.scale),
+  );
+}
+```
+
+Or just `tyndWindow.center()` — the Rust side does the math.
+
+## `monitors.fromPoint(x, y): Promise<Monitor | null>`
+
+Monitor containing a virtual-desktop point (physical pixels). Returns `null` if the point is outside every known monitor.
+
+```ts
+const m = await monitors.fromPoint(2200, 400);
+```
+
+## `monitors.cursorPosition(): Promise<{ x, y }>`
+
+Global cursor position in physical pixels.
+
+```ts
+const { x, y } = await monitors.cursorPosition();
+const under = await monitors.fromPoint(x, y);
+```
+
+## Related
+
+- [tyndWindow](/docs/v0.3/api/os/window) — `setPosition`, `setSize`, `scaleFactor`, `center`.

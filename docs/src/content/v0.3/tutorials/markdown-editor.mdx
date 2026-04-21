@@ -1,0 +1,193 @@
+---
+title: Markdown Editor
+description: "Build a complete markdown editor — file open/save, live preview, keyboard shortcuts, native menu. ~150 LOC end-to-end."
+---
+
+# Markdown Editor
+
+Build a native markdown editor with:
+
+- Side-by-side editor + preview.
+- `Cmd/Ctrl+O` / `Cmd/Ctrl+S` to open / save files.
+- Native File menu.
+- Dirty-state tracking with preventable close.
+
+End result: a ~10 MB `.exe` / `.app` / `.AppImage`.
+
+## Scaffold
+
+```bash
+bunx @tynd/cli create md-editor --framework react --runtime lite
+cd md-editor
+bun install
+bun add marked
+```
+
+## Backend — open / save
+
+Only the thing the WebView can't do safely: file I/O. Everything else stays on the frontend.
+
+```ts filename="backend/main.ts"
+import { app } from "@tynd/core";
+
+app.start({
+  frontendDir: import.meta.dir + "/../dist",
+  window: {
+    title: "Markdown Editor",
+    width: 1280,
+    height: 800,
+    center: true,
+  },
+  menu: [
+    {
+      type: "submenu",
+      label: "File",
+      items: [
+        { label: "Open", id: "file.open", accelerator: "CmdOrCtrl+O" },
+        { label: "Save", id: "file.save", accelerator: "CmdOrCtrl+S" },
+        { label: "Save As", id: "file.saveAs", accelerator: "CmdOrCtrl+Shift+S" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    {
+      type: "submenu",
+      label: "Edit",
+      items: [
+        { role: "undo" }, { role: "redo" },
+        { type: "separator" },
+        { role: "cut" }, { role: "copy" }, { role: "paste" },
+      ],
+    },
+  ],
+});
+```
+
+That's the whole backend. The file dialogs, reads, writes all go through OS APIs called **directly from the frontend** — no round-trip.
+
+## Frontend — editor + preview
+
+```tsx filename="src/App.tsx"
+import { useEffect, useRef, useState } from "react";
+import { marked } from "marked";
+import {
+  dialog,
+  fs,
+  menu,
+  tyndWindow,
+} from "@tynd/core/client";
+
+export default function App() {
+  const [path, setPath] = useState<string | null>(null);
+  const [body, setBody] = useState<string>("# Hello\n\nStart typing…");
+  const [saved, setSaved] = useState<string>(body);
+  const dirty = body !== saved;
+
+  // Window title reflects file + dirty state
+  useEffect(() => {
+    const name = path ? path.split(/[/\\]/).pop() : "Untitled";
+    void tyndWindow.setTitle(`${dirty ? "● " : ""}${name} — Markdown Editor`);
+  }, [path, dirty]);
+
+  // Menu handlers
+  useEffect(() => {
+    const offOpen = menu.onClick("file.open", openFile);
+    const offSave = menu.onClick("file.save", () => saveFile(false));
+    const offSaveAs = menu.onClick("file.saveAs", () => saveFile(true));
+    return () => { offOpen(); offSave(); offSaveAs(); };
+  }, [path, body]);
+
+  // Preventable close when dirty
+  useEffect(() => {
+    const off = tyndWindow.onCloseRequested(async (e) => {
+      if (!dirty) return;
+      e.preventDefault();
+      const keep = await dialog.confirm(
+        "You have unsaved changes. Close anyway?",
+      );
+      if (keep) {
+        await tyndWindow.close("main");
+      }
+    });
+    return off;
+  }, [dirty]);
+
+  async function openFile() {
+    const picked = await dialog.openFile({
+      filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
+    });
+    if (!picked) return;
+    const text = await fs.readText(picked);
+    setPath(picked);
+    setBody(text);
+    setSaved(text);
+  }
+
+  async function saveFile(forceDialog: boolean) {
+    let dest = path;
+    if (!dest || forceDialog) {
+      const picked = await dialog.saveFile({
+        defaultPath: path ?? "untitled.md",
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+      if (!picked) return;
+      dest = picked;
+    }
+    await fs.writeText(dest, body);
+    setPath(dest);
+    setSaved(body);
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", height: "100vh" }}>
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        style={{
+          padding: "1rem",
+          border: "none",
+          outline: "none",
+          resize: "none",
+          fontFamily: "ui-monospace, monospace",
+          fontSize: 14,
+        }}
+      />
+      <div
+        style={{ padding: "1rem", overflow: "auto", borderLeft: "1px solid #ddd" }}
+        dangerouslySetInnerHTML={{ __html: marked.parse(body) as string }}
+      />
+    </div>
+  );
+}
+```
+
+## Build
+
+```bash
+tynd build --bundle
+```
+
+Output in `release/`. On macOS, open the `.app`; on Windows, run the NSIS setup; on Linux, install the `.deb`.
+
+## What this tutorial covered
+
+- Native menu bar with accelerators (`CmdOrCtrl+O`, `Cmd+S`).
+- `menu.onClick` handlers that reach straight into frontend state.
+- `dialog.openFile` / `dialog.saveFile` without a backend round-trip.
+- `fs.readText` / `fs.writeText` for user files.
+- `tyndWindow.onCloseRequested` + `preventDefault` for the "unsaved changes" dialog.
+- Reactive window title via `tyndWindow.setTitle`.
+
+## Next ideas
+
+- **Watch the file on disk** — `fs.watch(path, { recursive: false }, (e) => reload())` to detect external edits.
+- **Recent files list** — persist to `createStore("com.example.mdeditor")`.
+- **Export to PDF** — bundle a `wkhtmltopdf` [sidecar](/docs/v0.3/api/os/sidecar) and run via `process.exec`.
+- **Sync with cloud** — `http.post` to your API with the body; auth token in [`keyring`](/docs/v0.3/api/os/keyring).
+
+## Related
+
+- [fs API](/docs/v0.3/api/os/fs).
+- [dialog API](/docs/v0.3/api/os/dialog).
+- [menu API](/docs/v0.3/api/os/menu).
+- [Bundling](/docs/v0.3/guides/bundling).

@@ -1,0 +1,110 @@
+---
+title: Glossary
+description: "Definitions for every Tynd-specific term — runtimes, IPC primitives, build artifacts, and Rust-side concepts."
+---
+
+# Glossary
+
+## `@tynd/cli`
+
+The npm package that provides the `tynd` command. Includes `create`, `init`, `dev`, `start`, `build`, `clean`, `validate`, `info`, `upgrade`, `keygen`, `sign`.
+
+## `@tynd/core`
+
+The runtime-facing npm package. Exports `app`, `createEmitter` (backend), and 26 OS APIs + Web re-exports from `@tynd/core/client` (frontend).
+
+## `@tynd/host`
+
+The npm package whose postinstall downloads pre-built `tynd-full` / `tynd-lite` binaries from GitHub Releases.
+
+## Backend
+
+The TypeScript side that runs in the `lite` QuickJS or `full` Bun runtime. Declared via `backend` in `tynd.config.ts` (default `backend/main.ts`). Its `export`s are RPC methods.
+
+## `createBackend<T>()`
+
+Frontend import. Returns a typed `Proxy` that turns method calls into IPC messages. `T` is typically `typeof backend` (a type-only import).
+
+## `createEmitter<T>()`
+
+Backend utility. Creates a typed event bus. Exported emitters become subscribable from the frontend via `api.on("name", handler)`.
+
+## DevTools
+
+Chromium DevTools inside the WebView. Open with `tyndWindow.openDevTools()` (debug builds only). Compiled out of release builds.
+
+## Frontend
+
+The SPA that renders in the native WebView. Served via the `tynd://` custom scheme in production; proxies to a dev server (Vite, Angular CLI, …) in development.
+
+## `full` runtime
+
+Tynd runtime variant that spawns a Bun subprocess for the backend. `tynd-full.exe` binary. ~44 MB shipped.
+
+## IPC (Inter-Process Communication)
+
+The transport between frontend, Rust host, and backend. No TCP — uses the WebView's `window.ipc.postMessage`, `evaluate_script`, and the `tynd://` / `tynd-bin://` custom schemes.
+
+## `lite` runtime
+
+Tynd runtime variant that embeds QuickJS inside the Rust host. `tynd-lite.exe` binary. ~6.5 MB shipped.
+
+## Menu
+
+The native app menu bar (top of the screen on macOS, inside the window on Windows/Linux). Declared in `app.start({ menu })`; clicks handled with `menu.onClick(id, fn)`.
+
+## Monitor
+
+A connected display. `monitors.all()` / `.primary()` / `.current()` enumerate them. Each monitor has `{ name, position, size, scale, isPrimary }` — coordinates in physical pixels.
+
+## OS API
+
+A method callable from the frontend that dispatches to the Rust host — bypasses the TypeScript backend entirely. Example: `dialog.openFile`, `fs.readText`, `compute.hash`. Imported from `@tynd/core/client`.
+
+## Primary window
+
+The main window of a Tynd app — label `"main"`. Created by `app.start({ window })`. Closing it triggers `app.onClose`.
+
+## Runtime
+
+One of `"lite"` or `"full"` — picked in `tynd.config.ts`. Determines what JS environment the backend runs in.
+
+## Secondary window
+
+Any window beyond the primary. Created with `tyndWindow.create({ label, url?, title?, width?, height? })`. Each has its own WebView + IPC channel; events auto-route by label.
+
+## Sidecar
+
+A native binary bundled inside your app (ffmpeg, yt-dlp, etc.). Declared in `tynd.config.ts::sidecars`. Extracted to a temp dir at launch; accessed at runtime via `sidecar.path(name)`.
+
+## StreamCall
+
+The handle returned by calling an `async function*` backend export from the frontend. Both awaitable (resolves to the generator's return value) and async-iterable (yields each chunk). Cancellable via `.cancel()`.
+
+## TYNDPKG
+
+The self-extracting trailer appended to a Tynd binary at `tynd build` time. Contains frontend assets, backend bundle, Bun binary (for `full`), and sidecars. Magic bytes: `TYNDPKG\0` as the last 8 bytes of the file.
+
+## tynd-bin scheme (`tynd-bin://`)
+
+The secondary custom scheme for zero-copy binary IPC. Routes: `fs/readBinary`, `fs/writeBinary`, `compute/hash`. Raw bytes in request/response bodies — no base64, no JSON envelope.
+
+## tynd scheme (`tynd://`)
+
+The custom scheme that serves frontend assets. `tynd://localhost/<path>` maps to the built frontend directory (or a dev-server proxy in development). `window.location.origin` is always `tynd://localhost`.
+
+## `tynd.config.ts`
+
+The project config file. Validated by valibot. Defines `runtime`, `backend`, `frontendDir`, `window`, `sidecars`, `protocols`, `bundle`.
+
+## `tyndWindow`
+
+The frontend API for window control — size, position, focus, fullscreen, multi-window, events. Every call auto-targets the window it's invoked from (no explicit label arg).
+
+## Native layer
+
+The Rust-based layer that handles WebView embedding, custom protocols (`tynd://`, `tynd-bin://`), windowing, and the event loop. Shared crate stack with Tauri v2 — but invisible to your code.
+
+## Zero-codegen RPC
+
+Tynd's typed-RPC model. Types flow from `typeof backend` — no `.d.ts` generation, no IDL, no schema compiler. Refactoring a backend function automatically updates types at every frontend call site.

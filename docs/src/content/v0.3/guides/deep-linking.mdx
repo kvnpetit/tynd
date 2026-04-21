@@ -1,0 +1,149 @@
+---
+title: Deep Linking
+description: "Register a custom URL scheme (`myapp://`) so the OS launches your app for matching links."
+---
+
+# Deep Linking
+
+A **deep link** is a URL like `myapp://invite/abc123` that the OS routes to your app. Tynd handles the platform-specific registration at build time and delivers the URL to your frontend.
+
+## Declare the scheme
+
+```ts filename="tynd.config.ts"
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  protocols: ["myapp"],
+  bundle: { identifier: "com.example.myapp" },
+} satisfies TyndConfig;
+```
+
+- `protocols` — array of scheme names (no `://`).
+- Reserved schemes (`http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`) are rejected at config-validation time.
+
+## Registration per OS
+
+`tynd build` wires each installer format:
+
+- **macOS `.app`** — writes `CFBundleURLTypes` into `Info.plist`.
+- **Windows NSIS / MSI** — creates `HKCU\Software\Classes\<scheme>\shell\open\command` registry entries (current user — no admin prompt).
+- **Linux `.deb` / `.rpm` / `.AppImage`** — adds `MimeType=x-scheme-handler/<scheme>;` + `%U` in the `Exec=` line of the generated `.desktop` file.
+
+## Handle URLs at runtime
+
+Pair with `singleInstance` so duplicate launches forward the URL to the primary:
+
+```ts
+import { singleInstance } from "@tynd/core/client";
+
+const { acquired } = await singleInstance.acquire("com.example.myapp");
+if (!acquired) process.exit(0);
+
+singleInstance.onOpenUrl((url) => {
+  // url = "myapp://invite/abc123"
+  const parsed = new URL(url);
+  router.navigate(parsed.pathname);   // navigate to "/invite/abc123"
+});
+```
+
+`onOpenUrl` fires both on **cold start** (argv contains the URL) and on **duplicate launch** (the primary receives the forwarded URL).
+
+## Testing
+
+### macOS
+
+After running `tynd build --bundle app`, open the `.app` once so Launch Services registers the scheme, then:
+
+```bash
+open "myapp://test/path"
+```
+
+### Windows
+
+After running the NSIS installer:
+
+```powershell
+start myapp://test/path
+```
+
+Check registration with:
+
+```powershell
+Get-ItemProperty "HKCU:\Software\Classes\myapp"
+```
+
+### Linux
+
+After installing the `.deb` / `.rpm`:
+
+```bash
+xdg-open "myapp://test/path"
+```
+
+Check registration:
+
+```bash
+xdg-mime query default x-scheme-handler/myapp
+```
+
+During development (outside an installer), you can hand-register for testing:
+
+```bash
+# Create a temporary .desktop file
+cat > ~/.local/share/applications/myapp-dev.desktop <<EOF
+[Desktop Entry]
+Name=MyApp Dev
+Exec=/path/to/dev-binary %U
+Type=Application
+MimeType=x-scheme-handler/myapp;
+EOF
+update-desktop-database ~/.local/share/applications/
+```
+
+## Parsing URLs
+
+Use the standard `URL` API — available in both runtimes:
+
+```ts
+singleInstance.onOpenUrl((url) => {
+  const parsed = new URL(url);
+  // parsed.protocol === "myapp:"
+  // parsed.hostname === "invite"
+  // parsed.pathname === "/abc123"
+  // parsed.searchParams.get("foo")
+
+  if (parsed.hostname === "invite") {
+    acceptInvite(parsed.pathname.slice(1));
+  }
+});
+```
+
+## Multiple schemes
+
+```ts
+protocols: ["myapp", "myapp-dev"]
+```
+
+Useful if you want a prod + dev scheme that route differently. Both are handled by the same `onOpenUrl` callback — inspect `new URL(url).protocol` to branch.
+
+## Security
+
+- **Treat deep-link input as untrusted.** Users and websites can craft arbitrary payloads. Validate path / query against a whitelist before acting.
+- **Don't run privileged actions on link open** without confirmation. `myapp://delete-all` is a foot-gun.
+- **URL encoding** — browsers encode before launching. `URL` automatically decodes pathname / searchParams.
+
+## File type associations
+
+Not currently exposed as a first-class config field. If you need `.myapp` files to launch your app:
+
+- **macOS** — edit the generated `Info.plist` post-build (`CFBundleDocumentTypes`).
+- **Windows** — add registry entries under `HKCU\Software\Classes\.myapp` + `HKCU\Software\Classes\MyApp.Document\shell\open\command`.
+- **Linux** — extend the `.desktop` file with `MimeType=application/x-myapp;`.
+
+A future release may expose a `fileAssociations` config field; for now, roll your own post-build step.
+
+## Next
+
+- [Single Instance](/docs/v0.3/guides/single-instance)
+- [singleInstance API](/docs/v0.3/api/os/single-instance)

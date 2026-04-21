@@ -1,0 +1,90 @@
+---
+title: store
+description: "Persistent JSON key-value store under the OS config directory."
+---
+
+# `store`
+
+```ts
+import { createStore } from "@tynd/core/client";
+```
+
+Namespaced JSON k/v. Writes flush synchronously to `<config_dir>/<ns>/store.json`.
+
+## `createStore(namespace)`
+
+```ts
+const prefs = createStore("com.example.myapp");
+```
+
+- `namespace` — reverse-DNS recommended. Maps to `<config_dir>/<namespace>/store.json`.
+
+## Methods
+
+```ts
+await prefs.set("theme", "dark");
+const theme = await prefs.get<string>("theme");   // T | null
+
+await prefs.delete("theme");
+await prefs.clear();
+
+const keys = await prefs.keys();                   // string[]
+```
+
+That's the whole surface — five methods. No `has`, `values`, `entries`, `length` — compose from `keys()` + `get()` if you need them.
+
+```ts
+// has()
+const has = (await prefs.keys()).includes("theme");
+
+// entries()
+const keys = await prefs.keys();
+const entries = await Promise.all(keys.map(async (k) => [k, await prefs.get(k)] as const));
+
+// length
+const length = (await prefs.keys()).length;
+```
+
+## Types
+
+- Values must be **JSON-serializable** — primitives, arrays, plain objects, nulls. No functions, class instances, Maps / Sets, or cycles.
+- `get<T>` is an unchecked cast. Validate the shape yourself if you depend on it.
+
+## Where it writes
+
+| OS | Path |
+|---|---|
+| Linux | `~/.config/<namespace>/store.json` |
+| macOS | `~/Library/Preferences/<namespace>/store.json` |
+| Windows | `%APPDATA%\<namespace>\store.json` |
+
+The directory is created lazily on first write.
+
+## Durability
+
+- Each `set` / `delete` / `clear` **flushes synchronously** before resolving. On resolve, the change is on disk.
+- **No atomic multi-key writes.** For transactional semantics across keys, use [`sql`](/docs/v0.3/api/os/sql) with a single `UPDATE` statement, or write a flat JSON blob with one key.
+
+## Security
+
+**Not encrypted.** Plain JSON readable by any process with user-level access. For sensitive data (tokens, passwords, API keys), use [`keyring`](/docs/v0.3/api/os/keyring).
+
+## Example — per-instance cache + preferences
+
+```ts
+import { createStore } from "@tynd/core/client";
+
+const prefs = createStore("com.example.myapp");
+const cache = createStore("com.example.myapp.cache");
+
+await prefs.set("theme", "dark");
+await cache.set("lastSync", Date.now());
+```
+
+Each namespace is a separate file.
+
+## Related
+
+- [keyring](/docs/v0.3/api/os/keyring) — encrypted secrets.
+- [sql](/docs/v0.3/api/os/sql) — relational + transactional.
+- [fs](/docs/v0.3/api/os/fs) — raw file writes for custom formats.

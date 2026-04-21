@@ -1,0 +1,266 @@
+---
+title: Code Signing
+description: "Sign Windows binaries with signtool, sign + notarize macOS builds with codesign + notarytool, and integrate signing into `tynd build`."
+---
+
+# Code Signing
+
+`tynd build` signs Windows `.exe` / NSIS / MSI via `signtool` and macOS binaries / `.app` via `codesign` (+ optional notarization) **for you** when a `bundle.sign` block is present in `tynd.config.ts`.
+
+<Callout type="info">
+  **Why sign?** Unsigned binaries trigger SmartScreen warnings on Windows, are quarantined by Gatekeeper on macOS, and are flagged by Chrome/Edge on download. Signing + notarizing eliminates those prompts.
+</Callout>
+
+## Built-in signing
+
+Declare certs once in `tynd.config.ts`; every `tynd build` signs automatically.
+
+```ts filename="tynd.config.ts"
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  bundle: {
+    identifier: "com.example.myapp",
+    sign: {
+      windows: {
+        certificate:  "./cert.pfx",                  // or "cert:subject=My Publisher"
+        password:     "env:WIN_CERT_PASSWORD",       // reads from env var
+        timestampUrl: "http://timestamp.digicert.com",
+      },
+      macos: {
+        identity:     "Developer ID Application: Name (TEAMID)",
+        entitlements: "./entitlements.plist",         // optional
+        notarize: {
+          appleId:  "env:APPLE_ID",
+          password: "env:APPLE_APP_PASSWORD",         // app-specific password
+          teamId:   "env:APPLE_TEAM_ID",
+        },
+      },
+    },
+  },
+} satisfies TyndConfig;
+```
+
+- `env:NAME` resolves from `process.env.NAME` at build time and throws if missing — no secrets in source control.
+- The raw binary is signed first, then each installer artifact on top. Both layers need valid signatures for Gatekeeper / SmartScreen to trust the final download.
+- `notarize` is opt-in. When present, the signed `.app` is zipped and submitted with `xcrun notarytool submit --wait`, then stapled so offline launches work.
+- On Windows, `signtool.exe` is auto-discovered: `SIGNTOOL` env var → Windows SDK → PATH.
+
+Omit `bundle.sign` and builds stay unsigned — fine for dev and internal CI smoke tests.
+
+## Windows
+
+### Get a certificate
+
+| Type | Cost/yr | SmartScreen |
+|---|---|---|
+| **EV code-signing** (hardware token) | ~$300-600 | removed immediately |
+| Standard code-signing (OV) | ~$100-250 | removed after reputation builds (1-2 months) |
+| Free for open source: [SignPath.io](https://signpath.io) (Foundation tier) | $0 | OV-level |
+
+EV certs ship on a USB token (YubiKey or SafeNet); the key can't be exported. Standard certs come as a `.pfx`.
+
+### Built-in signing
+
+Point `certificate` at a `.pfx` file or a certificate store lookup:
+
+```ts
+sign: {
+  windows: {
+    certificate: "./cert.pfx",                       // file path
+    // or
+    certificate: "cert:subject=My Publisher Inc",    // Windows cert store by subject
+    // or
+    certificate: "cert:sha1=AAAAAAAA...FFFFFFFF",    // Windows cert store by thumbprint
+    password: "env:WIN_CERT_PASSWORD",
+    timestampUrl: "http://timestamp.digicert.com",
+  }
+}
+```
+
+### Manual `signtool` (advanced)
+
+```powershell
+signtool sign `
+  /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+  /f cert.pfx /p $env:CERT_PASSWORD `
+  release\my-app.exe
+```
+
+**Always include `/tr <timestamp>`** — without it, the signature expires when the cert does.
+
+Verify:
+
+```powershell
+signtool verify /pa /v release\my-app.exe
+```
+
+## macOS
+
+### Get a Developer ID
+
+- Enroll in the [Apple Developer Program](https://developer.apple.com/programs/) ($99/yr).
+- Create a **Developer ID Application** certificate in Xcode or the web console.
+- For `.dmg` / `.pkg` installers, also create a **Developer ID Installer** certificate.
+- Export both as `.p12` (password-protected) for CI.
+
+### Built-in signing
+
+```ts
+sign: {
+  macos: {
+    identity: "Developer ID Application: Your Name (TEAMID)",
+    entitlements: "./entitlements.plist",   // optional
+    notarize: {
+      appleId:  "env:APPLE_ID",
+      password: "env:APPLE_APP_PASSWORD",
+      teamId:   "env:APPLE_TEAM_ID",
+    },
+  }
+}
+```
+
+### Entitlements
+
+WebKit needs JIT — minimal `entitlements.plist`:
+
+```xml filename="entitlements.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.allow-jit</key>                         <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>  <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>        <true/>
+    <key>com.apple.security.network.client</key>                       <true/>
+</dict>
+</plist>
+```
+
+### Manual `codesign` + `notarytool`
+
+```bash
+codesign --deep --force --options runtime \
+  --entitlements entitlements.plist \
+  --sign "Developer ID Application: Your Name (TEAMID)" \
+  release/MyApp.app
+
+codesign --force --sign "Developer ID Application: Your Name (TEAMID)" \
+  release/MyApp-1.0.0.dmg
+
+xcrun notarytool submit release/MyApp-1.0.0.dmg \
+  --apple-id "you@example.com" --team-id "TEAMID" --password "app-specific-password" \
+  --wait
+
+xcrun stapler staple release/MyApp-1.0.0.dmg
+xcrun stapler staple release/MyApp.app
+```
+
+Generate an **app-specific password** at [appleid.apple.com](https://appleid.apple.com) → Sign-in and security → App-specific passwords.
+
+### Verify
+
+```bash
+spctl --assess -vv release/MyApp.app
+# Expected: "source=Notarized Developer ID"
+
+codesign --verify --deep --strict --verbose=2 release/MyApp.app
+```
+
+## Linux
+
+Linux has no centralized signature-verification model. Two practical paths:
+
+### Detached `.sig` (manual verification)
+
+```bash
+gpg --armor --detach-sign release/my-app-1.0.0.AppImage
+gpg --armor --detach-sign release/my-app-1.0.0.deb
+
+# Users verify with:
+gpg --verify my-app-1.0.0.AppImage.asc my-app-1.0.0.AppImage
+```
+
+Publish the public key alongside the downloads.
+
+### Signed `.deb` / `.rpm` repos
+
+- **Debian/APT** — `dpkg-sig --sign builder file.deb` + sign the `Release` file with `gpg --clearsign`. Users drop the key in `/etc/apt/trusted.gpg.d/`.
+- **RPM/dnf** — `rpm --addsign file.rpm` (needs `%_gpg_name` in `~/.rpmmacros`). Users import via `rpm --import`.
+
+### AppImage embedded signature
+
+```bash
+./appimagetool --sign --sign-key <KEYID> release/MyApp.AppImage
+```
+
+Verification is then done by the AppImage runtime itself.
+
+For most desktop apps shipping via GitHub Releases, **detached `.sig` is enough** — serious distros will package you themselves anyway.
+
+## CI — GitHub Actions example
+
+```yaml
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bunx tynd build --bundle
+        env:
+          # Windows
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+          # macOS
+          APPLE_ID:            ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID:       ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD:  ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.os }}
+          path: release/
+```
+
+For macOS, import the cert into the runner's keychain before the build step:
+
+```yaml
+- name: Import macOS certs
+  if: runner.os == 'macOS'
+  env:
+    CERT_BASE64:       ${{ secrets.MACOS_DEV_ID_P12 }}
+    CERT_PASSWORD:     ${{ secrets.MACOS_DEV_ID_PASSWORD }}
+    KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+  run: |
+    echo "$CERT_BASE64" | base64 --decode > cert.p12
+    security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+    security default-keychain -s build.keychain
+    security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+    security import cert.p12 -k build.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
+    security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+```
+
+For Windows, write the PFX from a base64-encoded secret before the build:
+
+```yaml
+- name: Stage Windows cert
+  if: runner.os == 'Windows'
+  env:
+    CERT_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+  run: |
+    [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($env:CERT_BASE64))
+```
+
+## EV certs + CI
+
+EV certs ship on hardware tokens and **don't work in most CI runners**. Use a cloud-signing service instead — DigiCert KeyLocker, SSL.com eSigner, Azure Trusted Signing. They expose a `signtool`-compatible interface over an authenticated API.
+
+## Next
+
+- [tynd.config.ts reference](/docs/v0.3/cli/config)
+- [Auto-Updates](/docs/v0.3/guides/auto-updates)
+- [Bundling](/docs/v0.3/guides/bundling)

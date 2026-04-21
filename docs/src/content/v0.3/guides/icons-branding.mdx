@@ -1,0 +1,146 @@
+---
+title: Icons & Branding
+description: "One source of truth for your app icon — SVG preferred. Tynd renders per-format sizes for Windows ICO, macOS ICNS, Linux hicolor."
+---
+
+# Icons & Branding
+
+Tynd uses **one icon source** and renders every output format at build time. No manual multi-size ICO, no separate macOS ICNS step.
+
+## Source icon
+
+Put one file in `public/`:
+
+```
+public/favicon.svg         ← preferred
+public/favicon.png         ← fallback
+public/favicon.ico         ← Windows-only; skipped for macOS/Linux
+```
+
+Alternative locations auto-detected in this order:
+
+1. `public/{favicon,icon,logo}.svg`
+2. `public/{favicon,icon,logo}.{ico,png}`
+3. `assets/icon.{svg,png,ico}`
+4. `icon.{svg,png,ico}`
+
+Override via `icon` in `tynd.config.ts`:
+
+```ts
+export default {
+  icon: "./branding/app-icon.svg",
+} satisfies TyndConfig;
+```
+
+## What's rendered per format
+
+| Target | Sizes | Notes |
+|---|---|---|
+| Windows ICO (raw `.exe` + NSIS + MSI) | 16, 32, 48, 256 | Embedded via ResEdit. Also embedded into the inner Bun copy (full mode) so Task Manager shows the right icon. |
+| macOS ICNS (`.app`) | 32, 128, 256, 512, 1024 | One entry per size bucket. |
+| Linux hicolor (`.deb`, `.rpm`, `.AppImage`) | 16, 32, 48, 64, 128, 256, 512 | Dropped into `usr/share/icons/hicolor/<n>x<n>/apps/<name>.png`. |
+
+## Why SVG
+
+- **Pixel-perfect at every size** — rasterized at render time per DPI bucket.
+- **Small on disk** — typically 2-10 KB.
+- **Editable** — you can tweak colors in an SVG editor and rebuild in seconds.
+
+PNG source degrades to single-size (native resolution). ICO source passes through to Windows bundles only — macOS/Linux bundlers skip with a warning.
+
+## SVG gotchas
+
+- **Must be square.** Tynd auto-wraps non-square SVGs in a square viewBox (Windows PE + macOS ICNS reject/distort non-square inputs). Design your icon with a square canvas.
+- **Avoid `<foreignObject>`, `<filter>`, heavy `<clipPath>`.** Some rasterizers (resvg) fall back or skip. Simple paths + solid fills render the same everywhere.
+- **Flatten external fonts.** `<text>` with a web font won't render identically in the rasterizer. Convert text to paths in your SVG editor.
+- **Use absolute coordinates.** Relative paths (`d="m 1 1 l 2 3"`) work in browsers but some rasterizers mis-handle them.
+
+## Taskbar / Dock
+
+The icon shown in the taskbar (Windows) / Dock (macOS) / activities view (Linux) is the same as your build icon — Tynd doesn't expose a separate runtime icon API yet.
+
+## Window icon at runtime
+
+Not currently exposed. If you want to change the window icon after launch (e.g. show an "unread" badge), track the feature request on GitHub.
+
+## Installer imagery (Windows)
+
+NSIS wizard imagery is separate from the app icon:
+
+```ts filename="tynd.config.ts"
+bundle: {
+  nsis: {
+    headerImage:  "./installer-header.bmp",    // 150×57 BMP, top of wizard
+    welcomeImage: "./installer-welcome.bmp",   // 164×314 BMP, welcome page
+  },
+}
+```
+
+Must be 24-bit BMP (NSIS is strict). Optional — default is no imagery.
+
+## Splash screen
+
+Not currently a first-class feature. If your app needs a splash, render it in the frontend — your first-paint HTML is the splash. Once `app.onReady` fires (DOMContentLoaded), swap to the real UI.
+
+```tsx filename="src/App.tsx"
+export default function App() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    // heavy init
+    initApp().then(() => setReady(true));
+  }, []);
+  return ready ? <MainApp /> : <Splash />;
+}
+```
+
+## App name in installers
+
+| Source | Used in |
+|---|---|
+| `package.json::name` | npm metadata, binary filename |
+| `bundle.identifier` (reverse-DNS) | macOS bundle ID, Windows registry key |
+| `package.json::description` | `.deb` / `.rpm` summary |
+| `package.json::author` | Installer publisher |
+| `package.json::homepage` | Installer "more info" link |
+
+Override any of these via `bundle.*` fields in `tynd.config.ts`.
+
+## Brand consistency checklist
+
+<Steps>
+
+### One source file in `public/`
+
+SVG preferred, square canvas.
+
+### Set `bundle.identifier` in `tynd.config.ts`
+
+Reverse-DNS (`com.yourco.myapp`). Required for `tynd build --bundle`.
+
+### Update `package.json` metadata
+
+`name`, `description`, `author`, `homepage` — they all flow into installer metadata.
+
+### Verify on each platform
+
+```bash
+tynd build --bundle
+```
+
+Open the `.app` / installer and check Finder / File Explorer / `.desktop` shows the icon. On Windows, check Task Manager for the running process icon (full mode embeds into the Bun subprocess too).
+
+### Lock the icon in a CI check
+
+If you want to guarantee your icon survives a merge:
+
+```bash
+test -f public/favicon.svg || { echo "icon missing"; exit 1; }
+```
+
+</Steps>
+
+## Related
+
+- [Bundling guide](/docs/v0.3/guides/bundling).
+- [tynd.config.ts reference](/docs/v0.3/cli/config).
+- [TYNDPKG format](/docs/v0.3/concepts/tyndpkg) — how the icon gets embedded.

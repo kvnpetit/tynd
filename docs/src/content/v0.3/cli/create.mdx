@@ -1,0 +1,75 @@
+---
+title: tynd create
+description: "Scaffold a new Tynd project — interactive or flag-driven."
+---
+
+# `tynd create`
+
+```bash
+bunx @tynd/cli create [name]
+```
+
+Scaffold a new project. Interactive by default — prompts for project name, frontend framework, and runtime mode if flags are missing.
+
+## Flags
+
+| Flag | Values | Default |
+|---|---|---|
+| `-f, --framework <fw>` | `react`, `vue`, `svelte`, `solid`, `preact`, `lit`, `angular` | interactive prompt |
+| `-r, --runtime <runtime>` | `full`, `lite` | interactive prompt |
+| `--no-install` | — | install is run by default |
+
+## Examples
+
+```bash
+bunx @tynd/cli create                              # fully interactive
+bunx @tynd/cli create my-app                       # name given, rest prompted
+bunx @tynd/cli create my-app -f react -r lite
+bunx @tynd/cli create my-app -f vue -r full --no-install
+```
+
+## What it does
+
+<Steps>
+
+### Creates the project directory
+
+Fails if the target directory exists and is not empty.
+
+### Scaffolds the frontend
+
+- Vite frameworks → `bun create vite@latest <name> --template <fw>-ts`
+- Angular → `bunx @angular/cli@latest new <name> --defaults --skip-git --skip-install --ssr=false`
+
+### Adds Tynd
+
+- Writes `tynd.config.ts` with the chosen runtime.
+- Creates `backend/main.ts` with a minimal `app.start` + greeting example.
+- Adds `@tynd/cli`, `@tynd/core`, `@tynd/host` to `package.json`.
+- Patches `package.json` scripts (`dev`, `build`, `start`).
+
+### Installs dependencies
+
+Runs `bun install` unless `--no-install`.
+
+</Steps>
+
+## Output
+
+```
+my-app/
+├── tynd.config.ts
+├── package.json
+├── tsconfig.json
+├── vite.config.ts       (Vite frameworks)
+├── angular.json         (Angular)
+├── backend/main.ts
+├── src/                 (framework-specific)
+└── public/favicon.svg
+```
+
+## Related
+
+- [Frontend Frameworks guide](/docs/v0.3/guides/frontend-frameworks).
+- [`tynd init`](/docs/v0.3/cli/init) — add Tynd to an existing project.
+- [Project Structure](/docs/v0.3/getting-started/project-structure).

@@ -1,0 +1,131 @@
+---
+title: Sidecars
+description: "Ship a helper binary (ffmpeg, yt-dlp, etc.) embedded inside your Tynd app and execute it at runtime."
+---
+
+# Sidecars
+
+Some apps need a native CLI binary bundled alongside the app — `ffmpeg` for video, `yt-dlp` for media downloads, a proprietary compiled tool, a custom Go/Rust binary. Tynd's **sidecar** mechanism packs these into the TYNDPKG trailer, extracts them at launch, and gives you a path at runtime.
+
+## Declare sidecars
+
+```ts filename="tynd.config.ts"
+import type { TyndConfig } from "@tynd/cli";
+
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  sidecars: [
+    { name: "ffmpeg.exe", path: "bin/ffmpeg.exe" },
+    { name: "yt-dlp",     path: "bin/yt-dlp" },
+  ],
+} satisfies TyndConfig;
+```
+
+- `name` — what your TS code asks for at runtime. Usually matches the binary's original filename.
+- `path` — where the binary lives on disk at build time, relative to the project root.
+
+## Use at runtime
+
+```ts
+import { sidecar, process } from "@tynd/core/client";
+
+const ffmpegPath = await sidecar.path("ffmpeg.exe");
+const { stdout, code } = await process.exec(ffmpegPath, {
+  args: ["-version"],
+});
+console.log(stdout);
+```
+
+`sidecar.path("ffmpeg.exe")` returns the **extracted on-disk path** — e.g. `/tmp/tynd-xxxx/sidecar/ffmpeg.exe` on Linux or `%TEMP%/tynd-xxxx/sidecar/ffmpeg.exe` on Windows. The binary is ready to execute when `path()` resolves.
+
+## What happens at build time
+
+When `tynd build` packs a sidecar:
+
+1. Reads the file from `path`.
+2. Packs it under `sidecar/<name>` in the TYNDPKG trailer.
+3. No compression — most sidecars are already-compressed formats (`.exe`, `ELF`, pre-compressed zips).
+
+## What happens at launch
+
+The Rust host's embed loader walks TYNDPKG and, for every entry under `sidecar/`:
+
+1. Extracts the bytes to `<temp_dir>/sidecar/<name>`.
+2. On Unix, chmods +755 so the binary is executable.
+3. Registers the path in a `Mutex<HashMap<name, PathBuf>>` inside `os::sidecar`.
+
+`sidecar.path("ffmpeg.exe")` looks up the map.
+
+## Platform-specific binaries
+
+A single app ships for multiple platforms, and your sidecar is probably **per-platform** (different binary on Windows, Linux, macOS, even per-arch). Two options:
+
+### One app build per platform (recommended)
+
+Your CI matrix runs `tynd build` on each target host. Before each build, the matrix step copies the right sidecar into `bin/`:
+
+```yaml
+# .github/workflows/release.yml (partial)
+- name: Stage sidecar for this host
+  shell: bash
+  run: |
+    case "${{ matrix.target }}" in
+      windows-x64)  curl -L -o bin/ffmpeg.exe https://…/ffmpeg-win-x64.exe ;;
+      linux-x64)    curl -L -o bin/ffmpeg https://…/ffmpeg-linux-x64 ;;
+      macos-arm64)  curl -L -o bin/ffmpeg https://…/ffmpeg-macos-arm64 ;;
+    esac
+
+- run: bunx tynd build --bundle
+```
+
+### Conditional sidecar at runtime
+
+If you can ship all platforms' binaries in one build (niche), check the OS and pick the right entry:
+
+```ts
+import { os, sidecar } from "@tynd/core/client";
+
+async function ffmpegPath() {
+  const { platform, arch } = await os.info();
+  const name = `ffmpeg-${platform}-${arch}${platform === "windows" ? ".exe" : ""}`;
+  return sidecar.path(name);
+}
+```
+
+## Interacting with a sidecar
+
+`process.exec` captures stdout/stderr/code:
+
+```ts
+const { stdout, stderr, code } = await process.exec(ffmpegPath, {
+  args: ["-i", input, "-c:v", "libx264", output],
+  cwd: "/some/working/dir",    // optional
+  env: { FFREPORT: "file=log.txt" },   // optional, merged with current env
+});
+
+if (code !== 0) throw new Error(stderr);
+```
+
+For long-running sidecars (transcoding, server processes), pair with `terminal.spawn` to stream stdout/stderr via a PTY, or roll your own streaming by structuring the command's output as discrete lines and polling from TS.
+
+## File-size tradeoff
+
+Sidecars **inflate your final binary** by exactly their uncompressed size (no zstd step). A 60 MB `ffmpeg-static` turns your ~10 MB `lite` app into a ~70 MB `.exe`. Consider:
+
+- **Auto-download on first launch** (via `http.download`) instead of bundling — trades startup latency for a slimmer installer.
+- **System-wide binary** — if most users already have `ffmpeg`, try `process.exec("ffmpeg", ...)` first and fall back to a bundled copy.
+- **Stripped / smaller variants** — ffmpeg without every codec is much smaller than a kitchen-sink build.
+
+## Code signing notes
+
+Windows: if your sidecar is unsigned but your outer `.exe` is signed, SmartScreen may still flag the outer binary (the signed outer is trusted; the sidecar executes inside your process boundary and inherits your trust). No extra work needed.
+
+macOS: a signed outer `.app` doesn't extend its signature to extracted sidecars. If you execute an unsigned sidecar on a notarized app, Gatekeeper may refuse. Either sign your sidecar too, or accept that specific sidecars need to be re-downloaded on first use.
+
+## Next
+
+- [process API](/docs/v0.3/api/os/process)
+- [terminal API](/docs/v0.3/api/os/terminal)
+- [TYNDPKG format](/docs/v0.3/concepts/tyndpkg)

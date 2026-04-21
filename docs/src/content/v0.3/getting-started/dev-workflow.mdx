@@ -1,0 +1,116 @@
+---
+title: Development Workflow
+description: "The day-to-day loop — dev mode with HMR, classic builds without HMR, cache hits, and troubleshooting."
+---
+
+# Development Workflow
+
+Tynd gives you three run modes: **development with hot reload**, **start from a fresh build**, and **release binary**.
+
+## `tynd dev` — hot reload everywhere
+
+```bash
+bun run dev        # alias for `tynd dev`
+```
+
+- **Frontend HMR** — the dev server (Vite, Angular CLI, …) runs in-process; Tynd mounts it inside the native window via the `tynd://` custom scheme proxying through to `localhost`.
+- **Backend hot reload** — Tynd watches `backend/**` and rebuilds + restarts the backend while **keeping the WebView alive**. Open windows persist; in-flight IPC calls reject with a reconnect-required error.
+- **OS-API calls** work unchanged — they go through the same Rust host, which doesn't restart.
+
+<Callout type="info">
+  **Backend restart is selective.** The backend bundle (`bundle.dev.js` for `lite`, `bundle.dist.js` for `full`) is rebuilt on every backend file change. The frontend is left untouched.
+</Callout>
+
+### What HMR covers per framework
+
+| Framework | Fast Refresh (HMR) |
+|---|---|
+| Vue / Svelte / Solid / Preact | ✅ |
+| React | ⚠ OK; breaks if React Compiler is enabled at dev time |
+| Lit | ♻ Full reload — Web Components by design |
+| Angular | ♻ Full reload by default (opt-in HMR via `ng serve --hmr`) |
+
+See [Frontend Frameworks](/docs/v0.3/guides/frontend-frameworks) for per-framework details.
+
+## `tynd start` — classic build, no HMR
+
+```bash
+tynd start
+```
+
+Builds frontend + backend from scratch (cache-hash keyed), then runs the host against the built artifacts. Every run reflects the latest source but there's no dev server and no watcher.
+
+Use this when:
+
+- you want to reproduce what a release build does without producing an installer,
+- you want to profile production-shaped startup latency,
+- the Vite HMR server is giving you grief.
+
+## `tynd build` — release binary
+
+```bash
+tynd build                 # raw single-file binary
+tynd build --bundle        # + installers (per host OS)
+```
+
+Produces under `release/`:
+
+- `lite` — ~6.5 MB self-contained executable,
+- `full` — ~44 MB self-contained executable (Bun zstd-packed).
+
+With `--bundle`:
+
+| Host OS | Output |
+|---|---|
+| macOS | `.app` bundle + `.dmg` |
+| Linux | `.deb`, `.rpm` (needs `rpmbuild`), `.AppImage` |
+| Windows | NSIS `.exe` setup + `.msi` |
+
+See [Bundling & Distribution](/docs/v0.3/guides/bundling).
+
+## The build cache
+
+`tynd dev`, `tynd start`, and `tynd build` all cache by hashing source dirs + key config files into `.tynd/cache/`. Cache keys:
+
+- `frontend` — frontend build output,
+- `backend` — production backend bundle,
+- `backend-dev` — dev backend bundle (lite only).
+
+When the hash matches and the output still exists, the step is skipped. Miss the cache? The source changed, the config changed, or the output was deleted.
+
+Flush with:
+
+```bash
+tynd clean              # removes .tynd/cache and release/
+tynd clean --dry-run    # preview without deleting
+```
+
+## Typechecking + linting
+
+Tynd doesn't enforce a particular checker — use your framework's defaults:
+
+```bash
+bunx tsc --noEmit          # typecheck
+bunx biome check .         # lint + format
+```
+
+CI in the Tynd monorepo runs `bun run check:all` which combines both sides. See the root `CLAUDE.md` / `CONTRIBUTING.md` in the repo for the exact commands.
+
+## Debugging
+
+- **Verbose logs** — `tynd dev --verbose` prints IPC traffic, cache decisions, and Rust-side events.
+- **DevTools** — open from the frontend with `await tyndWindow.openDevTools()`. Works in debug builds; release builds compile DevTools out.
+- **Full-runtime only** — `bun --inspect-brk` on the backend command line hooks up the Chrome DevTools inspector to the Bun subprocess.
+
+## `tynd info` + `tynd validate`
+
+- `tynd info` prints Bun version, Rust toolchain, WebView2 status (Windows), OS info, cache paths.
+- `tynd validate` typechecks `tynd.config.ts` against the `TyndConfig` schema and checks binary availability.
+
+Run both if something feels off.
+
+## Next
+
+- [Backend RPC guide](/docs/v0.3/guides/backend-rpc)
+- [Architecture](/docs/v0.3/concepts/architecture)
+- [Troubleshooting](/docs/v0.3/troubleshooting)

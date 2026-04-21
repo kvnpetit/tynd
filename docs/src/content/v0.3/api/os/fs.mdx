@@ -1,0 +1,175 @@
+---
+title: fs
+description: "Filesystem — read / write text and binary, walk directories, watch for changes."
+---
+
+# `fs`
+
+```ts
+import { fs } from "@tynd/core/client";
+```
+
+Cross-OS filesystem operations. Binary I/O uses the [zero-copy binary channel](/docs/v0.3/guides/binary-data).
+
+## Text I/O
+
+```ts
+await fs.writeText("data.json", JSON.stringify(state), { createDirs: true });
+const text = await fs.readText("data.json");
+```
+
+### `readText(path): Promise<string>`
+
+Reads the file as UTF-8.
+
+### `writeText(path, content, opts?): Promise<void>`
+
+Writes UTF-8 text.
+
+- `createDirs?: boolean` — create parent directories if missing.
+
+## Binary I/O
+
+```ts
+const bytes = await fs.readBinary("image.png");           // Uint8Array
+await fs.writeBinary("copy.png", bytes, { createDirs: true });
+```
+
+Uses the `tynd-bin://` channel — no base64, zero-copy. Accepts `Uint8Array | ArrayBuffer`. See the [Binary Data guide](/docs/v0.3/guides/binary-data).
+
+## Metadata
+
+### `exists(path): Promise<boolean>`
+
+```ts
+if (await fs.exists("data.json")) { /* … */ }
+```
+
+### `stat(path): Promise<FileStat>`
+
+```ts
+interface FileStat {
+  size:      number;
+  isFile:    boolean;
+  isDir:     boolean;
+  isSymlink: boolean;
+  mtime:     number | null;   // ms since epoch; null if unsupported
+}
+
+const info = await fs.stat("data.json");
+```
+
+## Directories
+
+### `readDir(path): Promise<DirEntry[]>`
+
+```ts
+interface DirEntry {
+  name:      string;
+  isFile:    boolean;
+  isDir:     boolean;
+  isSymlink: boolean;
+}
+
+const entries = await fs.readDir(".");
+```
+
+Join with the parent path for an absolute path: `await path.join(dir, entry.name)`.
+
+### `mkdir(path, opts?): Promise<void>`
+
+```ts
+await fs.mkdir("./nested/dir", { recursive: true });
+```
+
+### `remove(path, opts?): Promise<void>`
+
+Works on files and directories.
+
+```ts
+await fs.remove("./old.json");
+await fs.remove("./dir", { recursive: true });
+```
+
+### `rename(from, to): Promise<void>`
+
+```ts
+await fs.rename("./a.txt", "./b.txt");
+```
+
+### `copy(from, to): Promise<void>`
+
+```ts
+await fs.copy("./src.json", "./dst.json");
+```
+
+### `copyDir(from, to): Promise<void>`
+
+Recursive — files are copied, `symlink`s are left alone (call `fs.symlink` yourself if you need them).
+
+```ts
+await fs.copyDir("./src-assets", "./dist/assets");
+```
+
+### `trash(path): Promise<void>`
+
+Move to the OS recycle bin / Trash — reversible, unlike `remove()`. Uses `IShellItem` on Windows, `NSFileManager.trashItemAtURL` on macOS, the freedesktop.org Trash Spec on Linux.
+
+```ts
+await fs.trash("./old.log");
+```
+
+### Symbolic + hard links
+
+```ts
+await fs.symlink("/etc/hosts", "/tmp/hosts-link");
+const target = await fs.readlink("/tmp/hosts-link"); // "/etc/hosts"
+await fs.hardlink("./data.db", "./data.bak");
+```
+
+Windows chooses file vs dir symlink based on what the target currently is (falls back to file when the target doesn't exist).
+
+## Stateful file handles
+
+Open a file once, then `seek` / `read` / `write` by chunk — handy for large or partially-read files. Binary travels base64 over JSON; for multi-MB I/O prefer [`fs.readBinary` / `fs.writeBinary`](/docs/v0.3/guides/binary-data) (zero-copy via `tynd-bin://`).
+
+```ts
+const h = await fs.open("big.bin", { read: true, write: true, create: true });
+await h.seek(1024);                         // "start" | "current" | "end"
+const { bytes, read } = await h.read(256);  // read up to 256 B
+const written = await h.write(new Uint8Array([1, 2, 3]));
+await h.close();                            // always release the handle
+```
+
+## Watcher
+
+```ts
+interface FsChangeEvent {
+  id:    number;
+  kind:  "create" | "modify" | "delete" | "rename" | "error" | "other";
+  path?: string;
+  error?: string;
+}
+
+const watcher = await fs.watch("./notes", { recursive: true }, (event) => {
+  console.log(event.kind, event.path);
+});
+
+// later
+await watcher.unwatch();
+```
+
+- Uses `ReadDirectoryChangesW` (Windows), `FSEvents` (macOS), `inotify` (Linux).
+- Event coalescing behavior differs by OS — `modify` may fire multiple times for a single logical save. Debounce on your side if needed.
+- `kind: "error"` events include an `error` field; watcher remains active.
+
+## Notes
+
+- Paths accept both absolute and relative. Relative paths resolve against the app's **current working directory** at launch. Prefer absolute paths built from `os.dataDir()`, `os.configDir()`, etc.
+- All methods run on a fresh Rust thread — JS event loop is never blocked.
+
+## Related
+
+- [path](/docs/v0.3/api/os/path) — path helpers.
+- [os](/docs/v0.3/api/os/os) — `dataDir`, `configDir`, `cacheDir`, `tmpDir`.
+- [Binary Data guide](/docs/v0.3/guides/binary-data).

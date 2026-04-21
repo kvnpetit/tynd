@@ -1,0 +1,81 @@
+---
+title: tray
+description: "System tray icon + menu event handling. The tray is configured in `app.start`, this API handles clicks."
+---
+
+# `tray`
+
+```ts
+import { tray } from "@tynd/core/client";
+```
+
+The tray icon + menu are declared in `app.start({ tray: … })` on the backend. This module lets the frontend (or backend) subscribe to user interactions.
+
+## Declare the tray
+
+```ts filename="backend/main.ts"
+app.start({
+  tray: {
+    icon:    import.meta.dir + "/assets/tray.png",
+    tooltip: "My App",
+    menu: [
+      { label: "Show",       id: "show" },
+      { label: "Preferences", id: "prefs" },
+      { type: "separator" },
+      { label: "Quit",       id: "quit" },
+    ],
+  },
+  // ...
+});
+```
+
+## Click handlers
+
+```ts
+tray.onClick(() => tyndWindow.show());
+tray.onRightClick(() => { /* context menu is native; this fires alongside */ });
+tray.onDoubleClick(() => tyndWindow.show());
+
+// Mouse enter / move / leave the tray region (physical pixels).
+tray.onEnter(({ x, y }) => previewNearTray(x, y));
+tray.onMove(({ x, y }) => updatePreviewPos(x, y));
+tray.onLeave(() => dismissPreview());
+```
+
+Each returns an `unsubscribe()` function.
+
+## Runtime mutation
+
+```ts
+await tray.setIcon("/abs/new-icon.png");
+await tray.setTooltip("3 unread");
+await tray.setTitle("42");                // macOS menu bar text only
+await tray.setVisible(false);
+await tray.setIconAsTemplate(true);       // macOS — auto-adapt to light/dark menu bar
+await tray.setMenu([
+  { id: "open", label: "Open" },
+  { type: "separator" },
+  { id: "quit", label: "Quit", role: "quit" },
+]);
+```
+
+## Menu item handlers
+
+```ts
+tray.onMenu("show",  () => tyndWindow.show());
+tray.onMenu("prefs", () => openSettings());
+tray.onMenu("quit",  () => app.exit(0));
+```
+
+The `id` matches the `id` field you set on the tray menu item.
+
+## Notes
+
+- Tray events are broadcast — a handler registered in any window (or in the backend) fires on matching events.
+- Platform quirks: macOS fires double-click only if `onClick` doesn't handle it; Windows fires both. Guard on `Date.now()` deltas if you need strict discrimination.
+- Dynamic icon + tooltip + menu are now supported via `tray.set*`; mouse enter/move/leave events fire on every OS.
+
+## Related
+
+- [menu](/docs/v0.3/api/os/menu) — app menu bar click handling.
+- [Backend API](/docs/v0.3/api/backend) — tray config shape.

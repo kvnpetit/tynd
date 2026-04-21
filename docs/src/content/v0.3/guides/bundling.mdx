@@ -1,0 +1,206 @@
+---
+title: Bundling & Distribution
+description: "Turn the raw Tynd binary into platform-native installers — `.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS `.exe`, MSI."
+---
+
+# Bundling & Distribution
+
+`tynd build --bundle` turns the raw self-contained binary into platform-native installers. Tools auto-download on first build — no manual setup beyond `rpmbuild` on Linux.
+
+## Quick start
+
+```bash
+tynd build --bundle            # all formats for the host OS
+tynd build --bundle app,dmg    # comma-separated list
+```
+
+Output lands in `release/`:
+
+| Host OS | Outputs |
+|---|---|
+| macOS | `MyApp.app` + `MyApp-1.0.0.dmg` |
+| Linux | `.deb` + `.rpm` (if `rpmbuild` is installed) + `.AppImage` |
+| Windows | `MyApp-1.0.0-setup.exe` (NSIS) + `MyApp-1.0.0-x64.msi` |
+
+<Callout type="warning">
+  **No cross-compilation.** Each host produces installers only for its own OS. Use a GitHub Actions matrix to cover Windows, macOS, and Linux.
+</Callout>
+
+## Required config
+
+```ts filename="tynd.config.ts"
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  bundle: {
+    identifier: "com.example.myapp",   // reverse-DNS, required
+    categories: ["Utility"],           // XDG / Launch Services
+    shortDescription: "A tiny app",
+  },
+} satisfies TyndConfig;
+```
+
+Other fields (`author`, `description`, `homepage`, `version`) default to reading from `package.json`.
+
+## Formats
+
+### macOS `.app` + `.dmg`
+
+- `.app` — TS builder (`bundle/app.ts`). Copies the binary into `Contents/MacOS/`, emits `Info.plist`, renders ICNS from the source icon.
+- `.dmg` — shells out to `hdiutil` (ships with macOS).
+
+### Linux `.deb`
+
+Pure-TS builder (handwritten `ar` + `tar-stream`). No `dpkg-deb` required.
+
+Produces:
+
+- `control` with name, version, description, maintainer, dependencies (`libwebkit2gtk-4.1-0`, …).
+- `postinst` / `prerm` scripts that update desktop mime caches.
+- The `.desktop` file under `usr/share/applications/`.
+- Hicolor icon tree under `usr/share/icons/hicolor/<size>x<size>/apps/`.
+
+### Linux `.rpm`
+
+Uses system `rpmbuild`. **Required** — install with `sudo apt install rpm` or `sudo dnf install rpm-build` on the build machine. Tynd fails fast with a clear message if not found.
+
+### Linux `.AppImage`
+
+Auto-downloads `appimagetool` to `.tynd/cache/tools/appimagetool/<version>/`. Produces a portable single-file AppImage that runs on any modern distro.
+
+### Windows NSIS `.exe` setup
+
+Auto-downloads NSIS 3.09 portable zip to `.tynd/cache/tools/nsis/<version>/`. Generates `MyApp.nsi` from a template that honors:
+
+- `bundle.nsis.installMode` — `currentUser` (default) or `perMachine`.
+- `bundle.nsis.languages` — list of NSIS language files (default: English).
+- `bundle.nsis.license` — path to a license `.txt` shown during install.
+
+<Callout type="info">
+  **Default install mode is `currentUser`**, so the produced setup never prompts for UAC and installs into `%LOCALAPPDATA%\Programs\<AppName>`. Set `installMode: "perMachine"` for a system-wide install.
+</Callout>
+
+### Windows MSI
+
+Auto-downloads WiX Toolset v3.11.2. Builds an MSI via `candle.exe` + `light.exe` from a generated `.wxs`.
+
+## Auto-downloaded tools
+
+| Tool | Version | Where | When |
+|---|---|---|---|
+| `appimagetool` | latest | `.tynd/cache/tools/appimagetool/<ver>/` | first `--bundle appimage` on Linux |
+| `NSIS` | 3.09 | `.tynd/cache/tools/nsis/<ver>/` | first `--bundle nsis` on Windows |
+| `WiX` | v3.11.2 | `.tynd/cache/tools/wix/<ver>/` | first `--bundle msi` on Windows |
+
+Orchestrated by `bundle/tools.ts::ensureTool`. Extraction uses `adm-zip` for zips, `tar-stream` + `node:zlib` for `tar.gz`, raw stream for single-file AppImage.
+
+## Icon handling
+
+Single source of truth: **one file in `public/`** (SVG preferred).
+
+Auto-detection order:
+
+1. `public/{favicon,icon,logo}.svg`
+2. `public/{favicon,icon,logo}.{ico,png}`
+3. `assets/icon.{svg,png,ico}`
+4. `icon.{svg,png,ico}`
+
+Override with `icon` in `tynd.config.ts`.
+
+### Per-format rendering
+
+| Format | Sizes | Notes |
+|---|---|---|
+| Windows ICO | 16, 32, 48, 256 | via `renderIconPngSet` → `pngToIco` |
+| macOS ICNS | 32, 128, 256, 512, 1024 | via `generateIcns`, one entry per size bucket |
+| Linux hicolor | 16, 32, 48, 64, 128, 256, 512 | dropped into `usr/share/icons/hicolor/<n>x<n>/apps/<name>.png` |
+
+- **PNG source** — degrades to single-size (native resolution). SVG recommended for pixel-perfect rendering.
+- **ICO source** — passes through directly to `.exe` / NSIS / MSI; skipped (with warning) for macOS/Linux.
+- **Non-square SVG** — wrapped in a square viewBox before rasterising. Windows PE + macOS ICNS reject / distort non-square inputs.
+
+Icons are **not cached** — rendering is fast and each build produces fresh, per-DPI artwork.
+
+## Config reference — `bundle` block
+
+```ts
+bundle: {
+  identifier:        "com.example.myapp",     // required
+  categories:        ["Utility"],
+  shortDescription:  "…",
+  longDescription:   "…",
+  copyright:         "© 2026 Example Inc.",
+  homepage:          "https://example.com",
+
+  nsis: {
+    installMode:   "currentUser" | "perMachine",
+    languages:     ["English", "French"],
+    license:       "./LICENSE.txt",
+    headerImage:   "./installer-header.bmp",
+    welcomeImage:  "./installer-welcome.bmp",
+  },
+  deb: {
+    depends:    ["libwebkit2gtk-4.1-0"],
+    recommends: [],
+    suggests:   [],
+  },
+  rpm: {
+    requires:   ["webkit2gtk4.1"],
+  },
+  appimage: {
+    continuous: false,
+  },
+  sign: { /* see Code Signing */ },
+}
+```
+
+## CI — build on all three platforms
+
+```yaml
+# .github/workflows/release.yml
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            bundles: deb,rpm,appimage
+          - os: macos-latest
+            target: macos-arm64
+            bundles: app,dmg
+          - os: windows-latest
+            target: windows-x64
+            bundles: nsis,msi
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y rpm \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+            libxdo-dev
+      - run: bun install
+      - run: bunx tynd build --bundle ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ matrix.target }}
+          path: release/
+```
+
+## Known issues
+
+- **`.deb` dependency miss** — if your app uses `fs.watch` (inotify), `terminal` (util-linux), or similar, add those to `bundle.deb.depends`.
+- **AppImage + old glibc** — AppImages link against the glibc version used at build time. Build on the oldest supported system (Ubuntu 20.04 LTS) to maximise compatibility.
+- **NSIS Unicode** — the generated `.nsi` is UTF-8. Include the `Unicode true` directive if you rely on non-ASCII in metadata (Tynd does this by default).
+
+## Next
+
+- [Code Signing](/docs/v0.3/guides/code-signing)
+- [Auto-Updates](/docs/v0.3/guides/auto-updates)
+- [tynd.config.ts](/docs/v0.3/cli/config)

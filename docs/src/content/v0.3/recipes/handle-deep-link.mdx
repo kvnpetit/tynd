@@ -1,0 +1,59 @@
+---
+title: Handle Deep Link (myapp://)
+description: "React to custom-scheme URLs on both cold start and duplicate launch."
+---
+
+# Handle Deep Link
+
+## Register the scheme
+
+```ts filename="tynd.config.ts"
+export default {
+  runtime: "lite",
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  protocols: ["myapp"],
+  bundle: { identifier: "com.example.myapp" },
+} satisfies TyndConfig;
+```
+
+`tynd build` wires the scheme into the NSIS / MSI / `.app` / `.deb` / `.rpm` / `.AppImage` installer.
+
+## Handle URLs
+
+```ts
+import { singleInstance } from "@tynd/core/client";
+
+const { acquired } = await singleInstance.acquire("com.example.myapp");
+if (!acquired) process.exit(0);   // primary has already been focused + notified
+
+singleInstance.onOpenUrl((url) => {
+  const parsed = new URL(url);
+  // url = "myapp://invite/abc123?ref=twitter"
+  // parsed.hostname === "invite"
+  // parsed.pathname === "/abc123"
+  // parsed.searchParams.get("ref") === "twitter"
+  handleDeepLink(parsed);
+});
+```
+
+`onOpenUrl` fires for:
+
+- **Cold start** — the argv carries the URL.
+- **Duplicate launch** — the primary receives the forwarded URL.
+
+## Validate aggressively
+
+Treat deep-link input as untrusted. Validate against a whitelist before acting:
+
+```ts
+function handleDeepLink(url: URL) {
+  if (url.hostname === "invite" && /^\/[a-z0-9]+$/i.test(url.pathname)) {
+    router.navigate(url.pathname);
+  } else {
+    console.warn("ignored unknown deep link", url.href);
+  }
+}
+```
+
+**Related:** [Deep Linking guide](/docs/v0.3/guides/deep-linking) · [singleInstance API](/docs/v0.3/api/os/single-instance).

@@ -1,0 +1,74 @@
+---
+title: process
+description: "Spawn subprocesses and capture stdout / stderr / exit code. Direct exec and shell exec."
+---
+
+# `process`
+
+```ts
+import { process } from "@tynd/core/client";
+```
+
+Run subprocesses and collect buffered output.
+
+## `exec(cmd, opts?): Promise<ExecResult>`
+
+Direct execution — no shell interpolation.
+
+```ts
+const { stdout, stderr, code } = await process.exec("git", {
+  args: ["status", "--short"],
+});
+```
+
+## `execShell(cmd, opts?): Promise<ExecResult>`
+
+Runs via `cmd.exe /c` on Windows, `sh -c` elsewhere.
+
+```ts
+const { stdout } = await process.execShell("ls -la | grep tynd");
+```
+
+`execShell` does not accept `args` — the whole command is a single string, interpreted by the shell.
+
+## Options
+
+```ts
+interface ExecOptions {
+  args?:  string[];
+  cwd?:   string;
+  env?:   Record<string, string>;
+  input?: string;                  // written to stdin
+}
+```
+
+- `env` is **merged** with the current process env (vars you supply override, others pass through).
+- `input` is piped to the child's stdin. Useful for passing large payloads without shell-quoting.
+
+## Return
+
+```ts
+interface ExecResult {
+  code:   number | null;   // null if the process was killed by a signal
+  stdout: string;
+  stderr: string;
+}
+```
+
+## Security
+
+<Callout type="warning">
+  `execShell` interpolates through a shell. Any unquoted user input is a shell injection. Default to `exec` with array arguments; reach for `execShell` only when pipes / globs are genuinely needed and inputs are fully trusted.
+</Callout>
+
+## Notes
+
+- **Buffered output.** stdout/stderr are fully captured and returned at the end — not suitable for long-running processes that print steadily (memory grows). Use [`terminal.spawn`](/docs/v0.3/api/os/terminal) for streaming.
+- Each call runs on a fresh Rust thread — JS event loop never blocks.
+- No direct cancel / kill while the call is pending. For cancellable processes, use `terminal.spawn` which gives you a handle with `kill()`.
+
+## Related
+
+- [terminal](/docs/v0.3/api/os/terminal) — real PTY, streaming stdout.
+- [sidecar](/docs/v0.3/api/os/sidecar) — resolve a bundled binary's runtime path.
+- [shell](/docs/v0.3/api/os/shell) — OS default-handler launches.

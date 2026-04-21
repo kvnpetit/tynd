@@ -1,0 +1,105 @@
+---
+title: Installation
+description: "Install Bun and the OS-level dependencies Tynd needs to build and run desktop apps on Windows, macOS, and Linux."
+---
+
+# Installation
+
+Tynd is a Bun-first framework. The CLI, the dev server, and the `full` runtime all run on Bun — Node.js is not a supported replacement for app developers.
+
+## Install Bun
+
+<Tabs items={["macOS / Linux", "Windows"]}>
+  <Tabs.Tab>
+    ```bash
+    curl -fsSL https://bun.sh/install | bash
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```powershell
+    powershell -c "irm bun.sh/install.ps1 | iex"
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Verify:
+
+```bash
+bun --version
+```
+
+## OS-level WebView dependencies
+
+Tynd uses the system WebView — Edge WebView2 on Windows, WKWebView on macOS, WebKitGTK 4.1 on Linux. End users of a built binary need nothing extra on Windows and macOS; Linux users may need the runtime WebKitGTK package.
+
+<Tabs items={["Windows", "macOS", "Linux"]}>
+  <Tabs.Tab>
+    **WebView2** is pre-installed on Windows 11 and most Windows 10 versions.
+
+    Missing the runtime? Download the Evergreen Bootstrapper from [developer.microsoft.com/microsoft-edge/webview2](https://developer.microsoft.com/microsoft-edge/webview2/).
+  </Tabs.Tab>
+  <Tabs.Tab>
+    **WKWebView** ships with macOS — nothing to install.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    End-user runtime (for installed `.deb`/`.rpm`/`.AppImage`):
+
+    ```bash
+    # Debian / Ubuntu
+    sudo apt install libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libsoup-3.0-0
+    ```
+
+    Development (building from source):
+
+    ```bash
+    sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
+      libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+      libxdo-dev
+    ```
+
+    **Fedora / RHEL:**
+
+    ```bash
+    sudo dnf install gtk3-devel webkit2gtk4.1-devel libsoup3-devel
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Install the CLI
+
+You don't have to install anything globally — use `bunx`:
+
+```bash
+bunx @tynd/cli create my-app
+```
+
+Or add it to a project:
+
+```bash
+bun add -d @tynd/cli @tynd/core @tynd/host
+```
+
+`@tynd/host`'s postinstall downloads the pre-built `tynd-full` and `tynd-lite` binaries for your OS/arch from GitHub Releases. Bun blocks postinstall scripts by default — `tynd init` / `tynd create` auto-add `@tynd/host` to your `package.json` `trustedDependencies` so the download runs on the next `bun install`.
+
+If the postinstall was skipped or failed (old `@tynd/host` version, network glitch), `tynd dev` / `start` / `build` / `validate` fall back to fetching the matching release asset on demand and cache it under `node_modules/@tynd/host/bin/<platform>-<arch>/`. If that also fails, see [Troubleshooting](/docs/v0.3/troubleshooting).
+
+## Verify the install
+
+```bash
+bunx tynd info
+```
+
+Prints Bun version, Rust toolchain (if present), WebView2 status (Windows), OS info, and detected cache paths.
+
+<Callout type="info">
+  **No Rust toolchain required.** Unless you're building the native host from source, you don't need Rust — `@tynd/host` ships pre-built binaries.
+</Callout>
+
+## Editor setup
+
+Any TypeScript-capable editor works. The project's `tsconfig.json` points at ES2023 + Bun's type declarations (for `full`) or pure Web standards (for `lite`). No special language-server setup needed.
+
+## Next
+
+- [Your First App](/docs/v0.3/getting-started/first-app)
+- [Development Workflow](/docs/v0.3/getting-started/dev-workflow)

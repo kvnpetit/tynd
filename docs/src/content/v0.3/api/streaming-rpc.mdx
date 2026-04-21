@@ -1,0 +1,108 @@
+---
+title: Streaming RPC
+description: "Async-generator backend handlers stream yields + return values to the frontend with flow control and cancellation."
+---
+
+# Streaming RPC
+
+If a backend export is an `async function*`, the frontend gets a `StreamCall<Y, R>` handle: **awaitable** (resolves to the generator's return value) and **async-iterable** (yields each chunk). Cancellation propagates end-to-end via `iterator.return()`.
+
+## Basic shape
+
+```ts filename="backend/main.ts"
+export async function* processFiles(paths: string[]) {
+  let ok = 0;
+  for (const [i, path] of paths.entries()) {
+    await doWork(path);
+    ok++;
+    yield { path, progress: (i + 1) / paths.length };
+  }
+  return { ok, failed: paths.length - ok };
+}
+```
+
+```ts filename="src/main.ts"
+const stream = api.processFiles(["a.txt", "b.txt"]);
+
+for await (const chunk of stream) {
+  render(chunk.progress);
+}
+
+const summary = await stream;   // { ok, failed }
+// or early-stop: await stream.cancel();
+```
+
+## `StreamCall<Y, R>`
+
+```ts
+type StreamCall<Y, R> = AsyncIterable<Y> & PromiseLike<R> & {
+  cancel(): Promise<void>;
+};
+```
+
+- **`[Symbol.asyncIterator]()`** — yields `Y` chunks.
+- **`.then(…)` / `await`** — resolves to the final `R` return value.
+- **`.cancel()`** — sends a cancel signal; iterator throws, promise rejects.
+
+## Marshalling
+
+- Each `yield` sends one JSON line (full mode) or one `__tynd_yield__` native call (lite).
+- The final `return` value is delivered as a single resolve on the promise side.
+- Values must be JSON-serializable (same constraints as regular RPC).
+
+## Flow control
+
+Three mechanisms keep streaming safe at arbitrary yield rates:
+
+1. **Per-stream credit** — backend starts with 64 credits; every yield decrements; at 0 the generator awaits. Frontend replenishes with `{ type: "ack", id, n: 32 }` per 32 consumed chunks.
+2. **Yield batching** — Rust buffers yields and flushes every 10 ms or at 64 items. One `evaluate_script` per flush per webview.
+3. **Cleanup on window close** — the Rust host auto-cancels every active stream that originated in a closed window.
+
+See the [Streaming RPC guide](/docs/v0.3/guides/streaming) for details.
+
+## Cancellation
+
+```ts
+const stream = api.processFiles(hugeBatch);
+
+setTimeout(() => void stream.cancel(), 3000);
+```
+
+Also triggers automatically on:
+
+- `break` out of `for await` → implicit `iterator.return()` → cancel signal.
+- Originating window closes → Rust cancels every stream in `dispatch::call_labels()` for that label.
+
+## Error handling
+
+```ts
+try {
+  for await (const n of api.flaky()) {
+    console.log(n);
+  }
+} catch (err) {
+  console.error(err.message);
+}
+```
+
+Thrown errors in the generator propagate into both `for await` and `await stream`.
+
+## Typical patterns
+
+- **Progress + summary** — yield progress, return summary.
+- **Cancellable long task** — bind a cancel button to `stream.cancel()`.
+- **LLM tokens** — yield decoded fragments from `res.body.getReader()`.
+
+Examples: [Streaming RPC guide](/docs/v0.3/guides/streaming).
+
+## Limitations
+
+- No transferable objects; values are JSON-cloned each time.
+- Generator back-pressure is credit-based — not propagated to the producer's I/O source (it's a generator, not a stream).
+- For multi-MB binary chunks, yield handles/IDs over JSON and fetch the bytes separately via [binary IPC](/docs/v0.3/guides/binary-data).
+
+## Next
+
+- [Streaming RPC guide](/docs/v0.3/guides/streaming)
+- [Backend RPC guide](/docs/v0.3/guides/backend-rpc)
+- [IPC model](/docs/v0.3/concepts/ipc)

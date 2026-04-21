@@ -28,7 +28,7 @@ const SITE_TAGLINE =
   "Desktop apps in TypeScript. Small native binaries, zero-codegen typed RPC.";
 
 /** Latest version slug — must match lib/versions.ts. */
-const LATEST_VERSION = "v0.2";
+const LATEST_VERSION = "v0.3";
 
 interface Page {
   filePath: string;

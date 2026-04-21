@@ -1,0 +1,15 @@
+export default {
+  index: "Overview",
+  config: "tynd.config.ts",
+  create: "tynd create",
+  init: "tynd init",
+  dev: "tynd dev",
+  start: "tynd start",
+  build: "tynd build",
+  clean: "tynd clean",
+  validate: "tynd validate",
+  info: "tynd info",
+  upgrade: "tynd upgrade",
+  keygen: "tynd keygen",
+  sign: "tynd sign",
+};

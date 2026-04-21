@@ -1,0 +1,89 @@
+---
+title: websocket
+description: "Full-duplex WebSocket client with bundled TLS. Text + binary frames."
+---
+
+# `websocket`
+
+```ts
+import { websocket } from "@tynd/core/client";
+```
+
+WebSocket client with bundled TLS (`wss://` works out of the box).
+
+## `connect(url): Promise<WebSocketHandle>`
+
+```ts
+const ws = await websocket.connect("wss://echo.websocket.events");
+```
+
+Returns a handle for sending / receiving / closing the connection.
+
+## `WebSocketHandle`
+
+```ts
+interface WebSocketHandle {
+  id: number;
+  send(data: string | Uint8Array): Promise<void>;
+  ping(): Promise<void>;
+  close(code?: number, reason?: string): Promise<void>;
+  onOpen(handler: () => void): () => void;
+  onMessage(handler: (msg: WebSocketMessage) => void): () => void;
+  onClose(handler: (code: number) => void): () => void;
+  onError(handler: (message: string) => void): () => void;
+}
+
+interface WebSocketMessage {
+  kind: "text" | "binary";
+  data: string | Uint8Array;
+}
+```
+
+## Event handlers
+
+All return `unsubscribe()`.
+
+```ts
+ws.onOpen(() => ws.send("hello"));
+ws.onMessage((msg) => {
+  if (msg.kind === "text") console.log(msg.data);         // string
+  else console.log("binary:", msg.data.byteLength);        // Uint8Array
+});
+ws.onClose((code) => console.log("closed:", code));
+ws.onError((message) => console.error(message));
+```
+
+`onClose` passes the close code. The reason field isn't exposed on the receive side (not all close frames carry one; the WebSocket client reports code but not reason).
+
+## Sending
+
+```ts
+await ws.send("text frame");
+await ws.send(new Uint8Array([1, 2, 3]));   // binary — auto base64-encoded on IPC
+```
+
+## Ping / close
+
+```ts
+await ws.ping();
+await ws.close(1000, "bye");   // code + optional reason sent to the peer
+```
+
+## `list(): Promise<number[]>`
+
+IDs of currently-open connections.
+
+```ts
+const ids = await websocket.list();
+```
+
+## Notes
+
+- `wss://` works out of the box (TLS).
+- `ping` sends a WebSocket PING frame — auto-reply with PONG is automatic.
+- No built-in auto-reconnect — call `websocket.connect` again to re-establish.
+- For the spec `WebSocket` API, `import { WebSocket } from "@tynd/core/client"`. Same transport, different shape.
+
+## Related
+
+- [http](/docs/v0.3/api/os/http) — for simple request/response.

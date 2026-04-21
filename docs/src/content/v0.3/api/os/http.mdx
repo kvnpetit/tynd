@@ -1,0 +1,113 @@
+---
+title: http
+description: "HTTP client with upload / download progress. TLS is bundled — no OpenSSL runtime dep."
+---
+
+# `http`
+
+```ts
+import { http } from "@tynd/core/client";
+```
+
+HTTP/1.1 client with bundled TLS. For HTTP/2 or HTTP/3, use `fetch` in `full` mode.
+
+## Methods
+
+All return `Promise<HttpResponse<T>>` (except `download`).
+
+### `get<T = string>(url, opts?): Promise<HttpResponse<T>>`
+
+```ts
+const { body, status, headers } = await http.get("https://example.com");
+// body is a UTF-8 string
+```
+
+### `getJson<T = unknown>(url, opts?): Promise<HttpResponse<T>>`
+
+```ts
+const { body } = await http.getJson<Repo[]>("https://api.github.com/users/kvnpetit/repos");
+// body is typed as Repo[]
+```
+
+### `getBinary(url, opts?): Promise<HttpResponse<Uint8Array>>`
+
+```ts
+const { body: bytes } = await http.getBinary("https://example.com/image.png");
+```
+
+### `post<T = string>(url, opts?)` / `request<T = string>(url, opts?)`
+
+Same shape as `get`. `request` lets you supply the method yourself.
+
+```ts
+await http.post("https://api.example.com/events", {
+  body: { name: "click" },
+  headers: { authorization: "Bearer …" },
+});
+
+await http.request(url, { method: "OPTIONS" });
+```
+
+### `download(url, dest, opts?): Promise<{ path: string; bytes: number }>`
+
+Streams the response body to disk. Good for multi-MB downloads — bytes never round-trip through JS memory.
+
+```ts
+const { path, bytes } = await http.download("https://.../big.zip", "./downloads/big.zip", {
+  onProgress: ({ loaded, total }) => {
+    const pct = total ? ((loaded / total) * 100).toFixed(1) : "?";
+    console.log(`${pct}%`);
+  },
+});
+```
+
+## Options
+
+```ts
+interface HttpRequestOptions {
+  method?:    "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+  headers?:   Record<string, string>;
+  body?:      string | Record<string, unknown> | unknown[];    // object → auto-JSON
+  timeoutMs?: number;
+  onProgress?: (p: HttpProgress) => void;
+}
+
+interface HttpProgress {
+  phase:  "upload" | "download";
+  loaded: number;
+  total:  number | null;
+}
+```
+
+`onProgress` fires during both upload (when `body` is set) and download. Throttled ~50 ms by the Rust side.
+
+Download-specific options are a subset:
+
+```ts
+{ headers?, timeoutMs?, onProgress? }
+```
+
+## `HttpResponse<T = string>`
+
+```ts
+interface HttpResponse<T> {
+  status:     number;
+  statusText: string;
+  headers:    Record<string, string>;
+  body:       T;
+}
+```
+
+Non-2xx responses **don't throw** — inspect `status` yourself.
+
+## Notes
+
+- **HTTP/1.1 only**. For h2 / h3, use `fetch` in `full` mode.
+- TLS is bundled — no OpenSSL runtime dep.
+- Cookies: no cookie jar is maintained. Read `Set-Cookie` and replay manually if needed.
+- Proxy: reads `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` env vars at startup.
+
+## Related
+
+- [websocket](/docs/v0.3/api/os/websocket) — full-duplex.
+- Web `fetch` — `import { fetch } from "@tynd/core/client"` for the spec API.

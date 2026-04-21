@@ -1,0 +1,68 @@
+---
+title: Tynd vs Wails v3
+description: "Both target native WebView with a non-Rust backend language. Wails uses Go; Tynd uses TypeScript."
+---
+
+# Tynd vs Wails v3
+
+Wails targets the same niche as Tynd — a **native WebView** desktop framework without bundled Chromium — but uses **Go** for the native side. Tynd uses TypeScript.
+
+## The core tradeoff
+
+| | Tynd | Wails v3 |
+|---|---|---|
+| Backend language | TypeScript | Go |
+| Typed RPC | `createBackend<typeof backend>()` — zero codegen | `wails generate bindings` — Go → TS codegen |
+| IPC transport | `wry` postMessage + `tynd://` custom scheme | HTTP + WebSocket (opens a local TCP port) |
+| Firewall prompt possible | ❌ | ⚠️ possible on first launch |
+| Binary size | ~6.5 MB (lite) / ~44 MB (full) | ~9-14 MB |
+| HTTP server middleware | ❌ | ✅ Gin router |
+| Server mode (no GUI) | ❌ | ✅ |
+| Windows 11 Mica / macOS Vibrancy | ⚠️ partial | ✅ full |
+| GTK4 / WebKitGTK 6.0 | ❌ | ✅ experimental |
+| Mobile | ❌ | ❌ |
+
+## When Tynd wins
+
+- **TypeScript end-to-end** — no Go on either side. Your team already knows TS.
+- **Zero-network IPC** — Wails uses HTTP + WebSocket on a local port. Windows Defender / enterprise firewalls can prompt on first launch.
+- **Zero-codegen typed RPC** — Tynd's `typeof backend` flows through `Proxy`. Wails requires running `wails generate bindings` to produce `.d.ts` files, and those need to stay in sync with the Go source.
+- **Runtime-swappable builds** — `lite` for the smallest binary, `full` for richer npm access. Wails is Go-only.
+
+## When Wails wins
+
+- **Reuse Go libraries.** If your team already has Go code (crypto, gRPC, DB drivers, image processing), Wails lets you call it directly.
+- **Richer window effects.** LiquidGlass (macOS Sequoia), SnapAssist (Windows 11), custom window shape (mask), 54 native menu roles, named context menus with context data.
+- **HTTP middleware on the asset server.** Wails exposes the Gin router — add middleware, custom endpoints, intercept asset requests.
+- **Server mode.** Run a Wails app without a GUI window, serving over HTTP/WS. Useful for CLIs that optionally have a GUI.
+- **Synchronous cancellable event hooks.** Wails exposes more cancellation points in the system-event pipeline than Tynd does.
+- **Encrypted single-instance comms.** Wails uses AES-256-GCM between the second instance and the primary; Tynd sends a plain JSON line over a local socket.
+- **GTK4 / WebKitGTK 6.0** — experimental but Wails-first.
+- **Wayland improvements.** Fractional scaling support, auto-disable DMA-BUF on NVIDIA.
+
+## Where they're tied
+
+- **Native WebView** — both use the OS WebView (WebView2 / WKWebView / WebKitGTK).
+- **OS APIs that both cover** — dialogs, tray, menu, clipboard, shell, notification, FS basics.
+- **Bundle formats** — both ship `.app` / `.dmg` / `.AppImage` / NSIS. (Wails lacks `.deb` / `.rpm` / `.msi`; Tynd ships all of those.)
+
+## Migration path
+
+Porting Wails → Tynd:
+
+- **`type MyService struct { … }`** with bound methods → `export async function method(…)` in `backend/main.ts`.
+- **`EventsEmit(ctx, "name", data)`** → `events.emit("name", data)`.
+- **`EventsOn(callback)`** → `api.on("name", handler)` on the frontend.
+- **Go libraries** — reimplement in TS / pure-JS, or wrap a Go binary as a `sidecar` and call via `process.exec`.
+- **Gin middleware / custom routes** — no direct equivalent. Move server-like concerns into the backend or a real HTTP service.
+
+Porting Tynd → Wails:
+
+- **TS backend** → rewrite each export as a Go method with `wails generate bindings`.
+- **`lite` runtime** — N/A; Wails is Go-only.
+- **Zero-codegen typing** — you'll run `wails generate bindings` as part of your dev loop.
+
+## Related
+
+- [Comparisons overview](/docs/v0.3/compare).
+- [Full 500-row matrix](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md).

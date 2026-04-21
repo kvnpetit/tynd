@@ -1,0 +1,66 @@
+---
+title: Comparisons
+description: "Tynd vs Tauri, Electron, Wails — how to choose and where each excels."
+---
+
+# Comparisons
+
+Tynd sits in the same category as Tauri, Wails, and Electron — a framework for shipping desktop apps with a WebView front. Each makes different tradeoffs on language, binary size, and API surface.
+
+## TL;DR
+
+| | Binary size (empty app) | Language choice | Native surface | Mobile | TS-native? |
+|---|---|---|---|---|---|
+| **Tynd** | ~6.5 MB (lite) / ~44 MB (full) | TypeScript only | 26 Rust-backed APIs | ❌ | ✅ |
+| **Tauri v2** | ~8-12 MB | Rust + JS | ~30 official plugins | ✅ | ⚠ via bridge |
+| **Wails v3** | ~9-14 MB | Go + JS | Go stdlib + bindings | ❌ | ⚠ via bridge |
+| **Electron** | ~160-200 MB | Node.js + JS | Full Chromium + Node stdlib | ❌ | ⚠ via bridge |
+
+<Callout type="info">
+  **Headline:** Tynd is the only option where a TypeScript developer never writes Rust, Go, or Node glue. Same language end-to-end.
+</Callout>
+
+## Pick Tynd when
+
+- You want **TypeScript end-to-end** — no Rust, Go, or Node glue.
+- You want a **small binary** (`lite` ships at ~6.5 MB).
+- You want **zero-network IPC** and **zero-codegen typed RPC**.
+- You want **runtime-swappable builds** (lite for deployment, full for richer Node/Bun surface from the same source).
+
+## Pick Tauri when
+
+- You want a **capability-based ACL security model** (per-command, per-path, per-URL permissions).
+- You need **mobile (iOS / Android)** support.
+- You need a specific Tauri plugin from the 30-plugin ecosystem (Stronghold, biometric, NFC, deep-link, …).
+- You're already a **Rust developer** who prefers writing Rust for the native layer.
+
+## Pick Wails when
+
+- You're a **Go developer** and want to reuse Go libraries on the native side.
+- You need **GTK4 / WebKitGTK 6.0** on Linux (experimental but Wails-first).
+- You want **custom IPC transports** or **server-mode** (run without a GUI).
+
+## Pick Electron when
+
+- You need **bundled Chromium** — consistent rendering across OSes, no WebView2 / WKWebView / WebKitGTK variance.
+- You need **full Node stdlib** or the entire npm ecosystem in the main process.
+- You need **`desktopCapturer`** (screen capture), **`printToPDF`**, **Chrome extensions**, **Touch Bar** (macOS), or **StoreKit IAP**.
+- Binary size is not a concern.
+
+## Detailed comparisons
+
+<Cards>
+  <Cards.Card title="vs Tauri v2" href="/docs/v0.3/compare/vs-tauri">
+    Shared stack (wry + tao); Tauri has plugins and mobile, Tynd keeps TS-only and zero-codegen.
+  </Cards.Card>
+  <Cards.Card title="vs Electron" href="/docs/v0.3/compare/vs-electron">
+    Tynd's native WebView vs Electron's bundled Chromium — 25× binary size difference, different API surfaces.
+  </Cards.Card>
+  <Cards.Card title="vs Wails" href="/docs/v0.3/compare/vs-wails">
+    Both target native WebView with a non-Rust backend language; different ecosystems, different IPC transports.
+  </Cards.Card>
+</Cards>
+
+## Full feature matrix
+
+The Tynd monorepo ships a **500-row, 39-category matrix** at [`COMPARISON.md`](https://github.com/kvnpetit/tynd/blob/main/COMPARISON.md) comparing Tynd against Tauri v2, Wails v3, and Electron on every concrete feature (window ops, dialogs, tray, menu, clipboard, notifications, shortcuts, FS, IPC, HTTP, updater, single-instance, autolaunch, persistence, app-level APIs, OS info, path utilities, security, mobile, build, DX, IPC arch, print, screen capture, accessibility, spellcheck, extensions, in-app purchase, and concurrency).
