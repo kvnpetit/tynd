@@ -404,6 +404,8 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                         &proxy,
                         dev_url_owned.as_deref(),
                         frontend_dir_owned.as_deref(),
+                        &native_window,
+                        &secondaries,
                     ) {
                         Ok((new_label, entry)) => {
                             window_id_to_label.insert(entry.window.id(), new_label.clone());
@@ -782,6 +784,27 @@ fn webview_for<'a>(
     }
 }
 
+#[cfg(target_os = "windows")]
+fn with_parent_window(wb: WindowBuilder, parent: &Window) -> WindowBuilder {
+    use tao::platform::windows::{WindowBuilderExtWindows, WindowExtWindows};
+    wb.with_parent_window(parent.hwnd() as _)
+}
+
+#[cfg(target_os = "macos")]
+fn with_parent_window(wb: WindowBuilder, parent: &Window) -> WindowBuilder {
+    use tao::platform::macos::{WindowBuilderExtMacOS, WindowExtMacOS};
+    wb.with_parent_window(parent.ns_window())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn with_parent_window(wb: WindowBuilder, _parent: &Window) -> WindowBuilder {
+    // GTK's transient-for pattern isn't exposed by tao — modalTo quietly
+    // degrades to a regular always-on-top window. Apps that need strict
+    // modal semantics on Linux should set `alwaysOnTop: true` + block
+    // parent input via `setEnabled(false)` in their own handler.
+    wb
+}
+
 fn label_for(id: WindowId, map: &HashMap<WindowId, String>) -> String {
     map.get(&id)
         .cloned()
@@ -880,6 +903,8 @@ fn create_secondary(
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     dev_url: Option<&str>,
     frontend_dir: Option<&str>,
+    primary: &Window,
+    secondaries: &HashMap<String, SecondaryEntry>,
 ) -> Result<(String, SecondaryEntry), String> {
     let label = args
         .get("label")
@@ -921,6 +946,20 @@ fn create_secondary(
         .unwrap_or(false)
     {
         wb = wb.with_always_on_top(true);
+    }
+    // Modal / owned child window: look up the parent by label and pass the
+    // native handle to tao's platform builder. Linux has no equivalent, so
+    // modalTo is a no-op there.
+    if let Some(parent_label) = args.get("modalTo").and_then(Value::as_str) {
+        let parent: &Window = if parent_label == PRIMARY_LABEL {
+            primary
+        } else {
+            secondaries
+                .get(parent_label)
+                .map(|e| &e.window)
+                .ok_or_else(|| format!("create: parent window '{parent_label}' not found"))?
+        };
+        wb = with_parent_window(wb, parent);
     }
     let window = wb.build(target).map_err(|e| format!("build window: {e}"))?;
 

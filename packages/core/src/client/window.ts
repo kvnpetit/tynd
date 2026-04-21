@@ -28,6 +28,12 @@ export interface CreateWindowOptions {
   alwaysOnTop?: boolean
   /** Custom User-Agent string for requests issued by this webview. */
   userAgent?: string
+  /**
+   * Attach this window to a parent (by label) as a modal / owned child.
+   * Windows + macOS: native owner window; Linux: degrades to a regular
+   * always-on-top window (tao exposes no equivalent).
+   */
+  modalTo?: string
 }
 
 export interface NavigationEvent extends WindowEventBase {
