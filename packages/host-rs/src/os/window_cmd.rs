@@ -308,6 +308,19 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             set_badge(win, label, count);
             Ok(Value::Null)
         },
+        "setFocusable" => {
+            let b = args
+                .get("focusable")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            win.set_focusable(b);
+            Ok(Value::Null)
+        },
+        "setEnabled" => {
+            let enabled = args.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+            set_enabled(win, enabled);
+            Ok(Value::Null)
+        },
 
         _ => Err(format!("window.{method}: unknown method")),
     }
@@ -351,6 +364,19 @@ fn set_badge(win: &Window, _label: Option<&str>, count: Option<i64>) {
 #[cfg(target_os = "windows")]
 fn set_badge(_win: &Window, _label: Option<&str>, _count: Option<i64>) {
     // Windows uses taskbar overlay icons instead — not wired yet.
+}
+
+#[cfg(target_os = "windows")]
+fn set_enabled(win: &Window, enabled: bool) {
+    use tao::platform::windows::WindowExtWindows;
+    win.set_enable(enabled);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn set_enabled(_win: &Window, _enabled: bool) {
+    // No cross-OS primitive — macOS / Linux apps emulate "disabled" with
+    // CSS pointer-events: none + an overlay, since users expect the window
+    // to stay dragggable and closable regardless.
 }
 
 /// Map an API string to tao's `CursorIcon`. Unknown names fall back to

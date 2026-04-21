@@ -365,6 +365,14 @@ export const tyndWindow = {
   setBadge(options: { label?: string; count?: number }): Promise<void> {
     return osCall("window", "setBadge", options)
   },
+  /** Whether the window can receive keyboard focus. */
+  setFocusable(focusable: boolean): Promise<void> {
+    return osCall("window", "setFocusable", { focusable })
+  },
+  /** Windows only — disable mouse + keyboard input. Other OS: no-op. */
+  setEnabled(enabled: boolean): Promise<void> {
+    return osCall("window", "setEnabled", { enabled })
+  },
 
   /**
    * Cmd+F-style in-page search. Uses the built-in `window.find()` present

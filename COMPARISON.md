@@ -49,13 +49,13 @@ Tynd is a desktop-app framework with a **TypeScript backend** and a native WebVi
 | Close / destroy | ✅ | ✅ | ✅ | ✅ |
 | Focus | ✅ | ✅ | ✅ | ✅ |
 | Request user attention / flash | ✅ | ✅ | ✅ | ✅ |
-| Enable / disable | ❌ | ✅ | ✅ | ⚠️ |
+| Enable / disable | ✅ Windows | ✅ | ✅ | ⚠️ |
 | Set resizable | ✅ | ✅ | ✅ | ✅ |
 | Set closable | ✅ | ✅ | ✅ | ✅ |
 | Set maximizable | ✅ | ✅ | ✅ | ✅ |
 | Set minimizable | ✅ | ✅ | ✅ | ✅ |
 | Set movable | ❌ | ✅ | ❌ | ✅ |
-| Set focusable | ❌ | ✅ | ❌ | ✅ |
+| Set focusable | ✅ | ✅ | ❌ | ✅ |
 | isMaximized / isMinimized / isFullscreen / isVisible | ✅ | ✅ | ✅ | ✅ |
 | isDecorated / isResizable / isFocused | ✅ | ✅ | ⚠️ | ✅ |
 | Skip taskbar | ✅ Win+Linux | ✅ | ✅ | ✅ |
@@ -779,7 +779,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 
 | Category | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Window — core ops | 34/39 | 38/39 | 29/39 | 37/39 |
+| Window — core ops | 36/39 | 38/39 | 29/39 | 37/39 |
 | Window — appearance | 9/27 | 19/27 | 18/27 | 18/27 |
 | Webview API | 3/19 | 17/19 | 2/19 | 16/19 |
 | Multi-window | 5/9 | 8/9 | 7/9 | 8/9 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~203/503 (40%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~205/503 (41%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
