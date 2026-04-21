@@ -329,6 +329,22 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             win.set_visible_on_all_workspaces(v);
             Ok(Value::Null)
         },
+        "setShadow" => {
+            let enabled = args.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+            set_has_shadow(win, enabled);
+            Ok(Value::Null)
+        },
+        "setWindowIcon" => {
+            // Passing null clears the icon; a path reloads it.
+            match args.get("path").and_then(Value::as_str) {
+                Some(path) => {
+                    let icon = crate::os::icon::load_tao(path)?;
+                    win.set_window_icon(Some(icon));
+                },
+                None => win.set_window_icon(None),
+            }
+            Ok(Value::Null)
+        },
 
         _ => Err(format!("window.{method}: unknown method")),
     }
@@ -385,6 +401,18 @@ fn set_enabled(_win: &Window, _enabled: bool) {
     // No cross-OS primitive — macOS / Linux apps emulate "disabled" with
     // CSS pointer-events: none + an overlay, since users expect the window
     // to stay dragggable and closable regardless.
+}
+
+#[cfg(target_os = "macos")]
+fn set_has_shadow(win: &Window, enabled: bool) {
+    use tao::platform::macos::WindowExtMacOS;
+    win.set_has_shadow(enabled);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_has_shadow(_win: &Window, _enabled: bool) {
+    // Windows / Linux: no runtime API to toggle the native drop shadow.
+    // Callers control this via the `decorations` flag at build time.
 }
 
 /// Map an API string to tao's `CursorIcon`. Unknown names fall back to
