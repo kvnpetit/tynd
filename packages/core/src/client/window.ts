@@ -48,6 +48,19 @@ export interface DragOverEvent extends WindowEventBase {
 declare global {
   interface Window {
     __TYND_WINDOW_LABEL__?: string
+    /**
+     * Non-standard but supported in Chromium (WebView2) and WKWebView.
+     * Returns `true` when a match was found and scrolled into view.
+     */
+    find?: (
+      query: string,
+      caseSensitive?: boolean,
+      backwards?: boolean,
+      wrap?: boolean,
+      wholeWord?: boolean,
+      searchInFrames?: boolean,
+      showDialog?: boolean,
+    ) => boolean
   }
 }
 
@@ -229,6 +242,32 @@ export const tyndWindow = {
   /** Current URL of the webview. */
   getUrl(): Promise<string> {
     return osCall("window", "getUrl")
+  },
+
+  /**
+   * Cmd+F-style in-page search. Uses the built-in `window.find()` present
+   * in Chromium-based WebView2 and WKWebView. `true` = match found and the
+   * viewport was scrolled to the hit.
+   */
+  findInPage(
+    query: string,
+    options?: { backwards?: boolean; caseSensitive?: boolean; wholeWord?: boolean },
+  ): boolean {
+    if (typeof window === "undefined" || typeof window.find !== "function") return false
+    return window.find(
+      query,
+      options?.caseSensitive ?? false,
+      options?.backwards ?? false,
+      true,
+      options?.wholeWord ?? false,
+      true,
+      false,
+    )
+  },
+  /** Clear the active find highlight / selection. */
+  stopFindInPage(): void {
+    if (typeof window === "undefined") return
+    window.getSelection()?.removeAllRanges()
   },
 
   /** Label of the current window (`"main"` for the primary window). */

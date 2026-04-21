@@ -708,8 +708,8 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Custom dictionary | ❌ | ❌ | ❌ | ✅ |
 | Language list / switch | ❌ | ❌ | ❌ | ✅ |
 | Context menu spelling suggestions | ❌ | ❌ | ❌ | ✅ |
-| `findInPage` (Cmd+F style) | ❌ | ❌ | ❌ | ✅ |
-| `stopFindInPage` | ❌ | ❌ | ❌ | ✅ |
+| `findInPage` (Cmd+F style) | ✅ via window.find | ❌ | ❌ | ✅ |
+| `stopFindInPage` | ✅ | ❌ | ❌ | ✅ |
 
 ---
 
@@ -812,11 +812,11 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Printing & PDF | 1/7 | 0/7 | 1/7 | 7/7 |
 | Screen & media capture | 0/7 | 0/7 | 0/7 | 7/7 |
 | Accessibility | 1/6 | 1/6 | 1/6 | 6/6 |
-| Spellcheck & find | 0/6 | 0/6 | 0/6 | 6/6 |
+| Spellcheck & find | 2/6 | 0/6 | 0/6 | 6/6 |
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~162/503 (32%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~164/503 (33%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
