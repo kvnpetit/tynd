@@ -23,14 +23,29 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use super::events;
 
-fn http_agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(60))
-        .build()
+fn http_agent(proxy: Option<&str>) -> Result<ureq::Agent, String> {
+    let mut b = ureq::AgentBuilder::new().timeout(Duration::from_secs(60));
+    if let Some(url) = proxy {
+        let p = ureq::Proxy::new(url).map_err(|e| format!("updater: bad proxy URL: {e}"))?;
+        b = b.proxy(p);
+    }
+    Ok(b.build())
+}
+
+fn apply_headers(mut req: ureq::Request, headers: Option<&Value>) -> ureq::Request {
+    if let Some(obj) = headers.and_then(Value::as_object) {
+        for (k, v) in obj {
+            if let Some(s) = v.as_str() {
+                req = req.set(k, s);
+            }
+        }
+    }
+    req
 }
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
@@ -38,8 +53,63 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "check" => check(args),
         "downloadAndVerify" => download_and_verify(args),
         "install" => install(args),
+        "startPeriodicCheck" => start_periodic_check(args),
+        "stopPeriodicCheck" => stop_periodic_check(),
         _ => Err(format!("updater.{method}: unknown method")),
     }
+}
+
+// Periodic check — single background task at a time. `startPeriodicCheck`
+// returns the id; `stopPeriodicCheck` halts the in-flight task.
+
+static PERIODIC_RUNNING: AtomicBool = AtomicBool::new(false);
+static PERIODIC_ID: AtomicU64 = AtomicU64::new(0);
+
+#[allow(clippy::unnecessary_wraps)]
+fn start_periodic_check(args: &Value) -> Result<Value, String> {
+    if PERIODIC_RUNNING.swap(true, Ordering::SeqCst) {
+        return Ok(json!({ "id": PERIODIC_ID.load(Ordering::SeqCst) }));
+    }
+    let interval_ms = args
+        .get("intervalMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(60 * 60 * 1000) // 1 hour default
+        .max(1000);
+    let args_owned = args.clone();
+    let id = PERIODIC_ID.fetch_add(1, Ordering::SeqCst) + 1;
+    PERIODIC_ID.store(id, Ordering::SeqCst);
+
+    std::thread::spawn(move || {
+        while PERIODIC_RUNNING.load(Ordering::SeqCst) {
+            match check(&args_owned) {
+                Ok(info) => {
+                    events::emit(
+                        "updater:check",
+                        &json!({ "ok": true, "info": info, "id": id }),
+                    );
+                },
+                Err(err) => {
+                    events::emit(
+                        "updater:check",
+                        &json!({ "ok": false, "error": err, "id": id }),
+                    );
+                },
+            }
+            // Sleep in 250ms slices so stop is snappy.
+            let mut slept = 0u64;
+            while slept < interval_ms && PERIODIC_RUNNING.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(250));
+                slept += 250;
+            }
+        }
+    });
+    Ok(json!({ "id": id }))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn stop_periodic_check() -> Result<Value, String> {
+    PERIODIC_RUNNING.store(false, Ordering::SeqCst);
+    Ok(Value::Null)
 }
 
 /// Fetch the manifest, pick the entry for the current platform, compare the
@@ -54,10 +124,15 @@ fn check(args: &Value) -> Result<Value, String> {
         .get("currentVersion")
         .and_then(Value::as_str)
         .ok_or_else(|| "updater.check: missing 'currentVersion'".to_string())?;
+    let proxy = args.get("proxy").and_then(Value::as_str);
+    let allow_downgrade = args
+        .get("allowDowngrade")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
 
-    let agent = http_agent();
-    let resp = agent
-        .get(endpoint)
+    let agent = http_agent(proxy)?;
+    let req = apply_headers(agent.get(endpoint), args.get("headers"));
+    let resp = req
         .call()
         .map_err(|e| format!("updater.check({endpoint}): {e}"))?;
     let mut body = String::new();
@@ -74,7 +149,7 @@ fn check(args: &Value) -> Result<Value, String> {
         .ok_or_else(|| "updater.check: manifest missing 'version'".to_string())?
         .to_string();
 
-    if !is_strictly_newer(current, &available_version) {
+    if !allow_downgrade && !is_strictly_newer(current, &available_version) {
         return Ok(json!({ "available": false }));
     }
 
@@ -127,10 +202,11 @@ fn download_and_verify(args: &Value) -> Result<Value, String> {
 
     let signature = decode_signature(signature_b64)?;
     let verifying_key = decode_pub_key(pub_key_b64)?;
+    let proxy = args.get("proxy").and_then(Value::as_str);
 
-    let agent = http_agent();
-    let resp = agent
-        .get(url)
+    let agent = http_agent(proxy)?;
+    let req = apply_headers(agent.get(url), args.get("headers"));
+    let resp = req
         .call()
         .map_err(|e| format!("updater.downloadAndVerify({url}): {e}"))?;
     let total = resp

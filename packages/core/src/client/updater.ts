@@ -20,6 +20,12 @@ export interface UpdaterCheckOptions {
   endpoint: string
   /** Semver version of the running app (typically read from package.json). */
   currentVersion: string
+  /** Custom HTTP headers forwarded to the manifest request. */
+  headers?: Record<string, string>
+  /** Proxy URL (http / socks5). Default: system proxy. */
+  proxy?: string
+  /** When `true`, accept manifests that advertise an older version. */
+  allowDowngrade?: boolean
 }
 
 export interface UpdaterProgress {
@@ -37,7 +43,20 @@ export interface UpdaterDownloadOptions {
   pubKey: string
   /** Optional id used to scope progress events for this download. */
   progressId?: string
+  /** Custom HTTP headers forwarded to the download request. */
+  headers?: Record<string, string>
+  /** Proxy URL (http / socks5). Default: system proxy. */
+  proxy?: string
 }
+
+export interface UpdaterPeriodicOptions extends UpdaterCheckOptions {
+  /** Milliseconds between checks. Minimum 1000; default 1 hour. */
+  intervalMs?: number
+}
+
+export type UpdaterCheckEvent =
+  | { id: number; ok: true; info: UpdateInfo | { available: false } }
+  | { id: number; ok: false; error: string }
 
 export interface UpdaterDownloadResult {
   /** Absolute path to the verified download on disk. */
@@ -90,5 +109,21 @@ export const updater = {
    */
   install(options: UpdaterInstallOptions): Promise<UpdaterInstallResult> {
     return osCall("updater", "install", options)
+  },
+
+  /**
+   * Run `check` on a timer. Emits `updater:check` with either the result
+   * or an error. Single task at a time — calling twice returns the
+   * existing id. Stop with `stopPeriodicCheck`.
+   */
+  async startPeriodicCheck(options: UpdaterPeriodicOptions): Promise<number> {
+    const { id } = await osCall<{ id: number }>("updater", "startPeriodicCheck", options)
+    return id
+  },
+  stopPeriodicCheck(): Promise<void> {
+    return osCall("updater", "stopPeriodicCheck")
+  },
+  onCheck(handler: (event: UpdaterCheckEvent) => void): () => void {
+    return window.__tynd__.os_on("updater:check", (raw) => handler(raw as UpdaterCheckEvent))
   },
 }

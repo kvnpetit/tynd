@@ -59,11 +59,13 @@ export {
 export { tray, type TrayMenuItem } from "./client/tray.js"
 export {
   type UpdateInfo,
+  type UpdaterCheckEvent,
   type UpdaterCheckOptions,
   type UpdaterDownloadOptions,
   type UpdaterDownloadResult,
   type UpdaterInstallOptions,
   type UpdaterInstallResult,
+  type UpdaterPeriodicOptions,
   type UpdaterProgress,
   updater,
 } from "./client/updater.js"
