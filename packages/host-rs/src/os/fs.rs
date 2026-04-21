@@ -48,10 +48,13 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 // wire for binary payloads (matches other small-blob APIs); for multi-MB
 // payloads prefer `readBinary` / `writeBinary` via the bin scheme.
 
-static HANDLES: OnceLock<Mutex<ahash::HashMap<u64, File>>> = OnceLock::new();
+// Each file sits behind its own mutex so blocking I/O on one handle
+// doesn't stall concurrent opens/closes or operations on other handles.
+// The outer map lock is only held during insert / remove / lookup.
+static HANDLES: OnceLock<Mutex<ahash::HashMap<u64, std::sync::Arc<Mutex<File>>>>> = OnceLock::new();
 static NEXT_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 
-fn handles() -> &'static Mutex<ahash::HashMap<u64, File>> {
+fn handles() -> &'static Mutex<ahash::HashMap<u64, std::sync::Arc<Mutex<File>>>> {
     HANDLES.get_or_init(|| Mutex::new(ahash::HashMap::default()))
 }
 
@@ -76,20 +79,27 @@ fn open_handle(args: &Value) -> Result<Value, String> {
         .map_err(|e| format!("fs.open({path}): {e}"))?;
 
     let id = NEXT_HANDLE_ID.fetch_add(1, Ordering::SeqCst);
-    handles().lock().insert(id, file);
+    handles()
+        .lock()
+        .insert(id, std::sync::Arc::new(Mutex::new(file)));
     Ok(json!({ "id": id }))
 }
 
+/// Look up the handle, clone the Arc, drop the outer lock, then perform
+/// the I/O under the per-handle mutex. Blocking syscalls never hold the
+/// map lock.
 fn with_handle<R>(args: &Value, f: impl FnOnce(&mut File) -> R) -> Result<R, String> {
     let id = args
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "fs: missing 'id'".to_string())?;
-    let mut map = handles().lock();
-    let file = map
-        .get_mut(&id)
+    let file = handles()
+        .lock()
+        .get(&id)
+        .cloned()
         .ok_or_else(|| format!("fs: handle {id} not open"))?;
-    Ok(f(file))
+    let mut guard = file.lock();
+    Ok(f(&mut guard))
 }
 
 fn seek_handle(args: &Value) -> Result<Value, String> {

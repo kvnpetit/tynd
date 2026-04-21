@@ -155,10 +155,14 @@ fn start_monitoring(args: &Value) -> Result<Value, String> {
         .unwrap_or(DEFAULT_POLL_MS)
         .max(50);
 
-    // Seed with the current content so the first tick doesn't fire spuriously.
-    if let Ok(initial) = Clipboard::new().and_then(|mut c| c.get_text()) {
-        *last_hash().lock() = hash(initial.as_bytes());
-    }
+    // Seed with the current content so the first tick doesn't fire
+    // spuriously. The poll loop uses `get_text().unwrap_or_default()`, so
+    // a failed seed MUST degrade to the hash of an empty string (not 0) —
+    // otherwise the first successful poll always reports a change.
+    let initial = Clipboard::new()
+        .and_then(|mut c| c.get_text())
+        .unwrap_or_default();
+    *last_hash().lock() = hash(initial.as_bytes());
 
     std::thread::spawn(move || {
         while MONITORING.load(Ordering::SeqCst) {

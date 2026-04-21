@@ -90,6 +90,14 @@ fn emit_action(id: &str) {
 
 // ---- Linux (libnotify via notify-rust) ----------------------------------
 
+/// Cap concurrent `wait_for_action` threads so a runaway caller can't spawn
+/// thousands of blocked OS threads. Drops new waits once we're at the cap —
+/// the notification still appears but its clicks go unhandled.
+#[cfg(all(unix, not(target_os = "macos")))]
+const MAX_ACTION_WAITERS: usize = 16;
+#[cfg(all(unix, not(target_os = "macos")))]
+static ACTION_WAITERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 #[cfg(all(unix, not(target_os = "macos")))]
 #[allow(clippy::needless_pass_by_value)] // signature stays uniform across OS branches
 fn send_platform(
@@ -115,9 +123,13 @@ fn send_platform(
     }
 
     let handle = n.show().map_err(|e| e.to_string())?;
-    if !actions.is_empty() {
+    if !actions.is_empty()
+        && ACTION_WAITERS.load(std::sync::atomic::Ordering::SeqCst) < MAX_ACTION_WAITERS
+    {
+        ACTION_WAITERS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         std::thread::spawn(move || {
             handle.wait_for_action(|action| emit_action(action));
+            ACTION_WAITERS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         });
     }
     Ok(Value::Null)

@@ -158,10 +158,20 @@ fn glob_match(pattern: &str, input: &str) -> bool {
     // Translate to a simple state machine without regex deps.
     let pat: Vec<char> = pattern.chars().collect();
     let inp: Vec<char> = input.chars().collect();
-    matcher(&pat, 0, &inp, 0)
+    matcher(&pat, 0, &inp, 0, 0)
 }
 
-fn matcher(pat: &[char], pi: usize, inp: &[char], ii: usize) -> bool {
+/// Hard cap on recursion. Patterns with many `*` segments can otherwise
+/// grow combinatorially — a crafted user-supplied policy like
+/// `**/**/**/…` against a long path would blow the stack. Returning false
+/// past the cap is the safe fallback (denied by allow list, ignored by
+/// deny list; caller can widen the allow rule if needed).
+const GLOB_MAX_DEPTH: u32 = 64;
+
+fn matcher(pat: &[char], pi: usize, inp: &[char], ii: usize, depth: u32) -> bool {
+    if depth > GLOB_MAX_DEPTH {
+        return false;
+    }
     if pi == pat.len() {
         return ii == inp.len();
     }
@@ -173,14 +183,14 @@ fn matcher(pat: &[char], pi: usize, inp: &[char], ii: usize) -> bool {
             if !cross_sep && i > ii && inp[i - 1] == '/' {
                 break;
             }
-            if matcher(pat, next_pi, inp, i) {
+            if matcher(pat, next_pi, inp, i, depth + 1) {
                 return true;
             }
         }
         return false;
     }
     if ii < inp.len() && pat[pi] == inp[ii] {
-        return matcher(pat, pi + 1, inp, ii + 1);
+        return matcher(pat, pi + 1, inp, ii + 1, depth + 1);
     }
     false
 }
