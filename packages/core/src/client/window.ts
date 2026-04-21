@@ -281,6 +281,10 @@ export const tyndWindow = {
   setZoom(level: number): Promise<void> {
     return osCall("window", "setZoom", { level })
   },
+  /** Last zoom passed to `setZoom` (defaults to `1.0`). wry has no getter. */
+  getZoom(): Promise<number> {
+    return osCall("window", "getZoom")
+  },
   /** Open the webview devtools. Only available in debug builds. */
   openDevTools(): Promise<void> {
     return osCall("window", "openDevTools")
