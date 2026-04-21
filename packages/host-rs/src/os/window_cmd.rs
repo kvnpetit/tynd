@@ -321,6 +321,14 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             set_enabled(win, enabled);
             Ok(Value::Null)
         },
+        "setVisibleOnAllWorkspaces" => {
+            let v = args
+                .get("visible")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            win.set_visible_on_all_workspaces(v);
+            Ok(Value::Null)
+        },
 
         _ => Err(format!("window.{method}: unknown method")),
     }
