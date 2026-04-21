@@ -379,7 +379,7 @@ import { menu } from "@tynd/core/client"
 const unsub = menu.onClick("file.new", () => newDocument())
 // call unsub() to stop listening
 
-// Native popup menu anchored on the current window. Windows only today.
+// Native popup menu anchored on the current window (all OS).
 await menu.showContextMenu(
   [
     { id: "copy", label: "Copy", role: "copy" },

@@ -61,3 +61,4 @@ embedded-js    = ["dep:rquickjs"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 arboard = { version = "3", features = ["wayland-data-control"] }
+gtk.workspace = true

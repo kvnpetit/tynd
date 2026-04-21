@@ -19,7 +19,7 @@ export const menu = {
    * Show a native popup menu anchored on the current window. Clicks emit
    * the same `menu:action` event as the menu bar / tray — discriminate by
    * `id`. `x` / `y` are window-relative logical pixels; omitting both uses
-   * the cursor position. Windows only for now (macOS / Linux in progress).
+   * the cursor position.
    */
   showContextMenu(items: ContextMenuItem[], position?: { x: number; y: number }): Promise<void> {
     return osCall("window", "showContextMenu", {

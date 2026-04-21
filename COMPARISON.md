@@ -291,7 +291,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Show context menu programmatically | ⚠️ Windows only | ✅ | ✅ | ✅ |
+| Show context menu programmatically | ✅ | ✅ | ✅ | ✅ |
 | Context data on click | ❌ | ❌ | ✅ | ❌ |
 | Named context menus | ❌ | ❌ | ✅ | ⚠️ |
 | Default browser context menu enabled | ❌ | ❌ | ✅ | ✅ |

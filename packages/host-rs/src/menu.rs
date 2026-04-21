@@ -162,21 +162,34 @@ fn show_on_window(
 }
 
 #[cfg(target_os = "macos")]
+#[allow(clippy::unnecessary_wraps)]
 fn show_on_window(
-    _window: &tao::window::Window,
-    _menu: &muda::Menu,
-    _position: Option<muda::dpi::Position>,
+    window: &tao::window::Window,
+    menu: &muda::Menu,
+    position: Option<muda::dpi::Position>,
 ) -> Result<(), String> {
-    Err("menu.showContextMenu: macOS not wired yet".into())
+    use tao::platform::macos::WindowExtMacOS;
+    let ns_view = window.ns_view();
+    unsafe {
+        menu.show_context_menu_for_nsview(ns_view.cast(), position);
+    }
+    Ok(())
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
+#[allow(clippy::unnecessary_wraps)]
 fn show_on_window(
-    _window: &tao::window::Window,
-    _menu: &muda::Menu,
-    _position: Option<muda::dpi::Position>,
+    window: &tao::window::Window,
+    menu: &muda::Menu,
+    position: Option<muda::dpi::Position>,
 ) -> Result<(), String> {
-    Err("menu.showContextMenu: Linux not wired yet".into())
+    use gtk::glib::object::Cast as _;
+    use tao::platform::unix::WindowExtUnix;
+    // muda wants `&gtk::Window`; tao hands us `&gtk::ApplicationWindow`,
+    // a subclass — upcast_ref is zero-cost.
+    let gtk_win: &gtk::Window = window.gtk_window().upcast_ref();
+    menu.show_context_menu_for_gtk_window(gtk_win, position);
+    Ok(())
 }
 
 pub(crate) fn init_bar(menu: &muda::Menu, window: &tao::window::Window) {
