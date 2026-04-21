@@ -5,6 +5,7 @@
     ".": {
       "package-name": "tynd",
       "changelog-path": "CHANGELOG.md",
+      "pull-request-title-pattern": "chore: release ${version}",
       "extra-files": [
         { "type": "json", "path": "packages/cli/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/core/package.json", "jsonpath": "$.version" },
@@ -25,6 +26,5 @@
     { "type": "style", "section": "Style", "hidden": true }
   ],
   "separate-pull-requests": false,
-  "include-component-in-tag": false,
-  "pull-request-title-pattern": "chore: release ${version}"
+  "include-component-in-tag": false
 }
