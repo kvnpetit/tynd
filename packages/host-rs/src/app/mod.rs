@@ -501,6 +501,20 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                             Err(e) => (false, Value::String(format!("getUrl: {e}"))),
                         }
                     },
+                    "showContextMenu" => {
+                        let win: Option<&Window> = if label == PRIMARY_LABEL {
+                            Some(&native_window)
+                        } else {
+                            secondaries.get(&label).map(|e| &e.window)
+                        };
+                        match win {
+                            Some(w) => match menu::show_context_menu(w, &args) {
+                                Ok(()) => (true, Value::Null),
+                                Err(e) => (false, Value::String(e)),
+                            },
+                            None => (false, Value::String(format!("window '{label}' not found"))),
+                        }
+                    },
                     _ => {
                         let win: Option<&Window> = if label == PRIMARY_LABEL {
                             Some(&native_window)

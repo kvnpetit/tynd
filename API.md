@@ -378,6 +378,17 @@ import { menu } from "@tynd/core/client"
 
 const unsub = menu.onClick("file.new", () => newDocument())
 // call unsub() to stop listening
+
+// Native popup menu anchored on the current window. Windows only today.
+await menu.showContextMenu(
+  [
+    { id: "copy", label: "Copy", role: "copy" },
+    { type: "separator" },
+    { id: "delete", label: "Delete selection" },
+  ],
+  { x: 120, y: 240 },
+)
+menu.onClick("delete", () => deleteSelection())
 ```
 
 ### `clipboard`
