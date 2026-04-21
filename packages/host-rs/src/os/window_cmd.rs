@@ -185,6 +185,17 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
         "monitors" => Ok(list_monitors(win)),
         "primaryMonitor" => Ok(primary_monitor(win)),
         "currentMonitor" => Ok(current_monitor(win)),
+        "monitorFromPoint" => {
+            let x = args.get("x").and_then(Value::as_f64).unwrap_or(0.0);
+            let y = args.get("y").and_then(Value::as_f64).unwrap_or(0.0);
+            Ok(monitor_from_point(win, x, y))
+        },
+        "globalCursorPosition" => {
+            let pos = win
+                .cursor_position()
+                .map_err(|e| format!("globalCursorPosition: {e}"))?;
+            Ok(json!({ "x": pos.x, "y": pos.y }))
+        },
 
         "setFocus" => {
             win.set_focus();
@@ -597,6 +608,16 @@ fn primary_monitor(win: &Window) -> Value {
 fn current_monitor(win: &Window) -> Value {
     let primary_name = win.primary_monitor().and_then(|p| p.name());
     win.current_monitor().map_or(Value::Null, |m| {
+        let is_primary = primary_name
+            .as_ref()
+            .is_some_and(|p| m.name().as_ref() == Some(p));
+        monitor_to_json(&m, is_primary)
+    })
+}
+
+fn monitor_from_point(win: &Window, x: f64, y: f64) -> Value {
+    let primary_name = win.primary_monitor().and_then(|p| p.name());
+    win.monitor_from_point(x, y).map_or(Value::Null, |m| {
         let is_primary = primary_name
             .as_ref()
             .is_some_and(|p| m.name().as_ref() == Some(p));
