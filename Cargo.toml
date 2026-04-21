@@ -69,6 +69,8 @@ global-hotkey = "0.5"
 # Cross-platform recycle bin (IShellItem on Windows, NSFileManager trashItemAtURL
 # on macOS, freedesktop.org Trash Spec on Linux).
 trash         = "5"
+# User idle time — GetLastInputInfo (Win), CGEventSource (macOS), XScreenSaver (Linux).
+user-idle     = "0.6"
 
 # Launch-at-boot — registry on Windows, Launch Agents on macOS, autostart
 # .desktop on Linux.
