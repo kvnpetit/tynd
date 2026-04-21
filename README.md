@@ -275,7 +275,7 @@ rustup install stable
 # Linux only
 sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
-  libxdo-dev
+  libxdo-dev libxss-dev
 
 # Build
 cargo build --release -p tynd-full
