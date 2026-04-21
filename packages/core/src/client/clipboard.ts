@@ -41,4 +41,25 @@ export const clipboard = {
   clear(): Promise<void> {
     return osCall("clipboard", "clear")
   },
+
+  /**
+   * Start a polling thread that emits `clipboard:change` when the content
+   * changes. Cross-OS — no native event API on Windows/macOS/Linux that
+   * doesn't require heavy dependencies. Default interval 200 ms.
+   */
+  async onChange(
+    handler: (event: { text: string }) => void,
+    options?: { intervalMs?: number },
+  ): Promise<() => Promise<void>> {
+    await osCall("clipboard", "startMonitoring", {
+      intervalMs: options?.intervalMs,
+    })
+    const off = window.__tynd__.os_on("clipboard:change", (raw) =>
+      handler(raw as { text: string }),
+    )
+    return async () => {
+      off()
+      await osCall("clipboard", "stopMonitoring")
+    }
+  },
 }
