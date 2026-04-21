@@ -182,22 +182,31 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 let proxy = proxy.clone();
                 tray_icon::TrayIconEvent::set_event_handler(Some(
                     move |evt: tray_icon::TrayIconEvent| {
-                        let name = match &evt {
+                        let (name, data) = match &evt {
                             tray_icon::TrayIconEvent::Click {
                                 button: tray_icon::MouseButton::Left,
                                 ..
-                            } => "tray:click",
+                            } => ("tray:click", Value::Null),
                             tray_icon::TrayIconEvent::Click {
                                 button: tray_icon::MouseButton::Right,
                                 ..
-                            } => "tray:right-click",
-                            tray_icon::TrayIconEvent::DoubleClick { .. } => "tray:double-click",
+                            } => ("tray:right-click", Value::Null),
+                            tray_icon::TrayIconEvent::DoubleClick { .. } => {
+                                ("tray:double-click", Value::Null)
+                            },
+                            tray_icon::TrayIconEvent::Enter { position, .. } => {
+                                ("tray:enter", json!({ "x": position.x, "y": position.y }))
+                            },
+                            tray_icon::TrayIconEvent::Move { position, .. } => {
+                                ("tray:move", json!({ "x": position.x, "y": position.y }))
+                            },
+                            tray_icon::TrayIconEvent::Leave { position, .. } => {
+                                ("tray:leave", json!({ "x": position.x, "y": position.y }))
+                            },
                             _ => return,
                         };
-                        let _ = proxy.send_event(UserEvent::OsEventScript(ipc::eval_os_event(
-                            name,
-                            &Value::Null,
-                        )));
+                        let _ = proxy
+                            .send_event(UserEvent::OsEventScript(ipc::eval_os_event(name, &data)));
                     },
                 ));
                 Some(tray)

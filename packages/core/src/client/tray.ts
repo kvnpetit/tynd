@@ -41,6 +41,24 @@ export const tray = {
   onDoubleClick(handler: () => void): () => void {
     return window.__tynd__.os_on("tray:double-click", () => handler())
   },
+  /** Mouse entered the tray icon's bounds. `x`/`y` are physical pixels. */
+  onEnter(handler: (pos: { x: number; y: number }) => void): () => void {
+    return window.__tynd__.os_on("tray:enter", (raw) =>
+      handler(raw as { x: number; y: number }),
+    )
+  },
+  /** Mouse moved over the tray icon. */
+  onMove(handler: (pos: { x: number; y: number }) => void): () => void {
+    return window.__tynd__.os_on("tray:move", (raw) =>
+      handler(raw as { x: number; y: number }),
+    )
+  },
+  /** Mouse left the tray icon's bounds. */
+  onLeave(handler: (pos: { x: number; y: number }) => void): () => void {
+    return window.__tynd__.os_on("tray:leave", (raw) =>
+      handler(raw as { x: number; y: number }),
+    )
+  },
   onMenu(id: string, handler: () => void): () => void {
     return window.__tynd__.os_on("menu:action", (data: unknown) => {
       if (((data as Record<string, unknown>)?.["id"] as string) === id) handler()
