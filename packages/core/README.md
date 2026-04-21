@@ -72,7 +72,7 @@ const bytes = await fs.readBinary(file!)
 
 Native integrations — identical surface in both `full` and `lite` modes:
 
-`app`, `dialog`, `tyndWindow`, `monitors`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs` (+ watcher), `shortcuts`, `keyring`, `autolaunch`, `store`, `updater`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance`.
+`app`, `dialog`, `tyndWindow`, `monitors`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs` (+ watcher, handles, symlinks), `shortcuts`, `keyring`, `autolaunch`, `store`, `updater`, `log`, `power`, `security`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance`.
 
 Plus Web-standard re-exports (`fetch`, `WebSocket`, `crypto`, `URL`, `Blob`, `AbortController`, `TextEncoder`, …) so `import * as tynd from "@tynd/core/client"` gives you the whole namespace at once.
 
