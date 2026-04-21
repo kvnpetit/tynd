@@ -4,6 +4,38 @@
  * cancellation on top without changing the public API shape.
  */
 
+/**
+ * Subscribe to a backend event; automatically unsubscribe after `n`
+ * invocations. Returns a manual unsubscribe for the case where the
+ * subscriber wants to stop early.
+ */
+export function listenN<T = unknown>(
+  event: string,
+  n: number,
+  handler: (payload: T) => void,
+): () => void {
+  if (n <= 0) return () => {}
+  let remaining = n
+  const wrapper = (raw: unknown) => {
+    handler(raw as T)
+    remaining -= 1
+    if (remaining <= 0) {
+      window.__tynd__.off(event, wrapper)
+    }
+  }
+  window.__tynd__.on(event, wrapper)
+  return () => window.__tynd__.off(event, wrapper)
+}
+
+/**
+ * Subscribe to a backend event once, mirroring the EventEmitter pattern.
+ * `createBackend()` already exposes `.once()` for typed events — this
+ * helper is the untyped variant for ad-hoc events like `window:focused`.
+ */
+export function once<T = unknown>(event: string, handler: (payload: T) => void): () => void {
+  return listenN<T>(event, 1, handler)
+}
+
 export class RpcTimeoutError extends Error {
   constructor(ms: number) {
     super(`RPC timed out after ${ms}ms`)
