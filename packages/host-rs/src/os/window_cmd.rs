@@ -356,6 +356,11 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             set_traffic_light_inset(win, x, y);
             Ok(Value::Null)
         },
+        "setSystemBackdrop" => {
+            let kind = args.get("kind").and_then(Value::as_str).unwrap_or("auto");
+            set_system_backdrop(win, kind)?;
+            Ok(Value::Null)
+        },
         "setWindowIcon" => {
             // Passing null clears the icon; a path reloads it.
             match args.get("path").and_then(Value::as_str) {
@@ -460,6 +465,47 @@ fn set_traffic_light_inset(win: &Window, x: f64, y: f64) {
 }
 #[cfg(not(target_os = "macos"))]
 fn set_traffic_light_inset(_win: &Window, _x: f64, _y: f64) {}
+
+#[cfg(target_os = "windows")]
+fn set_system_backdrop(win: &Window, kind: &str) -> Result<(), String> {
+    // DWMWA_SYSTEMBACKDROP_TYPE = 38 (Windows 11 22000+).
+    // Values: 0 Auto, 1 None, 2 Mainwindow (Mica), 3 TransientWindow
+    // (Acrylic / background blur), 4 TabbedWindow (Tabbed).
+    use tao::platform::windows::WindowExtWindows as _;
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+
+    const DWMWA_SYSTEMBACKDROP_TYPE: u32 = 38;
+    let value: i32 = match kind {
+        "none" => 1,
+        "mica" => 2,
+        "acrylic" => 3,
+        "tabbed" => 4,
+        _ => 0,
+    };
+    let hwnd = win.hwnd() as HWND;
+    let value_ptr = std::ptr::addr_of!(value).cast();
+    let hr = unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_SYSTEMBACKDROP_TYPE,
+            value_ptr,
+            size_of::<i32>() as u32,
+        )
+    };
+    if hr < 0 {
+        return Err(format!(
+            "setSystemBackdrop: DwmSetWindowAttribute hr=0x{hr:x}"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[allow(clippy::unnecessary_wraps)]
+fn set_system_backdrop(_win: &Window, _kind: &str) -> Result<(), String> {
+    Ok(())
+}
 
 /// Map an API string to tao's `CursorIcon`. Unknown names fall back to
 /// `Default` so apps don't hard-crash on typos.

@@ -60,6 +60,7 @@ project pages.
 - user-idle        (MIT)              — https://github.com/olback/user-idle-rs
 - tauri-winrt-notification (Apache-2.0 / MIT) — https://github.com/tauri-apps/winrt-notification
 - mac-notification-sys    (MIT)         — https://github.com/h4llow3En/mac-notification-sys
+- windows-sys             (Apache-2.0 / MIT) — https://github.com/microsoft/windows-rs
 - rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
 - tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
 - rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite

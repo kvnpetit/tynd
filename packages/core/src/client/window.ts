@@ -401,6 +401,16 @@ export const tyndWindow = {
   setTrafficLightInset(x: number, y: number): Promise<void> {
     return osCall("window", "setTrafficLightInset", { x, y })
   },
+  /**
+   * Windows 11+ system backdrop: `"mica"`, `"acrylic"`, `"tabbed"`,
+   * `"none"`, or `"auto"`. No-op on other OS. Requires the window to have
+   * no decorations for best results (set in config).
+   */
+  setSystemBackdrop(
+    kind: "auto" | "none" | "mica" | "acrylic" | "tabbed",
+  ): Promise<void> {
+    return osCall("window", "setSystemBackdrop", { kind })
+  },
 
   /**
    * Cmd+F-style in-page search. Uses the built-in `window.find()` present
