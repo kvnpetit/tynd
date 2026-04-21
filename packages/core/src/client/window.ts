@@ -214,6 +214,23 @@ export const tyndWindow = {
     return osCall("window", "closeDevTools")
   },
 
+  /** Open the OS print dialog for the current webview contents. */
+  print(): Promise<void> {
+    return osCall("window", "print")
+  },
+  /** Replace the webview URL at runtime. */
+  navigate(url: string): Promise<void> {
+    return osCall("window", "navigate", { url })
+  },
+  /** Replace the webview contents with raw HTML. */
+  loadHtml(html: string): Promise<void> {
+    return osCall("window", "loadHtml", { html })
+  },
+  /** Current URL of the webview. */
+  getUrl(): Promise<string> {
+    return osCall("window", "getUrl")
+  },
+
   /** Label of the current window (`"main"` for the primary window). */
   label(): string {
     return getWindowLabel()

@@ -467,6 +467,40 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                             (true, Value::Null)
                         }
                     },
+                    "print" => {
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        match wv.print() {
+                            Ok(()) => (true, Value::Null),
+                            Err(e) => (false, Value::String(format!("print: {e}"))),
+                        }
+                    },
+                    "navigate" => {
+                        let url = args.get("url").and_then(Value::as_str).unwrap_or("");
+                        if url.is_empty() {
+                            (false, Value::String("navigate: missing 'url'".into()))
+                        } else {
+                            let wv = webview_for(&label, &webview, &secondaries);
+                            match wv.load_url(url) {
+                                Ok(()) => (true, Value::Null),
+                                Err(e) => (false, Value::String(format!("navigate: {e}"))),
+                            }
+                        }
+                    },
+                    "loadHtml" => {
+                        let html = args.get("html").and_then(Value::as_str).unwrap_or("");
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        match wv.load_html(html) {
+                            Ok(()) => (true, Value::Null),
+                            Err(e) => (false, Value::String(format!("loadHtml: {e}"))),
+                        }
+                    },
+                    "getUrl" => {
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        match wv.url() {
+                            Ok(u) => (true, Value::String(u)),
+                            Err(e) => (false, Value::String(format!("getUrl: {e}"))),
+                        }
+                    },
                     _ => {
                         let win: Option<&Window> = if label == PRIMARY_LABEL {
                             Some(&native_window)
