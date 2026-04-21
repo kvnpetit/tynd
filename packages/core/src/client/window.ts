@@ -389,6 +389,18 @@ export const tyndWindow = {
   setWindowIcon(path: string | null): Promise<void> {
     return osCall("window", "setWindowIcon", { path })
   },
+  /** macOS: make the titlebar transparent. No-op on Windows / Linux. */
+  setTitlebarTransparent(transparent: boolean): Promise<void> {
+    return osCall("window", "setTitlebarTransparent", { transparent })
+  },
+  /** macOS: let HTML extend under the titlebar. No-op on Windows / Linux. */
+  setFullsizeContentView(fullsize: boolean): Promise<void> {
+    return osCall("window", "setFullsizeContentView", { fullsize })
+  },
+  /** macOS: reposition the traffic light buttons. No-op on Windows / Linux. */
+  setTrafficLightInset(x: number, y: number): Promise<void> {
+    return osCall("window", "setTrafficLightInset", { x, y })
+  },
 
   /**
    * Cmd+F-style in-page search. Uses the built-in `window.find()` present
