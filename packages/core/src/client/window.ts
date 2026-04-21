@@ -34,6 +34,10 @@ export interface CreateWindowOptions {
    * always-on-top window (tao exposes no equivalent).
    */
   modalTo?: string
+  /** Hide the window automatically when it loses focus (popover pattern). */
+  hideOnFocusLost?: boolean
+  /** Hide the window automatically when the user presses Escape. */
+  hideOnEscape?: boolean
 }
 
 export interface NavigationEvent extends WindowEventBase {
