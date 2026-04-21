@@ -359,6 +359,14 @@ await tyndWindow.print() // opens the system print dialog
 const hit = tyndWindow.findInPage("invoice", { caseSensitive: false })
 tyndWindow.stopFindInPage()
 
+// Appearance runtime knobs
+await tyndWindow.setTheme("dark")
+await tyndWindow.setBackgroundColor({ r: 20, g: 20, b: 28 })
+await tyndWindow.setProgressBar("normal", 42) // 42% in taskbar/dock
+await tyndWindow.setBadge({ label: "3" })      // macOS dock / Linux launcher
+await tyndWindow.setSkipTaskbar(true)          // Windows/Linux
+await tyndWindow.setContentProtection(true)    // blocks screenshots / capture
+
 // Cursor control — click-through windows, drag zones, custom game cursors.
 await tyndWindow.setCursorIcon("grab")
 await tyndWindow.setCursorVisible(false)

@@ -58,8 +58,8 @@ Tynd is a desktop-app framework with a **TypeScript backend** and a native WebVi
 | Set focusable | ❌ | ✅ | ❌ | ✅ |
 | isMaximized / isMinimized / isFullscreen / isVisible | ✅ | ✅ | ✅ | ✅ |
 | isDecorated / isResizable / isFocused | ✅ | ✅ | ⚠️ | ✅ |
-| Skip taskbar | ❌ | ✅ | ✅ | ✅ |
-| Content protection (screenshot block) | ❌ | ✅ | ✅ | ✅ |
+| Skip taskbar | ✅ Win+Linux | ✅ | ✅ | ✅ |
+| Content protection (screenshot block) | ✅ | ✅ | ✅ | ✅ |
 | Show / hide menu bar | ❌ | ✅ | ✅ | ✅ |
 | Set zoom factor / get zoom | ⚠️ set only | ✅ | ✅ | ✅ |
 | Navigate to URL at runtime | ✅ | ✅ | ✅ | ✅ |
@@ -79,10 +79,10 @@ Tynd is a desktop-app framework with a **TypeScript backend** and a native WebVi
 | Translucent window | ❌ | ❌ | ✅ | ✅ |
 | CSS drag region | ✅ | ✅ | ✅ | ✅ |
 | Set decorations at runtime | ✅ | ✅ | ✅ | ⚠️ |
-| Set background color | ❌ | ✅ | ✅ | ✅ |
+| Set background color | ✅ | ✅ | ✅ | ✅ |
 | Set shadow | ❌ | ✅ | ✅ | ✅ |
 | Set window icon at runtime | ❌ | ✅ | ✅ | ✅ |
-| Set theme (light / dark / system) | ❌ | ✅ | ✅ | ✅ |
+| Set theme (light / dark / system) | ✅ | ✅ | ✅ | ✅ |
 | Set backdrop type at runtime | ❌ | ❌ | ✅ | ⚠️ |
 | Mica / Acrylic / Tabbed (Windows 11) | ❌ | ✅ | ✅ | ✅ |
 | LiquidGlass (macOS Sequoia) | ❌ | ❌ | ✅ | ❌ |
@@ -92,8 +92,8 @@ Tynd is a desktop-app framework with a **TypeScript backend** and a native WebVi
 | Traffic light position (macOS) | ❌ | ✅ | ❌ | ✅ |
 | Window tabbing identifier (macOS) | ❌ | ✅ | ❌ | ❌ |
 | Scrollbar style (Windows fluent overlay) | ❌ | ✅ | ❌ | ❌ |
-| Taskbar progress bar (Windows / macOS) | ❌ | ✅ | ❌ | ✅ |
-| Dock / taskbar badge count | ❌ | ✅ | ✅ | ✅ |
+| Taskbar progress bar (Windows / macOS) | ✅ | ✅ | ❌ | ✅ |
+| Dock / taskbar badge count | ✅ mac+Linux | ✅ | ✅ | ✅ |
 | Taskbar overlay icon (Windows) | ❌ | ✅ | ❌ | ✅ |
 | Disable window icon (Windows) | ❌ | ❌ | ✅ | ❌ |
 | Custom window shape (mask) | ❌ | ❌ | ✅ | ❌ |
@@ -779,8 +779,8 @@ Features available in Electron with no direct equivalent in the other frameworks
 
 | Category | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Window — core ops | 30/39 | 38/39 | 29/39 | 37/39 |
-| Window — appearance | 4/27 | 19/27 | 18/27 | 18/27 |
+| Window — core ops | 32/39 | 38/39 | 29/39 | 37/39 |
+| Window — appearance | 9/27 | 19/27 | 18/27 | 18/27 |
 | Webview API | 0/19 | 17/19 | 2/19 | 16/19 |
 | Multi-window | 5/9 | 8/9 | 7/9 | 8/9 |
 | Window events | 10/14 | 11/14 | 12/14 | 13/14 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~177/503 (35%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~184/503 (37%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
