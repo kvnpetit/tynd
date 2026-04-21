@@ -286,6 +286,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     // Last zoom level passed to `setZoom`, keyed by window label. wry has no
     // getter so we cache the write.
     let mut zoom_levels: HashMap<String, f64> = HashMap::new();
+    // Auto-hide flags set via CreateWindowOptions. `hideOnFocusLost` hides the
+    // window when it blurs; `hideOnEscape` hides it on Escape keydown.
+    let mut hide_on_focus_lost: HashMap<String, bool> = HashMap::new();
+    let mut hide_on_escape: HashMap<String, bool> = HashMap::new();
     let flush_scheduled = std::sync::Arc::new(AtomicBool::new(false));
 
     event_loop.run(move |event, target, control_flow| {
@@ -409,6 +413,20 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     ) {
                         Ok((new_label, entry)) => {
                             window_id_to_label.insert(entry.window.id(), new_label.clone());
+                            if args
+                                .get("hideOnFocusLost")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false)
+                            {
+                                hide_on_focus_lost.insert(new_label.clone(), true);
+                            }
+                            if args
+                                .get("hideOnEscape")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(false)
+                            {
+                                hide_on_escape.insert(new_label.clone(), true);
+                            }
                             secondaries.insert(new_label, entry);
                             (true, Value::Null)
                         },
@@ -684,6 +702,29 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     },
                     &json!({ "label": label }),
                 );
+                if !focused && hide_on_focus_lost.get(&label).copied().unwrap_or(false) {
+                    if let Some(entry) = secondaries.get(&label) {
+                        entry.window.set_visible(false);
+                    }
+                }
+            },
+
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        event: key_event, ..
+                    },
+                window_id,
+                ..
+            } if key_event.physical_key == tao::keyboard::KeyCode::Escape
+                && key_event.state == tao::event::ElementState::Pressed =>
+            {
+                let label = label_for(window_id, &window_id_to_label);
+                if hide_on_escape.get(&label).copied().unwrap_or(false) {
+                    if let Some(entry) = secondaries.get(&label) {
+                        entry.window.set_visible(false);
+                    }
+                }
             },
 
             Event::WindowEvent {
