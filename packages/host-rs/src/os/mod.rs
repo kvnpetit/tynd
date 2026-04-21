@@ -9,6 +9,7 @@ pub mod fs;
 pub mod http;
 pub mod icon;
 pub mod keyring;
+pub mod log;
 pub mod notification;
 pub mod os_info;
 pub mod process;
@@ -52,6 +53,7 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "sql" => sql::dispatch(method, args),
         "updater" => updater::dispatch(method, args),
         "keyring" => keyring::dispatch(method, args),
+        "log" => log::dispatch(method, args),
         #[cfg(feature = "embedded-js")]
         "workers" => workers::dispatch(method, args),
         #[cfg(not(feature = "embedded-js"))]

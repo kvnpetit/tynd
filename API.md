@@ -439,6 +439,24 @@ const watcher = await fs.watch("./notes", { recursive: true }, (event) => {
 // Later: await watcher.unwatch()
 ```
 
+### `log` — structured logging with rotation
+
+JSON-lines format on disk, size-based rotation. Same API on backend and
+frontend — both land in the same file.
+
+```typescript
+import { log } from "@tynd/core/client"
+
+await log.configure({ level: "info", maxBytes: 2 * 1024 * 1024, maxFiles: 5 })
+await log.info("boot complete", { runtime: "full", ms: 142 })
+await log.error("http 500", { url: "/api/sync", code: 500 })
+
+const path = await log.path() // absolute path of the active file
+```
+
+Default location: `<cache_dir>/<app-name>/app.log`. Rotates to `app.log.1`,
+`app.log.2`, ... when `maxBytes` is reached, dropping anything past `maxFiles`.
+
 ### `keyring` — secure credential storage
 
 ```typescript
