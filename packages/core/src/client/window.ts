@@ -157,6 +157,9 @@ export const tyndWindow = {
   setTitle(title: string): Promise<void> {
     return osCall("window", "setTitle", { title })
   },
+  getTitle(): Promise<string> {
+    return osCall("window", "getTitle")
+  },
   setSize(width: number, height: number): Promise<void> {
     return osCall("window", "setSize", { width, height })
   },

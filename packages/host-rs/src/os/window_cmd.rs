@@ -30,6 +30,7 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             win.set_title(title);
             Ok(Value::Null)
         },
+        "getTitle" => Ok(Value::String(win.title())),
 
         "setSize" => {
             let w = args.get("width").and_then(Value::as_f64).unwrap_or(800.0);
