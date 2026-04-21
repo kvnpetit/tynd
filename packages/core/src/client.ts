@@ -28,7 +28,7 @@ export {
 } from "./client/http.js"
 export { type KeyringEntry, keyring } from "./client/keyring.js"
 export { log, type LogConfigureOptions, type LogLevel } from "./client/log.js"
-export { menu } from "./client/menu.js"
+export { type ContextMenuItem, menu } from "./client/menu.js"
 export { type Monitor, monitors } from "./client/monitor.js"
 export { type NotificationOptions, notification } from "./client/notification.js"
 export { type OsInfo, os } from "./client/os.js"

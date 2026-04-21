@@ -1,4 +1,6 @@
 use muda::accelerator::Accelerator;
+use muda::ContextMenu as _;
+use serde_json::Value;
 use std::str::FromStr as _;
 
 use crate::runtime::MenuItemDef;
@@ -117,6 +119,64 @@ fn role_to_predefined(role: &str) -> Option<muda::PredefinedMenuItem> {
         "about" => P::about(None::<&str>, None),
         _ => return None,
     })
+}
+
+/// Display `items` as a popup context menu anchored on `window`. Called from
+/// the main thread (WindowCmd path); `x` / `y` are window-relative logical
+/// pixels, `None` falls back to the cursor position. Clicks emit the usual
+/// `menu:action` event — apps discriminate by item `id`.
+pub(crate) fn show_context_menu(window: &tao::window::Window, args: &Value) -> Result<(), String> {
+    let raw = args
+        .get("items")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "menu.showContextMenu: 'items' must be an array".to_string())?;
+    let items: Vec<MenuItemDef> = serde_json::from_value(Value::Array(raw.clone()))
+        .map_err(|e| format!("menu.showContextMenu: invalid items — {e}"))?;
+
+    let menu = muda::Menu::new();
+    fill(&|i: &dyn muda::IsMenuItem| menu.append(i), &items)?;
+
+    let position: Option<muda::dpi::Position> = match (
+        args.get("x").and_then(Value::as_f64),
+        args.get("y").and_then(Value::as_f64),
+    ) {
+        (Some(x), Some(y)) => Some(muda::dpi::LogicalPosition::new(x, y).into()),
+        _ => None,
+    };
+
+    show_on_window(window, &menu, position)
+}
+
+#[cfg(target_os = "windows")]
+#[allow(clippy::unnecessary_wraps)]
+fn show_on_window(
+    window: &tao::window::Window,
+    menu: &muda::Menu,
+    position: Option<muda::dpi::Position>,
+) -> Result<(), String> {
+    use tao::platform::windows::WindowExtWindows;
+    unsafe {
+        menu.show_context_menu_for_hwnd(window.hwnd(), position);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn show_on_window(
+    _window: &tao::window::Window,
+    _menu: &muda::Menu,
+    _position: Option<muda::dpi::Position>,
+) -> Result<(), String> {
+    Err("menu.showContextMenu: macOS not wired yet".into())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn show_on_window(
+    _window: &tao::window::Window,
+    _menu: &muda::Menu,
+    _position: Option<muda::dpi::Position>,
+) -> Result<(), String> {
+    Err("menu.showContextMenu: Linux not wired yet".into())
 }
 
 pub(crate) fn init_bar(menu: &muda::Menu, window: &tao::window::Window) {
