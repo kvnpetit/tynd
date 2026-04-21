@@ -62,8 +62,8 @@ Tynd is a desktop-app framework with a **TypeScript backend** and a native WebVi
 | Content protection (screenshot block) | ❌ | ✅ | ✅ | ✅ |
 | Show / hide menu bar | ❌ | ✅ | ✅ | ✅ |
 | Set zoom factor / get zoom | ⚠️ set only | ✅ | ✅ | ✅ |
-| Navigate to URL at runtime | ❌ | ✅ | ✅ | ✅ |
-| Set HTML content at runtime | ❌ | ✅ | ✅ | ✅ |
+| Navigate to URL at runtime | ✅ | ✅ | ✅ | ✅ |
+| Set HTML content at runtime | ✅ | ✅ | ✅ | ✅ |
 | Reload | ✅ | ✅ | ✅ | ✅ |
 | Visible on all workspaces | ❌ | ✅ | ❌ | ✅ |
 | Prevent window overflowing monitor bounds | ❌ | ✅ | ❌ | ❌ |
@@ -663,7 +663,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Programmatic print (open system dialog) | ❌ | ❌ | ✅ | ✅ |
+| Programmatic print (open system dialog) | ✅ | ❌ | ✅ | ✅ |
 | Silent print (no dialog) | ❌ | ❌ | ❌ | ✅ |
 | Page range / copies / duplex options | ❌ | ❌ | ❌ | ✅ |
 | Choose printer by name | ❌ | ❌ | ❌ | ✅ |
@@ -779,7 +779,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 
 | Category | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Window — core ops | 28/39 | 38/39 | 29/39 | 37/39 |
+| Window — core ops | 30/39 | 38/39 | 29/39 | 37/39 |
 | Window — appearance | 4/27 | 19/27 | 18/27 | 18/27 |
 | Webview API | 0/19 | 17/19 | 2/19 | 16/19 |
 | Multi-window | 5/9 | 8/9 | 7/9 | 8/9 |
@@ -809,14 +809,14 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Mobile | 0/8 | 8/8 | 0/8 | 0/8 |
 | Build & distribution | 6/26 | 19/26 | 13/26 | 21/26 |
 | DX & CLI | 7/17 | 12/17 | 11/17 | 9/17 |
-| Printing & PDF | 0/7 | 0/7 | 1/7 | 7/7 |
+| Printing & PDF | 1/7 | 0/7 | 1/7 | 7/7 |
 | Screen & media capture | 0/7 | 0/7 | 0/7 | 7/7 |
 | Accessibility | 1/6 | 1/6 | 1/6 | 6/6 |
 | Spellcheck & find | 0/6 | 0/6 | 0/6 | 6/6 |
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~158/503 (31%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~162/503 (32%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 

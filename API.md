@@ -349,6 +349,12 @@ const offClose = tyndWindow.onCloseRequested((e) => {
 // Manual cancel (e.g. from a modal opened elsewhere during the 500ms window):
 await tyndWindow.cancelClose()
 
+// Runtime webview navigation + printing
+await tyndWindow.navigate("/reports")
+await tyndWindow.loadHtml("<h1>Hello</h1>")
+const url = await tyndWindow.getUrl()
+await tyndWindow.print() // opens the system print dialog
+
 // Native file drop — paths are real OS paths, not browser File objects.
 const offDrop = tyndWindow.onDrop(({ paths, x, y }) => {
   for (const p of paths) void openFile(p)
