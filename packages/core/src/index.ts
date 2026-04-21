@@ -24,6 +24,24 @@ import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "
 export { onFrontendEmit } from "./frontend-events.js"
 
 /**
+ * Evaluate raw JavaScript inside a webview. Useful for DevTools-style
+ * tools or forcing a frontend module to re-init without a reload. When
+ * `label` is omitted the script runs on every open window.
+ *
+ * @example
+ *   evalInFrontend(`document.body.classList.add('debug')`)
+ *   evalInFrontend(`window.location.reload()`, "settings")
+ */
+export function evalInFrontend(script: string, label?: string): void {
+  const fn = getEmitFn()
+  if (!fn) {
+    tynd.warn("evalInFrontend() before app.start() — dropped")
+    return
+  }
+  fn("__tynd:eval__", { script }, label)
+}
+
+/**
  * Create a typed event emitter. Export the result from your backend module.
  * The frontend subscribes via `api.on("eventName", handler)`.
  *

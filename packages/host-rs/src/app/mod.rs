@@ -372,6 +372,23 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     }
                 },
                 BackendEvent::Emit { name, payload, to } => {
+                    // Reserved event: backend asked us to evaluate raw JS on
+                    // the target webview(s). Used by `evalInFrontend` to
+                    // inject code without round-tripping through an RPC call.
+                    if name == "__tynd:eval__" {
+                        if let Some(script) = payload.get("script").and_then(Value::as_str) {
+                            if let Some(label) = to {
+                                let wv = webview_for(&label, &webview, &secondaries);
+                                let _ = wv.evaluate_script(script);
+                            } else {
+                                let _ = webview.evaluate_script(script);
+                                for entry in secondaries.values() {
+                                    let _ = entry.webview.evaluate_script(script);
+                                }
+                            }
+                        }
+                        return;
+                    }
                     let script = ipc::eval_dispatch(&name, &payload);
                     if let Some(label) = to {
                         let wv = webview_for(&label, &webview, &secondaries);
