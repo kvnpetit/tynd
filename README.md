@@ -30,21 +30,21 @@ bunx @tynd/cli create my-app
 
 ---
 
-## ✨ At a glance
+## At a glance
 
-- 🟦 **TypeScript top to bottom.** Backend, frontend, IPC, config — same language, no codegen.
-- 🧬 **Two runtime modes, one API.** Start with `lite` (~6.5 MB native binary, no extra runtime needed). Switch to `full` with one config line when you need Bun's JIT or native-binding npm packages.
-- 🔒 **Native window, zero network.** No HTTP server, no loopback TCP port, no firewall prompt. Frontend and IPC ride a native custom scheme.
-- 🧰 **30 OS APIs, identical in both modes** — `fs` (+ watcher, handles, symlinks, trash), `sql` (embedded SQLite), `http`, `websocket`, `terminal` (real PTY), `compute` (blake3/sha/CSPRNG), `dialog`, `tray` (runtime mutation + mouse enter/leave), `menu` (accelerators + checkbox/radio + context menu), `notification` (icon/sound/actions/schedule), `clipboard` (image + HTML + change monitor), `shell` (incl. reveal), `process`, `sidecar`, `singleInstance` (with argv forwarding + deep links), `shortcuts` (system-wide hotkeys), `keyring` (OS-encrypted secrets), `autolaunch` (start at boot), `store`, `updater` (signed auto-update + periodic check), `workers`, `log` (JSON-lines + rotation + console capture), `power` (idle time), `security` (capability ACL for fs + http), `app` (name/version/exit/relaunch), `os` / `path`, `tyndWindow` (multi-window + events + cursor + backdrop), plus typed emitters (bidirectional) and streaming RPC.
-- ⚡ **Zero-copy binary IPC.** Multi-MB payloads (`fs.readBinary`, `compute.hash`, …) skip JSON/base64 entirely — roughly **5-10× faster** than the usual webview-framework binary path.
-- 📦 **First-class installers.** `tynd build --bundle` emits `.app` / `.dmg` / `.deb` / `.rpm` / `.AppImage` / NSIS `.exe` / `.msi`. Installer tools auto-download on first build — no manual setup. Built-in code signing (`signtool` on Windows, `codesign` + optional notarization on macOS).
-- 🛡️ **Security defaults.** Auto-injected CSP on every HTML response, OS-backed secret storage via `keyring`, Ed25519-signed auto-updater so tampered binaries are rejected.
-- 🌊 **Streaming RPC that doesn't flinch.** Async-generator backend handlers stream to the frontend with per-chunk flow control + batched DOM updates — 10k+ yields/sec without freezing the UI.
-- 🎨 **Framework-agnostic.** React, Vue, Svelte, Solid, Preact, Lit, Angular — anything that outputs a pure SPA.
+- **TypeScript top to bottom.** Backend, frontend, IPC, config — same language, no codegen.
+- **Two runtime modes, one API.** Start with `lite` (~6.5 MB native binary, no extra runtime needed). Switch to `full` with one config line when you need Bun's JIT or native-binding npm packages.
+- **Native window, zero network.** No HTTP server, no loopback TCP port, no firewall prompt. Frontend and IPC ride a native custom scheme.
+- **30 OS APIs, identical in both modes** — `fs` (+ watcher, handles, symlinks, trash), `sql` (embedded SQLite), `http`, `websocket`, `terminal` (real PTY), `compute` (blake3/sha/CSPRNG), `dialog`, `tray` (runtime mutation + mouse enter/leave), `menu` (accelerators + checkbox/radio + context menu), `notification` (icon/sound/actions/schedule), `clipboard` (image + HTML + change monitor), `shell` (incl. reveal), `process`, `sidecar`, `singleInstance` (with argv forwarding + deep links), `shortcuts` (system-wide hotkeys), `keyring` (OS-encrypted secrets), `autolaunch` (start at boot), `store`, `updater` (signed auto-update + periodic check), `workers`, `log` (JSON-lines + rotation + console capture), `power` (idle time), `security` (capability ACL for fs + http), `app` (name/version/exit/relaunch), `os` / `path`, `tyndWindow` (multi-window + events + cursor + backdrop), plus typed emitters (bidirectional) and streaming RPC.
+- **Zero-copy binary IPC.** Multi-MB payloads (`fs.readBinary`, `compute.hash`, …) skip JSON/base64 entirely — roughly **5-10× faster** than the usual webview-framework binary path.
+- **First-class installers.** `tynd build --bundle` emits `.app` / `.dmg` / `.deb` / `.rpm` / `.AppImage` / NSIS `.exe` / `.msi`. Installer tools auto-download on first build — no manual setup. Built-in code signing (`signtool` on Windows, `codesign` + optional notarization on macOS).
+- **Security defaults.** Auto-injected CSP on every HTML response, OS-backed secret storage via `keyring`, Ed25519-signed auto-updater so tampered binaries are rejected.
+- **Streaming RPC that doesn't flinch.** Async-generator backend handlers stream to the frontend with per-chunk flow control + batched DOM updates — 10k+ yields/sec without freezing the UI.
+- **Framework-agnostic.** React, Vue, Svelte, Solid, Preact, Lit, Angular — anything that outputs a pure SPA.
 
 ---
 
-## 🧭 Why Tynd
+## Why Tynd
 
 - **TypeScript backend, no codegen.** The frontend types backend calls from `typeof backend` — no `.d.ts` generation, no IDL, no schema file.
 - **Native OS webview.** The final binary doesn't ship a browser — it uses WebView2 / WKWebView / WebKitGTK, so you inherit the OS's paint loop, font stack, and accessibility for free.
@@ -55,7 +55,7 @@ See [COMPARISON.md](./COMPARISON.md) for the full Tynd vs Tauri / Wails / Electr
 
 ---
 
-## 🧪 How it works
+## How it works
 
 ```
 TypeScript backend                         Native OS window
@@ -77,10 +77,10 @@ TypeScript backend                         Native OS window
 | JS runtime | embedded interpreter — ships inside the native binary | Bun, packed into the native binary |
 | Hot JS speed | interpreter — fine for IPC glue, slower on tight loops | **Bun JIT — often 10-100× faster on CPU-bound JS** |
 | IPC overhead | in-process, no serialization hop | one serialization hop (OS pipe) |
-| `fs` / `http` / `websocket` / `sql` / `compute` / `terminal` / … | ✓ same API | ✓ same API |
-| JS-level `fetch` / `Bun.file` / `bun:sqlite` | ✗ (use the Tynd API) | ✓ |
-| Pure-JS npm packages | ✓ (bundled) | ✓ |
-| npm with native bindings | ✗ | ✓ |
+| `fs` / `http` / `websocket` / `sql` / `compute` / `terminal` / … | yes, same API | yes, same API |
+| JS-level `fetch` / `Bun.file` / `bun:sqlite` | no (use the Tynd API) | yes |
+| Pure-JS npm packages | yes (bundled) | yes |
+| npm with native bindings | no | yes |
 | Binary size | smaller (~6.5 MB) | larger (~44 MB, Bun compressed) |
 | Startup | faster (everything in-process) | slower (spawns Bun) |
 
@@ -88,7 +88,7 @@ TypeScript backend                         Native OS window
 
 ---
 
-## 📋 Requirements
+## Requirements
 
 **[Bun](https://bun.sh) is required for app developers.** Tynd is a Bun-first framework — the CLI, the dev server, and the full runtime all run on Bun. Node.js is not supported as a replacement.
 
@@ -104,7 +104,7 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 
 ---
 
-## 🚀 Quick start
+## Quick start
 
 ```bash
 bunx tynd create my-app
@@ -121,7 +121,7 @@ bunx tynd create my-app --framework vue   --runtime lite
 
 ---
 
-## 🛠️ CLI
+## CLI
 
 ```bash
 tynd create [name]           # scaffold a new project (interactive if no args)
@@ -143,14 +143,14 @@ tynd sign <file>             # sign a file with an updater private key
 
 ---
 
-## 🎨 Supported frameworks
+## Supported frameworks
 
 | Framework | Scaffold | Build | Fast Refresh (HMR) |
 |---|---|---|---|
-| React                 | ✅ Vite `react-ts`  | ✅ | ⚠ OK; breaks if React Compiler is enabled |
-| Vue / Svelte / Solid / Preact | ✅ Vite `<name>-ts` | ✅ | ✅ |
-| Lit                   | ✅ Vite `lit-ts`    | ✅ | ♻ Full reload only — Web Components by design |
-| Angular               | ✅ Angular CLI      | ✅ | ♻ Full reload by default (opt-in HMR via `ng serve --hmr`) |
+| React                 | Vite `react-ts`  | yes | Partial — breaks if React Compiler is enabled |
+| Vue / Svelte / Solid / Preact | Vite `<name>-ts` | yes | yes |
+| Lit                   | Vite `lit-ts`    | yes | Full reload only — Web Components by design |
+| Angular               | Angular CLI      | yes | Full reload by default (opt-in HMR via `ng serve --hmr`) |
 
 `tynd init` also detects existing **Vite**, **CRA**, **Angular CLI**, **Parcel**, **Rsbuild**, and **Webpack** setups.
 
@@ -160,7 +160,7 @@ See [`FRAMEWORKS.md`](FRAMEWORKS.md) for the full matrix, per-framework notes, o
 
 ---
 
-## 📁 Project structure
+## Project structure
 
 ```
 my-app/
@@ -174,7 +174,7 @@ my-app/
 
 ---
 
-## 🧩 API
+## API
 
 Tynd exposes three surfaces — backend module, typed frontend RPC, and direct OS APIs:
 
@@ -206,7 +206,7 @@ import { createBackend, fs, process, terminal } from "@tynd/core/client"
 import type * as backend from "../backend/main"
 
 const api = createBackend<typeof backend>()
-const msg = await api.greet("Alice")   // string ✅
+const msg = await api.greet("Alice")   // typed string
 
 await fs.writeText("data.json", JSON.stringify(state))
 const { stdout } = await process.exec("git", { args: ["status"] })
@@ -216,7 +216,7 @@ const { stdout } = await process.exec("git", { args: ["status"] })
 
 ---
 
-## ⚙️ tynd.config.ts
+## tynd.config.ts
 
 ```typescript
 import type { TyndConfig } from "@tynd/cli"
@@ -254,17 +254,17 @@ export default {
 
 ---
 
-## 🪟 WebView runtime
+## WebView runtime
 
 | OS | WebView | Pre-installed? |
 |---|---|---|
-| Windows 10/11 | WebView2 (Edge Chromium) | ✅ |
-| macOS | WKWebView | ✅ |
-| Linux | WebKitGTK 4.1 | ⚠️ `sudo apt install libwebkit2gtk-4.1-0` |
+| Windows 10/11 | WebView2 (Edge Chromium) | yes |
+| macOS | WKWebView | yes |
+| Linux | WebKitGTK 4.1 | no — `sudo apt install libwebkit2gtk-4.1-0` |
 
 ---
 
-## 🏗️ Building from source (contributors only)
+## Building from source (contributors only)
 
 App authors don't need this section — `@tynd/host`'s postinstall downloads pre-built binaries automatically. If you want to build the native host yourself:
 
@@ -296,7 +296,7 @@ packages/
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 **-> [tynd.kvnpetit.com/docs](https://tynd.kvnpetit.com/docs)** — live versioned docs site.
 
