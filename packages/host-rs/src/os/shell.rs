@@ -27,8 +27,57 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             open::that(path).map_err(|e| e.to_string())?;
             Ok(Value::Null)
         },
+        "revealInFolder" => {
+            let path = args
+                .as_str()
+                .or_else(|| args.get("path").and_then(|p| p.as_str()))
+                .ok_or_else(|| "shell.revealInFolder: missing path argument".to_string())?;
+            reveal(path)?;
+            Ok(Value::Null)
+        },
         _ => Err(format!("shell.{method}: unknown method")),
     }
+}
+
+/// Open the OS file manager with `path` selected / highlighted. Uses the
+/// native "reveal" gesture (explorer /select, Finder open -R, xdg-open
+/// parent) so the user sees the item in-place.
+#[cfg(target_os = "windows")]
+fn reveal(path: &str) -> Result<(), String> {
+    let p = std::path::Path::new(path);
+    if !p.exists() {
+        return Err(format!("shell.revealInFolder({path}): path does not exist"));
+    }
+    std::process::Command::new("explorer")
+        .arg(format!("/select,{}", p.display()))
+        .spawn()
+        .map_err(|e| format!("shell.revealInFolder: {e}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn reveal(path: &str) -> Result<(), String> {
+    if !std::path::Path::new(path).exists() {
+        return Err(format!("shell.revealInFolder({path}): path does not exist"));
+    }
+    std::process::Command::new("open")
+        .args(["-R", path])
+        .spawn()
+        .map_err(|e| format!("shell.revealInFolder: {e}"))?;
+    Ok(())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn reveal(path: &str) -> Result<(), String> {
+    let p = std::path::Path::new(path);
+    if !p.exists() {
+        return Err(format!("shell.revealInFolder({path}): path does not exist"));
+    }
+    // No single Linux convention — open the parent dir, works on every
+    // desktop that has `xdg-open` installed.
+    let parent = p.parent().unwrap_or(p);
+    open::that(parent).map_err(|e| format!("shell.revealInFolder: {e}"))?;
+    Ok(())
 }
 
 #[cfg(test)]

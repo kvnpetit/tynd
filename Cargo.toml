@@ -66,6 +66,9 @@ interprocess = "2.2"
 # on Linux) + global hotkey manager for system-wide shortcuts.
 notify        = "6.1"
 global-hotkey = "0.5"
+# Cross-platform recycle bin (IShellItem on Windows, NSFileManager trashItemAtURL
+# on macOS, freedesktop.org Trash Spec on Linux).
+trash         = "5"
 
 # Launch-at-boot — registry on Windows, Launch Agents on macOS, autostart
 # .desktop on Linux.
