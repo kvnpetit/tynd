@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/kvnpetit/tynd/compare/v0.3.1...v0.3.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* **host:** drop unnecessary std::sync::atomic qualifications (Linux clippy) ([3c9a880](https://github.com/kvnpetit/tynd/commit/3c9a880931410d3ebe7bccc2334b52a005c92e19))
+
 ## [0.3.1](https://github.com/kvnpetit/tynd/compare/v0.3.0...v0.3.1) (2026-04-21)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "tynd",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Native desktop apps in TypeScript — workspace root",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
