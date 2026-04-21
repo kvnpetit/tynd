@@ -546,6 +546,19 @@ const theme = await prefs.get<string>("theme")
 
 JSON-backed k/v under the OS config dir.
 
+### `power` — idle time
+
+```typescript
+import { power } from "@tynd/core/client"
+
+// Seconds since last keyboard/mouse input — useful to pause sync while AFK.
+const idle = await power.getIdleTime()
+if (idle > 300) pauseSync()
+```
+
+Sleep / wake / lock events are not wired yet — apps that need them should
+poll `getIdleTime` on a timer.
+
 ### `os` / `path`
 
 ```typescript

@@ -745,7 +745,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
 | Screen / window capture (desktopCapturer) | ❌ | ❌ | ❌ | ✅ |
-| Power monitor (sleep / wake / idle) | ❌ | ❌ | ❌ | ✅ |
+| Power monitor (sleep / wake / idle) | ⚠️ idle only | ❌ | ❌ | ✅ |
 | Prevent display / app sleep (powerSaveBlocker) | ❌ | ❌ | ❌ | ✅ |
 | Crash reporting | ✅ | ❌ | ❌ | ✅ |
 | Touch Bar (macOS) | ❌ | ❌ | ❌ | ✅ |
