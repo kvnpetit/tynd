@@ -227,7 +227,9 @@ mod tests {
 
     #[test]
     fn write_then_read() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempdir().unwrap();
         fresh_state(dir.path());
         write_entry(&json!({ "level": "info", "message": "hi" })).unwrap();
@@ -238,7 +240,9 @@ mod tests {
 
     #[test]
     fn level_filter_drops_below_threshold() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempdir().unwrap();
         fresh_state(dir.path());
         {
@@ -254,7 +258,9 @@ mod tests {
 
     #[test]
     fn rotates_when_exceeding_max_bytes() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempdir().unwrap();
         fresh_state(dir.path());
         {
