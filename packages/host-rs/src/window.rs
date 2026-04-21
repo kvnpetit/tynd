@@ -23,6 +23,8 @@ pub struct WindowConfig {
     pub center: Option<bool>,
     pub fullscreen: Option<bool>,
     pub maximized: Option<bool>,
+    /// Custom User-Agent string set on every webview request.
+    pub user_agent: Option<String>,
 }
 
 /// Build a native window from a `WindowConfig`.

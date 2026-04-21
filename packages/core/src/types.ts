@@ -15,6 +15,7 @@ const WindowConfigSchema = v.object({
   center: v.optional(v.boolean()),
   fullscreen: v.optional(v.boolean()),
   maximized: v.optional(v.boolean()),
+  userAgent: v.optional(v.pipe(v.string(), v.minLength(1))),
 })
 export type WindowConfig = v.InferOutput<typeof WindowConfigSchema>
 
