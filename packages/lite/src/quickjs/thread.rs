@@ -70,10 +70,14 @@ fn install_globals(
             let tx = event_tx.clone();
             g.set(
                 "__tynd_emit__",
-                Function::new(ctx.clone(), move |name: String, payload_json: String| {
-                    let payload = serde_json::from_str(&payload_json).unwrap_or(Value::Null);
-                    let _ = tx.send(BackendEvent::Emit { name, payload });
-                })?,
+                Function::new(
+                    ctx.clone(),
+                    move |name: String, payload_json: String, to_json: rquickjs::Value<'_>| {
+                        let payload = serde_json::from_str(&payload_json).unwrap_or(Value::Null);
+                        let to = to_json.as_string().and_then(|s| s.to_string().ok());
+                        let _ = tx.send(BackendEvent::Emit { name, payload, to });
+                    },
+                )?,
             )?;
         }
 

@@ -43,6 +43,14 @@ export function createEmitter<T extends EmitterMap>(): Emitter<T> {
       }
       fn(event, payload)
     },
+    emitTo<K extends keyof T>(label: string, event: K & string, payload: T[K]) {
+      const fn = getEmitFn()
+      if (!fn) {
+        tynd.warn(`emitTo("${event}") before app.start() — event dropped`)
+        return
+      }
+      fn(event, payload, label)
+    },
   }
 }
 

@@ -29,10 +29,12 @@ export function startLite(config: AppConfig): void {
   // Look up on every emit — if tests or alt hosts inject it late, events
   // flow once the global appears instead of being silently dropped forever.
   let warned = false
-  setEmitFn((name, payload) => {
-    const nativeEmit = g["__tynd_emit__"] as ((name: string, payload: string) => void) | undefined
+  setEmitFn((name, payload, to) => {
+    const nativeEmit = g["__tynd_emit__"] as
+      | ((name: string, payload: string, to?: string) => void)
+      | undefined
     if (nativeEmit) {
-      nativeEmit(name, JSON.stringify(payload))
+      nativeEmit(name, JSON.stringify(payload), to)
     } else if (!warned) {
       warned = true
       tynd.warn(`emit("${name}"): __tynd_emit__ not available — event dropped`)

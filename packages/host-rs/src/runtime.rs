@@ -13,7 +13,12 @@ pub enum BackendEvent {
     /// A single chunk from a streaming (async-iterable) backend call.
     Yield { id: String, value: Value },
     /// Event pushed by the backend to frontend subscribers
-    Emit { name: String, payload: Value },
+    Emit {
+        name: String,
+        payload: Value,
+        /// Target window label; when `None` every webview receives the event.
+        to: Option<String>,
+    },
     /// Dev-mode: backend was hot-reloaded — the host should soft-reload the webview
     /// so the frontend picks up the new backend without losing the native window.
     Reload,

@@ -6,7 +6,7 @@
  * pulling in runtime-specific code paths.
  */
 
-type EmitFn = (name: string, payload: unknown) => void
+type EmitFn = (name: string, payload: unknown, to?: string) => void
 
 let _emitFn: EmitFn | null = null
 export function setEmitFn(fn: EmitFn): void {
