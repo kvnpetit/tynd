@@ -108,9 +108,12 @@ fn unwatch(args: &Value) -> Result<Value, String> {
 }
 
 fn path_arg<'a>(args: &'a Value, name: &str) -> Result<&'a str, String> {
-    args.get(name)
+    let path = args
+        .get(name)
         .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("fs: missing '{name}' argument"))
+        .ok_or_else(|| format!("fs: missing '{name}' argument"))?;
+    super::security::check_fs(path)?;
+    Ok(path)
 }
 
 fn read_text(args: &Value) -> Result<Value, String> {

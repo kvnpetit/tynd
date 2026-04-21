@@ -14,6 +14,7 @@ pub mod notification;
 pub mod os_info;
 pub mod power;
 pub mod process;
+pub mod security;
 pub mod shell;
 pub mod shortcuts;
 pub mod sidecar;
@@ -56,6 +57,7 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         "keyring" => keyring::dispatch(method, args),
         "log" => log::dispatch(method, args),
         "power" => power::dispatch(method, args),
+        "security" => security::dispatch(method, args),
         #[cfg(feature = "embedded-js")]
         "workers" => workers::dispatch(method, args),
         #[cfg(not(feature = "embedded-js"))]

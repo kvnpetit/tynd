@@ -99,6 +99,7 @@ fn request(args: &Value) -> Result<Value, String> {
         .get("url")
         .and_then(Value::as_str)
         .ok_or_else(|| "http.request: missing 'url'".to_string())?;
+    super::security::check_http(url)?;
     let method = args.get("method").and_then(Value::as_str).unwrap_or("GET");
     let timeout_ms = args.get("timeoutMs").and_then(Value::as_u64);
     let progress_id = args
@@ -193,10 +194,12 @@ fn download(args: &Value) -> Result<Value, String> {
         .get("url")
         .and_then(Value::as_str)
         .ok_or_else(|| "http.download: missing 'url'".to_string())?;
+    super::security::check_http(url)?;
     let dest = args
         .get("dest")
         .and_then(Value::as_str)
         .ok_or_else(|| "http.download: missing 'dest'".to_string())?;
+    super::security::check_fs(dest)?;
     let timeout_ms = args.get("timeoutMs").and_then(Value::as_u64);
     let progress_id = args
         .get("progressId")

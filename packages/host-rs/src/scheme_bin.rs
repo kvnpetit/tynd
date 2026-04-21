@@ -73,6 +73,9 @@ fn route_read_binary(query: &HashMap<String, String>) -> BinResponse {
     let Some(path) = query.get("path") else {
         return err_response(StatusCode::BAD_REQUEST, "missing 'path' query".into());
     };
+    if let Err(e) = crate::os::security::check_fs(path) {
+        return err_response(StatusCode::FORBIDDEN, e);
+    }
     match std::fs::read(path) {
         Ok(bytes) => ok_bytes(bytes),
         Err(e) => err_response(
@@ -86,6 +89,9 @@ fn route_write_binary(query: &HashMap<String, String>, body: &[u8]) -> BinRespon
     let Some(path) = query.get("path") else {
         return err_response(StatusCode::BAD_REQUEST, "missing 'path' query".into());
     };
+    if let Err(e) = crate::os::security::check_fs(path) {
+        return err_response(StatusCode::FORBIDDEN, e);
+    }
     if query.get("createDirs").map(String::as_str) == Some("1") {
         if let Some(parent) = std::path::Path::new(path).parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {

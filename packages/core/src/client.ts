@@ -34,6 +34,7 @@ export { type NotificationOptions, notification } from "./client/notification.js
 export { type OsInfo, os } from "./client/os.js"
 export { path } from "./client/path.js"
 export { power } from "./client/power.js"
+export { security, type SecurityPolicy, type SecurityScope } from "./client/security.js"
 export { type ExecOptions, type ExecResult, process } from "./client/process.js"
 export { shell } from "./client/shell.js"
 export { type ShortcutHandle, shortcuts } from "./client/shortcuts.js"

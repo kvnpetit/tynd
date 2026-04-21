@@ -551,11 +551,11 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Capability-based ACL | ❌ | ✅ | ❌ | ❌ |
-| Default-deny model | ❌ | ✅ | ❌ | ❌ |
+| Capability-based ACL | ✅ opt-in | ✅ | ❌ | ❌ |
+| Default-deny model | ✅ opt-in | ✅ | ❌ | ❌ |
 | Command allowlist / denylist | ❌ | ✅ | ❌ | ❌ |
-| Scoped FS access (path patterns) | ❌ | ✅ | ❌ | ❌ |
-| Scoped HTTP access (URL patterns) | ❌ | ✅ | ❌ | ❌ |
+| Scoped FS access (path patterns) | ✅ | ✅ | ❌ | ❌ |
+| Scoped HTTP access (URL patterns) | ✅ | ✅ | ❌ | ❌ |
 | Auto-injected CSP | ✅ | ✅ | ❌ | ❌ |
 | Permission request handler | ❌ | ✅ | ❌ | ✅ |
 | Biometric authentication | ❌ | ✅ 📱 | ❌ | ❌ |
@@ -805,7 +805,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | App-level APIs | 4/14 | 11/14 | 7/14 | 11/14 |
 | OS & Environment | 8/12 | 11/12 | 5/12 | 11/12 |
 | Path utilities | 8/13 | 13/13 | 0/13 | 11/13 |
-| Security & permissions | 2/13 | 8/13 | 0/13 | 6/13 |
+| Security & permissions | 6/13 | 8/13 | 0/13 | 6/13 |
 | Mobile | 0/8 | 8/8 | 0/8 | 0/8 |
 | Build & distribution | 6/26 | 19/26 | 13/26 | 21/26 |
 | DX & CLI | 7/17 | 12/17 | 11/17 | 9/17 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~165/503 (33%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~169/503 (34%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
