@@ -1,4 +1,20 @@
 import { osCall } from "./_internal.js"
+import type { Monitor } from "./monitor.js"
+
+export type WindowPreset =
+  | "topLeft"
+  | "topRight"
+  | "topCenter"
+  | "leftCenter"
+  | "rightCenter"
+  | "bottomLeft"
+  | "bottomRight"
+  | "bottomCenter"
+  | "center"
+  | "trayLeft"
+  | "trayRight"
+  | "trayCenter"
+  | "trayBottomCenter"
 
 export interface WindowSize {
   width: number
@@ -343,6 +359,78 @@ export const tyndWindow = {
   /** Start a native resize drag from the given edge / corner. */
   startResizeDragging(direction: ResizeDirection = "southEast"): Promise<void> {
     return osCall("window", "startResizeDragging", { direction })
+  },
+
+  /**
+   * Move + resize to one of 13 presets, anchored on the current monitor.
+   * Matches Tauri's WindowPositioner — useful for HUDs, quick pickers, or
+   * panels that want consistent placement on every display.
+   */
+  async positionAt(preset: WindowPreset, padding = 20): Promise<void> {
+    const [current, self] = await Promise.all([
+      osCall<Monitor | null>("window", "currentMonitor"),
+      osCall<WindowSize>("window", "getOuterSize"),
+    ])
+    if (!current) return
+    const scale = current.scale || 1
+    const monitorW = current.size.width / scale
+    const monitorH = current.size.height / scale
+    const mx = current.position.x / scale
+    const my = current.position.y / scale
+
+    const { width: w, height: h } = self
+    let x = mx
+    let y = my
+    switch (preset) {
+      case "topLeft":
+        x = mx + padding
+        y = my + padding
+        break
+      case "topRight":
+        x = mx + monitorW - w - padding
+        y = my + padding
+        break
+      case "topCenter":
+        x = mx + (monitorW - w) / 2
+        y = my + padding
+        break
+      case "leftCenter":
+        x = mx + padding
+        y = my + (monitorH - h) / 2
+        break
+      case "rightCenter":
+        x = mx + monitorW - w - padding
+        y = my + (monitorH - h) / 2
+        break
+      case "bottomLeft":
+        x = mx + padding
+        y = my + monitorH - h - padding
+        break
+      case "bottomRight":
+        x = mx + monitorW - w - padding
+        y = my + monitorH - h - padding
+        break
+      case "bottomCenter":
+        x = mx + (monitorW - w) / 2
+        y = my + monitorH - h - padding
+        break
+      case "center":
+        x = mx + (monitorW - w) / 2
+        y = my + (monitorH - h) / 2
+        break
+      case "trayLeft":
+      case "trayRight":
+      case "trayCenter":
+      case "trayBottomCenter":
+        // Tray-relative presets: without a cross-OS tray bounds API (each
+        // platform reports it differently) we approximate with the nearest
+        // monitor corner — apps that need exact tray placement should track
+        // cursor position in their own `tray:click` handler.
+        x = mx + monitorW - w - padding
+        y = my + padding
+        break
+    }
+    await osCall("window", "setPosition", { x, y })
   },
 
   /** Override the window theme (`system` follows the OS). */

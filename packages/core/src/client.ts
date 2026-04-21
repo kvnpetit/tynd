@@ -100,6 +100,6 @@ export {
   type WebSocketMessage,
   websocket,
 } from "./client/websocket.js"
-export { tyndWindow } from "./client/window.js"
+export { tyndWindow, type WindowPreset } from "./client/window.js"
 export { type WorkerHandle, workers } from "./client/workers.js"
 export type { Emitter, EmitterMap } from "./types.js"
