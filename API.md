@@ -104,6 +104,24 @@ export const events = createEmitter<{
 events.emit("fileChanged", { path: "/foo.ts" })
 ```
 
+### Frontend -> backend events (`createFrontendEmitter` + `onFrontendEmit`)
+
+Mirror of `createEmitter`: frontend emits, backend listens. Uses the same
+IPC pipe as RPC calls — no new transport.
+
+```typescript
+// Backend entry — from "@tynd/core"
+import { onFrontendEmit } from "@tynd/core"
+
+onFrontendEmit<string>("toast", (text) => console.log("toast:", text))
+
+// Frontend — from "@tynd/core/client"
+import { createFrontendEmitter } from "@tynd/core/client"
+
+const frontend = createFrontendEmitter<{ toast: string }>()
+frontend.emit("toast", "Saved!")
+```
+
 ### Native menu bar
 
 ```typescript

@@ -382,7 +382,7 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 | Typed RPC frontend -> backend | ✅ | ✅ | ✅ | ✅ |
 | Auto-generated TS types (zero build step) | ✅ | ⚠️ | ✅ | ⚠️ |
 | Backend -> frontend events | ✅ | ✅ | ✅ | ✅ |
-| Frontend -> backend events | ❌ | ✅ | ✅ | ✅ |
+| Frontend -> backend events | ✅ | ✅ | ✅ | ✅ |
 | `once()` listener | ✅ | ✅ | ✅ | ✅ |
 | Listen N times | ❌ | ❌ | ✅ | ❌ |
 | Window-scoped event listeners | ❌ | ✅ | ❌ | ✅ |
@@ -795,7 +795,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Notifications | 8/13 | 13/13 | 6/13 | 9/13 |
 | Global shortcuts | 4/6 | 6/6 | 4/6 | 4/6 |
 | Shell & FS | 8/21 | 20/21 | 6/21 | 20/21 |
-| IPC & Events | 6/23 | 17/23 | 11/23 | 17/23 |
+| IPC & Events | 7/23 | 17/23 | 11/23 | 17/23 |
 | HTTP & WebSocket | 4/4 | 4/4 | 1/4 | 4/4 |
 | Auto-updater | 5/10 | 10/10 | 0/10 | 10/10 |
 | Single instance & deep linking | 6/8 | 7/8 | 4/8 | 7/8 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~197/503 (39%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~198/503 (39%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 

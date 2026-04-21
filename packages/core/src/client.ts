@@ -3,6 +3,7 @@
 export { type AppInfo, app } from "./client/app.js"
 export { type AutolaunchOptions, autolaunch } from "./client/autolaunch.js"
 export { type BackendClient, createBackend } from "./client/backend.js"
+export { createFrontendEmitter } from "./client/frontend-emitter.js"
 export { type ClipboardImage, clipboard } from "./client/clipboard.js"
 export { compute, type HashAlgo } from "./client/compute.js"
 export {

@@ -1,4 +1,5 @@
 import * as v from "valibot"
+import { dispatchFrontendEmit, FRONTEND_EMIT_FN } from "../frontend-events.js"
 import { fireClose, fireReady, onCloseFns, setEmitFn } from "../lifecycle.ts"
 import { tynd } from "../logger.js"
 import type { AppConfig } from "../types.js"
@@ -187,6 +188,15 @@ async function handleCall(
 ): Promise<void> {
   const { id, fn, args } = msg
   try {
+    // Reserved name: frontend emitter bus. Runs without touching the user
+    // module so module loading failures don't block frontend -> backend
+    // events, and event dispatch doesn't accidentally shadow a same-named
+    // user export.
+    if (fn === FRONTEND_EMIT_FN) {
+      dispatchFrontendEmit(args[0] as string, args[1])
+      process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, value: null })}\n`)
+      return
+    }
     const mod = await getModule(entryPath)
     const handler = mod[fn]
     if (typeof handler !== "function") {
