@@ -96,7 +96,9 @@ fn emit_action(id: &str) {
 #[cfg(all(unix, not(target_os = "macos")))]
 const MAX_ACTION_WAITERS: usize = 16;
 #[cfg(all(unix, not(target_os = "macos")))]
-static ACTION_WAITERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+use std::sync::atomic::AtomicUsize;
+#[cfg(all(unix, not(target_os = "macos")))]
+static ACTION_WAITERS: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(all(unix, not(target_os = "macos")))]
 #[allow(clippy::needless_pass_by_value)] // signature stays uniform across OS branches
@@ -123,13 +125,11 @@ fn send_platform(
     }
 
     let handle = n.show().map_err(|e| e.to_string())?;
-    if !actions.is_empty()
-        && ACTION_WAITERS.load(std::sync::atomic::Ordering::SeqCst) < MAX_ACTION_WAITERS
-    {
-        ACTION_WAITERS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    if !actions.is_empty() && ACTION_WAITERS.load(Ordering::SeqCst) < MAX_ACTION_WAITERS {
+        ACTION_WAITERS.fetch_add(1, Ordering::SeqCst);
         std::thread::spawn(move || {
             handle.wait_for_action(emit_action);
-            ACTION_WAITERS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            ACTION_WAITERS.fetch_sub(1, Ordering::SeqCst);
         });
     }
     Ok(Value::Null)
