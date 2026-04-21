@@ -405,6 +405,12 @@ export const tyndWindow = {
   close(label: string): Promise<void> {
     return osCall("window", "close", { label })
   },
+  /** Close this window. No-op on the primary window (use `app.exit()` instead). */
+  closeSelf(): Promise<void> {
+    const label = getWindowLabel()
+    if (label === "main") return Promise.resolve()
+    return osCall("window", "close", { label })
+  },
   /** List labels of all open windows (primary first). */
   all(): Promise<string[]> {
     return osCall("window", "all")
