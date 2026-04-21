@@ -358,8 +358,17 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                         });
                     }
                 },
-                BackendEvent::Emit { name, payload } => {
-                    let _ = webview.evaluate_script(&ipc::eval_dispatch(&name, &payload));
+                BackendEvent::Emit { name, payload, to } => {
+                    let script = ipc::eval_dispatch(&name, &payload);
+                    if let Some(label) = to {
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        let _ = wv.evaluate_script(&script);
+                    } else {
+                        let _ = webview.evaluate_script(&script);
+                        for entry in secondaries.values() {
+                            let _ = entry.webview.evaluate_script(&script);
+                        }
+                    }
                 },
                 BackendEvent::Reload => {
                     let _ = webview.evaluate_script(&ipc::eval_hide_error_overlay());

@@ -78,8 +78,8 @@ export function startFull(config: AppConfig): void {
   })
   process.stdout.write(`${configMsg}\n`)
 
-  setEmitFn((name, payload) => {
-    process.stdout.write(`${JSON.stringify({ type: "event", name, payload })}\n`)
+  setEmitFn((name, payload, to) => {
+    process.stdout.write(`${JSON.stringify({ type: "event", name, payload, to })}\n`)
   })
 
   // The CLI always injects `TYND_ENTRY`; missing it is a bug in the

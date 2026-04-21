@@ -40,7 +40,12 @@ enum BunMsg {
     #[serde(rename = "yield")]
     Yield { id: String, value: Value },
     #[serde(rename = "event")]
-    Event { name: String, payload: Value },
+    Event {
+        name: String,
+        payload: Value,
+        #[serde(default)]
+        to: Option<String>,
+    },
 }
 
 /// Dev-mode handle: swap the Bun subprocess in place while the host and WebView stay alive.
@@ -235,8 +240,8 @@ fn spawn_bun(
                         Ok(BunMsg::Yield { id, value }) => {
                             let _ = event_tx.send(BackendEvent::Yield { id, value });
                         },
-                        Ok(BunMsg::Event { name, payload }) => {
-                            let _ = event_tx.send(BackendEvent::Emit { name, payload });
+                        Ok(BunMsg::Event { name, payload, to }) => {
+                            let _ = event_tx.send(BackendEvent::Emit { name, payload, to });
                         },
                         Ok(BunMsg::Config { .. }) => {},
                         Err(e) => tynd_log!("Parse error ({e}): {trimmed}"),

@@ -150,6 +150,11 @@ export interface Emitter<T extends EmitterMap> {
   /** @internal — phantom type field, never has a real runtime value */
   readonly __tynd_event_types__: T
   emit<K extends keyof T>(event: K & string, payload: T[K]): void
+  /**
+   * Emit only to the window with the given `label`. Other windows don't
+   * receive the event. Default label is `"main"` for the primary window.
+   */
+  emitTo<K extends keyof T>(label: string, event: K & string, payload: T[K]): void
 }
 
 export interface FileFilter {
