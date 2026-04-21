@@ -6,6 +6,8 @@ export type { ConfirmOptions, MessageOptions, OpenFileOptions, SaveFileOptions }
 export interface OpenDirectoryOptions {
   title?: string
   defaultDir?: string
+  /** macOS: allow the user to create directories from the picker. */
+  canCreateDirectories?: boolean
 }
 
 export const dialog = {
