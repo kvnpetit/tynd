@@ -11,17 +11,26 @@ use std::time::Duration;
 
 static APP_NAME: OnceLock<Mutex<String>> = OnceLock::new();
 static APP_VERSION: OnceLock<Mutex<String>> = OnceLock::new();
+static BUNDLE_ID: OnceLock<Mutex<String>> = OnceLock::new();
+
+/// Tynd host version — baked in at compile time from the workspace Cargo.toml.
+const FRAMEWORK_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "getName" => Ok(Value::String(get_name())),
         "getVersion" => Ok(Value::String(get_version())),
+        "getFrameworkVersion" => Ok(Value::String(FRAMEWORK_VERSION.into())),
+        "getBundleIdentifier" => Ok(get_bundle_id().map_or(Value::Null, Value::String)),
         "setInfo" => {
             if let Some(n) = args.get("name").and_then(Value::as_str) {
                 set_name(n.to_string());
             }
             if let Some(v) = args.get("version").and_then(Value::as_str) {
                 set_version(v.to_string());
+            }
+            if let Some(b) = args.get("bundleId").and_then(Value::as_str) {
+                set_bundle_id(b.to_string());
             }
             Ok(Value::Null)
         },
@@ -33,6 +42,19 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "relaunch" => relaunch(),
         _ => Err(format!("app.{method}: unknown method")),
     }
+}
+
+fn set_bundle_id(id: String) {
+    match BUNDLE_ID.get() {
+        Some(m) => *m.lock() = id,
+        None => {
+            let _ = BUNDLE_ID.set(Mutex::new(id));
+        },
+    }
+}
+
+fn get_bundle_id() -> Option<String> {
+    BUNDLE_ID.get().map(|m| m.lock().clone())
 }
 
 fn set_name(name: String) {

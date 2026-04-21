@@ -3,6 +3,8 @@ import { osCall } from "./_internal.ts"
 export interface AppInfo {
   name?: string
   version?: string
+  /** Reverse-DNS identifier, e.g. `com.acme.myapp`. */
+  bundleId?: string
 }
 
 export const app = {
@@ -13,6 +15,14 @@ export const app = {
   /** App version. Defaults to `"0.0.0"` unless the backend calls `setInfo`. */
   getVersion(): Promise<string> {
     return osCall("app", "getVersion")
+  },
+  /** Tynd host version baked in at compile time (e.g. `"0.2.0"`). */
+  getFrameworkVersion(): Promise<string> {
+    return osCall("app", "getFrameworkVersion")
+  },
+  /** Reverse-DNS bundle identifier set via `setInfo({ bundleId })`. */
+  getBundleIdentifier(): Promise<string | null> {
+    return osCall("app", "getBundleIdentifier")
   },
   /**
    * Set app name and/or version at runtime. Typically called once from the

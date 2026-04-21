@@ -200,17 +200,19 @@ delivered as a single resolve on the promise side.
 
 Called from the frontend. They go through the Rust host directly — no round-trip to the TypeScript backend.
 
-### `app` — name, version, exit, relaunch
+### `app` — name, version, identifiers, exit, relaunch
 
 ```typescript
 import { app } from "@tynd/core/client"
 
 // Backend sets once at startup — typically from package.json fields.
-await app.setInfo({ name: pkg.name, version: pkg.version })
+await app.setInfo({ name: pkg.name, version: pkg.version, bundleId: "com.acme.myapp" })
 
 // Anyone can query — frontend or backend.
-const name    = await app.getName()     // fallback: binary file stem
-const version = await app.getVersion()  // fallback: "0.0.0"
+const name    = await app.getName()              // fallback: binary file stem
+const version = await app.getVersion()           // fallback: "0.0.0"
+const tyndVer = await app.getFrameworkVersion()  // compile-time Tynd host version
+const bundle  = await app.getBundleIdentifier()  // null unless setInfo provided it
 
 // Graceful lifecycle control.
 await app.relaunch()   // spawn self + exit current
