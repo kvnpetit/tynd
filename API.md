@@ -503,6 +503,33 @@ const path = await log.path() // absolute path of the active file
 Default location: `<cache_dir>/<app-name>/app.log`. Rotates to `app.log.1`,
 `app.log.2`, ... when `maxBytes` is reached, dropping anything past `maxFiles`.
 
+### `security` — capability-based allow/deny for FS + HTTP
+
+Opt-in. Until `configure` is called every API behaves as before. Deny rules
+beat allow rules; `defaultDeny` flips empty `allow` from "open" to "closed".
+
+```typescript
+import { security, path } from "@tynd/core/client"
+
+await security.configure({
+  fs: {
+    allow: [`${await path.dataDir()}/myapp/**`],
+    deny: ["**/.ssh/**", "**/.env"],
+  },
+  http: {
+    allow: ["https://api.myapp.com/**", "https://cdn.myapp.com/**"],
+  },
+  defaultDeny: true,
+})
+
+// Probe before calling — handy for conditional UI.
+if (await security.isHttpAllowed(target)) startSync(target)
+```
+
+Patterns: `*` = any run within a segment, `**` = any run including `/`.
+Paths are normalized to forward slashes; matching is case-insensitive on
+Windows, case-sensitive elsewhere.
+
 ### `keyring` — secure credential storage
 
 ```typescript
