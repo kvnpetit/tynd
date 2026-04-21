@@ -45,6 +45,53 @@ export interface DragOverEvent extends WindowEventBase {
   y: number
 }
 
+export type CursorIcon =
+  | "default"
+  | "crosshair"
+  | "hand"
+  | "arrow"
+  | "move"
+  | "text"
+  | "wait"
+  | "help"
+  | "progress"
+  | "notAllowed"
+  | "contextMenu"
+  | "cell"
+  | "verticalText"
+  | "alias"
+  | "copy"
+  | "noDrop"
+  | "grab"
+  | "grabbing"
+  | "allScroll"
+  | "zoomIn"
+  | "zoomOut"
+  | "eResize"
+  | "nResize"
+  | "neResize"
+  | "nwResize"
+  | "sResize"
+  | "seResize"
+  | "swResize"
+  | "wResize"
+  | "ewResize"
+  | "nsResize"
+  | "neswResize"
+  | "nwseResize"
+  | "colResize"
+  | "rowResize"
+
+export type ResizeDirection =
+  | "east"
+  | "north"
+  | "northEast"
+  | "northWest"
+  | "south"
+  | "southEast"
+  | "southWest"
+  | "west"
+
 declare global {
   interface Window {
     __TYND_WINDOW_LABEL__?: string
@@ -242,6 +289,30 @@ export const tyndWindow = {
   /** Current URL of the webview. */
   getUrl(): Promise<string> {
     return osCall("window", "getUrl")
+  },
+
+  /** Set the cursor icon over this window. */
+  setCursorIcon(icon: CursorIcon): Promise<void> {
+    return osCall("window", "setCursorIcon", { icon })
+  },
+  /** Warp the cursor to the given window-relative logical position. */
+  setCursorPosition(x: number, y: number): Promise<void> {
+    return osCall("window", "setCursorPosition", { x, y })
+  },
+  setCursorVisible(visible: boolean): Promise<void> {
+    return osCall("window", "setCursorVisible", { visible })
+  },
+  /** Click-through: when `true`, mouse events pass through to windows behind. */
+  setIgnoreCursorEvents(ignore: boolean): Promise<void> {
+    return osCall("window", "setIgnoreCursorEvents", { ignore })
+  },
+  /** Start a native window drag. Call from a mousedown handler on a drag zone. */
+  startDragging(): Promise<void> {
+    return osCall("window", "startDragging")
+  },
+  /** Start a native resize drag from the given edge / corner. */
+  startResizeDragging(direction: ResizeDirection = "southEast"): Promise<void> {
+    return osCall("window", "startResizeDragging", { direction })
   },
 
   /**

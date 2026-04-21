@@ -173,13 +173,13 @@ Tauri v2 has a distinct `Webview` class alongside `WebviewWindow`. Electron expo
 
 | Feature | Tynd | Tauri v2 | Wails v3 | Electron |
 |---|---|---|---|---|
-| Set cursor icon | ❌ | ✅ | ❌ | ⚠️ |
-| Set cursor position | ❌ | ✅ | ❌ | ❌ |
+| Set cursor icon | ✅ | ✅ | ❌ | ⚠️ |
+| Set cursor position | ✅ | ✅ | ❌ | ❌ |
 | Cursor grab | ❌ | ✅ | ❌ | ❌ |
-| Cursor visible / hidden | ❌ | ✅ | ❌ | ❌ |
-| Ignore cursor events (click-through) | ❌ | ✅ | ✅ | ✅ |
-| Start drag programmatically | ❌ | ✅ | ❌ | ✅ |
-| Start resize drag from edge | ❌ | ✅ | ❌ | ❌ |
+| Cursor visible / hidden | ✅ | ✅ | ❌ | ❌ |
+| Ignore cursor events (click-through) | ✅ | ✅ | ✅ | ✅ |
+| Start drag programmatically | ✅ | ✅ | ❌ | ✅ |
+| Start resize drag from edge | ✅ | ✅ | ❌ | ❌ |
 
 ---
 
@@ -784,7 +784,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Webview API | 0/19 | 17/19 | 2/19 | 16/19 |
 | Multi-window | 5/9 | 8/9 | 7/9 | 8/9 |
 | Window events | 10/14 | 11/14 | 12/14 | 13/14 |
-| Cursor & mouse | 0/7 | 7/7 | 2/7 | 3/7 |
+| Cursor & mouse | 6/7 | 7/7 | 2/7 | 3/7 |
 | Monitors & screens | 4/8 | 7/8 | 6/8 | 7/8 |
 | Drag & drop | 2/4 | 3/4 | 4/4 | 3/4 |
 | Dialogs | 10/18 | 13/18 | 14/18 | 14/18 |
@@ -816,7 +816,7 @@ Features available in Electron with no direct equivalent in the other frameworks
 | Extensions / WebFrame / SW | 0/6 | 0/6 | 0/6 | 6/6 |
 | In-app purchase | 0/5 | 0/5 | 0/5 | 4/5 |
 | Electron-specific APIs | 0/13 | 0/13 | 0/13 | 13/13 |
-| **Total** | **~171/503 (34%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
+| **Total** | **~177/503 (35%)** | **~368/503 (73%)** | **~189/503 (38%)** | **~357/503 (71%)** |
 
 > **Note on scores:** Tynd is early-stage — the foundations (wry + tao IPC, zero-codegen typed RPC, dual runtimes) are solid. Electron's score benefits from Node.js stdlib covering FS, shell, path, and OS utilities natively, plus Chromium-native features like printing, spellcheck, screen capture, and extensions. Tauri v2's breadth is driven by its 31 official plugins and mobile platform support.
 
