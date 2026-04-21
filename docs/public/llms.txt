@@ -107,6 +107,7 @@ Tynd is a desktop-app framework with a TypeScript backend, a native WebView fron
 - [websocket](https://tynd.kvnpetit.com/docs/v0.3/api/os/websocket): Full-duplex WebSocket client with bundled TLS. Text + binary frames.
 - [tyndWindow](https://tynd.kvnpetit.com/docs/v0.3/api/os/window): Window control, events, multi-window management. All methods auto-target the window they're called from.
 - [workers](https://tynd.kvnpetit.com/docs/v0.3/api/os/workers): Offload CPU-bound JS to an isolated thread. Unified API across `lite` (embedded QuickJS) and `full` (`Bun.Worker`).
+- [RPC helpers](https://tynd.kvnpetit.com/docs/v0.3/api/rpc-helpers): withTimeout, abortable, once, listenN — timeout + cancellation + ad-hoc event helpers on top of createBackend.
 - [Streaming RPC](https://tynd.kvnpetit.com/docs/v0.3/api/streaming-rpc): Async-generator backend handlers stream yields + return values to the frontend with flow control and cancellation.
 
 ## CLI Reference

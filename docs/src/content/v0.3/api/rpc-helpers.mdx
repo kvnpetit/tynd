@@ -1,0 +1,59 @@
+---
+title: RPC helpers
+description: "withTimeout, abortable, once, listenN — timeout + cancellation + ad-hoc event helpers on top of createBackend."
+---
+
+# RPC helpers
+
+```ts
+import { withTimeout, abortable, once, listenN, RpcTimeoutError } from "@tynd/core/client";
+```
+
+Utilities layered on top of [`createBackend`](/docs/v0.3/api/backend) / [`createEmitter`](/docs/v0.3/api/backend) — they don't change the public API shape, they just make common call-site patterns terser.
+
+## `withTimeout(promise, ms)`
+
+Reject with `RpcTimeoutError` if the promise hasn't settled within `ms` ms.
+
+```ts
+try {
+  const user = await withTimeout(api.getUser("alice"), 2000);
+} catch (err) {
+  if (err instanceof RpcTimeoutError) retryLater();
+  else throw err;
+}
+```
+
+<Callout type="warning">
+  Non-streaming calls in Tynd don't propagate cancellation to the backend mid-call today. `withTimeout` rejects *on the frontend* — the backend keeps running until the handler returns. For true work-stoppage, use streaming + `handle.cancel()`.
+</Callout>
+
+## `abortable(promise, signal)`
+
+Race a promise against an `AbortSignal`. Rejects with the signal's `reason` (or a generic `AbortError`) when `abort()` fires.
+
+```ts
+const ctrl = new AbortController();
+document.querySelector("#cancel")?.addEventListener("click", () => ctrl.abort());
+
+try {
+  const result = await abortable(api.compute(), ctrl.signal);
+} catch (err) {
+  if ((err as DOMException).name === "AbortError") {
+    // user cancelled
+  }
+}
+```
+
+## `once(event, handler)` / `listenN(event, n, handler)`
+
+Auto-unsubscribe after the first (`once`) or `n`th (`listenN`) invocation. Both return a manual unsubscribe for early opt-out.
+
+```ts
+once("app:ready", () => hideSplash());
+
+const off = listenN<Progress>("progress", 100, (p) => render(p));
+// off() can stop the subscription before 100 events land.
+```
+
+`createBackend` already exposes a typed `.once()` for its own emitters — these helpers target untyped ad-hoc events (`window:focused`, `tray:click`, `clipboard:change`, …).

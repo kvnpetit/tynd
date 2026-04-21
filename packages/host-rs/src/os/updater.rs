@@ -67,7 +67,13 @@ static PERIODIC_ID: AtomicU64 = AtomicU64::new(0);
 
 #[allow(clippy::unnecessary_wraps)]
 fn start_periodic_check(args: &Value) -> Result<Value, String> {
+    // Allocate the id BEFORE flipping RUNNING so a concurrent caller that
+    // observes `RUNNING == true` always reads a settled id (we never leave
+    // it at 0 once the task is live).
+    let id = PERIODIC_ID.fetch_add(1, Ordering::SeqCst) + 1;
     if PERIODIC_RUNNING.swap(true, Ordering::SeqCst) {
+        // Another call won the race; don't burn the id we just allocated —
+        // but returning the already-running id keeps the API contract.
         return Ok(json!({ "id": PERIODIC_ID.load(Ordering::SeqCst) }));
     }
     let interval_ms = args
@@ -76,8 +82,6 @@ fn start_periodic_check(args: &Value) -> Result<Value, String> {
         .unwrap_or(60 * 60 * 1000) // 1 hour default
         .max(1000);
     let args_owned = args.clone();
-    let id = PERIODIC_ID.fetch_add(1, Ordering::SeqCst) + 1;
-    PERIODIC_ID.store(id, Ordering::SeqCst);
 
     std::thread::spawn(move || {
         while PERIODIC_RUNNING.load(Ordering::SeqCst) {
@@ -460,8 +464,12 @@ fn install_windows(
     } else {
         String::new()
     };
+    // `timeout.exe` needs a real console stdin — GUI-subsystem launches
+    // without one (SmartScreen / protected folders / service contexts) see
+    // "ERROR: Input redirection is not supported". `ping` has no such
+    // constraint and is guaranteed present on every supported Windows.
     let script = format!(
-        "timeout /t 2 /nobreak > nul & move /y \"{new_path}\" \"{current_str}\"{launch_tail}"
+        "ping -n 3 127.0.0.1 > nul & move /y \"{new_path}\" \"{current_str}\"{launch_tail}"
     );
 
     std::process::Command::new("cmd")
