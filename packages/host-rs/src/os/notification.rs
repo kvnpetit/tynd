@@ -1,12 +1,64 @@
+use parking_lot::Mutex;
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 
 use super::events;
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "send" => send(args),
+        "schedule" => schedule(args),
+        "cancel" => cancel(args),
+        "checkPermission" | "requestPermission" => Ok(Value::String("granted".into())),
         _ => Err(format!("notification.{method}: unknown method")),
     }
+}
+
+static SCHEDULED: OnceLock<
+    Mutex<ahash::HashMap<u64, std::sync::Arc<std::sync::atomic::AtomicBool>>>,
+> = OnceLock::new();
+static NEXT_SCHEDULE_ID: AtomicU64 = AtomicU64::new(1);
+
+fn scheduled() -> &'static Mutex<ahash::HashMap<u64, std::sync::Arc<std::sync::atomic::AtomicBool>>>
+{
+    SCHEDULED.get_or_init(|| Mutex::new(ahash::HashMap::default()))
+}
+
+fn schedule(args: &Value) -> Result<Value, String> {
+    let delay_ms = args
+        .get("delayMs")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "notification.schedule: missing 'delayMs'".to_string())?;
+
+    let id = NEXT_SCHEDULE_ID.fetch_add(1, Ordering::SeqCst);
+    let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    scheduled().lock().insert(id, cancelled.clone());
+
+    let args_owned = args.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        if cancelled.load(Ordering::SeqCst) {
+            return;
+        }
+        let _ = send(&args_owned);
+        scheduled().lock().remove(&id);
+    });
+
+    Ok(json!({ "id": id }))
+}
+
+fn cancel(args: &Value) -> Result<Value, String> {
+    let id = args
+        .get("id")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "notification.cancel: missing 'id'".to_string())?;
+    let removed = scheduled().lock().remove(&id);
+    if let Some(flag) = removed {
+        flag.store(true, Ordering::SeqCst);
+        return Ok(Value::Bool(true));
+    }
+    Ok(Value::Bool(false))
 }
 
 fn send(args: &Value) -> Result<Value, String> {

@@ -458,6 +458,13 @@ await notification.send("New message", {
 notification.onAction(({ action }) => {
   if (action === "reply") openReplyWindow()
 })
+
+// Permission is always granted on native — kept for web-API parity
+if ((await notification.checkPermission()) === "granted") {
+  const id = await notification.schedule("Reminder", 60_000, { body: "Stand up!" })
+  // cancel before the timer fires if the user dismisses the reminder:
+  // await notification.cancel(id)
+}
 ```
 
 ### `tray`
