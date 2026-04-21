@@ -533,6 +533,7 @@ frontend — both land in the same file.
 import { log } from "@tynd/core/client"
 
 await log.configure({ level: "info", maxBytes: 2 * 1024 * 1024, maxFiles: 5 })
+log.captureConsole() // console.* now also writes to the log file
 await log.info("boot complete", { runtime: "full", ms: 142 })
 await log.error("http 500", { url: "/api/sync", code: 500 })
 
