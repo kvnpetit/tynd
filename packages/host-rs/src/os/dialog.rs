@@ -21,6 +21,9 @@ fn build_open_dialog(args: &Value) -> AsyncFileDialog {
     if let Some(dir) = args.get("defaultDir").and_then(|p| p.as_str()) {
         d = d.set_directory(dir);
     }
+    if let Some(can) = args.get("canCreateDirectories").and_then(Value::as_bool) {
+        d = d.set_can_create_directories(can);
+    }
     apply_filters(d, args)
 }
 
@@ -68,6 +71,9 @@ fn open_directory(args: &Value) -> Value {
     if let Some(dir) = args.get("defaultDir").and_then(|p| p.as_str()) {
         d = d.set_directory(dir);
     }
+    if let Some(can) = args.get("canCreateDirectories").and_then(Value::as_bool) {
+        d = d.set_can_create_directories(can);
+    }
     let picked = pollster::block_on(d.pick_folder());
     picked.map_or(Value::Null, |h| {
         Value::String(h.path().to_string_lossy().into_owned())
@@ -84,6 +90,9 @@ fn save_file(args: &Value) -> Value {
     }
     if let Some(dir) = args.get("defaultDir").and_then(|p| p.as_str()) {
         d = d.set_directory(dir);
+    }
+    if let Some(can) = args.get("canCreateDirectories").and_then(Value::as_bool) {
+        d = d.set_can_create_directories(can);
     }
     d = apply_filters(d, args);
 

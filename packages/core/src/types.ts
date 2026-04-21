@@ -168,6 +168,8 @@ export interface OpenFileOptions {
   title?: string
   defaultDir?: string
   filters?: FileFilter[]
+  /** macOS: allow the user to create directories from the picker. */
+  canCreateDirectories?: boolean
 }
 
 export interface SaveFileOptions {
@@ -176,6 +178,8 @@ export interface SaveFileOptions {
   defaultName?: string
   defaultDir?: string
   filters?: FileFilter[]
+  /** macOS: allow the user to create directories from the picker. */
+  canCreateDirectories?: boolean
 }
 
 export interface MessageOptions {
