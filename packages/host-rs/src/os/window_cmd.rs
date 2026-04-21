@@ -237,8 +237,119 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             Ok(Value::Null)
         },
 
+        "setTheme" => {
+            let theme = args.get("theme").and_then(Value::as_str);
+            let t = match theme {
+                Some("light") => Some(tao::window::Theme::Light),
+                Some("dark") => Some(tao::window::Theme::Dark),
+                Some("system") | None => None,
+                Some(other) => return Err(format!("setTheme: unknown theme '{other}'")),
+            };
+            win.set_theme(t);
+            Ok(Value::Null)
+        },
+        "setBackgroundColor" => {
+            let rgba = args.get("color").and_then(|v| {
+                // Accept `[r,g,b,a]` or `{r,g,b,a}` — JSON-friendly both ways.
+                if let Some(arr) = v.as_array() {
+                    if arr.len() == 4 {
+                        return Some((
+                            arr[0].as_u64()? as u8,
+                            arr[1].as_u64()? as u8,
+                            arr[2].as_u64()? as u8,
+                            arr[3].as_u64()? as u8,
+                        ));
+                    }
+                }
+                let r = v.get("r")?.as_u64()? as u8;
+                let g = v.get("g")?.as_u64()? as u8;
+                let b = v.get("b")?.as_u64()? as u8;
+                let a = v.get("a").and_then(Value::as_u64).unwrap_or(255) as u8;
+                Some((r, g, b, a))
+            });
+            win.set_background_color(rgba);
+            Ok(Value::Null)
+        },
+        "setContentProtection" => {
+            let enabled = args
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            win.set_content_protection(enabled);
+            Ok(Value::Null)
+        },
+        "setProgressBar" => {
+            let state = match args.get("state").and_then(Value::as_str).unwrap_or("none") {
+                "normal" => Some(tao::window::ProgressState::Normal),
+                "indeterminate" => Some(tao::window::ProgressState::Indeterminate),
+                "paused" => Some(tao::window::ProgressState::Paused),
+                "error" => Some(tao::window::ProgressState::Error),
+                _ => Some(tao::window::ProgressState::None),
+            };
+            let progress = args.get("progress").and_then(Value::as_u64);
+            win.set_progress_bar(tao::window::ProgressBarState {
+                state,
+                progress,
+                desktop_filename: args
+                    .get("desktopFilename")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+            });
+            Ok(Value::Null)
+        },
+        "setSkipTaskbar" => {
+            let skip = args.get("skip").and_then(Value::as_bool).unwrap_or(false);
+            set_skip_taskbar(win, skip)
+        },
+        "setBadge" => {
+            let label = args.get("label").and_then(Value::as_str);
+            let count = args.get("count").and_then(Value::as_i64);
+            set_badge(win, label, count);
+            Ok(Value::Null)
+        },
+
         _ => Err(format!("window.{method}: unknown method")),
     }
+}
+
+#[cfg(target_os = "windows")]
+fn set_skip_taskbar(win: &Window, skip: bool) -> Result<Value, String> {
+    use tao::platform::windows::WindowExtWindows;
+    win.set_skip_taskbar(skip)
+        .map_err(|e| format!("setSkipTaskbar: {e}"))?;
+    Ok(Value::Null)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn set_skip_taskbar(win: &Window, skip: bool) -> Result<Value, String> {
+    use tao::platform::unix::WindowExtUnix;
+    win.set_skip_taskbar(skip)
+        .map_err(|e| format!("setSkipTaskbar: {e}"))?;
+    Ok(Value::Null)
+}
+
+#[cfg(target_os = "macos")]
+#[allow(clippy::needless_pass_by_value)]
+fn set_skip_taskbar(_win: &Window, _skip: bool) -> Result<Value, String> {
+    // macOS has no per-window Dock hide — see `app.setDockVisible`.
+    Ok(Value::Null)
+}
+
+#[cfg(target_os = "macos")]
+fn set_badge(win: &Window, label: Option<&str>, _count: Option<i64>) {
+    use tao::platform::macos::WindowExtMacOS;
+    win.set_badge_label(label.map(str::to_string));
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn set_badge(win: &Window, _label: Option<&str>, count: Option<i64>) {
+    use tao::platform::unix::WindowExtUnix;
+    win.set_badge_count(count, None);
+}
+
+#[cfg(target_os = "windows")]
+fn set_badge(_win: &Window, _label: Option<&str>, _count: Option<i64>) {
+    // Windows uses taskbar overlay icons instead — not wired yet.
 }
 
 /// Map an API string to tao's `CursorIcon`. Unknown names fall back to

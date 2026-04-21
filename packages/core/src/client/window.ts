@@ -315,6 +315,41 @@ export const tyndWindow = {
     return osCall("window", "startResizeDragging", { direction })
   },
 
+  /** Override the window theme (`system` follows the OS). */
+  setTheme(theme: "light" | "dark" | "system"): Promise<void> {
+    return osCall("window", "setTheme", { theme })
+  },
+  /** Set the native window background color (shows through transparent HTML). */
+  setBackgroundColor(color: { r: number; g: number; b: number; a?: number } | null): Promise<void> {
+    return osCall("window", "setBackgroundColor", { color })
+  },
+  /** Block screenshots + screen recording of this window (Win/macOS). */
+  setContentProtection(enabled: boolean): Promise<void> {
+    return osCall("window", "setContentProtection", { enabled })
+  },
+  /**
+   * Taskbar / dock progress indicator. `progress` is 0-100. State: `"normal"`,
+   * `"indeterminate"`, `"paused"`, `"error"`, `"none"` (default).
+   */
+  setProgressBar(
+    state: "none" | "normal" | "indeterminate" | "paused" | "error",
+    progress?: number,
+  ): Promise<void> {
+    return osCall("window", "setProgressBar", { state, progress })
+  },
+  /** Hide the window from the taskbar (Windows/Linux). No-op on macOS. */
+  setSkipTaskbar(skip: boolean): Promise<void> {
+    return osCall("window", "setSkipTaskbar", { skip })
+  },
+  /**
+   * Dock / taskbar badge. `label` is displayed on macOS; `count` is rendered
+   * on Linux (Unity). Windows uses taskbar overlay icons and is unsupported
+   * here.
+   */
+  setBadge(options: { label?: string; count?: number }): Promise<void> {
+    return osCall("window", "setBadge", options)
+  },
+
   /**
    * Cmd+F-style in-page search. Uses the built-in `window.find()` present
    * in Chromium-based WebView2 and WKWebView. `true` = match found and the
