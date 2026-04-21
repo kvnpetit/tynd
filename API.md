@@ -355,6 +355,10 @@ await tyndWindow.loadHtml("<h1>Hello</h1>")
 const url = await tyndWindow.getUrl()
 await tyndWindow.print() // opens the system print dialog
 
+// Cmd+F-style in-page search (uses the built-in window.find, sync not async).
+const hit = tyndWindow.findInPage("invoice", { caseSensitive: false })
+tyndWindow.stopFindInPage()
+
 // Native file drop — paths are real OS paths, not browser File objects.
 const offDrop = tyndWindow.onDrop(({ paths, x, y }) => {
   for (const p of paths) void openFile(p)
