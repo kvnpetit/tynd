@@ -348,6 +348,13 @@ const offClose = tyndWindow.onCloseRequested((e) => {
 
 // Manual cancel (e.g. from a modal opened elsewhere during the 500ms window):
 await tyndWindow.cancelClose()
+
+// Native file drop — paths are real OS paths, not browser File objects.
+const offDrop = tyndWindow.onDrop(({ paths, x, y }) => {
+  for (const p of paths) void openFile(p)
+})
+tyndWindow.onDragEnter(({ paths }) => highlightDropZone(paths.length))
+tyndWindow.onDragLeave(() => clearDropZone())
 ```
 
 ### `menu` — react to menu item clicks

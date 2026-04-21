@@ -32,6 +32,19 @@ export interface WindowEventBase {
   label: string
 }
 
+export interface DragDropEvent extends WindowEventBase {
+  /** Native OS file paths. */
+  paths: string[]
+  /** Cursor position relative to the webview top-left, logical pixels. */
+  x: number
+  y: number
+}
+
+export interface DragOverEvent extends WindowEventBase {
+  x: number
+  y: number
+}
+
 declare global {
   interface Window {
     __TYND_WINDOW_LABEL__?: string
@@ -261,6 +274,23 @@ export const tyndWindow = {
    */
   onClosed(handler: (e: WindowEventBase) => void): () => void {
     return window.__tynd__.os_on("window:closed", (raw) => handler(raw as WindowEventBase))
+  },
+
+  /** Files dragged over the window. `paths` are native OS paths. */
+  onDragEnter(handler: (e: DragDropEvent) => void): () => void {
+    return onWindow("drag-enter", handler)
+  },
+  /** Drag cursor moving over the window. Fires frequently — throttle if needed. */
+  onDragOver(handler: (e: DragOverEvent) => void): () => void {
+    return onWindow("drag-over", handler)
+  },
+  /** Drag cancelled or left the window. */
+  onDragLeave(handler: () => void): () => void {
+    return onWindow("drag-leave", handler as (e: WindowEventBase) => void)
+  },
+  /** Files dropped onto the window. `paths` are native OS paths. */
+  onDrop(handler: (e: DragDropEvent) => void): () => void {
+    return onWindow("drop", handler)
   },
   /**
    * Fires when the user tries to close the window (X button, Alt+F4, Cmd+Q…).

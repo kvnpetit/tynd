@@ -7,7 +7,7 @@ use tao::{
     event_loop::{ControlFlow, EventLoopBuilder, EventLoopWindowTarget},
     window::{Theme, Window, WindowBuilder, WindowId},
 };
-use wry::{http::Request, WebView, WebViewBuilder};
+use wry::{http::Request, DragDropEvent, WebView, WebViewBuilder};
 
 use crate::{
     ipc, menu, os,
@@ -219,7 +219,8 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         .with_initialization_script(ipc::JS_SHIM)
         .with_ipc_handler(move |req: Request<String>| {
             dispatch::handle_ipc_body(req.into_body(), PRIMARY_LABEL, &call_tx_ipc, &proxy_for_ipc);
-        });
+        })
+        .with_drag_drop_handler(drag_drop_handler(PRIMARY_LABEL));
 
     if debug {
         wb = wb.with_devtools(true);
@@ -686,6 +687,48 @@ fn label_for(id: WindowId, map: &HashMap<WindowId, String>) -> String {
         .unwrap_or_else(|| PRIMARY_LABEL.into())
 }
 
+/// Build a DragDrop handler bound to a window label. Emits `window:drag-enter`,
+/// `window:drag-over`, `window:drag-leave`, `window:drop` with paths + cursor
+/// position. Returns `false` so the WebView still runs default HTML5 DnD.
+fn drag_drop_handler(label: &str) -> impl Fn(DragDropEvent) -> bool + 'static {
+    let label = label.to_string();
+    move |evt| {
+        match evt {
+            DragDropEvent::Enter { paths, position } => {
+                let paths: Vec<String> = paths
+                    .into_iter()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+                os::events::emit(
+                    "window:drag-enter",
+                    &json!({ "label": label, "paths": paths, "x": position.0, "y": position.1 }),
+                );
+            },
+            DragDropEvent::Over { position } => {
+                os::events::emit(
+                    "window:drag-over",
+                    &json!({ "label": label, "x": position.0, "y": position.1 }),
+                );
+            },
+            DragDropEvent::Drop { paths, position } => {
+                let paths: Vec<String> = paths
+                    .into_iter()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+                os::events::emit(
+                    "window:drop",
+                    &json!({ "label": label, "paths": paths, "x": position.0, "y": position.1 }),
+                );
+            },
+            DragDropEvent::Leave => {
+                os::events::emit("window:drag-leave", &json!({ "label": label }));
+            },
+            _ => {},
+        }
+        false
+    }
+}
+
 /// Init script injected into every webview so frontend code knows which window
 /// it's running in (for filtering broadcast `window:*` events by label).
 fn inject_window_label(label: &str) -> String {
@@ -762,7 +805,8 @@ fn create_secondary(
         .with_initialization_script(ipc::JS_SHIM)
         .with_ipc_handler(move |req: Request<String>| {
             dispatch::handle_ipc_body(req.into_body(), &label_for_ipc, &call_tx, &proxy);
-        });
+        })
+        .with_drag_drop_handler(drag_drop_handler(&label));
     if debug {
         wvb = wvb.with_devtools(true);
         wvb = wvb.with_initialization_script(ipc::JS_DEV_FLAG);
