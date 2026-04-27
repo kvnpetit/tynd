@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { compute } from "./compute.ts"
+import { compute } from "./compute"
 
 type FetchCall = { url: string; method: string; body: Uint8Array | null }
 type OsCall = { api: string; method: string; args: unknown }

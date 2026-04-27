@@ -1,23 +1,17 @@
-import { fireClose, fireReady, onCloseFns, onReadyFns, setEmitFn } from "../lifecycle.ts"
-import { tynd } from "../logger.js"
-import type { AppConfig } from "../types.js"
-
-// Silence unused-import warnings when the module is tree-shaken away in full
-// builds — the exported handler lists still need to be referenced.
-void onReadyFns
-void onCloseFns
+import { fireClose, fireReady, setEmitFn } from "../lifecycle"
+import { tynd } from "../logger"
+import type { AppConfig } from "../types"
+import { safeStringify } from "./stringify"
 
 /**
- * Lite-mode boot.
- *
- * No stdio: config is written to `globalThis.__tynd_config__` for the Rust
- * host to read after eval; the native host injects `__tynd_emit__` for
- * event delivery and calls `__tynd_on_ready__` / `__tynd_on_close__`
- * directly for lifecycle.
+ * Lite boot: config via `globalThis.__tynd_config__`, events via injected
+ * `__tynd_emit__`, plugins pre-registered by the CLI-prepended bundle header.
  */
 export function startLite(config: AppConfig): void {
   const g = globalThis as Record<string, unknown>
-  g["__tynd_config__"] = JSON.stringify({
+  // Config is app-controlled; primitives + null only, but route through
+  // `safeStringify` so any future addition stays safe (BigInt, etc.).
+  const configJson = safeStringify({
     window: config.window ?? {},
     menu: config.menu ?? [],
     tray: config.tray ?? null,
@@ -26,6 +20,11 @@ export function startLite(config: AppConfig): void {
     frontendDir: config.frontendDir ?? null,
     quitOnLastWindowClosed: config.quitOnLastWindowClosed ?? false,
   })
+  if (configJson === null) {
+    tynd.error("lite: tynd.config contains a non-JSON-serializable value — aborting")
+    throw new Error("unserializable tynd.config")
+  }
+  g["__tynd_config__"] = configJson
 
   // Look up on every emit — if tests or alt hosts inject it late, events
   // flow once the global appears instead of being silently dropped forever.
@@ -34,12 +33,21 @@ export function startLite(config: AppConfig): void {
     const nativeEmit = g["__tynd_emit__"] as
       | ((name: string, payload: string, to?: string) => void)
       | undefined
-    if (nativeEmit) {
-      nativeEmit(name, JSON.stringify(payload), to)
-    } else if (!warned) {
-      warned = true
-      tynd.warn(`emit("${name}"): __tynd_emit__ not available — event dropped`)
+    if (!nativeEmit) {
+      if (!warned) {
+        warned = true
+        tynd.warn(`emit("${name}"): __tynd_emit__ not available — event dropped`)
+      }
+      return
     }
+    // Match full-mode: surface BigInt / circular refs as explicit log
+    // rather than silently JSON-crashing inside `nativeEmit`.
+    const encoded = safeStringify(payload)
+    if (encoded === null) {
+      tynd.error(`emit("${name}"): payload is not JSON-serializable — dropped`)
+      return
+    }
+    nativeEmit(name, encoded, to)
   })
 
   g["__tynd_on_ready__"] = fireReady

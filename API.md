@@ -593,7 +593,7 @@ JSON-lines format on disk, size-based rotation. Same API on backend and
 frontend — both land in the same file.
 
 ```typescript
-import { log } from "@tynd/core/client"
+import { log } from "@tynd/plugin-log/client"
 
 await log.configure({ level: "info", maxBytes: 2 * 1024 * 1024, maxFiles: 5 })
 log.captureConsole() // console.* now also writes to the log file
@@ -636,7 +636,7 @@ Windows, case-sensitive elsewhere.
 ### `keyring` — secure credential storage
 
 ```typescript
-import { keyring } from "@tynd/core/client"
+import { keyring } from "@tynd/plugin-keyring/client"
 
 const entry = { service: "com.example.myapp", account: "alice" }
 
@@ -650,7 +650,7 @@ Backing store per OS: Keychain (macOS), Credential Manager + DPAPI (Windows), Se
 ### `autolaunch` — start the app at system boot
 
 ```typescript
-import { autolaunch } from "@tynd/core/client"
+import { autolaunch } from "@tynd/plugin-autolaunch/client"
 
 await autolaunch.enable({ args: ["--minimized"] })
 const on = await autolaunch.isEnabled()
@@ -662,7 +662,8 @@ Platform-specific storage (Windows: `HKCU\Software\Microsoft\Windows\CurrentVers
 ### `shortcuts` — system-wide keyboard hotkeys
 
 ```typescript
-import { shortcuts, tyndWindow } from "@tynd/core/client"
+import { shortcuts } from "@tynd/plugin-shortcuts/client"
+import { tyndWindow } from "@tynd/core/client"
 
 const handle = await shortcuts.register("CmdOrCtrl+Shift+P", () => {
   tyndWindow.setFocus()
@@ -683,14 +684,25 @@ import { createStore } from "@tynd/core/client"
 const prefs = createStore("com.example.myapp")
 await prefs.set("theme", "dark")
 const theme = await prefs.get<string>("theme")
+
+// Full Map-like surface:
+await prefs.has("theme")          // boolean
+await prefs.length()              // number
+await prefs.keys()                // string[]
+await prefs.values<string>()      // T[]
+await prefs.entries<string>()     // [key, value][]
+await prefs.clear()
+await prefs.reload()              // re-read store.json from disk
 ```
 
-JSON-backed k/v under the OS config dir.
+JSON-backed k/v under the OS config dir, loaded once per namespace and
+cached. Writes flush synchronously; `reload()` drops the cache when an
+external process has mutated the file.
 
 ### `power` — idle time
 
 ```typescript
-import { power } from "@tynd/core/client"
+import { power } from "@tynd/plugin-power/client"
 
 // Seconds since last keyboard/mouse input — useful to pause sync while AFK.
 const idle = await power.getIdleTime()
@@ -780,7 +792,7 @@ Backed by `tungstenite` with rustls TLS (`wss://` out of the box). Each connecti
 ### `sql` — embedded SQLite
 
 ```typescript
-import { sql } from "@tynd/core/client"
+import { sql } from "@tynd/plugin-sql/client"
 
 const db = await sql.open("./data.db")       // or ":memory:"
 await db.exec("CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, name TEXT)")
@@ -820,7 +832,7 @@ const { stdout } = await process.exec(ffmpeg, { args: ["-version"] })
 ### `terminal` — real PTY inside the app
 
 ```typescript
-import { terminal } from "@tynd/core/client"
+import { terminal } from "@tynd/plugin-terminal/client"
 
 const t = await terminal.spawn({ cols: 120, rows: 30 })  // uses $SHELL / COMSPEC
 
@@ -909,7 +921,7 @@ Use a stable reverse-DNS id — it doubles as the OS lock name and the socket na
 ### `updater` — auto-update with Ed25519 verify + periodic check
 
 ```typescript
-import { updater } from "@tynd/core/client"
+import { updater } from "@tynd/plugin-updater/client"
 
 const info = await updater.check({
   endpoint:       "https://releases.example.com/update.json",

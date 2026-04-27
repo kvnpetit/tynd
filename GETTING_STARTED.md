@@ -8,8 +8,13 @@ Build a native desktop app in TypeScript in under 5 minutes. By the end of this 
 
 ## 📋 Prerequisites
 
-- **[Bun](https://bun.sh)** — `curl -fsSL https://bun.sh/install | bash`
+- **[Bun](https://bun.sh) >= 1.3.0** — `curl -fsSL https://bun.sh/install | bash`.
+  Tynd is Bun-only. Node.js is not supported; `@types/bun` covers every
+  stdlib API the CLI touches.
 - **A C compiler toolchain** — needed if `@tynd/host` can't find a pre-built binary for your OS/arch. On macOS it's Xcode CLT, on Linux it's `build-essential`, on Windows it's MSVC build tools.
+- **Rust** — only required for `runtime: "full-custom"` / `"lite-custom"`.
+  The CLI installs its own managed toolchain at `~/.tynd/toolchain/`
+  (pinned to Rust 1.85); your system `rustup` is untouched.
 
 Linux only — WebView deps:
 
@@ -19,6 +24,20 @@ sudo apt-get install -y \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
   libxdo-dev libxss-dev
 ```
+
+### Supported platforms
+
+Prebuilt host binaries are shipped for:
+
+| OS          | Architectures | Minimum OS version |
+|-------------|---------------|--------------------|
+| Windows     | x64, arm64    | Windows 10 1809    |
+| macOS       | x64, arm64    | macOS 11 Big Sur   |
+| Linux       | x64, arm64    | glibc 2.31 (Ubuntu 20.04+, Debian 11+, Fedora 34+) |
+
+Older systems can still build from source via `runtime: "lite-custom"` /
+`"full-custom"` as long as a recent enough Rust / WebView runtime is
+available.
 
 ## 🪴 Scaffold a project
 

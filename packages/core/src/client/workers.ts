@@ -1,4 +1,4 @@
-import { osCall } from "./_internal.js"
+import { osCall } from "./_internal"
 
 export interface WorkerHandle {
   id: number

@@ -1,4 +1,4 @@
-import { base64ToBytes, osCall } from "./_internal.js"
+import { base64ToBytes, osCall } from "./_internal"
 
 export interface HttpResponse<T = string> {
   status: number

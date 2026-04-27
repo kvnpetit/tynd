@@ -6,6 +6,8 @@
  * pulling in runtime-specific code paths.
  */
 
+import { clearFrontendListeners } from "./frontend-events"
+
 type EmitFn = (name: string, payload: unknown, to?: string) => void
 
 let _emitFn: EmitFn | null = null
@@ -43,4 +45,8 @@ export function fireClose(): void {
       /* best-effort: one handler's error must not block the others */
     }
   }
+  // Drop any frontend-emit handlers so the listener map doesn't outlive
+  // the app. User code that relies on its own unsubscribe pattern is
+  // unaffected (that path already ran during normal teardown).
+  clearFrontendListeners()
 }

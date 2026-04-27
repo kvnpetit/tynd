@@ -49,6 +49,9 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: cargo test --workspace
+        run: cargo test --workspace
+
   typescript:
     name: TypeScript
     runs-on: ubuntu-latest
@@ -84,6 +87,9 @@ jobs:
 
       - name: Typecheck workspaces
         run: bun run typecheck
+
+      - name: bun test
+        run: bun test
 
       - name: Build @tynd/cli
         run: bun run build

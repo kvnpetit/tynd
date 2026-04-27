@@ -1,4 +1,4 @@
-import { osCall } from "./_internal.js"
+import { osCall } from "./_internal"
 
 export const shell = {
   openExternal(url: string): Promise<void> {

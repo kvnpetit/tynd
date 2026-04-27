@@ -129,7 +129,6 @@ fn clear() -> Result<Value, String> {
     Ok(Value::Null)
 }
 
-// --- Change monitoring --------------------------------------------------
 // No cross-OS event API for the clipboard — poll on a background thread.
 // 200ms is fast enough for typical paste flows and cheap (single text read
 // + hash compare). Image changes are detected too, via the same text path:
@@ -146,7 +145,9 @@ fn last_hash() -> &'static Mutex<u64> {
 
 #[allow(clippy::unnecessary_wraps)]
 fn start_monitoring(args: &Value) -> Result<Value, String> {
-    if MONITORING.swap(true, Ordering::SeqCst) {
+    // AcqRel pairs with the Acquire load in the poll loop + Release store
+    // in `stop_monitoring`.
+    if MONITORING.swap(true, Ordering::AcqRel) {
         return Ok(Value::Null);
     }
     let interval = args
@@ -165,7 +166,7 @@ fn start_monitoring(args: &Value) -> Result<Value, String> {
     *last_hash().lock() = hash(initial.as_bytes());
 
     std::thread::spawn(move || {
-        while MONITORING.load(Ordering::SeqCst) {
+        while MONITORING.load(Ordering::Acquire) {
             std::thread::sleep(std::time::Duration::from_millis(interval));
             let Ok(mut cb) = Clipboard::new() else {
                 continue;
@@ -185,7 +186,7 @@ fn start_monitoring(args: &Value) -> Result<Value, String> {
 
 #[allow(clippy::unnecessary_wraps)]
 fn stop_monitoring() -> Result<Value, String> {
-    MONITORING.store(false, Ordering::SeqCst);
+    MONITORING.store(false, Ordering::Release);
     Ok(Value::Null)
 }
 

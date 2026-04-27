@@ -10,9 +10,10 @@
 //! `PolyfillEvent` messages from background threads (see
 //! `polyfills::fetch` / `polyfills::websocket`).
 
+use parking_lot::Mutex;
 use serde_json::Value;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tynd_host::{
     runtime::{BackendBridge, BackendCall, BackendConfig, BackendEvent},
     tynd_log,
@@ -47,6 +48,13 @@ pub(crate) struct ReloadHandle {
 }
 
 impl ReloadHandle {
+    /// Frontend-only reload. Tells the host to `window.location.reload()`
+    /// on every webview without tearing down the JS backend — matches
+    /// what the watcher needs when only static HTML/CSS/assets changed.
+    pub(crate) fn reload_frontend_only(&self) {
+        let _ = self.event_tx.send(BackendEvent::Reload);
+    }
+
     pub(crate) fn reload(&self) {
         let bundle_code = match std::fs::read_to_string(&self.bundle_path) {
             Ok(s) => s,
@@ -72,7 +80,9 @@ impl ReloadHandle {
         match cfg_rx.recv() {
             Ok(_) => {
                 // Swap last so no message races to the old thread.
-                *self.js_tx_slot.lock().unwrap() = new_js_tx;
+                // parking_lot::Mutex has no poison state, so a panic in
+                // the prior JS thread can't brick the reload path.
+                *self.js_tx_slot.lock() = new_js_tx;
                 let _ = self.event_tx.send(BackendEvent::Reload);
             },
             Err(_) => {
@@ -114,7 +124,7 @@ pub(crate) fn start(
         let slot = js_tx_slot.clone();
         std::thread::spawn(move || {
             while let Ok(call) = call_rx.recv() {
-                let tx = slot.lock().unwrap().clone();
+                let tx = slot.lock().clone();
                 let _ = tx.send(JsMsg::Call(call));
             }
         });

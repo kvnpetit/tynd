@@ -1,5 +1,5 @@
-import { osCall } from "./_internal.js"
-import type { Monitor } from "./monitor.js"
+import { osCall } from "./_internal"
+import type { Monitor } from "./monitor"
 
 export type WindowPreset =
   | "topLeft"
@@ -504,9 +504,7 @@ export const tyndWindow = {
    * `"none"`, or `"auto"`. No-op on other OS. Requires the window to have
    * no decorations for best results (set in config).
    */
-  setSystemBackdrop(
-    kind: "auto" | "none" | "mica" | "acrylic" | "tabbed",
-  ): Promise<void> {
+  setSystemBackdrop(kind: "auto" | "none" | "mica" | "acrylic" | "tabbed"): Promise<void> {
     return osCall("window", "setSystemBackdrop", { kind })
   },
 

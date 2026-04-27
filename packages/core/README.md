@@ -29,7 +29,12 @@ bun add @tynd/core @tynd/host
 import { app, createEmitter } from "@tynd/core"
 
 // src/App.tsx  (WebView)
-import { createBackend, fs, dialog, sql /* …and more */ } from "@tynd/core/client"
+import { createBackend, fs, dialog /* …and more core APIs */ } from "@tynd/core/client"
+
+// Plugins bring their own import path — preset runtimes bundle every
+// first-party plugin; your code still imports from the plugin package so
+// third-party plugins drop in with the same shape.
+import { sql } from "@tynd/plugin-sql/client"
 ```
 
 ## Backend — `app.start()` + typed emitters

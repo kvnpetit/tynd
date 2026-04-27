@@ -60,6 +60,13 @@ pub(crate) struct ReloadHandle {
 }
 
 impl ReloadHandle {
+    /// Frontend-only reload. Fires the webview reload via the shared bus
+    /// without respawning Bun — used when only static frontend files
+    /// changed on disk.
+    pub(crate) fn reload_frontend_only(&self) {
+        let _ = self.event_tx.send(BackendEvent::Reload);
+    }
+
     pub(crate) fn reload(&self) {
         // Killing the child closes stdout which unblocks the reader thread.
         if let Some(mut child) = self.child_slot.lock().unwrap().take() {

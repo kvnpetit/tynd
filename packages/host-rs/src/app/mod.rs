@@ -20,8 +20,7 @@ mod util;
 
 use util::webview_data_dir;
 
-/// Label used internally for the app's first (primary) window. Secondary
-/// windows created via `tyndWindow.create({ label })` cannot reuse it.
+/// Reserved — secondary windows created via `tyndWindow.create({ label })` may not reuse it.
 const PRIMARY_LABEL: &str = "main";
 
 #[derive(Debug)]
@@ -57,6 +56,7 @@ enum UserEvent {
     ProceedClose,
     /// Sent by the single-instance listener when a duplicate launch forwards
     /// its argv — we bring the primary window to the front.
+    #[cfg_attr(not(feature = "api-single-instance"), allow(dead_code))]
     FocusPrimary,
     /// Sent 10ms after the first buffered yield (or synchronously when the
     /// buffer exceeds `YIELD_BATCH_MAX`) to flush pending chunks to every
@@ -98,10 +98,11 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         }));
     }
 
-    // Global hotkeys are emitted once registered; wire the handler at startup
-    // so the app doesn't miss events registered before the first user call.
-    os::shortcuts::install_event_handler();
+    // Install the plugin event bus against the now-wired emitter so
+    // native plugins can raise events alongside OS APIs.
+    crate::plugins::install_default_emit();
 
+    #[cfg(feature = "api-single-instance")]
     {
         // When another instance of this app forwards its argv via the
         // single-instance socket, bring the primary window to the front and
@@ -138,17 +139,15 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         });
     }
 
-    // Pre-warm asset cache in background so the first WebView request is instant.
     if let Some(ref dir) = config.frontend_dir {
         let dir = dir.clone();
         std::thread::spawn(move || scheme::warm(&dir));
     }
 
-    // Build native window
     let native_window =
         window::build_window(&config.window, config.icon_path.as_deref(), &event_loop);
 
-    // muda menu event handler (shared by app menu AND tray menu)
+    // Shared by the app menu bar and every tray submenu.
     {
         let proxy = proxy.clone();
         muda::MenuEvent::set_event_handler(Some(move |evt: muda::MenuEvent| {
@@ -269,18 +268,25 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         wb = wb.with_html(window::placeholder_html(app_name));
     }
 
-    let webview = wb
-        .build(&native_window)
-        .expect("WebViewBuilder::build failed");
+    // Fail with an actionable message rather than a panic stack — a build
+    // error here means WebView2 / WebKitGTK isn't installed on the host.
+    let webview = match wb.build(&native_window) {
+        Ok(wv) => wv,
+        Err(e) => {
+            crate::tynd_error!(
+                "Failed to initialize WebView runtime: {e}. \
+                 Check that WebView2 (Windows) or WebKitGTK (Linux) is installed."
+            );
+            std::process::exit(1);
+        },
+    };
 
     if config.window.center.unwrap_or(false) {
         window::center_window(&native_window);
     }
 
     let exit_started = std::sync::Arc::new(AtomicBool::new(false));
-    // tao has no dedicated minimize/maximize/fullscreen events — poll flags on
-    // each Resized (triggered by every transition on every platform) and emit
-    // synthetic events only when they actually flip.
+    // tao lacks minimize/maximize/fullscreen events; diff against this snapshot on Resized.
     let mut last_state = WindowState::capture(&native_window);
     let mut secondaries: HashMap<String, SecondaryEntry> = HashMap::new();
     let mut window_id_to_label: HashMap<WindowId, String> = HashMap::new();
@@ -289,14 +295,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let dev_url_owned = config.dev_url.clone();
     let frontend_dir_owned = config.frontend_dir.clone();
 
-    // Per-window yield buffer — flushed in batches so a 10k-yield burst ends
-    // up as ~30 `evaluate_script` calls instead of 10k. See YIELD_BATCH_MAX.
+    // Yield batching — one evaluate_script per webview per flush instead of per-yield.
     let mut yield_buffer: HashMap<String, Vec<(String, Value)>> = HashMap::new();
-    // Last zoom level passed to `setZoom`, keyed by window label. wry has no
-    // getter so we cache the write.
+    // Cache setZoom writes; wry has no getter.
     let mut zoom_levels: HashMap<String, f64> = HashMap::new();
-    // Auto-hide flags set via CreateWindowOptions. `hideOnFocusLost` hides the
-    // window when it blurs; `hideOnEscape` hides it on Escape keydown.
     let mut hide_on_focus_lost: HashMap<String, bool> = HashMap::new();
     let mut hide_on_escape: HashMap<String, bool> = HashMap::new();
     let flush_scheduled = std::sync::Arc::new(AtomicBool::new(false));
@@ -401,11 +403,22 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     }
                 },
                 BackendEvent::Reload => {
+                    // Broadcast to every window so Settings / About / popups don't keep stale HTML.
                     let _ = webview.evaluate_script(&ipc::eval_hide_error_overlay());
                     let _ = webview.evaluate_script("window.location.reload();");
+                    for entry in secondaries.values() {
+                        let _ = entry
+                            .webview
+                            .evaluate_script(&ipc::eval_hide_error_overlay());
+                        let _ = entry.webview.evaluate_script("window.location.reload();");
+                    }
                 },
                 BackendEvent::Error { message } => {
-                    let _ = webview.evaluate_script(&ipc::eval_show_error_overlay(&message));
+                    let script = ipc::eval_show_error_overlay(&message);
+                    let _ = webview.evaluate_script(&script);
+                    for entry in secondaries.values() {
+                        let _ = entry.webview.evaluate_script(&script);
+                    }
                 },
             },
 
@@ -481,7 +494,8 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                         }
                     },
                     "all" => {
-                        let mut labels: Vec<Value> = vec![Value::String(PRIMARY_LABEL.into())];
+                        let mut labels: Vec<Value> = Vec::with_capacity(secondaries.len() + 1);
+                        labels.push(Value::String(PRIMARY_LABEL.into()));
                         labels.extend(secondaries.keys().cloned().map(Value::String));
                         (true, Value::Array(labels))
                     },

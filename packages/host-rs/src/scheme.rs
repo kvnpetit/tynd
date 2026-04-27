@@ -1,5 +1,28 @@
-use std::{borrow::Cow, collections::HashMap, path::PathBuf, sync::OnceLock};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    },
+};
 use wry::http::{Request, Response, StatusCode};
+
+/// When set, `handle` bypasses the static asset cache and reads from
+/// disk on every request. Enables `tynd dev` to serve fresh bytes after
+/// an editor save without restarting the host. Flipped to `true` by the
+/// lite/full binaries when they're launched with `--debug`.
+static DEV_MODE: AtomicBool = AtomicBool::new(false);
+
+/// Toggle dev-mode asset serving. No-op when the value is unchanged.
+pub fn set_dev_mode(on: bool) {
+    DEV_MODE.store(on, Ordering::Release);
+}
+
+fn dev_mode() -> bool {
+    DEV_MODE.load(Ordering::Acquire)
+}
 
 struct Asset {
     bytes: &'static [u8],
@@ -108,14 +131,17 @@ pub fn warm(static_dir: &str) {
 
 /// Serve static files via the `tynd://` custom protocol.
 /// All files are loaded into memory on first request — subsequent requests
-/// are served from memory with zero disk I/O.
+/// are served from memory with zero disk I/O. In dev mode (`set_dev_mode(true)`)
+/// the cache is bypassed so editor saves land on the next webview reload.
 pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
-    let cache = get_cache(static_dir);
-
     let uri = request.uri().to_owned();
     let path = uri.path().trim_start_matches('/');
 
-    // Try exact path, then SPA fallback to index.html
+    if dev_mode() {
+        return serve_from_disk(static_dir, path);
+    }
+
+    let cache = get_cache(static_dir);
     let asset = cache.get(path).or_else(|| {
         // Only fall back for extensionless paths (HTML routes), not missing assets
         let has_extension = path.contains('.') && !path.ends_with('/');
@@ -148,6 +174,50 @@ pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'sta
             .body(Cow::Borrowed(b"404 Not Found" as &[u8]))
             .unwrap(),
     }
+}
+
+/// Dev-mode asset reader — reads from `static_dir` on every request so
+/// editor saves show up on the next reload. SPA fallback mirrors the
+/// cached path: extensionless paths that miss fall back to `index.html`.
+fn serve_from_disk(static_dir: &str, path: &str) -> Response<Cow<'static, [u8]>> {
+    let base = PathBuf::from(static_dir);
+    let mut target = base.join(path);
+    let has_extension = path.contains('.') && !path.ends_with('/');
+    // Reject `..` escapes out of the static dir before opening the file.
+    if let Ok(canon) = std::fs::canonicalize(&target) {
+        if !canon.starts_with(base.canonicalize().unwrap_or_else(|_| base.clone())) {
+            return not_found();
+        }
+        target = canon;
+    } else if !has_extension {
+        target = base.join("index.html");
+    } else {
+        return not_found();
+    }
+    let Ok(bytes) = std::fs::read(&target) else {
+        return not_found();
+    };
+    let mime = mime_for(&target);
+    let mut rsp = Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", mime)
+        // Dev: never cache in the webview — editor saves must land.
+        .header("Cache-Control", "no-store");
+    if mime.starts_with("text/html") {
+        rsp = rsp
+            .header("Cross-Origin-Opener-Policy", "same-origin")
+            .header("Cross-Origin-Embedder-Policy", "credentialless")
+            .header("Content-Security-Policy", default_csp());
+    }
+    rsp.body(Cow::Owned(bytes)).unwrap()
+}
+
+fn not_found() -> Response<Cow<'static, [u8]>> {
+    Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .header("Content-Type", "text/plain")
+        .body(Cow::Borrowed(b"404 Not Found" as &[u8]))
+        .unwrap()
 }
 
 /// Baseline CSP applied to every HTML response served via `tynd://`. Blocks

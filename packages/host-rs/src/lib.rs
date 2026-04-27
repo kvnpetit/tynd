@@ -5,11 +5,16 @@ pub mod ipc;
 pub mod log;
 pub(crate) mod menu;
 pub mod os;
+pub mod plugins;
 pub mod runtime;
 pub mod scheme;
 pub mod scheme_bin;
 pub(crate) mod tray;
 pub mod window;
+
+// Re-export the plugin SDK so consumer crates (preset runtimes + the
+// CLI-generated workspace) can reference a single authoritative version.
+pub use tynd_plugin_sdk as plugin_sdk;
 
 /// Back-compat alias for `tynd_info!`. Prefer `tynd_info!` / `tynd_warn!` /
 /// `tynd_error!` / `tynd_debug!` in new code.

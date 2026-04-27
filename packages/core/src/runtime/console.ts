@@ -4,11 +4,7 @@
  * its own minimal console in `quickjs/globals.js`).
  */
 
-// Only the five methods that any Bun app actually produces. The full
-// console surface (group/trace/table/time/count/dir/assert) is left
-// untouched — it writes to whatever the original implementation uses
-// and won't pollute stdout because Bun's own defaults already go to
-// stderr for those.
+// Bun's other console methods (group/trace/table/…) already go to stderr by default.
 const METHODS = ["log", "info", "debug", "warn", "error"] as const
 
 function formatArg(a: unknown): string {

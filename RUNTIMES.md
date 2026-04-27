@@ -79,13 +79,13 @@ Anything that reaches past the Web surface goes through a Tynd OS API. These are
 | Bundled binary (ffmpeg, etc.) | `import { sidecar, process } from "@tynd/core/client"` → `process.exec(await sidecar.path("ffmpeg"))` |
 | Read env vars | `import { os } from "@tynd/core/client"` → `os.env("API_KEY")` |
 | Persistent key/value | `import { createStore } from "@tynd/core/client"` |
-| Embedded SQLite | `import { sql } from "@tynd/core/client"` |
+| Embedded SQLite | `import { sql } from "@tynd/plugin-sql/client"` |
 | WebSocket client | `new WebSocket(url)` (Web standard) or `websocket.connect` (Tynd API, with more hooks) |
 | HTTP client | `fetch(url, opts)` (Web standard) or `http.request` (Tynd API, with upload/download progress) |
 | File / folder dialog | `import { dialog } from "@tynd/core/client"` |
 | Tray + menu | `import { tray, menu } from "@tynd/core/client"` |
 | Native notification | `import { notification } from "@tynd/core/client"` |
-| PTY terminal | `import { terminal } from "@tynd/core/client"` |
+| PTY terminal | `import { terminal } from "@tynd/plugin-terminal/client"` |
 | Isolated worker | `import { workers } from "@tynd/core/client"` |
 | Single-instance lock | `import { singleInstance } from "@tynd/core/client"` |
 

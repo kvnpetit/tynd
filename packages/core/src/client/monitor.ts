@@ -1,4 +1,4 @@
-import { osCall } from "./_internal.ts"
+import { osCall } from "./_internal"
 
 export interface Monitor {
   /** OS-assigned monitor name (null on some Linux setups). */

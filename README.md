@@ -35,7 +35,7 @@ bunx @tynd/cli create my-app
 - **TypeScript top to bottom.** Backend, frontend, IPC, config — same language, no codegen.
 - **Two runtime modes, one API.** Start with `lite` (~6.5 MB native binary, no extra runtime needed). Switch to `full` with one config line when you need Bun's JIT or native-binding npm packages.
 - **Native window, zero network.** No HTTP server, no loopback TCP port, no firewall prompt. Frontend and IPC ride a native custom scheme.
-- **30 OS APIs, identical in both modes** — `fs` (+ watcher, handles, symlinks, trash), `sql` (embedded SQLite), `http`, `websocket`, `terminal` (real PTY), `compute` (blake3/sha/CSPRNG), `dialog`, `tray` (runtime mutation + mouse enter/leave), `menu` (accelerators + checkbox/radio + context menu), `notification` (icon/sound/actions/schedule), `clipboard` (image + HTML + change monitor), `shell` (incl. reveal), `process`, `sidecar`, `singleInstance` (with argv forwarding + deep links), `shortcuts` (system-wide hotkeys), `keyring` (OS-encrypted secrets), `autolaunch` (start at boot), `store`, `updater` (signed auto-update + periodic check), `workers`, `log` (JSON-lines + rotation + console capture), `power` (idle time), `security` (capability ACL for fs + http), `app` (name/version/exit/relaunch), `os` / `path`, `tyndWindow` (multi-window + events + cursor + backdrop), plus typed emitters (bidirectional) and streaming RPC.
+- **Rich OS surface, identical in both modes.** Core APIs (`fs` + watcher/handles/symlinks/trash, `http`, `websocket`, `compute`, `dialog`, `tray`, `menu`, `notification`, `clipboard`, `shell`, `process`, `sidecar`, `singleInstance`, `store`, `workers`, `security`, `app`, `os`/`path`, `tyndWindow`) ship bundled. Extra capabilities land as first-party plugins — preset runtimes include all of them; custom runtimes opt in (`sql` embedded SQLite, `terminal` real PTY, `shortcuts` system-wide hotkeys, `keyring` OS-encrypted secrets, `autolaunch` start-at-boot, `updater` signed auto-update, `log` JSON-lines + rotation, `power` idle time, `clipboard-history` ring-buffer watcher) plus TS-only UI helpers (`command-palette`, `deeplink`, `i18n`, `qr`, `theme`). Typed emitters (bidirectional) and streaming RPC work across every surface.
 - **Zero-copy binary IPC.** Multi-MB payloads (`fs.readBinary`, `compute.hash`, …) skip JSON/base64 entirely — roughly **5-10× faster** than the usual webview-framework binary path.
 - **First-class installers.** `tynd build --bundle` emits `.app` / `.dmg` / `.deb` / `.rpm` / `.AppImage` / NSIS `.exe` / `.msi`. Installer tools auto-download on first build — no manual setup. Built-in code signing (`signtool` on Windows, `codesign` + optional notarization on macOS).
 - **Security defaults.** Auto-injected CSP on every HTML response, OS-backed secret storage via `keyring`, Ed25519-signed auto-updater so tampered binaries are rejected.
@@ -202,7 +202,8 @@ app.start({
 
 ```typescript
 // src/App.tsx
-import { createBackend, fs, process, terminal } from "@tynd/core/client"
+import { createBackend, fs, process } from "@tynd/core/client"
+import { terminal } from "@tynd/plugin-terminal/client"
 import type * as backend from "../backend/main"
 
 const api = createBackend<typeof backend>()

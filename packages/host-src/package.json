@@ -1,0 +1,40 @@
+{
+  "name": "@tynd/host-src",
+  "version": "1.0.0",
+  "description": "Rust source of the Tynd host — consumed by the CLI when building `full-custom` or `lite-custom` runtimes locally.",
+  "license": "Apache-2.0",
+  "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
+  "homepage": "https://tynd.kvnpetit.com/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
+    "directory": "packages/host-src"
+  },
+  "bugs": {
+    "url": "https://github.com/kvnpetit/tynd/issues"
+  },
+  "keywords": [
+    "tynd",
+    "rust",
+    "source",
+    "custom-build",
+    "webview"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "private": false,
+  "tynd": {
+    "hostSrc": "./native",
+    "crateName": "tynd_host"
+  },
+  "scripts": {
+    "sync": "bun run scripts/sync.ts",
+    "prepublishOnly": "bun run sync"
+  },
+  "files": [
+    "native/**",
+    "scripts/**",
+    "README.md"
+  ]
+}

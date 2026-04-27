@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { fs } from "./fs.ts"
+import { fs } from "./fs"
 
 type FetchCall = { url: string; method: string; body: Uint8Array | null }
 

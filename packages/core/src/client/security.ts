@@ -1,4 +1,4 @@
-import { osCall } from "./_internal.js"
+import { osCall } from "./_internal"
 
 export interface SecurityScope {
   /** Glob patterns that are allowed. Empty = open (unless `defaultDeny`). */

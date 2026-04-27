@@ -155,6 +155,10 @@ fn show_on_window(
     position: Option<muda::dpi::Position>,
 ) -> Result<(), String> {
     use tao::platform::windows::WindowExtWindows;
+    // SAFETY: `window.hwnd()` returns a valid HWND owned by the tao
+    // window, and the window outlives this call. muda's API is safe to
+    // invoke from the main thread, which is where wry's event loop
+    // (and therefore this callback) already runs.
     unsafe {
         menu.show_context_menu_for_hwnd(window.hwnd(), position);
     }
@@ -170,6 +174,9 @@ fn show_on_window(
 ) -> Result<(), String> {
     use tao::platform::macos::WindowExtMacOS;
     let ns_view = window.ns_view();
+    // SAFETY: `window.ns_view()` returns a valid NSView pointer owned by
+    // tao; the view outlives this call. Cocoa menu APIs must be called
+    // on the main thread, which is where this handler runs.
     unsafe {
         menu.show_context_menu_for_nsview(ns_view.cast(), position);
     }
@@ -196,6 +203,9 @@ pub(crate) fn init_bar(menu: &muda::Menu, window: &tao::window::Window) {
     #[cfg(target_os = "windows")]
     {
         use tao::platform::windows::WindowExtWindows;
+        // SAFETY: `window.hwnd()` is a valid HWND that lives at least as
+        // long as `window`; muda stores it for later use and the window
+        // stays alive for the lifetime of the app.
         unsafe {
             if let Err(e) = menu.init_for_hwnd(window.hwnd()) {
                 crate::tynd_log!("menu.init_for_hwnd: {e}");

@@ -1,6 +1,6 @@
 {
   "name": "@tynd/core",
-  "version": "0.3.1",
+  "version": "1.0.0",
   "description": "Tynd framework core — backend API (app.start, createEmitter) and typed frontend client",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
@@ -45,6 +45,15 @@
     "@types/bun": "latest"
   },
   "dependencies": {
-    "valibot": "^1.3.1"
+    "valibot": "^1.3.1",
+    "@tynd/plugin-autolaunch": "workspace:*",
+    "@tynd/plugin-clipboard-history": "workspace:*",
+    "@tynd/plugin-keyring": "workspace:*",
+    "@tynd/plugin-log": "workspace:*",
+    "@tynd/plugin-power": "workspace:*",
+    "@tynd/plugin-shortcuts": "workspace:*",
+    "@tynd/plugin-sql": "workspace:*",
+    "@tynd/plugin-terminal": "workspace:*",
+    "@tynd/plugin-updater": "workspace:*"
   }
 }

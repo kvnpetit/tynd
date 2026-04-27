@@ -1,4 +1,4 @@
-import { osCall } from "./_internal.ts"
+import { osCall } from "./_internal"
 
 export interface SingleInstanceResult {
   acquired: boolean

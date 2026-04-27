@@ -1,4 +1,4 @@
-import { base64ToBytes, binExchangeText, osCall } from "./_internal.js"
+import { base64ToBytes, binExchangeText, osCall } from "./_internal"
 
 export type HashAlgo = "blake3" | "sha256" | "sha384" | "sha512"
 

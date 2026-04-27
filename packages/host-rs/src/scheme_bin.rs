@@ -33,7 +33,9 @@ use std::collections::HashMap;
 use wry::http::{Request, Response, StatusCode};
 use wry::RequestAsyncResponder;
 
-use crate::os::{call_pool, compute};
+use crate::os::call_pool;
+#[cfg(feature = "api-compute")]
+use crate::os::compute;
 
 type BinResponse = Response<Cow<'static, [u8]>>;
 
@@ -50,7 +52,17 @@ pub fn handle_async(req: Request<Vec<u8>>, responder: RequestAsyncResponder) {
 fn dispatch(req: &Request<Vec<u8>>) -> BinResponse {
     let uri = req.uri();
     let path = uri.path().trim_start_matches('/');
+    // `query`/`body` are only consumed when at least one binary route is
+    // compiled in. Disabling both `api-fs` and `api-compute` drops them.
+    #[cfg_attr(
+        not(any(feature = "api-fs", feature = "api-compute")),
+        allow(unused_variables)
+    )]
     let query = parse_query(uri.query().unwrap_or(""));
+    #[cfg_attr(
+        not(any(feature = "api-fs", feature = "api-compute")),
+        allow(unused_variables)
+    )]
     let body = req.body();
     let method = req.method().as_str();
 
@@ -59,8 +71,11 @@ fn dispatch(req: &Request<Vec<u8>>) -> BinResponse {
     };
 
     match (api, fn_name, method) {
+        #[cfg(feature = "api-fs")]
         ("fs", "readBinary", "GET") => route_read_binary(&query),
+        #[cfg(feature = "api-fs")]
         ("fs", "writeBinary", "POST") => route_write_binary(&query, body),
+        #[cfg(feature = "api-compute")]
         ("compute", "hash", "POST") => route_compute_hash(&query, body),
         _ => err_response(
             StatusCode::NOT_FOUND,
@@ -69,6 +84,7 @@ fn dispatch(req: &Request<Vec<u8>>) -> BinResponse {
     }
 }
 
+#[cfg(feature = "api-fs")]
 fn route_read_binary(query: &HashMap<String, String>) -> BinResponse {
     let Some(path) = query.get("path") else {
         return err_response(StatusCode::BAD_REQUEST, "missing 'path' query".into());
@@ -85,6 +101,7 @@ fn route_read_binary(query: &HashMap<String, String>) -> BinResponse {
     }
 }
 
+#[cfg(feature = "api-fs")]
 fn route_write_binary(query: &HashMap<String, String>, body: &[u8]) -> BinResponse {
     let Some(path) = query.get("path") else {
         return err_response(StatusCode::BAD_REQUEST, "missing 'path' query".into());
@@ -111,6 +128,7 @@ fn route_write_binary(query: &HashMap<String, String>, body: &[u8]) -> BinRespon
     }
 }
 
+#[cfg(feature = "api-compute")]
 fn route_compute_hash(query: &HashMap<String, String>, body: &[u8]) -> BinResponse {
     let algo = query.get("algo").map_or("blake3", String::as_str);
     let encoding = query.get("encoding").map_or("hex", String::as_str);
@@ -126,6 +144,7 @@ fn route_compute_hash(query: &HashMap<String, String>, body: &[u8]) -> BinRespon
     }
 }
 
+#[cfg(feature = "api-fs")]
 fn ok_bytes(bytes: Vec<u8>) -> BinResponse {
     let mut rsp = Response::builder()
         .status(StatusCode::OK)
@@ -135,6 +154,7 @@ fn ok_bytes(bytes: Vec<u8>) -> BinResponse {
     rsp.body(Cow::Owned(bytes)).unwrap()
 }
 
+#[cfg(feature = "api-fs")]
 fn no_content() -> BinResponse {
     let mut rsp = Response::builder().status(StatusCode::NO_CONTENT);
     rsp = cache_headers(rsp);
@@ -211,6 +231,7 @@ mod tests {
         dispatch(&req)
     }
 
+    #[cfg(any(feature = "api-fs", feature = "api-compute"))]
     fn post(url: &str, body: Vec<u8>) -> BinResponse {
         let req = Request::builder()
             .uri(url)
@@ -226,6 +247,7 @@ mod tests {
         assert_eq!(r.status(), StatusCode::NOT_FOUND);
     }
 
+    #[cfg(feature = "api-fs")]
     #[test]
     fn fs_read_binary_round_trips() {
         let dir = tempfile::tempdir().unwrap();
@@ -238,6 +260,7 @@ mod tests {
         assert_eq!(r.body().as_ref(), bytes.as_slice());
     }
 
+    #[cfg(feature = "api-fs")]
     #[test]
     fn fs_write_binary_writes_body() {
         let dir = tempfile::tempdir().unwrap();
@@ -252,6 +275,7 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), body);
     }
 
+    #[cfg(feature = "api-compute")]
     #[test]
     fn compute_hash_returns_hex_string() {
         let r = post(
@@ -266,6 +290,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "api-fs")]
     #[test]
     fn missing_path_is_400() {
         let r = get("tynd-bin://localhost/fs/readBinary");

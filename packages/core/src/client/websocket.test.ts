@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { websocket } from "./websocket.ts"
+import { websocket } from "./websocket"
 
 type Call = { api: string; method: string; args: unknown }
 type EventBus = Map<string, Array<(data: unknown) => void>>

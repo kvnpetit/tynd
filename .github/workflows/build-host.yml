@@ -176,7 +176,7 @@ jobs:
             tynd-lite-macos-arm64
 
   publish:
-    name: Publish @tynd/cli + @tynd/core + @tynd/host
+    name: Publish npm packages (cli + core + host + plugin-sdk + plugins)
     needs: [build, build-macos]
     runs-on: ubuntu-latest
     permissions:
@@ -223,20 +223,61 @@ jobs:
         run: bun run build
         working-directory: packages/cli
 
-      - name: Publish @tynd/cli
-        run: npm publish --access public --provenance
-        working-directory: packages/cli
+      - name: Define publish_with_retry
+        run: |
+          cat >> "$GITHUB_ENV" <<'EOF'
+          PUBLISH_WITH_RETRY=1
+          EOF
+          cat > "$RUNNER_TEMP/publish.sh" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          attempt=1
+          max_attempts=3
+          delay=5
+          until npm publish --access public --provenance; do
+            if (( attempt >= max_attempts )); then
+              echo "npm publish: exhausted $max_attempts attempts"
+              exit 1
+            fi
+            echo "npm publish failed (attempt $attempt/$max_attempts), retrying in ${delay}s…"
+            sleep "$delay"
+            attempt=$((attempt + 1))
+            delay=$((delay * 2))
+          done
+          EOF
+          chmod +x "$RUNNER_TEMP/publish.sh"
+
+      - name: Publish @tynd/plugin-sdk
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/plugin-sdk
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @tynd/core
-        run: npm publish --access public --provenance
-        working-directory: packages/core
+      - name: Publish plugins
+        run: |
+          for dir in plugins/*/; do
+            if [ -f "$dir/package.json" ]; then
+              echo "Publishing $dir"
+              (cd "$dir" && "$RUNNER_TEMP/publish.sh")
+            fi
+          done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @tynd/host
-        run: npm publish --access public --provenance
+        run: "$RUNNER_TEMP/publish.sh"
         working-directory: packages/host
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @tynd/core
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @tynd/cli
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

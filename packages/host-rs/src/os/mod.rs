@@ -1,69 +1,199 @@
+// Always-on modules — structural glue (lifecycle, event bus, internal
+// helpers) that the host relies on regardless of which user-facing APIs
+// are compiled in.
 pub mod app;
-pub mod autolaunch;
 pub mod call_pool;
-pub mod clipboard;
-pub mod compute;
-pub mod dialog;
 pub mod events;
-pub mod fs;
-pub mod http;
 pub mod icon;
-pub mod keyring;
-pub mod log;
-pub mod notification;
 pub mod os_info;
-pub mod power;
-pub mod process;
 pub mod security;
-pub mod shell;
-pub mod shortcuts;
-pub mod sidecar;
-pub mod single_instance;
-pub mod sql;
-pub mod store;
-pub mod terminal;
-pub mod updater;
-pub mod websocket;
 pub mod window_cmd;
+
+// Gatable user-facing OS APIs. Each feature flag flips both the module
+// and its `dispatch` arm. Preset builds enable `api-all` (default);
+// custom builds pick a subset.
+#[cfg(feature = "api-clipboard")]
+pub mod clipboard;
+#[cfg(feature = "api-compute")]
+pub mod compute;
+#[cfg(feature = "api-dialog")]
+pub mod dialog;
+#[cfg(feature = "api-fs")]
+pub mod fs;
+#[cfg(feature = "api-http")]
+pub mod http;
+#[cfg(feature = "api-notification")]
+pub mod notification;
+#[cfg(feature = "api-process")]
+pub mod process;
+#[cfg(feature = "api-shell")]
+pub mod shell;
+#[cfg(feature = "api-sidecar")]
+pub mod sidecar;
+#[cfg(feature = "api-single-instance")]
+pub mod single_instance;
+#[cfg(feature = "api-store")]
+pub mod store;
+#[cfg(feature = "api-websocket")]
+pub mod websocket;
 
 #[cfg(feature = "embedded-js")]
 pub mod workers;
 
 use serde_json::Value;
 
+/// Produced whenever an API name is known but the feature wasn't
+/// compiled in. Shape matches normal dispatch errors so frontends don't
+/// need a special case. Only referenced by the `#[cfg(not(feature = ...))]`
+/// branches, so it's dead code under `default` (= `api-all`).
+#[allow(dead_code)]
+fn api_disabled(api: &str) -> String {
+    format!(
+        "OS API '{api}' is not compiled in this build. Enable the matching \
+         `api-{api}` feature (or add it to `apis` in tynd.config.ts)."
+    )
+}
+
 /// Dispatch a non-window OS API call from a background thread.
 /// Returns `Ok(value)` or `Err(user-facing message)`.
+#[allow(clippy::too_many_lines)]
 pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> {
     match api {
         "app" => app::dispatch(method, args),
-        "autolaunch" => autolaunch::dispatch(method, args),
-        "dialog" => dialog::dispatch(method, args),
-        "clipboard" => clipboard::dispatch(method, args),
-        "shell" => shell::dispatch(method, args),
-        "notification" => notification::dispatch(method, args),
-        "process" => process::dispatch(method, args),
-        "fs" => fs::dispatch(method, args),
-        "store" => store::dispatch(method, args),
         "os" => os_info::dispatch(method, args),
-        "http" => http::dispatch(method, args),
-        "sidecar" => sidecar::dispatch(method, args),
-        "terminal" => terminal::dispatch(method, args),
-        "compute" => compute::dispatch(method, args),
-        "shortcuts" => shortcuts::dispatch(method, args),
-        "singleInstance" => single_instance::dispatch(method, args),
-        "websocket" => websocket::dispatch(method, args),
-        "sql" => sql::dispatch(method, args),
-        "updater" => updater::dispatch(method, args),
-        "keyring" => keyring::dispatch(method, args),
-        "log" => log::dispatch(method, args),
-        "power" => power::dispatch(method, args),
         "security" => security::dispatch(method, args),
+        // Native plugins (api-* features irrelevant — plugin registry is
+        // populated at process startup from the CLI-generated main.rs).
+        "plugin" => crate::plugins::dispatch(method, args),
+
+        "clipboard" => {
+            #[cfg(feature = "api-clipboard")]
+            {
+                clipboard::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-clipboard"))]
+            {
+                Err(api_disabled("clipboard"))
+            }
+        },
+        "compute" => {
+            #[cfg(feature = "api-compute")]
+            {
+                compute::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-compute"))]
+            {
+                Err(api_disabled("compute"))
+            }
+        },
+        "dialog" => {
+            #[cfg(feature = "api-dialog")]
+            {
+                dialog::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-dialog"))]
+            {
+                Err(api_disabled("dialog"))
+            }
+        },
+        "fs" => {
+            #[cfg(feature = "api-fs")]
+            {
+                fs::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-fs"))]
+            {
+                Err(api_disabled("fs"))
+            }
+        },
+        "http" => {
+            #[cfg(feature = "api-http")]
+            {
+                http::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-http"))]
+            {
+                Err(api_disabled("http"))
+            }
+        },
+        "notification" => {
+            #[cfg(feature = "api-notification")]
+            {
+                notification::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-notification"))]
+            {
+                Err(api_disabled("notification"))
+            }
+        },
+        "process" => {
+            #[cfg(feature = "api-process")]
+            {
+                process::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-process"))]
+            {
+                Err(api_disabled("process"))
+            }
+        },
+        "shell" => {
+            #[cfg(feature = "api-shell")]
+            {
+                shell::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-shell"))]
+            {
+                Err(api_disabled("shell"))
+            }
+        },
+        "sidecar" => {
+            #[cfg(feature = "api-sidecar")]
+            {
+                sidecar::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-sidecar"))]
+            {
+                Err(api_disabled("sidecar"))
+            }
+        },
+        "singleInstance" => {
+            #[cfg(feature = "api-single-instance")]
+            {
+                single_instance::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-single-instance"))]
+            {
+                Err(api_disabled("singleInstance"))
+            }
+        },
+        "store" => {
+            #[cfg(feature = "api-store")]
+            {
+                store::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-store"))]
+            {
+                Err(api_disabled("store"))
+            }
+        },
+        "websocket" => {
+            #[cfg(feature = "api-websocket")]
+            {
+                websocket::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-websocket"))]
+            {
+                Err(api_disabled("websocket"))
+            }
+        },
+
         #[cfg(feature = "embedded-js")]
         "workers" => workers::dispatch(method, args),
         #[cfg(not(feature = "embedded-js"))]
         "workers" => {
             Err("workers API is lite-only; in full runtime use Bun.Worker natively".to_string())
         },
+
         _ => Err(format!("Unknown OS API: '{api}'")),
     }
 }

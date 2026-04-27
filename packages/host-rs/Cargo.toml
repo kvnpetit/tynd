@@ -17,54 +17,98 @@ readme.workspace        = true
 workspace = true
 
 [dependencies]
-wry.workspace         = true
-tao.workspace         = true
-serde.workspace       = true
-serde_json.workspace  = true
-rfd.workspace         = true
-arboard.workspace     = true
-open.workspace        = true
-pollster.workspace    = true
-notify-rust.workspace = true
-image.workspace       = true
-muda.workspace        = true
-tray-icon.workspace   = true
-dirs.workspace        = true
-zstd.workspace        = true
-ureq.workspace        = true
-base64.workspace      = true
-portable-pty.workspace = true
-sha2.workspace        = true
-blake3.workspace      = true
-single-instance.workspace = true
-interprocess.workspace     = true
-ed25519-dalek.workspace    = true
-notify.workspace           = true
-global-hotkey.workspace    = true
-auto-launch.workspace      = true
-keyring.workspace          = true
-trash.workspace            = true
-user-idle.workspace        = true
-rand.workspace             = true
-tungstenite.workspace      = true
-rusqlite.workspace         = true
-parking_lot.workspace      = true
-dashmap.workspace          = true
-ahash.workspace            = true
-tempfile.workspace         = true
+# Always-on — structural or used by more than one always-on module.
+wry.workspace          = true
+tao.workspace          = true
+serde.workspace        = true
+serde_json.workspace   = true
+pollster.workspace     = true
+image.workspace        = true
+muda.workspace         = true
+tray-icon.workspace    = true
+dirs.workspace         = true
+zstd.workspace         = true
+base64.workspace       = true
+sha2.workspace         = true
+blake3.workspace       = true
+rand.workspace         = true
+parking_lot.workspace  = true
+dashmap.workspace      = true
+ahash.workspace        = true
+tempfile.workspace     = true
 
-rquickjs              = { workspace = true, optional = true }
+# Optional — pulled only when their matching `api-*` feature is enabled.
+rfd              = { workspace = true, optional = true }
+arboard          = { workspace = true, optional = true }
+open             = { workspace = true, optional = true }
+notify-rust      = { workspace = true, optional = true }
+ureq             = { workspace = true, optional = true }
+single-instance  = { workspace = true, optional = true }
+interprocess     = { workspace = true, optional = true }
+notify           = { workspace = true, optional = true }
+trash            = { workspace = true, optional = true }
+tungstenite      = { workspace = true, optional = true }
+
+rquickjs         = { workspace = true, optional = true }
+
+# Native plugin contract. Pulled unconditionally — the trait + registry are
+# tiny and the host always needs them to dispatch plugin calls when one
+# or more native plugins are compiled in.
+tynd_plugin_sdk  = { path = "../plugin-sdk/native" }
 
 [features]
-default        = []
-embedded-js    = ["dep:rquickjs"]
+# Preset builds (tynd-full / tynd-lite) get `default = ["api-all"]` so every
+# OS API is compiled in. Custom builds pass `--no-default-features` and pick
+# the exact set of `api-*` features they want, which also drops the matching
+# crate dependencies from the compile graph.
+default = ["api-all"]
+
+# Embedded QuickJS runtime (lite only — keeps rquickjs out of full).
+# Lite's JS polyfills call into `os::compute` (SubtleCrypto) and
+# `os::websocket` (WebSocket), so those two APIs ride along mandatorily.
+embedded-js = ["dep:rquickjs", "api-compute", "api-websocket"]
+
+# Meta feature: every gatable OS API. Disabling this and picking a subset is
+# how `runtime: "full-custom"` / `"lite-custom"` narrow the attack surface
+# and binary size.
+api-all = [
+    "api-clipboard",
+    "api-compute",
+    "api-dialog",
+    "api-fs",
+    "api-http",
+    "api-notification",
+    "api-process",
+    "api-shell",
+    "api-sidecar",
+    "api-single-instance",
+    "api-store",
+    "api-websocket",
+]
+
+# Per-API gates. Each feature enables its module + dispatch arm + pulls the
+# crate dependencies it needs. APIs with no external dep list nothing here.
+api-clipboard       = ["dep:arboard"]
+api-compute         = []
+api-dialog          = ["dep:rfd"]
+api-fs              = ["dep:notify", "dep:trash"]
+api-http            = ["dep:ureq"]
+api-notification    = ["dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys"]
+api-process         = []
+api-shell           = ["dep:open"]
+api-sidecar         = []
+api-single-instance = ["dep:single-instance", "dep:interprocess"]
+api-store           = []
+api-websocket       = ["dep:tungstenite"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
-arboard = { version = "3", features = ["wayland-data-control"] }
+# Linux needs the wayland-data-control feature on arboard; re-declared here
+# as optional so it's only pulled with api-clipboard.
+arboard = { version = "3", features = ["wayland-data-control"], optional = true }
 gtk.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
-tauri-winrt-notification.workspace = true
+tauri-winrt-notification = { workspace = true, optional = true }
 # Direct Win32 access for runtime-only features tao doesn't surface: DWM
 # system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
 windows-sys = { version = "0.59", features = [
@@ -76,4 +120,4 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-mac-notification-sys.workspace = true
+mac-notification-sys = { workspace = true, optional = true }

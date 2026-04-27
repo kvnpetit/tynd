@@ -4238,6 +4238,15 @@ dependencies = [
  "serde",
  "serde_json",
  "tynd-host",
+ "tynd_plugin_autolaunch",
+ "tynd_plugin_clipboard_history",
+ "tynd_plugin_keyring",
+ "tynd_plugin_log",
+ "tynd_plugin_power",
+ "tynd_plugin_shortcuts",
+ "tynd_plugin_sql",
+ "tynd_plugin_terminal",
+ "tynd_plugin_updater",
  "zstd",
 ]
 
@@ -4247,17 +4256,13 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "arboard",
- "auto-launch",
  "base64",
  "blake3",
  "dashmap",
  "dirs 6.0.0",
- "ed25519-dalek",
- "global-hotkey",
  "gtk",
  "image",
  "interprocess",
- "keyring",
  "mac-notification-sys",
  "muda",
  "notify",
@@ -4265,11 +4270,9 @@ dependencies = [
  "open",
  "parking_lot",
  "pollster",
- "portable-pty",
  "rand",
  "rfd",
  "rquickjs",
- "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -4280,8 +4283,8 @@ dependencies = [
  "trash",
  "tray-icon",
  "tungstenite",
+ "tynd_plugin_sdk",
  "ureq",
- "user-idle",
  "windows-sys 0.59.0",
  "wry",
  "zstd",
@@ -4294,12 +4297,124 @@ dependencies = [
  "base64",
  "hmac",
  "mimalloc",
+ "parking_lot",
  "rquickjs",
  "serde",
  "serde_json",
  "sha2",
  "tungstenite",
  "tynd-host",
+ "tynd_plugin_autolaunch",
+ "tynd_plugin_clipboard_history",
+ "tynd_plugin_keyring",
+ "tynd_plugin_log",
+ "tynd_plugin_power",
+ "tynd_plugin_shortcuts",
+ "tynd_plugin_sql",
+ "tynd_plugin_terminal",
+ "tynd_plugin_updater",
+ "ureq",
+]
+
+[[package]]
+name = "tynd_plugin_autolaunch"
+version = "1.0.0"
+dependencies = [
+ "auto-launch",
+ "serde_json",
+ "tynd_plugin_sdk",
+]
+
+[[package]]
+name = "tynd_plugin_clipboard_history"
+version = "1.0.0"
+dependencies = [
+ "arboard",
+ "parking_lot",
+ "serde_json",
+ "tynd_plugin_sdk",
+]
+
+[[package]]
+name = "tynd_plugin_keyring"
+version = "1.0.0"
+dependencies = [
+ "keyring",
+ "serde_json",
+ "tynd_plugin_sdk",
+]
+
+[[package]]
+name = "tynd_plugin_log"
+version = "1.0.0"
+dependencies = [
+ "dirs 6.0.0",
+ "parking_lot",
+ "serde_json",
+ "tynd_plugin_sdk",
+]
+
+[[package]]
+name = "tynd_plugin_power"
+version = "1.0.0"
+dependencies = [
+ "serde_json",
+ "tynd_plugin_sdk",
+ "user-idle",
+]
+
+[[package]]
+name = "tynd_plugin_sdk"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "tynd_plugin_shortcuts"
+version = "1.0.0"
+dependencies = [
+ "dashmap",
+ "global-hotkey",
+ "parking_lot",
+ "serde_json",
+ "tynd_plugin_sdk",
+]
+
+[[package]]
+name = "tynd_plugin_sql"
+version = "1.0.0"
+dependencies = [
+ "base64",
+ "dashmap",
+ "parking_lot",
+ "rusqlite",
+ "serde_json",
+ "tynd_plugin_sdk",
+]
+
+[[package]]
+name = "tynd_plugin_terminal"
+version = "1.0.0"
+dependencies = [
+ "base64",
+ "dashmap",
+ "parking_lot",
+ "portable-pty",
+ "serde_json",
+ "tynd_plugin_sdk",
+]
+
+[[package]]
+name = "tynd_plugin_updater"
+version = "1.0.0"
+dependencies = [
+ "base64",
+ "ed25519-dalek",
+ "parking_lot",
+ "serde_json",
+ "tynd_plugin_sdk",
  "ureq",
 ]
 

@@ -498,6 +498,10 @@ fn set_system_backdrop(win: &Window, kind: &str) -> Result<(), String> {
     };
     let hwnd = win.hwnd() as HWND;
     let value_ptr = std::ptr::addr_of!(value).cast();
+    // SAFETY: `DwmSetWindowAttribute` takes a `*const c_void` pointing
+    // at `DWORD`-sized data; `addr_of!(value)` yields a properly-aligned
+    // pointer to an `i32` local that outlives the call (function returns
+    // after `hr` is computed). `hwnd` is a valid HWND owned by `win`.
     let hr = unsafe {
         DwmSetWindowAttribute(
             hwnd,

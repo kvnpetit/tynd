@@ -1,5 +1,5 @@
-import type { ConfirmOptions, MessageOptions, OpenFileOptions, SaveFileOptions } from "../types.js"
-import { osCall } from "./_internal.js"
+import type { ConfirmOptions, MessageOptions, OpenFileOptions, SaveFileOptions } from "../types"
+import { osCall } from "./_internal"
 
 export type { ConfirmOptions, MessageOptions, OpenFileOptions, SaveFileOptions }
 

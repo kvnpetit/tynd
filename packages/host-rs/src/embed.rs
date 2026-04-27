@@ -151,14 +151,23 @@ pub fn prepare_extract_dir() -> Option<ExtractPaths> {
 
 /// chmod +755 each extracted sidecar (Unix) and register its on-disk path
 /// so app code can resolve it via `os::sidecar::path(name)`.
+///
+/// When `api-sidecar` isn't compiled in the registration is skipped — the
+/// files are still extracted, they just aren't discoverable via the API.
+/// Custom builds that drop the feature shouldn't pack sidecars in the first
+/// place; this is belt-and-suspenders.
+// Underscore-prefixed bindings are the simplest way to silence unused-var
+// warnings across the unix / api-sidecar feature matrix; clippy disagrees.
+#[allow(clippy::used_underscore_binding)]
 pub fn finalize_sidecars(pending: &[(String, PathBuf)]) {
-    for (name, path) in pending {
+    for (_name, _path) in pending {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o755));
+            let _ = fs::set_permissions(_path, fs::Permissions::from_mode(0o755));
         }
-        crate::os::sidecar::register(name, &path.to_string_lossy());
+        #[cfg(feature = "api-sidecar")]
+        crate::os::sidecar::register(_name, &_path.to_string_lossy());
     }
 }
 

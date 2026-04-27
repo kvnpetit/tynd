@@ -118,12 +118,37 @@ globalThis.__tynd_mod__ = globalThis;
       __tynd_return__(id, true, 'null');
       return;
     }
+
+    // Plugin calls: fnName = "$plugin$<name>$<method>". Registry lives on
+    // globalThis.__tynd_plugin_methods__ (populated by definePlugin / app.start).
+    var fn;
     var mod = globalThis.__tynd_mod__;
-    var fn = mod && mod[fnName];
-    if (typeof fn !== 'function') {
-      __tynd_return__(id, false, stringify('Unknown function: ' + fnName));
-      return;
+    if (fnName.indexOf('$plugin$') === 0) {
+      var rest = fnName.slice(8);
+      var sep = rest.indexOf('$');
+      if (sep <= 0 || sep === rest.length - 1) {
+        __tynd_return__(id, false, stringify('Malformed plugin call: ' + fnName));
+        return;
+      }
+      var pName = rest.slice(0, sep);
+      var mName = rest.slice(sep + 1);
+      var pluginMethods = globalThis.__tynd_plugin_methods__;
+      var methods = pluginMethods && pluginMethods[pName];
+      fn = methods && methods[mName];
+      if (typeof fn !== 'function') {
+        __tynd_return__(id, false, stringify(
+          'plugin "' + pName + '" has no method "' + mName + '" (or it wasn\'t registered in app.start({ plugins: [...] }))'
+        ));
+        return;
+      }
+    } else {
+      fn = mod && mod[fnName];
+      if (typeof fn !== 'function') {
+        __tynd_return__(id, false, stringify('Unknown function: ' + fnName));
+        return;
+      }
     }
+
     var args;
     try { args = JSON.parse(argsJson); } catch (_) { args = []; }
     var result;

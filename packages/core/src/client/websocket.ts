@@ -1,4 +1,4 @@
-import { base64ToBytes, bytesToBase64, osCall } from "./_internal.ts"
+import { base64ToBytes, bytesToBase64, osCall } from "./_internal"
 
 export interface WebSocketMessage {
   kind: "text" | "binary"

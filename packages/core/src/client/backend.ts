@@ -1,5 +1,5 @@
-import { tynd } from "../logger.js"
-import type { Emitter } from "../types.js"
+import { tynd } from "../logger"
+import type { Emitter } from "../types"
 import "./_internal.js"
 
 type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
@@ -58,7 +58,7 @@ export function createBackend<T>(): BackendClient<T> {
   return new Proxy({} as BackendClient<T>, {
     get(_target, prop: string | symbol) {
       if (typeof prop !== "string") return undefined
-      // A thenable Proxy would make `await api` invoke `api.then()` as a backend call.
+      // Block thenable traps so `await api` doesn't fire a backend call.
       if (prop === "then" || prop === "catch" || prop === "finally") return undefined
 
       if (!window.__tynd__) {
@@ -74,11 +74,16 @@ export function createBackend<T>(): BackendClient<T> {
         return (event: string, handler: (p: unknown) => void) => {
           let called = false
           const wrapper = (p: unknown) => {
-            if (!called) {
-              called = true
-              window.__tynd__.off(event, wrapper)
-              handler(p)
+            if (called) {
+              // Extra fires usually mean emitter/receiver disagree on multiplicity — surface them.
+              tynd.warn(
+                `on.once(${JSON.stringify(event)}): handler fired more than once — extra invocation ignored`,
+              )
+              return
             }
+            called = true
+            window.__tynd__.off(event, wrapper)
+            handler(p)
           }
           window.__tynd__.on(event, wrapper)
           return () => window.__tynd__.off(event, wrapper)

@@ -1,5 +1,187 @@
 # Changelog
 
+## [1.0.0](https://github.com/kvnpetit/tynd/compare/v0.3.1...v1.0.0) (2026-04-22)
+
+First stable release. The framework ships the runtime, CLI, and every
+first-party plugin in lockstep under `1.0.0`; future minor releases stay
+on the same SemVer line.
+
+### ⚠ BREAKING CHANGES
+
+* **plugins:** Extract `sql`, `terminal`, `updater`, `keyring`,
+  `autolaunch`, `shortcuts`, `log`, `power`, and `clipboard-history` out
+  of `@tynd/core` into standalone `@tynd/plugin-*` packages. Preset
+  runtimes (`full`, `lite`) still bundle every first-party plugin so the
+  user-visible capability is identical; imports move from
+  `@tynd/core/client` to `@tynd/plugin-<name>/client`. See
+  [MIGRATION.md](MIGRATION.md#upgrading-from-v03--v10) for the
+  symbol-by-symbol mapping. Custom runtimes (`full-custom`, `lite-custom`)
+  pick plugins à la carte via `tynd.config.ts::plugins`, including
+  third-party plugins.
+
+### Features
+
+* **plugin-sdk:** publish `@tynd/plugin-sdk` + Rust `tynd_plugin_sdk`
+  crate so community plugins can ship JS-only *or* native code with a
+  single trait + helper.
+* **core:** `onHostEvent` helper in the plugin SDK so clients subscribe
+  to backend-emitted events without redeclaring `TyndGlobal`.
+* **core:** `clearFrontendListeners()` + auto-cleanup on `app.onClose`.
+* **runtime:** `safeStringify()` shared by full + lite handles BigInt
+  and circular refs uniformly (BigInt serialises to string; non-JSON
+  values surface as explicit errors instead of silent `null`).
+* **runtime:** stdin buffer capped at 8 MiB to reject malformed IPC
+  streams; stream credit capped at `STREAM_CREDIT` to keep ACK flow
+  bounded.
+* **store:** `has`, `values`, `entries`, `length`, `reload` round out
+  the Map-like surface COMPARISON.md had been claiming.
+* **plugin-sdk:** `PluginCx::os_call(api, method, args)` lets a native
+  plugin reach core OS APIs through the SDK. Opt into the capability
+  gate from `tynd.config.ts` with `plugins: [{ pkg, apis: ["fs"] }]`
+  — calls outside the allow-list fail with a `"plugin capability:
+  not permitted"` error before hitting the dispatcher. JS-only
+  plugins run unsandboxed; the field is advisory for them.
+* **plugin-sdk:** DX helpers to drop the boilerplate out of a typical
+  native plugin:
+  - `ArgsExt::require<T>` / `opt<T>` — typed extractor on
+    `serde_json::Value` with named-key error messages.
+  - `PluginCx::spawn_interval(name, interval, body)` — periodic
+    background worker with `BackgroundHandle` that stops + joins on
+    `Drop`. Refactor dropped ~40 LOC of atomic-flag plumbing from
+    `plugin-clipboard-history` and `plugin-updater`.
+  - `test_cx()` — unit-test context whose `emit` captures events into
+    an `EventCapture` so plugins can assert side-effects without a
+    real host.
+* **cli:** custom-build binaries carry the user's app name. Generated
+  `.tynd/build/Cargo.toml` uses `<appName>` as the `[[bin]]` name; the
+  plugin-less path copies `tynd-{full,lite}` to `target/release/<appName>`
+  after cargo build. No more `tynd-*-custom.exe` leaking into logs or
+  intermediate artefacts.
+* **cli:** `tynd plugin-new <name> [--js|--native]` scaffolds a ready-
+  to-hack plugin package (`backend.ts`, `client.ts`, `package.json` +
+  optional `native/{Cargo.toml,src/lib.rs}`) with working stubs + unit
+  tests. `--scope <scope>` overrides the default; when omitted the
+  scope is inferred from the nearest `package.json`.
+* **cli:** `tynd dev` now supports `runtime: "lite-custom"` / `"full-custom"`
+  — calls `buildCustomHost()` on start so the dev loop works with the
+  exact plugin + API set declared in `tynd.config.ts`. Previously dev
+  fell back to `ensureHostBinary` and failed because no prebuilt exists
+  for custom runtimes.
+* **cli:** atomic native host swap during rebuild — `tynd dev` now
+  compiles the next binary **before** killing the running one, so
+  cargo's multi-second rebuilds no longer leave a dead window on
+  screen. A failed rebuild keeps the previous host alive instead of
+  dumping the user into a broken state.
+* **host:** `BackendEvent::Reload` + `BackendEvent::Error` broadcast to
+  every open webview, not just the primary. Multi-window apps
+  (Settings, About, popups) now refresh and surface dev-mode error
+  overlays uniformly after a hot reload.
+* **cli:** workspace-linked plugin sources now hot-reload — when a
+  declared plugin resolves to a path outside `node_modules` (workspace
+  protocol, `bun link`, `file:` dep), `tynd dev` installs a dedicated
+  watcher on its source tree so edits feed the backend hot-reload loop.
+  Installed npm packages stay read-only.
+* **cli:** extended watcher file-type coverage — native watchers now
+  include `Cargo.lock`, frontend watchers cover fonts (woff/ttf/otf),
+  video (mp4/webm), audio (mp3/ogg), AVIF, BMP, and TSX entries that
+  get served directly.
+* **host:** dev-mode static asset bypass + `reload-frontend` stdin
+  command — `tynd_host::scheme::set_dev_mode(true)` (set by lite/full in
+  `--debug`) skips the memory cache and reads each asset from disk, so
+  editor saves to raw HTML / CSS / JS land on the next reload. A new
+  `ReloadHandle::reload_frontend_only()` sends `BackendEvent::Reload`
+  without swapping the backend, paired with a `reload-frontend\n` stdin
+  handler in both runtimes.
+* **cli:** `tynd dev` now hot-reloads **static** frontends — when no
+  external dev server is configured, the CLI watches `cfg.frontendDir`
+  and streams `reload-frontend\n` to the host. External frameworks
+  (Vite, etc.) keep owning their own HMR.
+* **cli:** `.env*` watchers (`env`, `env.local`, `env.development`,
+  `env.development.local`) trigger a full restart — env changes can't be
+  applied without respawning the host process.
+* **cli:** hot-reload for native plugins — `tynd dev` watches every
+  declared native plugin's `src/**/*.rs` + `Cargo.toml`. Edits trigger a
+  debounced cargo rebuild + host respawn (window recreated). Target
+  dirs are filtered out so incremental builds don't feed themselves.
+  Coalesce rule: `config > native > backend`, so stacked edits produce
+  one correct reload instead of a rebuild storm.
+* **cli:** `tynd plugin-add <pkg>` one-shot plugin installer — runs
+  `bun add` and rewrites `tynd.config.ts::plugins` in a single pass.
+  Native plugins trigger a runtime-mismatch warning; `--auto-runtime`
+  flips `runtime:` to the matching `-custom` value inline.
+  `--skip-install` edits config only (in-workspace development).
+* **cli:** `tynd plugin-check [dir]` validates a plugin package before
+  publish — `package.json` shape (name, type, exports, deps), required
+  files, native crate layout (`Cargo.toml [lib] = rlib`,
+  `tynd_plugin_sdk` dep, `register_plugin!`, `TyndPlugin` impl). `--json`
+  for CI; exits 1 on any failure.
+* **cli:** `tynd plugin-list` inspects plugins declared in
+  `tynd.config.ts`, showing kind (`js` / `native` / `bundled` /
+  `missing`) plus declared capability allow-list. Surfaces unresolved
+  packages before they break at build time.
+* **cli:** runtime-plugin compatibility pre-flight — declaring a native
+  plugin while the runtime is `lite` / `full` (instead of `*-custom`)
+  fails `tynd dev` + `tynd build` immediately with the exact swap to
+  make in `tynd.config.ts`.
+* **plugin-sdk:** `validate(schema, args)` helper — short-circuits bad
+  plugin args before the round-trip to Rust. Accepts any Standard Schema
+  v1 validator (valibot, zod, arktype); throws `PluginArgsError` listing
+  every issue.
+* **cli:** `tynd doctor` prints a per-check status for Bun version,
+  platform, project config, host binary, GitHub reach and the managed
+  Rust toolchain. Exits 1 on failure so CI can gate on it; `--json`
+  emits machine-readable output for automation.
+* **cli:** `log.fail(message, { hint?, docs? })` helper consolidates
+  the `log.error + log.hint` pair. Build.ts's `CustomBuildError` and
+  missing-binary paths now route through it.
+* **cli:** atomic binary writes — `tynd build` writes to a `.tmp` next
+  to the target then renames, so a SIGTERM mid-build never leaves a
+  half-written executable.
+* **cli:** `ensureRustToolchain` installs a pinned Rust at
+  `~/.tynd/toolchain/` for custom builds, even when the user already
+  has a system `rustup`.
+* **cli:** `exec.secretArgs` masks password argv (signtool `/p`,
+  notarytool `--password`) in debug logs.
+* **cli:** opt-in macOS code signing step in the release workflow,
+  gated on `APPLE_CERT_P12_BASE64` / `APPLE_IDENTITY` secrets.
+* **ci:** npm publish wrapper retries transient registry failures;
+  workflow publishes plugin-sdk + every first-party plugin in dependency
+  order.
+
+### Bug Fixes
+
+* **lite:** hot-reload path no longer panics on `Mutex` poison
+  (`parking_lot::Mutex`, no poison state).
+* **host:** `plugins.rs::register` releases the write lock before
+  calling `init()` — no more self-deadlock when an `init` emits an
+  event.
+* **host:** `app/mod.rs "all"` branch uses `Vec::with_capacity` so the
+  hot dispatch path skips a reallocation.
+* **core:** `registerPlugin` throws on non-function method values and
+  rejects `$` in plugin / method names (reserved for the wire format).
+* **plugins/log:** `captureConsole` routes write failures to
+  `console.error` so DevTools never goes silent when the file sink is
+  unreachable.
+* **plugins/theme:** `configure()` is HMR-safe — removes the prior
+  `matchMedia` listener before registering a new one.
+* **plugins/sql:** `Text` cells use `from_utf8_lossy` instead of
+  silently collapsing to `""` on a single invalid byte.
+
+### Documentation
+
+* **MIGRATION.md:** new section covering v0.3 → v1.0 plugin extraction.
+* **GETTING\_STARTED.md:** explicit Bun >= 1.3.0 prerequisite and a
+  supported-platforms matrix (Win/macOS/Linux × x64/arm64).
+* **docs site:** cut `v1.0` folder as the new latest; `v0.3`, `v0.2`,
+  `v0.1` are archived and frozen.
+* **NOTICE:** add section for the Tynd plugin native crates.
+
+### Continuous Integration
+
+* Weekly Dependabot updates for npm, cargo, and github-actions.
+* CI runs `cargo test --workspace`, `bun test`, and
+  `tynd validate` smoke on `playground/{example,full}` on every PR.
+
 ## [0.3.1](https://github.com/kvnpetit/tynd/compare/v0.3.0...v0.3.1) (2026-04-21)
 
 

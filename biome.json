@@ -6,6 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
+    "ignoreUnknown": true,
     "includes": [
       "**/*.{js,mjs,cjs,jsx,ts,tsx,json,jsonc}",
       "!**/node_modules",
@@ -50,18 +51,25 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+      "a11y": {
+        "recommended": true,
+        "useButtonType": "error",
+        "useKeyWithClickEvents": "warn"
+      },
       "correctness": {
         "noUnusedImports": "error",
         "noUnusedVariables": "error",
         "noUnusedFunctionParameters": "warn",
         "noUnusedPrivateClassMembers": "error",
         "noUndeclaredVariables": "error",
+        "noChildrenProp": "off",
         "useExhaustiveDependencies": "warn",
         "useHookAtTopLevel": "error"
       },
       "style": {
-        "noNonNullAssertion": "off",
+        "noNonNullAssertion": "warn",
         "useImportType": "error",
+        "useExportType": "error",
         "useNodejsImportProtocol": "error",
         "useConst": "error",
         "useTemplate": "error",
@@ -76,8 +84,8 @@
         "noDoubleEquals": "error",
         "noEmptyBlockStatements": "error",
         "noImplicitAnyLet": "error",
-        "noArrayIndexKey": "warn",
-        "noConsole": "off",
+        "noArrayIndexKey": "error",
+        "noConsole": "warn",
         "noConfusingVoidType": "error",
         "noMisleadingCharacterClass": "error"
       },
@@ -86,7 +94,7 @@
         "noUselessTypeConstraint": "error",
         "noForEach": "off",
         "useOptionalChain": "error",
-        "useLiteralKeys": "off"
+        "useLiteralKeys": "error"
       },
       "performance": {
         "noAccumulatingSpread": "error",
@@ -95,9 +103,6 @@
       "security": {
         "noDangerouslySetInnerHtml": "error",
         "noGlobalEval": "error"
-      },
-      "a11y": {
-        "recommended": true
       }
     }
   },

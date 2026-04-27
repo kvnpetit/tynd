@@ -1,4 +1,4 @@
-import { base64ToBytes, binFetch, binUpload, bytesToBase64, osCall } from "./_internal.js"
+import { base64ToBytes, binFetch, binUpload, bytesToBase64, osCall } from "./_internal"
 
 export interface FileStat {
   size: number

@@ -1,4 +1,4 @@
-import { osCall } from "./_internal.js"
+import { osCall } from "./_internal"
 
 export interface TrayMenuItem {
   type?: "separator" | "submenu" | "checkbox" | "radio" | "item"
@@ -50,25 +50,20 @@ export const tray = {
   },
   /** Mouse entered the tray icon's bounds. `x`/`y` are physical pixels. */
   onEnter(handler: (pos: { x: number; y: number }) => void): () => void {
-    return window.__tynd__.os_on("tray:enter", (raw) =>
-      handler(raw as { x: number; y: number }),
-    )
+    return window.__tynd__.os_on("tray:enter", (raw) => handler(raw as { x: number; y: number }))
   },
   /** Mouse moved over the tray icon. */
   onMove(handler: (pos: { x: number; y: number }) => void): () => void {
-    return window.__tynd__.os_on("tray:move", (raw) =>
-      handler(raw as { x: number; y: number }),
-    )
+    return window.__tynd__.os_on("tray:move", (raw) => handler(raw as { x: number; y: number }))
   },
   /** Mouse left the tray icon's bounds. */
   onLeave(handler: (pos: { x: number; y: number }) => void): () => void {
-    return window.__tynd__.os_on("tray:leave", (raw) =>
-      handler(raw as { x: number; y: number }),
-    )
+    return window.__tynd__.os_on("tray:leave", (raw) => handler(raw as { x: number; y: number }))
   },
   onMenu(id: string, handler: () => void): () => void {
     return window.__tynd__.os_on("menu:action", (data: unknown) => {
-      if (((data as Record<string, unknown>)?.["id"] as string) === id) handler()
+      if (typeof data !== "object" || data === null) return
+      if ((data as Record<string, unknown>)["id"] === id) handler()
     })
   },
 }

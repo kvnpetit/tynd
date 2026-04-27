@@ -62,6 +62,50 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 .unwrap_or_default();
             Ok(Value::Array(keys))
         },
+        "has" => {
+            let key = key_arg(args)?;
+            load_if_needed(&namespace)?;
+            let present = stores()
+                .get(&namespace)
+                .is_some_and(|m| m.contains_key(key));
+            Ok(Value::Bool(present))
+        },
+        "values" => {
+            load_if_needed(&namespace)?;
+            let values: Vec<Value> = stores()
+                .get(&namespace)
+                .map(|m| m.values().cloned().collect())
+                .unwrap_or_default();
+            Ok(Value::Array(values))
+        },
+        "entries" => {
+            load_if_needed(&namespace)?;
+            // Pairs serialize as `[key, value]` tuples so the JS side can
+            // destructure them straight into `Object.fromEntries` without
+            // extra remapping.
+            let entries: Vec<Value> = stores()
+                .get(&namespace)
+                .map(|m| {
+                    m.iter()
+                        .map(|(k, v)| Value::Array(vec![Value::String(k.clone()), v.clone()]))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(Value::Array(entries))
+        },
+        "length" => {
+            load_if_needed(&namespace)?;
+            let n = stores().get(&namespace).map_or(0, |m| m.len());
+            Ok(Value::Number(n.into()))
+        },
+        "reload" => {
+            // Drop the in-memory copy so the next read re-parses the disk
+            // file. Useful when an external process (another app instance,
+            // a manual edit) mutated `store.json` under our feet.
+            stores().remove(&namespace);
+            load_if_needed(&namespace)?;
+            Ok(Value::Null)
+        },
         _ => Err(format!("store.{method}: unknown method")),
     }
 }
@@ -174,6 +218,95 @@ mod tests {
         stores().remove(&n);
         let v = dispatch("get", &json!({ "namespace": &n, "key": "k" })).unwrap();
         assert_eq!(v.as_str().unwrap(), "v");
+        let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn has_reflects_set_and_delete() {
+        let n = ns("has");
+        assert!(!dispatch("has", &json!({ "namespace": &n, "key": "x" }))
+            .unwrap()
+            .as_bool()
+            .unwrap());
+        dispatch("set", &json!({ "namespace": &n, "key": "x", "value": 1 })).unwrap();
+        assert!(dispatch("has", &json!({ "namespace": &n, "key": "x" }))
+            .unwrap()
+            .as_bool()
+            .unwrap());
+        dispatch("delete", &json!({ "namespace": &n, "key": "x" })).unwrap();
+        assert!(!dispatch("has", &json!({ "namespace": &n, "key": "x" }))
+            .unwrap()
+            .as_bool()
+            .unwrap());
+        let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn values_and_entries_and_length() {
+        let n = ns("vel");
+        dispatch("set", &json!({ "namespace": &n, "key": "a", "value": 1 })).unwrap();
+        dispatch(
+            "set",
+            &json!({ "namespace": &n, "key": "b", "value": "two" }),
+        )
+        .unwrap();
+
+        let len = dispatch("length", &json!({ "namespace": &n }))
+            .unwrap()
+            .as_u64()
+            .unwrap();
+        assert_eq!(len, 2);
+
+        let values = dispatch("values", &json!({ "namespace": &n })).unwrap();
+        let arr = values.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+
+        let entries = dispatch("entries", &json!({ "namespace": &n })).unwrap();
+        let entries_arr = entries.as_array().unwrap();
+        assert_eq!(entries_arr.len(), 2);
+        for pair in entries_arr {
+            let p = pair.as_array().unwrap();
+            assert_eq!(p.len(), 2);
+            assert!(p[0].is_string());
+        }
+        let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn reload_picks_up_external_writes() {
+        let n = ns("reload");
+        dispatch(
+            "set",
+            &json!({ "namespace": &n, "key": "k", "value": "v1" }),
+        )
+        .unwrap();
+
+        // Simulate an out-of-process write: rewrite the JSON file directly.
+        let path = store_path(&n).unwrap();
+        fs::write(&path, r#"{"k":"v2","extra":42}"#).unwrap();
+
+        // Without reload the cached value is stale.
+        let cached = dispatch("get", &json!({ "namespace": &n, "key": "k" }))
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(cached, "v1");
+
+        dispatch("reload", &json!({ "namespace": &n })).unwrap();
+        let fresh = dispatch("get", &json!({ "namespace": &n, "key": "k" }))
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(fresh, "v2");
+        assert_eq!(
+            dispatch("length", &json!({ "namespace": &n }))
+                .unwrap()
+                .as_u64()
+                .unwrap(),
+            2
+        );
         let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());
     }
 }

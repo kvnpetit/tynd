@@ -12,16 +12,23 @@ export type {
   MenuSubmenu,
   TrayConfig,
   WindowConfig,
-} from "./types.js"
+} from "./types"
 
 import * as v from "valibot"
-import { getEmitFn, lifecycleFlags, onCloseFns, onReadyFns } from "./lifecycle.ts"
-import { tynd } from "./logger.js"
-import { startFull } from "./runtime/full.ts"
-import { startLite } from "./runtime/lite.ts"
-import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types.js"
+import { getEmitFn, lifecycleFlags, onCloseFns, onReadyFns } from "./lifecycle"
+import { tynd } from "./logger"
+import { startFull } from "./runtime/full"
+import { startLite } from "./runtime/lite"
+import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types"
 
-export { onFrontendEmit } from "./frontend-events.js"
+export { clearFrontendListeners, onFrontendEmit } from "./frontend-events"
+export {
+  definePlugin,
+  type Plugin,
+  type PluginDefinition,
+  type PluginMethod,
+  registerPlugin,
+} from "./plugin"
 
 /**
  * Evaluate raw JavaScript inside a webview. Useful for DevTools-style

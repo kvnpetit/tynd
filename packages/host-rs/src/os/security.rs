@@ -195,14 +195,18 @@ fn matcher(pat: &[char], pi: usize, inp: &[char], ii: usize, depth: u32) -> bool
     false
 }
 
+// Cross-module test gate: anything hitting `check_fs` or `check_http`
+// must hold this while security tests flip the global policy, otherwise
+// fs / http tests race and see `configured: true` mid-run.
+#[cfg(test)]
+pub(crate) fn test_lock() -> &'static std::sync::Mutex<()> {
+    static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    &TEST_LOCK
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    // Tests mutate the global policy; serialize around a dedicated gate so
-    // they don't stomp each other under `cargo test`'s parallel runner.
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn glob_literal() {
@@ -224,7 +228,7 @@ mod tests {
 
     #[test]
     fn deny_overrides_allow() {
-        let _g = TEST_LOCK
+        let _g = test_lock()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         *policy().write() = Policy {
@@ -243,7 +247,7 @@ mod tests {
 
     #[test]
     fn default_deny_blocks_unlisted() {
-        let _g = TEST_LOCK
+        let _g = test_lock()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         *policy().write() = Policy {

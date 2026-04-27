@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { base64ToBytes, bytesToBase64 } from "./_internal.ts"
+import { base64ToBytes, bytesToBase64 } from "./_internal"
 
 describe("base64 helpers", () => {
   test("roundtrip preserves bytes", () => {

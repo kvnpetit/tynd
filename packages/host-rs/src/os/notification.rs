@@ -31,14 +31,16 @@ fn schedule(args: &Value) -> Result<Value, String> {
         .and_then(Value::as_u64)
         .ok_or_else(|| "notification.schedule: missing 'delayMs'".to_string())?;
 
-    let id = NEXT_SCHEDULE_ID.fetch_add(1, Ordering::SeqCst);
+    // Counter: Relaxed is enough for monotonic uniqueness.
+    let id = NEXT_SCHEDULE_ID.fetch_add(1, Ordering::Relaxed);
     let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     scheduled().lock().insert(id, cancelled.clone());
 
     let args_owned = args.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-        if cancelled.load(Ordering::SeqCst) {
+        // Acquire to observe the Release store in `cancel()` below.
+        if cancelled.load(Ordering::Acquire) {
             return;
         }
         let _ = send(&args_owned);
@@ -55,7 +57,8 @@ fn cancel(args: &Value) -> Result<Value, String> {
         .ok_or_else(|| "notification.cancel: missing 'id'".to_string())?;
     let removed = scheduled().lock().remove(&id);
     if let Some(flag) = removed {
-        flag.store(true, Ordering::SeqCst);
+        // Release so the scheduler thread sees the cancel on its Acquire.
+        flag.store(true, Ordering::Release);
         return Ok(Value::Bool(true));
     }
     Ok(Value::Bool(false))
@@ -87,8 +90,6 @@ fn send(args: &Value) -> Result<Value, String> {
 fn emit_action(id: &str) {
     events::emit("notification:action", &json!({ "action": id }));
 }
-
-// ---- Linux (libnotify via notify-rust) ----------------------------------
 
 /// Cap concurrent `wait_for_action` threads so a runaway caller can't spawn
 /// thousands of blocked OS threads. Drops new waits once we're at the cap —
@@ -125,17 +126,15 @@ fn send_platform(
     }
 
     let handle = n.show().map_err(|e| e.to_string())?;
-    if !actions.is_empty() && ACTION_WAITERS.load(Ordering::SeqCst) < MAX_ACTION_WAITERS {
-        ACTION_WAITERS.fetch_add(1, Ordering::SeqCst);
+    if !actions.is_empty() && ACTION_WAITERS.load(Ordering::Relaxed) < MAX_ACTION_WAITERS {
+        ACTION_WAITERS.fetch_add(1, Ordering::Relaxed);
         std::thread::spawn(move || {
             handle.wait_for_action(emit_action);
-            ACTION_WAITERS.fetch_sub(1, Ordering::SeqCst);
+            ACTION_WAITERS.fetch_sub(1, Ordering::Relaxed);
         });
     }
     Ok(Value::Null)
 }
-
-// ---- Windows (WinRT toasts via tauri-winrt-notification) -----------------
 
 #[cfg(target_os = "windows")]
 #[allow(clippy::needless_pass_by_value)] // signature stays uniform across OS branches
@@ -177,8 +176,6 @@ fn send_platform(
     toast.show().map_err(|e| format!("notification: {e:?}"))?;
     Ok(Value::Null)
 }
-
-// ---- macOS (NSUserNotificationCenter via mac-notification-sys) ----------
 
 #[cfg(target_os = "macos")]
 fn send_platform(

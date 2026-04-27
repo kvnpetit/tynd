@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { path } from "./path.ts"
+import { path } from "./path"
 
 describe("path", () => {
   test("join filters empty, normalises separators", () => {

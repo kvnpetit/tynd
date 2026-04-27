@@ -1,4 +1,4 @@
-import { osCall } from "./_internal.js"
+import { osCall } from "./_internal"
 
 export interface ClipboardImage {
   /** Base64-encoded PNG bytes. */
@@ -54,9 +54,7 @@ export const clipboard = {
     await osCall("clipboard", "startMonitoring", {
       intervalMs: options?.intervalMs,
     })
-    const off = window.__tynd__.os_on("clipboard:change", (raw) =>
-      handler(raw as { text: string }),
-    )
+    const off = window.__tynd__.os_on("clipboard:change", (raw) => handler(raw as { text: string }))
     return async () => {
       off()
       await osCall("clipboard", "stopMonitoring")

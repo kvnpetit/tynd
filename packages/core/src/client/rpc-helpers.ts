@@ -14,7 +14,9 @@ export function listenN<T = unknown>(
   n: number,
   handler: (payload: T) => void,
 ): () => void {
-  if (n <= 0) return () => {}
+  if (!Number.isFinite(n) || n < 1) {
+    throw new RangeError(`listenN: \`n\` must be a positive integer, got ${n}`)
+  }
   let remaining = n
   const wrapper = (raw: unknown) => {
     handler(raw as T)

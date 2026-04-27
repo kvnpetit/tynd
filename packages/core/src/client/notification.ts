@@ -1,5 +1,5 @@
-import type { NotificationActionEvent, NotificationOptions } from "../types.js"
-import { osCall } from "./_internal.js"
+import type { NotificationActionEvent, NotificationOptions } from "../types"
+import { osCall } from "./_internal"
 
 export type { NotificationActionEvent, NotificationOptions }
 
@@ -19,11 +19,7 @@ export const notification = {
    * Schedule a notification to fire after `delayMs` milliseconds. Returns a
    * numeric id that `cancel()` accepts to abort delivery.
    */
-  async schedule(
-    title: string,
-    delayMs: number,
-    opts?: NotificationOptions,
-  ): Promise<number> {
+  async schedule(title: string, delayMs: number, opts?: NotificationOptions): Promise<number> {
     const { id } = await osCall<{ id: number }>("notification", "schedule", {
       title,
       body: opts?.body ?? "",

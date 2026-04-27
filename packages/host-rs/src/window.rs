@@ -63,7 +63,13 @@ pub fn build_window<T>(
         }
     }
 
-    let window = wb.build(event_loop).expect("WindowBuilder::build failed");
+    let window = match wb.build(event_loop) {
+        Ok(w) => w,
+        Err(e) => {
+            crate::tynd_error!("Failed to create native window: {e}");
+            std::process::exit(1);
+        },
+    };
 
     if cfg.maximized.unwrap_or(false) {
         window.set_maximized(true);

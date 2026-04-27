@@ -1,5 +1,25 @@
 [workspace]
-members  = ["packages/host-rs", "packages/full", "packages/lite"]
+members  = [
+    "packages/host-rs",
+    "packages/full",
+    "packages/lite",
+    "packages/plugin-sdk/native",
+    "plugins/clipboard-history/native",
+    "plugins/sql/native",
+    "plugins/terminal/native",
+    "plugins/updater/native",
+    "plugins/keyring/native",
+    "plugins/autolaunch/native",
+    "plugins/shortcuts/native",
+    "plugins/power/native",
+    "plugins/log/native",
+]
+# Generated/vendored trees that should not be members of the monorepo
+# workspace. `packages/host-src/native/` is a flattened mirror of
+# `packages/host-rs` produced by `bun run --cwd packages/host-src sync`;
+# it's consumed by the ad-hoc workspace the CLI generates under
+# `.tynd/build/` for custom runtimes.
+exclude  = ["packages/host-src/native"]
 resolver = "2"
 
 [workspace.package]
@@ -100,6 +120,10 @@ rusqlite   = { version = "0.32", features = ["bundled"] }
 parking_lot = "0.12"   # lock-free fast path + no poison handling (saves a branch per lock)
 dashmap     = "6"      # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
 ahash       = "0.8"    # faster non-crypto hasher for small keys (sessions, routes)
+
+# Plugin SDK — referenced via workspace so plugin crates in the monorepo
+# and in `.tynd/build/` resolve the same version.
+tynd_plugin_sdk = { path = "packages/plugin-sdk/native" }
 
 [workspace.lints.rust]
 unused_must_use               = "deny"

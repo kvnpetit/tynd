@@ -13,6 +13,10 @@ keywords.workspace      = true
 categories.workspace    = true
 readme.workspace        = true
 
+[lib]
+name = "tynd_full"
+path = "src/lib.rs"
+
 [[bin]]
 name = "tynd-full"
 path = "src/main.rs"
@@ -21,9 +25,48 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-tynd-host            = { path = "../host-rs" }
+# Host is wired with `default-features = false` so `tynd-full` can flip the
+# preset (all APIs + bundled plugins) on via its own `default = ["preset"]`
+# feature, or be built as a slim custom variant via
+# `cargo build -p tynd-full --no-default-features --features "tynd-host/api-fs"`
+# the way the CLI does for `runtime: "full-custom"`.
+tynd-host            = { path = "../host-rs", default-features = false }
 serde.workspace      = true
 serde_json.workspace = true
 mimalloc.workspace   = true
 zstd.workspace       = true
 dirs.workspace       = true
+
+# Every official plugin, pulled as an optional path dep. The `bundled-plugins`
+# feature flips them all on so the preset binary ships with every plugin
+# linked and auto-registered — matches the pre-extraction "everything
+# included" UX. Custom builds skip this feature entirely.
+tynd_plugin_sql               = { path = "../../plugins/sql/native", optional = true }
+tynd_plugin_terminal          = { path = "../../plugins/terminal/native", optional = true }
+tynd_plugin_updater           = { path = "../../plugins/updater/native", optional = true }
+tynd_plugin_keyring           = { path = "../../plugins/keyring/native", optional = true }
+tynd_plugin_autolaunch        = { path = "../../plugins/autolaunch/native", optional = true }
+tynd_plugin_shortcuts         = { path = "../../plugins/shortcuts/native", optional = true }
+tynd_plugin_power             = { path = "../../plugins/power/native", optional = true }
+tynd_plugin_log               = { path = "../../plugins/log/native", optional = true }
+tynd_plugin_clipboard_history = { path = "../../plugins/clipboard-history/native", optional = true }
+
+[features]
+default = ["preset"]
+# The shipped `full` preset: every OS API + every official plugin.
+preset  = ["tynd-host/api-all", "bundled-plugins"]
+
+# Link every official plugin and auto-register them in `run()`. Turning
+# this off (via `--no-default-features`) is how the CLI trims the binary
+# for `runtime: "full-custom"`.
+bundled-plugins = [
+    "dep:tynd_plugin_sql",
+    "dep:tynd_plugin_terminal",
+    "dep:tynd_plugin_updater",
+    "dep:tynd_plugin_keyring",
+    "dep:tynd_plugin_autolaunch",
+    "dep:tynd_plugin_shortcuts",
+    "dep:tynd_plugin_power",
+    "dep:tynd_plugin_log",
+    "dep:tynd_plugin_clipboard_history",
+]

@@ -5,7 +5,7 @@
  * lookup.
  */
 
-import type { EmitterMap } from "../types.js"
+import type { EmitterMap } from "../types"
 
 const FRONTEND_EMIT_FN = "__tynd_fe_emit__"
 

@@ -49,9 +49,9 @@ project pages.
 - sha2             (Apache-2.0 / MIT) — https://github.com/RustCrypto/hashes
 - hmac             (Apache-2.0 / MIT) — https://github.com/RustCrypto/MACs
 - blake3           (Apache-2.0 / CC0-1.0) — https://github.com/BLAKE3-team/BLAKE3
-- single-instance  (MIT)              — https://github.com/jorgeatgu/single-instance
+- single-instance  (MIT)              — https://github.com/ldm0/single-instance
 - interprocess     (Apache-2.0 / MIT) — https://github.com/kotauskas/interprocess
-- ed25519-dalek    (BSD-3-Clause)     — https://github.com/dalek-cryptography/curve25519-dalek
+- ed25519-dalek    (BSD-3-Clause)     — https://github.com/dalek-cryptography/ed25519-dalek
 - notify           (CC0-1.0 / Artistic-2.0) — https://github.com/notify-rs/notify
 - global-hotkey    (Apache-2.0 / MIT) — https://github.com/tauri-apps/global-hotkey
 - auto-launch      (MIT)              — https://github.com/zzzgydi/auto-launch
@@ -93,3 +93,19 @@ Applications packaged with `tynd build` and the `full` runtime embed a
 copy of the Bun runtime:
 
 - Bun              (MIT)              — https://github.com/oven-sh/bun
+
+## Tynd plugin native crates
+
+Plugins ship their own Rust native crates; each is statically linked into
+the app's host binary when the plugin is enabled. All are licensed under
+`Apache-2.0 OR MIT` and live at https://github.com/kvnpetit/tynd/tree/main/plugins.
+
+- tynd_plugin_autolaunch
+- tynd_plugin_clipboard_history
+- tynd_plugin_keyring
+- tynd_plugin_log
+- tynd_plugin_power
+- tynd_plugin_shortcuts
+- tynd_plugin_sql
+- tynd_plugin_terminal
+- tynd_plugin_updater

@@ -26,10 +26,18 @@ export function osCall<T>(api: string, method: string, args: unknown = null): Pr
   return window.__tynd__.os_call(api, method, args) as Promise<T>
 }
 
+// Chunk size picked so `String.fromCharCode.apply` stays under typical
+// argument-length limits (~65k) while keeping O(n) overall cost.
+const B64_CHUNK = 0x8000
+
 export function bytesToBase64(bytes: Uint8Array): string {
-  let s = ""
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!)
-  return btoa(s)
+  if (bytes.length === 0) return ""
+  const parts: string[] = []
+  for (let i = 0; i < bytes.length; i += B64_CHUNK) {
+    const slice = bytes.subarray(i, Math.min(i + B64_CHUNK, bytes.length))
+    parts.push(String.fromCharCode.apply(null, slice as unknown as number[]))
+  }
+  return btoa(parts.join(""))
 }
 
 export function base64ToBytes(b64: string): Uint8Array {

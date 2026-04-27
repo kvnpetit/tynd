@@ -1,5 +1,5 @@
-import { osCall } from "./_internal.js"
-import type { TrayMenuItem } from "./tray.js"
+import { osCall } from "./_internal"
+import type { TrayMenuItem } from "./tray"
 
 export type ContextMenuItem = TrayMenuItem
 
@@ -12,7 +12,8 @@ export const menu = {
   /** Fire `handler` when the user clicks the menu item with the given `id`. */
   onClick(id: string, handler: () => void): () => void {
     return window.__tynd__.os_on("menu:action", (data: unknown) => {
-      if (((data as Record<string, unknown>)?.["id"] as string) === id) handler()
+      if (typeof data !== "object" || data === null) return
+      if ((data as Record<string, unknown>)["id"] === id) handler()
     })
   },
   /**

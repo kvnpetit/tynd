@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { createBackend } from "./backend.ts"
+import { createBackend } from "./backend"
 
 type Calls = Array<{ fn: string; args: unknown[] }>
 type EventHandlers = Map<string, Array<(payload: unknown) => void>>

@@ -42,15 +42,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     }
 }
 
-// --- File handles -------------------------------------------------------
-// Stateful seek/read/write — each `open` returns a numeric id that
-// subsequent ops reference. Closed explicitly by `close`. Base64 on the
-// wire for binary payloads (matches other small-blob APIs); for multi-MB
-// payloads prefer `readBinary` / `writeBinary` via the bin scheme.
-
-// Each file sits behind its own mutex so blocking I/O on one handle
-// doesn't stall concurrent opens/closes or operations on other handles.
-// The outer map lock is only held during insert / remove / lookup.
+// Per-handle mutex so blocking I/O on one file never stalls the map lock.
 static HANDLES: OnceLock<Mutex<ahash::HashMap<u64, std::sync::Arc<Mutex<File>>>>> = OnceLock::new();
 static NEXT_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -78,7 +70,7 @@ fn open_handle(args: &Value) -> Result<Value, String> {
         .open(path)
         .map_err(|e| format!("fs.open({path}): {e}"))?;
 
-    let id = NEXT_HANDLE_ID.fetch_add(1, Ordering::SeqCst);
+    let id = NEXT_HANDLE_ID.fetch_add(1, Ordering::Relaxed);
     handles()
         .lock()
         .insert(id, std::sync::Arc::new(Mutex::new(file)));
@@ -210,11 +202,6 @@ fn hardlink(args: &Value) -> Result<Value, String> {
     Ok(Value::Null)
 }
 
-// --- FS watcher ---------------------------------------------------------
-// Each `watch` call owns a `RecommendedWatcher` (ReadDirectoryChangesW /
-// FSEvents / inotify) stored behind a monotonically-increasing numeric id.
-// `unwatch(id)` drops the watcher, which tears down the OS handle.
-
 static WATCHERS: OnceLock<Mutex<ahash::HashMap<u64, RecommendedWatcher>>> = OnceLock::new();
 static NEXT_WATCH_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -239,7 +226,7 @@ fn watch(args: &Value) -> Result<Value, String> {
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
-    let id = NEXT_WATCH_ID.fetch_add(1, Ordering::SeqCst);
+    let id = NEXT_WATCH_ID.fetch_add(1, Ordering::Relaxed);
 
     let mut watcher =
         notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
@@ -420,6 +407,15 @@ mod tests {
     use super::*;
     use std::env;
 
+    // Hold the shared security-policy lock: fs tests all go through
+    // `path_arg` → `check_fs`, so concurrent security tests flipping
+    // `configured: true` would fail them otherwise.
+    fn lock() -> std::sync::MutexGuard<'static, ()> {
+        super::super::security::test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     fn tmp_path(name: &str) -> String {
         let ts = std::time::SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -433,6 +429,7 @@ mod tests {
 
     #[test]
     fn text_roundtrip() {
+        let _g = lock();
         let p = tmp_path("text.txt");
         write_text(&json!({ "path": &p, "content": "héllo" })).unwrap();
         let v = read_text(&json!({ "path": &p })).unwrap();
@@ -442,6 +439,7 @@ mod tests {
 
     #[test]
     fn stat_reports_size_and_isfile() {
+        let _g = lock();
         let p = tmp_path("stat.txt");
         write_text(&json!({ "path": &p, "content": "abcd" })).unwrap();
         let s = stat(&json!({ "path": &p })).unwrap();
@@ -453,6 +451,7 @@ mod tests {
 
     #[test]
     fn mkdir_recursive_and_remove() {
+        let _g = lock();
         let base = tmp_path("dirs");
         let nested = format!("{base}/a/b/c");
         mkdir(&json!({ "path": &nested, "recursive": true })).unwrap();
@@ -463,11 +462,13 @@ mod tests {
 
     #[test]
     fn missing_path_arg_errors() {
+        let _g = lock();
         assert!(read_text(&json!({})).is_err());
     }
 
     #[test]
     fn file_handle_round_trip() {
+        let _g = lock();
         let p = tmp_path("handle.bin");
         let open = open_handle(&json!({
             "path": &p,
@@ -497,6 +498,7 @@ mod tests {
 
     #[test]
     fn copy_dir_copies_nested_files() {
+        let _g = lock();
         let src = tmp_path("copysrc");
         let dst = tmp_path("copydst");
         let nested = format!("{src}/a/b");
@@ -510,6 +512,7 @@ mod tests {
 
     #[test]
     fn hardlink_creates_second_path_same_content() {
+        let _g = lock();
         let a = tmp_path("orig.txt");
         let b = tmp_path("link.txt");
         write_text(&json!({ "path": &a, "content": "same" })).unwrap();
