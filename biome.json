@@ -30,13 +30,12 @@
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
-      "semicolons": "asNeeded",
+      "semicolons": "always",
       "trailingCommas": "all",
       "arrowParentheses": "always",
       "bracketSameLine": false,
       "bracketSpacing": true
-    },
-    "globals": ["Bun"]
+    }
   },
   "json": {
     "formatter": {
