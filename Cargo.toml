@@ -3,16 +3,6 @@ members  = [
     "packages/host-rs",
     "packages/full",
     "packages/lite",
-    "packages/plugin-sdk/native",
-    "plugins/clipboard-history/native",
-    "plugins/sql/native",
-    "plugins/terminal/native",
-    "plugins/updater/native",
-    "plugins/keyring/native",
-    "plugins/autolaunch/native",
-    "plugins/shortcuts/native",
-    "plugins/power/native",
-    "plugins/log/native",
 ]
 # Generated/vendored trees that should not be members of the monorepo
 # workspace. `packages/host-src/native/` is a flattened mirror of
@@ -27,7 +17,7 @@ version       = "0.1.0"
 edition       = "2021"
 rust-version  = "1.83"
 license       = "Apache-2.0"
-repository    = "https://github.com/kvnpetit/tynd"
+repository    = "https://github.com/tynd-apps/tynd"
 homepage      = "https://tynd.kvnpetit.com/"
 documentation = "https://tynd.kvnpetit.com/docs"
 authors       = ["Kevin Petit <74395438+kvnpetit@users.noreply.github.com>"]
@@ -123,7 +113,7 @@ ahash       = "0.8"    # faster non-crypto hasher for small keys (sessions, rout
 
 # Plugin SDK — referenced via workspace so plugin crates in the monorepo
 # and in `.tynd/build/` resolve the same version.
-tynd_plugin_sdk = { path = "packages/plugin-sdk/native" }
+tynd_plugin_sdk = { path = "../plugin-sdk/native" }
 
 [workspace.lints.rust]
 unused_must_use               = "deny"
