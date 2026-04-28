@@ -1,7 +1,7 @@
-use muda::accelerator::Accelerator;
-use muda::ContextMenu as _;
-use serde_json::Value;
 use std::str::FromStr as _;
+
+use muda::{accelerator::Accelerator, ContextMenu as _};
+use serde_json::Value;
 
 use crate::runtime::MenuItemDef;
 

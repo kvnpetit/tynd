@@ -1,5 +1,16 @@
 [workspace]
 members = [ "packages/host-rs", "packages/full", "packages/lite" ]
+# Generated/vendored trees that should not be members of the monorepo
+# workspace. `packages/host-src/native/` is a flattened mirror of
+# `packages/host-rs` produced by `bun run --cwd packages/host-src sync`;
+# it's consumed by the ad-hoc workspace the CLI generates under
+# `.tynd/build/` for custom runtimes.
+#
+# The plugin-sdk + 14 plugins live in sibling repos (`../plugin-sdk`,
+# `../plugins`) — they have their own Cargo workspaces and are pulled in
+# here via path deps for dev iteration but are not workspace members.
+exclude  = [ "packages/host-src/native" ]
+resolver = "2"
 
 # cargo-shear can't see consumers across workspace boundaries — these crates
 # are declared here so sibling repos (../plugins, ../plugin-sdk) can pick them
@@ -15,17 +26,6 @@ ignored = [
     "rusqlite",
     "thiserror",
 ]
-# Generated/vendored trees that should not be members of the monorepo
-# workspace. `packages/host-src/native/` is a flattened mirror of
-# `packages/host-rs` produced by `bun run --cwd packages/host-src sync`;
-# it's consumed by the ad-hoc workspace the CLI generates under
-# `.tynd/build/` for custom runtimes.
-#
-# The plugin-sdk + 14 plugins live in sibling repos (`../plugin-sdk`,
-# `../plugins`) — they have their own Cargo workspaces and are pulled in
-# here via path deps for dev iteration but are not workspace members.
-exclude  = [ "packages/host-src/native" ]
-resolver = "2"
 
 [workspace.package]
 version       = "1.0.0"
@@ -238,6 +238,8 @@ cast_lossless            = "allow"
 similar_names            = "allow"
 too_many_lines           = "allow"
 doc_markdown             = "allow"
+items_after_statements   = "allow"
+unnecessary_wraps        = "allow"
 
 # Bug-catchers — real safety gains
 dbg_macro           = "warn"

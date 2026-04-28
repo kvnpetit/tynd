@@ -12,18 +12,21 @@
 //! by hitting Ctrl+C twice if the app's shutdown handler is wedged.
 //!
 //! Implementation notes:
-//! - The `ctrlc` crate spawns one OS-owned thread on Windows
-//!   (`SetConsoleCtrlHandler` runs there) and uses `sigaction` on Unix.
-//!   We avoid heap allocations in the hot path: the closure captures only
-//!   one `OnceLock`-backed `Instant` and a global `AtomicBool`.
-//! - `set_handler` errors only when called twice or when the platform
-//!   refuses to install the handler — both are non-fatal here, so we log
-//!   and move on rather than aborting startup.
+//! - The `ctrlc` crate spawns one OS-owned thread on Windows (`SetConsoleCtrlHandler` runs there)
+//!   and uses `sigaction` on Unix. We avoid heap allocations in the hot path: the closure captures
+//!   only one `OnceLock`-backed `Instant` and a global `AtomicBool`.
+//! - `set_handler` errors only when called twice or when the platform refuses to install the
+//!   handler — both are non-fatal here, so we log and move on rather than aborting startup.
+
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    },
+    time::{Duration, Instant},
+};
 
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
 
 /// How long after the first signal a second one is treated as "force quit"
 /// instead of a duplicate. Long enough to cover slow event-loop wake-ups
@@ -78,14 +81,11 @@ pub fn init() {
 /// `std::process::exit`) happens either inline on the hard-exit branch or
 /// later inside the event loop on the soft branch.
 fn on_signal() {
-    let cell = match FIRST_SIGNAL_AT.get() {
-        Some(c) => c,
+    let Some(cell) = FIRST_SIGNAL_AT.get() else {
         // `init()` wasn't called — defensive path. Just exit immediately;
         // the app never registered a graceful-shutdown hook anyway.
-        None => {
-            crate::cleanup::run();
-            std::process::exit(130);
-        },
+        crate::cleanup::run();
+        std::process::exit(130);
     };
 
     let mut slot = cell.lock();

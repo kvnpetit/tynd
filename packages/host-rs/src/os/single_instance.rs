@@ -10,14 +10,17 @@
 //! Migrated from the unmaintained `single-instance` crate to `fslock` —
 //! file-based, self-cleaning on process exit, no abstract socket trickery.
 
+use std::{
+    fs,
+    io::{BufRead, BufReader, Write},
+    path::PathBuf,
+    sync::OnceLock,
+};
+
 use fslock::LockFile;
 use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions, Stream};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::fs;
-use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
-use std::sync::OnceLock;
 
 use super::events;
 
@@ -48,7 +51,8 @@ fn lock_path(id: &str) -> Result<PathBuf, String> {
         .or_else(dirs::data_dir)
         .ok_or_else(|| "singleInstance: no cache/data dir available".to_string())?;
     let dir = base.join("tynd");
-    fs::create_dir_all(&dir).map_err(|e| format!("singleInstance: mkdir {}: {e}", dir.display()))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("singleInstance: mkdir {}: {e}", dir.display()))?;
     Ok(dir.join(format!("{id}.lock")))
 }
 

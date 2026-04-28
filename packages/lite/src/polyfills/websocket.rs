@@ -7,12 +7,11 @@
 //! Events are normalised to the polyfill's `ws:*` shape (with the JS-side
 //! session id merged in) and delivered via `JsMsg::PolyfillEvent`.
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
+use std::sync::{mpsc, OnceLock};
+
+use base64::{engine::general_purpose::STANDARD, Engine};
 use rquickjs::{Ctx, Function, Object};
 use serde_json::{json, Value};
-use std::sync::mpsc;
-use std::sync::OnceLock;
 use tynd_host::os::websocket::{run_session_with, Cmd};
 
 use super::_session::Sessions;

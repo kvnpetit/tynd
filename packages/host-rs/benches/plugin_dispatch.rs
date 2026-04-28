@@ -18,8 +18,10 @@ use std::sync::Once;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use serde_json::{json, Value};
-use tynd_host::plugin_sdk::{PluginCx, PluginResult, TyndPlugin};
-use tynd_host::plugins;
+use tynd_host::{
+    plugin_sdk::{PluginCx, PluginResult, TyndPlugin},
+    plugins,
+};
 
 struct BenchPlugin;
 

@@ -1,10 +1,13 @@
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    OnceLock,
+};
+
 use arboard::{Clipboard, ImageData};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use image::{ImageBuffer, ImageFormat, Rgba};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
 
 use super::events;
 

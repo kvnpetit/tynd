@@ -7,13 +7,16 @@
 //! `log.configure({...})` (or `os::log::init_from_config` from the host)
 //! before the first `write`. The default level is `info`.
 
+use std::{
+    fs::{File, OpenOptions},
+    io::Write as _,
+    path::PathBuf,
+    sync::OnceLock,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::fs::{File, OpenOptions};
-use std::io::Write as _;
-use std::path::PathBuf;
-use std::sync::OnceLock;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const DEFAULT_MAX_FILES: u32 = 3;
@@ -86,7 +89,9 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "configure" => configure(args),
         "write" => write_entry(args),
-        "path" => Ok(Value::String(state().lock().path.to_string_lossy().into_owned())),
+        "path" => Ok(Value::String(
+            state().lock().path.to_string_lossy().into_owned(),
+        )),
         _ => Err(format!("log.{method}: unknown method")),
     }
 }
@@ -120,8 +125,8 @@ fn write_entry(args: &Value) -> Result<Value, String> {
         .get("level")
         .and_then(Value::as_str)
         .ok_or_else(|| "log.write: missing 'level'".to_string())?;
-    let level = Level::parse(level_str)
-        .ok_or_else(|| format!("log.write: invalid level '{level_str}'"))?;
+    let level =
+        Level::parse(level_str).ok_or_else(|| format!("log.write: invalid level '{level_str}'"))?;
 
     let message = args
         .get("message")
@@ -219,10 +224,9 @@ fn rotate(s: &mut LoggerState) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{path::Path, sync::Mutex as StdMutex};
 
-    use std::path::Path;
-    use std::sync::Mutex as StdMutex;
+    use super::*;
 
     /// Tests in this module share the process-wide `STATE` (the public
     /// `dispatch()` is meant to be a singleton). `cargo test` runs tests
@@ -243,7 +247,11 @@ mod tests {
 
     fn tmpdir() -> PathBuf {
         let mut d = std::env::temp_dir();
-        d.push(format!("tynd-log-test-{}-{}", std::process::id(), fastrand::u64(..)));
+        d.push(format!(
+            "tynd-log-test-{}-{}",
+            std::process::id(),
+            fastrand::u64(..)
+        ));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -251,7 +259,9 @@ mod tests {
 
     #[test]
     fn write_then_read() {
-        let _g = TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _g = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tmpdir();
         fresh(&dir);
         write_entry(&json!({ "level": "info", "message": "hi-write-then-read" })).unwrap();
@@ -262,7 +272,9 @@ mod tests {
 
     #[test]
     fn level_filter_drops_below_threshold() {
-        let _g = TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _g = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tmpdir();
         fresh(&dir);
         {
@@ -278,7 +290,9 @@ mod tests {
 
     #[test]
     fn rotates_when_exceeding_max_bytes() {
-        let _g = TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _g = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tmpdir();
         fresh(&dir);
         {

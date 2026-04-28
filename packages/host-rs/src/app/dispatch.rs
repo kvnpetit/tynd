@@ -3,14 +3,14 @@
 //! The WebView handler runs on a wry-owned thread — we keep that closure
 //! minimal and delegate the parsing + fan-out here.
 
+use std::sync::OnceLock;
+
 use crossbeam_channel as mpsc;
 use dashmap::DashMap;
 use serde_json::Value;
-use std::sync::OnceLock;
 use tao::event_loop::EventLoopProxy;
 
-use super::util::take_string;
-use super::UserEvent;
+use super::{util::take_string, UserEvent};
 use crate::{os, runtime::BackendCall};
 
 /// Maps backend call `id` to the window `label` that issued it. Needed so the

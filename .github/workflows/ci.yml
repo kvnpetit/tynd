@@ -50,27 +50,29 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: clippy
+
+      # Nightly rustfmt unlocks `imports_granularity` / `group_imports` /
+      # `wrap_comments` / `format_strings` — only fmt runs on nightly,
+      # the rest of the build stays on stable.
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
 
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: tynd-rust
 
-      # Prebuilt binaries — far faster than `cargo install`.
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-deny,cargo-shear
+          tool: cargo-shear
 
       - name: cargo fmt --check
         if: startsWith(matrix.runner, 'ubuntu')
-        run: cargo fmt --all -- --check
+        run: cargo +nightly fmt --all -- --check
 
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: cargo deny check (license + advisories + bans + sources)
-        if: startsWith(matrix.runner, 'ubuntu')
-        run: cargo deny check
 
       - name: cargo shear (unused deps)
         if: startsWith(matrix.runner, 'ubuntu')

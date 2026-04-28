@@ -15,11 +15,16 @@
 //! 2x, the submitter spawns a one-shot thread instead of enqueuing. That caps
 //! latency for bursts without unbounded thread growth.
 
+use std::{
+    collections::VecDeque,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        OnceLock,
+    },
+    thread,
+};
+
 use parking_lot::{Condvar, Mutex};
-use std::collections::VecDeque;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::OnceLock;
-use std::thread;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
@@ -86,10 +91,15 @@ pub fn submit<F: FnOnce() + Send + 'static>(f: F) {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::{Duration, Instant},
+    };
+
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::time::{Duration, Instant};
 
     #[test]
     fn runs_submitted_jobs() {

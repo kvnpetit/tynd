@@ -12,9 +12,10 @@
 //! argon2, gzip, …), see ALTERNATIVES.md rather than growing this
 //! file.
 
+use std::sync::mpsc;
+
 use crossbeam_channel as bridge_chan;
 use rquickjs::Ctx;
-use std::sync::mpsc;
 use tynd_host::runtime::BackendEvent;
 
 use crate::quickjs::JsMsg;

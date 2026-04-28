@@ -14,8 +14,6 @@ pub mod window;
 
 // Re-export the plugin SDK so consumer crates (preset runtimes + the
 // CLI-generated workspace) can reference a single authoritative version.
-pub use tynd_plugin_sdk as plugin_sdk;
-
 // Re-export tracing so the `tynd_log!` / `tynd_info!` / `tynd_warn!` /
 // `tynd_error!` / `tynd_debug!` macros below resolve through `$crate`
 // without consumer crates needing their own `tracing` dep. Hidden from
@@ -23,6 +21,7 @@ pub use tynd_plugin_sdk as plugin_sdk;
 // themselves if they want spans/instrumentation.
 #[doc(hidden)]
 pub use tracing as __tracing;
+pub use tynd_plugin_sdk as plugin_sdk;
 
 /// Initialize the framework's structured logger (`tracing` + `tracing-subscriber`),
 /// the global panic hook, and the cross-platform SIGINT/SIGTERM handler.
@@ -56,15 +55,15 @@ pub fn init_tracing() {
 
 /// Install a structured panic hook that produces SRE-friendly logs:
 ///
-/// - Captures the panic message, source location (file:line:col), and the
-///   full backtrace (`std::backtrace::Backtrace::force_capture()` — works
-///   even when `RUST_BACKTRACE` is unset, which is the common prod case).
-/// - Emits at `error` level under `target = "tynd::panic"` so log filters
-///   can pin a high-severity sink (e.g. JSON to stderr → log shipper).
-/// - Calls `cleanup::run()` so registered temp dirs / IPC sockets / file
-///   locks (`os::single_instance`) don't leak on the panic-then-abort path.
-/// - Renders the message multi-line: header → message → location → backtrace.
-///   Avoids the unreadable single-line `Debug` blob that `default_hook` ships.
+/// - Captures the panic message, source location (file:line:col), and the full backtrace
+///   (`std::backtrace::Backtrace::force_capture()` — works even when `RUST_BACKTRACE` is unset,
+///   which is the common prod case).
+/// - Emits at `error` level under `target = "tynd::panic"` so log filters can pin a high-severity
+///   sink (e.g. JSON to stderr → log shipper).
+/// - Calls `cleanup::run()` so registered temp dirs / IPC sockets / file locks
+///   (`os::single_instance`) don't leak on the panic-then-abort path.
+/// - Renders the message multi-line: header → message → location → backtrace. Avoids the unreadable
+///   single-line `Debug` blob that `default_hook` ships.
 ///
 /// `panic = "abort"` is set in the workspace `[profile.release]`, so once
 /// this hook returns the runtime aborts the process. We don't need to call
@@ -78,10 +77,10 @@ pub fn init_tracing() {
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         let msg = panic_message(info);
-        let location = info
-            .location()
-            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
-            .unwrap_or_else(|| "<unknown>".to_string());
+        let location = info.location().map_or_else(
+            || "<unknown>".to_string(),
+            |l| format!("{}:{}:{}", l.file(), l.line(), l.column()),
+        );
         let backtrace = std::backtrace::Backtrace::force_capture();
         let backtrace_str = format!("{backtrace}");
         let backtrace_display = if backtrace_str.trim().is_empty()

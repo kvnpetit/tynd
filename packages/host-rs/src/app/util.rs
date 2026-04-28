@@ -1,7 +1,8 @@
 //! Tiny utilities shared between `app::run_app` and the IPC dispatcher.
 
-use serde_json::Value;
 use std::path::PathBuf;
+
+use serde_json::Value;
 
 /// Move a string field out of a `Value` without cloning. Falls back to an
 /// empty string if the key is missing or not a string.
@@ -23,6 +24,10 @@ pub(super) fn webview_data_dir(app_name: &str) -> Option<PathBuf> {
     // app name strips down to an empty string — same default the inline
     // sanitizer carried.
     let slug = slug::slugify(app_name);
-    let safe = if slug.is_empty() { "tynd".to_string() } else { slug };
+    let safe = if slug.is_empty() {
+        "tynd".to_string()
+    } else {
+        slug
+    };
     dirs::data_local_dir().map(|d| d.join(safe).join("WebView2"))
 }

@@ -27,11 +27,12 @@
 //! async `RequestAsyncResponder` so disk IO or multi-MB hashing never
 //! blocks paint.
 
-use std::borrow::Cow;
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
-use wry::http::{Request, Response, StatusCode};
-use wry::RequestAsyncResponder;
+use wry::{
+    http::{Request, Response, StatusCode},
+    RequestAsyncResponder,
+};
 
 use crate::os::call_pool;
 #[cfg(feature = "api-compute")]

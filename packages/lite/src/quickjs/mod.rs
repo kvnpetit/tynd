@@ -10,11 +10,11 @@
 //! `PolyfillEvent` messages from background threads (see
 //! `polyfills::fetch` / `polyfills::websocket`).
 
+use std::sync::{mpsc, Arc};
+
 use crossbeam_channel as bridge_chan;
 use parking_lot::Mutex;
 use serde_json::Value;
-use std::sync::mpsc;
-use std::sync::Arc;
 use tynd_host::{
     runtime::{BackendBridge, BackendCall, BackendConfig, BackendEvent},
     tynd_log,

@@ -5,9 +5,11 @@
 //! busy-wait, and no separate thread per timer. Cancellation is lazy:
 //! cleared IDs are marked and skipped when they reach the top of the heap.
 
-use std::collections::{BinaryHeap, HashSet};
-use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::{
+    collections::{BinaryHeap, HashSet},
+    sync::mpsc,
+    time::{Duration, Instant},
+};
 
 use super::JsMsg;
 

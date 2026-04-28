@@ -1,7 +1,10 @@
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    OnceLock,
+};
+
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
 
 use super::events;
 
@@ -146,6 +149,7 @@ fn send_platform(
     actions: Vec<(String, String)>,
 ) -> Result<Value, String> {
     use std::str::FromStr as _;
+
     use tauri_winrt_notification::{IconCrop, Sound, Toast};
 
     let app_id = exe_stem();

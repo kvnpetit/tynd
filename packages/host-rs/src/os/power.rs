@@ -6,15 +6,14 @@
 //! cross-platform APIs and apps in the wild ask for it constantly.
 //!
 //! Backends:
-//! - **Idle**: `user-idle` crate — `GetLastInputInfo` (Win),
-//!   `CGEventSource` (macOS), `XScreenSaver` (Linux).
+//! - **Idle**: `user-idle` crate — `GetLastInputInfo` (Win), `CGEventSource` (macOS),
+//!   `XScreenSaver` (Linux).
 //! - **Battery / AC**:
 //!   - Windows: `GetSystemPowerStatus` from `Win32_System_Power`.
 //!   - Linux: read-only sysfs at `/sys/class/power_supply/*`.
-//!   - macOS: not yet implemented — IOKit `IOPSCopyPowerSourcesInfo`
-//!     would land here when we adopt the `core-foundation` bindings.
-//!     Returns `null` fields rather than erroring so frontends gracefully
-//!     degrade to "battery info unavailable".
+//!   - macOS: not yet implemented — IOKit `IOPSCopyPowerSourcesInfo` would land here when we adopt
+//!     the `core-foundation` bindings. Returns `null` fields rather than erroring so frontends
+//!     gracefully degrade to "battery info unavailable".
 
 use serde_json::{json, Value};
 

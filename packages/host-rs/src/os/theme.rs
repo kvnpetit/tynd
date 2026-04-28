@@ -12,12 +12,17 @@
 //! - `current()` → "light" | "dark" | "unspecified"
 //! - `startWatch()` / `stopWatch()` → emits `theme:change` on transition.
 
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, OnceLock,
+    },
+    thread::JoinHandle,
+    time::Duration,
+};
+
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
-use std::thread::JoinHandle;
-use std::time::Duration;
 
 use super::events;
 
@@ -98,7 +103,10 @@ fn start_watch() -> Result<Value, String> {
         })
         .map_err(|e| format!("theme.startWatch: spawn: {e}"))?;
 
-    *slot = Some(Watcher { running, join: Some(join) });
+    *slot = Some(Watcher {
+        running,
+        join: Some(join),
+    });
     Ok(json!({ "watching": true }))
 }
 

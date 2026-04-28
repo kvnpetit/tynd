@@ -13,7 +13,8 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 && !url.starts_with("mailto:")
             {
                 return Err(format!(
-                    "shell.openExternal: unsupported scheme in '{url}' — only http, https, mailto allowed"
+                    "shell.openExternal: unsupported scheme in '{url}' — only http, https, mailto \
+                     allowed"
                 ));
             }
             open::that(url).map_err(|e| e.to_string())?;
@@ -39,8 +40,8 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             {
                 if EXEC_EXTS.iter().any(|e| e.eq_ignore_ascii_case(ext)) {
                     return Err(format!(
-                        "shell.openPath: refusing to open executable '{path}' — \
-                         use process.exec for binaries"
+                        "shell.openPath: refusing to open executable '{path}' — use process.exec \
+                         for binaries"
                     ));
                 }
             }
@@ -102,8 +103,9 @@ fn reveal(path: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn rejects_unsupported_scheme() {

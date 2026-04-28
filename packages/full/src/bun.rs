@@ -1,11 +1,15 @@
-use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
-use crossbeam_channel as mpsc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+use std::{
+    io::{BufRead, BufReader, Write},
+    process::{Child, ChildStdin, Command, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+};
+
+use crossbeam_channel as mpsc;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -99,7 +103,7 @@ impl ReloadHandle {
 
         match spawn_bun(
             &self.entry_path,
-            self.event_tx.clone(),
+            &self.event_tx,
             self.reload_in_progress.clone(),
         ) {
             Ok((child, stdin, _config)) => {
@@ -128,14 +132,14 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     let (event_tx, event_rx) = mpsc::unbounded::<BackendEvent>();
     let reload_in_progress = Arc::new(AtomicBool::new(false));
 
-    let (child, stdin, config) =
-        match spawn_bun(entry_path, event_tx.clone(), reload_in_progress.clone()) {
-            Ok(t) => t,
-            Err(e) => {
-                tynd_log!("{e}");
-                std::process::exit(1);
-            },
-        };
+    let (child, stdin, config) = match spawn_bun(entry_path, &event_tx, reload_in_progress.clone())
+    {
+        Ok(t) => t,
+        Err(e) => {
+            tynd_log!("{e}");
+            std::process::exit(1);
+        },
+    };
 
     let stdin_slot: Arc<Mutex<Option<ChildStdin>>> = Arc::new(Mutex::new(Some(stdin)));
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(Some(child)));
@@ -220,7 +224,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
 /// and return the child handle + stdin + parsed config.
 fn spawn_bun(
     entry_path: &str,
-    event_tx: mpsc::Sender<BackendEvent>,
+    event_tx: &mpsc::Sender<BackendEvent>,
     reload_in_progress: Arc<AtomicBool>,
 ) -> Result<(Child, ChildStdin, BackendConfig), String> {
     let bun_bin = std::env::var("TYND_BUN_PATH").unwrap_or_else(|_| "bun".into());
@@ -313,9 +317,8 @@ fn spawn_bun(
             tynd_host::tynd_debug!("Bun stdout closed during reload (expected)");
         } else {
             tynd_host::tynd_error!(
-                "Bun subprocess exited unexpectedly — IPC channel is dead. \
-                 The runtime crashed, was OOM-killed, or terminated on its own. \
-                 Restart the host to recover."
+                "Bun subprocess exited unexpectedly — IPC channel is dead. The runtime crashed, \
+                 was OOM-killed, or terminated on its own. Restart the host to recover."
             );
             let _ = reader_event_tx.send(BackendEvent::Error {
                 message: "Backend runtime exited unexpectedly. Check host logs and restart."

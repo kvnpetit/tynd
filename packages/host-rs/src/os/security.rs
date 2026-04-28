@@ -9,11 +9,11 @@
 //! everything" unless `defaultDeny` is set, in which case it means "deny
 //! everything".
 
+use std::{path::Path, sync::OnceLock};
+
 use parking_lot::RwLock;
 use serde::Deserialize;
 use serde_json::Value;
-use std::path::Path;
-use std::sync::OnceLock;
 
 #[derive(Debug, Default, Deserialize)]
 pub struct PolicyInput {

@@ -63,8 +63,8 @@ use serde_json::Value;
 #[allow(dead_code)]
 fn api_disabled(api: &str) -> String {
     format!(
-        "OS API '{api}' is not compiled in this build. Enable the matching \
-         `api-{api}` feature (or add it to `apis` in tynd.config.ts)."
+        "OS API '{api}' is not compiled in this build. Enable the matching `api-{api}` feature \
+         (or add it to `apis` in tynd.config.ts)."
     )
 }
 

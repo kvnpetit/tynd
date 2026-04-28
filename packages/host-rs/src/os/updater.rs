@@ -19,16 +19,20 @@
 //! }
 //! ```
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
+use std::{
+    io::Read,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, OnceLock,
+    },
+    thread::JoinHandle,
+    time::{Duration, Instant},
+};
+
+use base64::{engine::general_purpose::STANDARD, Engine};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::io::Read;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock};
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
 
 use super::events;
 
@@ -107,7 +111,7 @@ fn start_periodic_check(args: &Value) -> Result<Value, String> {
                 }
                 let mut slept = Duration::ZERO;
                 while slept < interval && r.load(Ordering::Acquire) {
-                    let step = tick.min(interval - slept);
+                    let step = tick.min(interval.checked_sub(slept).unwrap());
                     std::thread::sleep(step);
                     slept += step;
                 }
@@ -279,8 +283,7 @@ fn simple_rand() -> String {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_nanos() as u64);
     let pid = u64::from(std::process::id());
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{pid:x}-{nanos:x}-{n:x}")

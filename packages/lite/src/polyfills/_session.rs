@@ -5,8 +5,8 @@
 //! command-sender that drives the worker thread. Without this helper
 //! both modules ended up duplicating:
 //!
-//! - the `parking_lot::Mutex<HashMap<String, mpsc::Sender<Cmd>>>`
-//!   declaration (with the `OnceLock` lazy-init dance),
+//! - the `parking_lot::Mutex<HashMap<String, mpsc::Sender<Cmd>>>` declaration (with the `OnceLock`
+//!   lazy-init dance),
 //! - lookup+forward boilerplate inside every JS-callable function,
 //! - cleanup-on-disconnect semantics.
 //!
@@ -16,9 +16,9 @@
 //! cell — `std::sync::Mutex` would crash every subsequent operation
 //! if a holder ever panicked while holding the lock.
 
+use std::{collections::HashMap, sync::mpsc};
+
 use parking_lot::Mutex;
-use std::collections::HashMap;
-use std::sync::mpsc;
 
 /// Concurrent map from JS-side session id → command sender. `C` is the
 /// command enum the worker thread consumes (`fetch::Cmd`,

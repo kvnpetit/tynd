@@ -5,17 +5,20 @@
 
 #![allow(elided_lifetimes_in_paths)]
 
+use std::sync::mpsc;
+
 use crossbeam_channel as bridge_chan;
 use rquickjs::{Context, Function, Runtime};
 use serde_json::Value;
-use std::sync::mpsc;
 use tynd_host::{
     runtime::{BackendCall, BackendConfig, BackendEvent, MenuItemDef, TrayConfig},
     tynd_log,
 };
 
-use super::timer::{start_timer_thread, TimerCmd};
-use super::JsMsg;
+use super::{
+    timer::{start_timer_thread, TimerCmd},
+    JsMsg,
+};
 use crate::polyfills;
 
 const JS_GLOBALS: &str = include_str!("globals.js");
@@ -218,8 +221,7 @@ fn handle_call(ctx: &Context, call: BackendCall, event_tx: &bridge_chan::Sender<
                         // Lifecycle handlers always return null — encode as
                         // plain JSON so webview's `_decode` JSON-fallback
                         // resolves cleanly.
-                        value: serde_json::to_string(&value)
-                            .unwrap_or_else(|_| "null".into()),
+                        value: serde_json::to_string(&value).unwrap_or_else(|_| "null".into()),
                     },
                     Err(error) => BackendEvent::Return {
                         id,

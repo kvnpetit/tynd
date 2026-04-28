@@ -43,9 +43,9 @@ fn hostname() -> Value {
     // `hostname::get` wraps `gethostname(2)` (Unix) and
     // `GetComputerNameExW` (Windows) — drops the shell-out and the
     // `OsString::from_utf8_lossy` round-trip.
-    hostname::get()
-        .ok()
-        .map_or(Value::Null, |h| Value::String(h.to_string_lossy().into_owned()))
+    hostname::get().ok().map_or(Value::Null, |h| {
+        Value::String(h.to_string_lossy().into_owned())
+    })
 }
 
 /// BCP-47 locale via `sys-locale`, which calls
@@ -54,8 +54,7 @@ fn hostname() -> Value {
 /// the env-only fallback missed (Windows installs without the LC_ vars
 /// set, modern macOS that exposes the locale via CoreFoundation).
 fn locale() -> Value {
-    sys_locale::get_locale()
-        .map_or(Value::Null, |s| Value::String(s.replace('_', "-")))
+    sys_locale::get_locale().map_or(Value::Null, |s| Value::String(s.replace('_', "-")))
 }
 
 fn eol() -> &'static str {

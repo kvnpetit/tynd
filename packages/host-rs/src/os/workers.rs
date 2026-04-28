@@ -1,12 +1,14 @@
 //! Lite-only: isolated QuickJS runtime per worker on its own OS thread.
 //! Full uses `Bun.Worker` from TS instead. Input/output ship as JSON.
 
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    mpsc, OnceLock,
+};
+
 use dashmap::DashMap;
 use rquickjs::{Context, Function, Runtime};
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::sync::OnceLock;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -65,7 +67,9 @@ fn spawn(args: &Value) -> Result<Value, String> {
 
         let init = ctx.with(|ctx| -> Result<(), String> {
             let wrapped = format!(
-                "globalThis.__tynd_worker_fn__ = ({script});\nif (typeof globalThis.__tynd_worker_fn__ !== 'function') throw new Error('worker script must evaluate to a function');"
+                "globalThis.__tynd_worker_fn__ = ({script});\nif (typeof \
+                 globalThis.__tynd_worker_fn__ !== 'function') throw new Error('worker script \
+                 must evaluate to a function');"
             );
             ctx.eval::<(), _>(wrapped).map_err(|e| e.to_string())
         });
@@ -81,8 +85,9 @@ fn spawn(args: &Value) -> Result<Value, String> {
                 Msg::Stop => break,
                 Msg::Run { input, reply } => {
                     let result = ctx.with(|ctx| -> Result<String, String> {
-                        let call_src =
-                            "(function(i){var r=globalThis.__tynd_worker_fn__(JSON.parse(i));return JSON.stringify(r===undefined?null:r);})";
+                        let call_src = "(function(i){var \
+                                        r=globalThis.__tynd_worker_fn__(JSON.parse(i));return \
+                                        JSON.stringify(r===undefined?null:r);})";
                         let f: Function<'_> = ctx.eval(call_src).map_err(|e| e.to_string())?;
                         let out: rquickjs::String<'_> =
                             f.call((input,)).map_err(|e| e.to_string())?;

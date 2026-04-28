@@ -1,5 +1,4 @@
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use rand::RngCore;
 use serde_json::Value;
 use sha2::{Digest, Sha256, Sha384, Sha512};
@@ -75,8 +74,9 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn hash_known_sha256_vector() {

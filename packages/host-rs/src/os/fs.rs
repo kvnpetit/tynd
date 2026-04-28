@@ -1,7 +1,19 @@
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine as _;
-use cap_std::ambient_authority;
-use cap_std::fs::{Dir, OpenOptions};
+use std::{
+    fs::File,
+    io::{Read as _, Seek as _, SeekFrom, Write as _},
+    path::{Component, Path, PathBuf},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        OnceLock,
+    },
+    time::UNIX_EPOCH,
+};
+
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use cap_std::{
+    ambient_authority,
+    fs::{Dir, OpenOptions},
+};
 // Use the `notify` re-export from `notify_debouncer_full` so the
 // debouncer's `Watcher` bound (which it pins to notify 8.x via
 // transitive deps) and our types reference the *same* crate version.
@@ -11,12 +23,6 @@ use notify_debouncer_full::notify::{EventKind, RecommendedWatcher, RecursiveMode
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::fs::File;
-use std::io::{Read as _, Seek as _, SeekFrom, Write as _};
-use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
-use std::time::UNIX_EPOCH;
 
 use super::events;
 
@@ -193,10 +199,7 @@ fn resolve(input: &str) -> Result<(&'static Dir, PathBuf), String> {
             // Reject any residual `..` — `lexical_clean` should have removed
             // them, but a path like `/cwd/..` could lex-clean to `/` which
             // strip_prefix won't accept anyway. Still, belt + braces.
-            if rel
-                .components()
-                .any(|c| matches!(c, Component::ParentDir))
-            {
+            if rel.components().any(|c| matches!(c, Component::ParentDir)) {
                 continue;
             }
             let rel_buf = rel.to_path_buf();
@@ -351,12 +354,7 @@ fn copy_dir(args: &Value) -> Result<Value, String> {
     Ok(Value::Null)
 }
 
-fn copy_dir_recursive(
-    src_dir: &Dir,
-    src: &Path,
-    dst_dir: &Dir,
-    dst: &Path,
-) -> std::io::Result<()> {
+fn copy_dir_recursive(src_dir: &Dir, src: &Path, dst_dir: &Dir, dst: &Path) -> std::io::Result<()> {
     dst_dir.create_dir_all(dst)?;
     for entry in src_dir.read_dir(src)? {
         let entry = entry?;
@@ -442,11 +440,10 @@ fn hardlink(args: &Value) -> Result<Value, String> {
 /// dropping it joins the thread and unregisters every path. Replaces
 /// the bare `RecommendedWatcher` map and gives us:
 ///
-/// - dedup of multi-event renames (a Windows save emits `Remove` +
-///   `Create` on the same path; the debouncer collapses them into a
-///   single `Modify`/`Rename`),
-/// - tracked rename `from` → `to` paths so events buffered before the
-///   rename land with the post-rename path,
+/// - dedup of multi-event renames (a Windows save emits `Remove` + `Create` on the same path; the
+///   debouncer collapses them into a single `Modify`/`Rename`),
+/// - tracked rename `from` → `to` paths so events buffered before the rename land with the
+///   post-rename path,
 /// - exactly-once `Remove` for a recursive directory delete.
 ///
 /// The IPC payload shape stays unchanged — we still emit
@@ -731,9 +728,9 @@ fn trash_path(args: &Value) -> Result<Value, String> {
 
 #[cfg(test)]
 mod tests {
+    use std::{env, fs as stdfs};
+
     use super::*;
-    use std::env;
-    use std::fs as stdfs;
 
     // Hold the shared security-policy lock: fs tests all go through
     // `path_arg` → `check_fs`, so concurrent security tests flipping
@@ -833,7 +830,10 @@ mod tests {
         mkdir(&json!({ "path": &nested, "recursive": true })).unwrap();
         write_text(&json!({ "path": format!("{nested}/f.txt"), "content": "x" })).unwrap();
         copy_dir(&json!({ "from": &src, "to": &dst })).unwrap();
-        assert_eq!(stdfs::read_to_string(format!("{dst}/a/b/f.txt")).unwrap(), "x");
+        assert_eq!(
+            stdfs::read_to_string(format!("{dst}/a/b/f.txt")).unwrap(),
+            "x"
+        );
         remove(&json!({ "path": &src, "recursive": true })).unwrap();
         remove(&json!({ "path": &dst, "recursive": true })).unwrap();
     }

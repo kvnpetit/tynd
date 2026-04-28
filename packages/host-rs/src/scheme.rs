@@ -7,6 +7,7 @@ use std::{
         OnceLock,
     },
 };
+
 use wry::http::{Request, Response, StatusCode};
 
 /// When set, `handle` bypasses the static asset cache and reads from
@@ -127,8 +128,8 @@ fn get_cache(static_dir: &str) -> &'static AssetCache {
     #[cfg(debug_assertions)]
     if cache.dir != static_dir {
         eprintln!(
-            "[tynd] FATAL: scheme cache mismatch — initialized with '{}', \
-             called with '{static_dir}'",
+            "[tynd] FATAL: scheme cache mismatch — initialized with '{}', called with \
+             '{static_dir}'",
             cache.dir
         );
         std::process::abort();
@@ -245,17 +246,10 @@ fn not_found() -> Response<Cow<'static, [u8]>> {
 /// app bundle (where the default allows them) or set their own policy via
 /// a `<meta http-equiv="Content-Security-Policy">` tag in `index.html`.
 fn default_csp() -> &'static str {
-    "default-src 'self' tynd: tynd-bin:; \
-     img-src 'self' tynd: tynd-bin: data: blob:; \
-     media-src 'self' tynd: tynd-bin: data: blob:; \
-     script-src 'self' tynd:; \
-     style-src 'self' tynd: 'unsafe-inline'; \
-     font-src 'self' tynd: data:; \
-     connect-src 'self' tynd: tynd-bin: ipc: https: wss:; \
-     frame-src 'none'; \
-     object-src 'none'; \
-     base-uri 'self'; \
-     form-action 'self'"
+    "default-src 'self' tynd: tynd-bin:; img-src 'self' tynd: tynd-bin: data: blob:; media-src \
+     'self' tynd: tynd-bin: data: blob:; script-src 'self' tynd:; style-src 'self' tynd: \
+     'unsafe-inline'; font-src 'self' tynd: data:; connect-src 'self' tynd: tynd-bin: ipc: https: \
+     wss:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
 }
 
 /// Resolve the response Content-Type for a static asset.

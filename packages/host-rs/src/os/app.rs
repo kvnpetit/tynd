@@ -4,10 +4,10 @@
 //! The frontend then queries via `app.getName` / `app.getVersion`.
 //! Exit + relaunch are uniform across runtimes.
 
+use std::{sync::OnceLock, time::Duration};
+
 use parking_lot::Mutex;
 use serde_json::Value;
-use std::sync::OnceLock;
-use std::time::Duration;
 
 static APP_NAME: OnceLock<Mutex<String>> = OnceLock::new();
 static APP_VERSION: OnceLock<Mutex<String>> = OnceLock::new();

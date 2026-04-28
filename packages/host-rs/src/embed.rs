@@ -21,9 +21,11 @@
 //! own the per-entry dispatch (different entry keys, different output
 //! layout) and consume bytes by reading `data_len` from `reader()`.
 
-use std::fs::{self, File};
-use std::io::{self, Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::{self, File},
+    io::{self, Read, Seek, SeekFrom},
+    path::{Path, PathBuf},
+};
 
 pub const MAGIC: &[u8; 8] = b"TYNDPKG\0";
 /// section_size(u64) + magic(8) = 16 bytes
@@ -121,6 +123,7 @@ impl PackReader {
 /// Layout of the extraction target: a registered temp dir with pre-created
 /// `backend/` and `frontend/` subdirectories.
 #[derive(Debug)]
+#[allow(clippy::struct_field_names)] // `_dir` suffix disambiguates these from same-named values elsewhere.
 pub struct ExtractPaths {
     pub temp_dir: PathBuf,
     pub bundle_dir: PathBuf,

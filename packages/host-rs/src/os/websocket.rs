@@ -2,17 +2,19 @@
 //! in non-blocking mode, emits `websocket:open|message|close|error` events,
 //! and drains an outbound mpsc queue. Blocking `tungstenite` under the hood.
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
+use std::{
+    io::ErrorKind,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, OnceLock,
+    },
+    time::Duration,
+};
+
+use base64::{engine::general_purpose::STANDARD, Engine};
 use dashmap::DashMap;
 use serde_json::{json, Value};
-use std::io::ErrorKind;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::sync::OnceLock;
-use std::time::Duration;
-use tungstenite::protocol::CloseFrame;
-use tungstenite::Message;
+use tungstenite::{protocol::CloseFrame, Message};
 
 use super::events;
 

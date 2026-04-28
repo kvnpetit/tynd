@@ -1,9 +1,11 @@
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
+use std::{
+    fs,
+    io::{Read, Write},
+    time::{Duration, Instant},
+};
+
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
-use std::fs;
-use std::io::{Read, Write};
-use std::time::{Duration, Instant};
 
 use super::events;
 
@@ -242,7 +244,10 @@ fn download(args: &Value) -> Result<Value, String> {
     let parent = std::path::Path::new(dest)
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
-        .map_or_else(|| std::path::PathBuf::from("."), std::path::Path::to_path_buf);
+        .map_or_else(
+            || std::path::PathBuf::from("."),
+            std::path::Path::to_path_buf,
+        );
     let mut tmp = tempfile::NamedTempFile::new_in(&parent)
         .map_err(|e| format!("http.download: tempfile in {}: {e}", parent.display()))?;
     let mut reader = resp.into_reader().take(MAX_DOWNLOAD);

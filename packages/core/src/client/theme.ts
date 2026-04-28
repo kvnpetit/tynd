@@ -68,7 +68,7 @@ export interface ConfigureOptions {
  * the resolved theme immediately. Idempotent — calling again replaces
  * the prior subscription.
  */
-export async function configure(opts: ConfigureOptions = {}): Promise<void> {
+async function configure(opts: ConfigureOptions = {}): Promise<void> {
   // Drop any previous OS subscription so calling configure() twice
   // (e.g. during Vite HMR) doesn't stack handlers.
   state.unsubscribeOs?.();
@@ -106,7 +106,7 @@ export async function configure(opts: ConfigureOptions = {}): Promise<void> {
 }
 
 /** Unsubscribe from OS events + clear listeners. Call on teardown. */
-export function dispose(): void {
+function dispose(): void {
   state.unsubscribeOs?.();
   state.unsubscribeOs = null;
   state.listeners.clear();
@@ -118,17 +118,17 @@ export function dispose(): void {
 }
 
 /** Current user-visible preference — may be `"system"`. */
-export function preference(): ThemePreference {
+function preference(): ThemePreference {
   return state.preference;
 }
 
 /** Resolved theme (`"system"` -> whichever the OS is currently). */
-export function current(): EffectiveTheme {
+function current(): EffectiveTheme {
   return state.effective;
 }
 
 /** Set the user preference. Persists to localStorage and re-applies. */
-export function setPreference(p: ThemePreference): void {
+function setPreference(p: ThemePreference): void {
   if (p === state.preference) return;
   state.preference = p;
   savePreference(state.config.storageKey, p);
@@ -136,12 +136,12 @@ export function setPreference(p: ThemePreference): void {
 }
 
 /** Quick toggle for explicit light/dark — ignores `"system"`. */
-export function toggle(): void {
+function toggle(): void {
   setPreference(state.effective === "dark" ? "light" : "dark");
 }
 
 /** Subscribe to effective-theme changes. Returns unsubscribe. */
-export function onChange(handler: (t: EffectiveTheme) => void): () => void {
+function onChange(handler: (t: EffectiveTheme) => void): () => void {
   state.listeners.add(handler);
   return () => state.listeners.delete(handler);
 }

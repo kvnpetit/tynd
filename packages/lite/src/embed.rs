@@ -3,9 +3,11 @@
 //! Lite pack entries: `bundle.js`, `frontend/<path>`, `icon.{png,ico}`,
 //! `sidecar/<name>`. See `tynd_host::embed` for the wire format.
 
-use std::fs::{self, File};
-use std::io::{BufWriter, Read, Write};
-use std::path::PathBuf;
+use std::{
+    fs::{self, File},
+    io::{BufWriter, Read, Write},
+    path::PathBuf,
+};
 
 use tynd_host::embed::{finalize_sidecars, prepare_extract_dir, PackReader};
 

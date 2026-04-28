@@ -1,5 +1,6 @@
-use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use serde_json::{json, Value};
 use tao::{
     dpi::{LogicalPosition, LogicalSize, PhysicalPosition},
     window::{CursorIcon, ResizeDirection, Window},
@@ -485,8 +486,7 @@ fn set_system_backdrop(win: &Window, kind: &str) -> Result<(), String> {
     // Values: 0 Auto, 1 None, 2 Mainwindow (Mica), 3 TransientWindow
     // (Acrylic / background blur), 4 TabbedWindow (Tabbed).
     use tao::platform::windows::WindowExtWindows as _;
-    use windows_sys::Win32::Foundation::HWND;
-    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+    use windows_sys::Win32::{Foundation::HWND, Graphics::Dwm::DwmSetWindowAttribute};
 
     const DWMWA_SYSTEMBACKDROP_TYPE: u32 = 38;
     let value: i32 = match kind {

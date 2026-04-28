@@ -21,9 +21,10 @@
 //! than carrying a handle everywhere. Re-registering the same plugin
 //! name twice is a programming error and panics.
 
+use std::sync::{Arc, OnceLock};
+
 use parking_lot::RwLock;
 use serde_json::Value;
-use std::sync::{Arc, OnceLock};
 use tynd_plugin_sdk::{EmitFn, OsDispatchFn, PluginCx, TyndPlugin};
 
 type PluginBox = Box<dyn TyndPlugin>;
@@ -210,9 +211,11 @@ pub fn install_default_emit() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use serde_json::json;
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    use serde_json::json;
+
+    use super::*;
 
     struct Probe {
         inited: Arc<AtomicBool>,

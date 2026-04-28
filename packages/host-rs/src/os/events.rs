@@ -1,8 +1,9 @@
 //! Process-wide OS event emitter. Background threads emit without holding the
 //! `EventLoopProxy`. `app.rs` wires `set_emitter` once at startup.
 
-use serde_json::Value;
 use std::sync::OnceLock;
+
+use serde_json::Value;
 
 pub type EmitFn = Box<dyn Fn(&str, &Value) + Send + Sync + 'static>;
 

@@ -4,9 +4,11 @@
 //! `bun.version`, `bun.zst`, `bundle.js`, `frontend/<path>`, `icon.{png,ico}`,
 //! `sidecar/<name>`. See `tynd_host::embed` for the wire format.
 
-use std::fs::{self, File};
-use std::io::{BufWriter, Read, Write};
-use std::path::PathBuf;
+use std::{
+    fs::{self, File},
+    io::{BufWriter, Read, Write},
+    path::PathBuf,
+};
 
 use tynd_host::embed::{exe_stem, finalize_sidecars, prepare_extract_dir, PackReader};
 
@@ -35,7 +37,8 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
             "bun.version" => {
                 if data_len > 256 {
                     tynd_host::tynd_log!(
-                        "Embedded bun.version entry is suspiciously large ({data_len} bytes) — skipping"
+                        "Embedded bun.version entry is suspiciously large ({data_len} bytes) — \
+                         skipping"
                     );
                     pack.skip(data_len).ok()?;
                     continue;

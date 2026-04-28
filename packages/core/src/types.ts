@@ -20,7 +20,7 @@ const WindowConfigSchema = v.object({
 export type WindowConfig = v.InferOutput<typeof WindowConfigSchema>;
 
 /** Native OS roles for menu items. Role items are managed by the OS. */
-export const MENU_ROLES = [
+const MENU_ROLES = [
   "quit",
   "copy",
   "cut",

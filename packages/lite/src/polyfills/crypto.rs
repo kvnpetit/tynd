@@ -9,8 +9,7 @@
 //! All three bridge fns forward to `tynd_host::os::compute` so hash
 //! and random are implemented once in the workspace.
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use hmac::{Hmac, Mac};
 use rquickjs::{Ctx, Function, Object};
 use sha2::{Sha256, Sha384, Sha512};

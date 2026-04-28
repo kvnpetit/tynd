@@ -5,9 +5,10 @@
 //! (sharded internal mutex only on contention), so a burst of concurrent
 //! `sidecar.path(name)` calls don't serialise behind one global lock.
 
+use std::sync::OnceLock;
+
 use dashmap::DashMap;
 use serde_json::{json, Value};
-use std::sync::OnceLock;
 
 static SIDECARS: OnceLock<DashMap<String, String>> = OnceLock::new();
 

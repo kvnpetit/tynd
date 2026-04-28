@@ -1,9 +1,9 @@
 //! Native bridge for `performance.now()`. Monotonic clock anchored at the
 //! first call; return value is a double-precision milliseconds offset.
 
+use std::{sync::OnceLock, time::Instant};
+
 use rquickjs::{Ctx, Function, Object};
-use std::sync::OnceLock;
-use std::time::Instant;
 
 fn origin() -> Instant {
     static INIT: OnceLock<Instant> = OnceLock::new();

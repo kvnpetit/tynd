@@ -1,6 +1,9 @@
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use tao::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
@@ -291,8 +294,8 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         Ok(wv) => wv,
         Err(e) => {
             crate::tynd_error!(
-                "Failed to initialize WebView runtime: {e}. \
-                 Check that WebView2 (Windows) or WebKitGTK (Linux) is installed."
+                "Failed to initialize WebView runtime: {e}. Check that WebView2 (Windows) or \
+                 WebKitGTK (Linux) is installed."
             );
             std::process::exit(1);
         },

@@ -50,7 +50,10 @@ impl Args {
 
         if bundle_path.is_empty() {
             tynd_host::tynd_log!("Error: --bundle <path> is required");
-            tynd_host::tynd_log!("Usage: tynd-lite --bundle /path/to/bundle.js [--frontend-dir /path/to/dist] [--debug]");
+            tynd_host::tynd_log!(
+                "Usage: tynd-lite --bundle /path/to/bundle.js [--frontend-dir /path/to/dist] \
+                 [--debug]"
+            );
             std::process::exit(1);
         }
 

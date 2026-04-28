@@ -72,5 +72,10 @@ fn bench_eval_dispatch(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_eval_resolve, bench_eval_yield, bench_eval_dispatch);
+criterion_group!(
+    benches,
+    bench_eval_resolve,
+    bench_eval_yield,
+    bench_eval_dispatch
+);
 criterion_main!(benches);

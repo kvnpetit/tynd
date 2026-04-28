@@ -1,3 +1,5 @@
+use std::{path::PathBuf, sync::OnceLock};
+
 /// Global cleanup registry — paths to delete before any process::exit, plus
 /// the optional shutdown callback that signals the running event loop.
 ///
@@ -9,8 +11,6 @@
 /// proxy exists; signal handlers (`init_signals()`) invoke it to send a quit
 /// `UserEvent` so the loop unwinds cleanly instead of dying mid-frame.
 use parking_lot::Mutex;
-use std::path::PathBuf;
-use std::sync::OnceLock;
 
 static DIRS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 

@@ -8,16 +8,17 @@
 //!
 //! Abort: per-request `AtomicBool` checked between reads.
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
+use std::{
+    collections::HashMap,
+    io::Read,
+    sync::{mpsc, OnceLock},
+    time::Duration,
+};
+
+use base64::{engine::general_purpose::STANDARD, Engine};
 use rquickjs::{Ctx, Function, Object};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::io::Read;
-use std::sync::mpsc;
-use std::sync::OnceLock;
-use std::time::Duration;
 
 use super::_session::Sessions;
 use crate::quickjs::JsMsg;

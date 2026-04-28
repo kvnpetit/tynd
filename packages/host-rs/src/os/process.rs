@@ -1,7 +1,10 @@
+use std::{
+    collections::HashMap,
+    io::Write,
+    process::{Command, Stdio},
+};
+
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -34,8 +37,8 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
     // they need into the `cmd` string explicitly.
     if shell && !argv.is_empty() {
         return Err(
-            "process.execShell: extra 'args' are not allowed in shell mode — \
-             embed them in the 'cmd' string yourself (and quote them)"
+            "process.execShell: extra 'args' are not allowed in shell mode — embed them in the \
+             'cmd' string yourself (and quote them)"
                 .into(),
         );
     }

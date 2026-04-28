@@ -151,7 +151,7 @@ declare global {
 }
 
 /** Label of the current window. Defaults to "main" for the primary window. */
-export function getWindowLabel(): string {
+function getWindowLabel(): string {
   return typeof window !== "undefined" ? (window.__TYND_WINDOW_LABEL__ ?? "main") : "main";
 }
 

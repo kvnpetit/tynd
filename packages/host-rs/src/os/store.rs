@@ -1,12 +1,10 @@
 //! JSON key/value store at `config_dir()/<ns>/store.json`. Loaded once per
 //! namespace and cached; writes flush synchronously.
 
+use std::{fs, io::Write as _, path::PathBuf, sync::OnceLock};
+
 use dashmap::DashMap;
 use serde_json::{Map, Value};
-use std::fs;
-use std::io::Write as _;
-use std::path::PathBuf;
-use std::sync::OnceLock;
 
 static STORES: OnceLock<DashMap<String, Map<String, Value>>> = OnceLock::new();
 
@@ -130,19 +128,23 @@ fn validate_namespace(namespace: &str) -> Result<(), String> {
         return Err("store: namespace cannot be empty".into());
     }
     if namespace.starts_with('.') {
-        return Err(format!("store: namespace cannot start with '.' ('{namespace}')"));
+        return Err(format!(
+            "store: namespace cannot start with '.' ('{namespace}')"
+        ));
     }
     for ch in namespace.chars() {
         let ok = ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.';
         if !ok {
             return Err(format!(
-                "store: invalid character '{ch}' in namespace '{namespace}' \
-                 (allowed: A-Z, a-z, 0-9, '_', '-', '.')"
+                "store: invalid character '{ch}' in namespace '{namespace}' (allowed: A-Z, a-z, \
+                 0-9, '_', '-', '.')"
             ));
         }
     }
     if namespace.contains("..") {
-        return Err(format!("store: namespace cannot contain '..' ('{namespace}')"));
+        return Err(format!(
+            "store: namespace cannot contain '..' ('{namespace}')"
+        ));
     }
     Ok(())
 }
@@ -180,8 +182,7 @@ fn persist(namespace: &str) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("store: path {} has no parent dir", path.display()))?;
-    fs::create_dir_all(parent)
-        .map_err(|e| format!("store: mkdir {}: {e}", parent.display()))?;
+    fs::create_dir_all(parent).map_err(|e| format!("store: mkdir {}: {e}", parent.display()))?;
     let data = stores()
         .get(namespace)
         .map(|r| r.value().clone())
@@ -208,8 +209,9 @@ fn persist(namespace: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     // Each test owns a unique namespace so they never collide with each
     // other or with a real user's stores on disk.

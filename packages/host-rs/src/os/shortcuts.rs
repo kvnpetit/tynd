@@ -6,13 +6,18 @@
 //! installed lazily on first `register` so this module costs nothing at
 //! startup when no shortcut is wired.
 
+use std::{
+    str::FromStr as _,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    },
+};
+
 use dashmap::DashMap;
 use global_hotkey::{hotkey::HotKey, GlobalHotKeyManager};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use std::str::FromStr as _;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
 
 use super::events;
 
@@ -115,11 +120,7 @@ fn unregister(args: &Value) -> Result<Value, String> {
     let user_id = args
         .as_str()
         .map(str::to_string)
-        .or_else(|| {
-            args.get("id")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
+        .or_else(|| args.get("id").and_then(Value::as_str).map(str::to_string))
         .ok_or_else(|| "shortcuts.unregister: missing 'id'".to_string())?;
 
     let Some((_, hotkey)) = hotkeys().remove(&user_id) else {
@@ -147,10 +148,6 @@ fn unregister_all() -> Result<Value, String> {
 fn is_registered(args: &Value) -> bool {
     args.as_str()
         .map(str::to_string)
-        .or_else(|| {
-            args.get("id")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
+        .or_else(|| args.get("id").and_then(Value::as_str).map(str::to_string))
         .is_some_and(|id| hotkeys().contains_key(&id))
 }

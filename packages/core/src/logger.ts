@@ -12,7 +12,7 @@
 
 const _g = globalThis as Record<string, unknown>;
 
-export const IS_DEV: boolean = (() => {
+const IS_DEV: boolean = (() => {
   // 1. Browser (Vite) — replaced at build time: true in dev server, false in prod build
   try {
     if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV === true) return true;
@@ -20,7 +20,7 @@ export const IS_DEV: boolean = (() => {
     /* QuickJS: import.meta is replaced with {} — no-op */
   }
   // 2. Bun subprocess (full mode) — CLI sets TYND_DEV_URL during `tynd dev`
-  if (typeof process !== "undefined" && !!process.env?.TYND_DEV_URL) return true;
+  if (typeof process !== "undefined" && process.env?.TYND_DEV_URL) return true;
   // 3. QuickJS (lite mode) — CLI injects `globalThis.__TYND_DEV__ = true` at bundle time
   if (_g.__TYND_DEV__ === true) return true;
   return false;

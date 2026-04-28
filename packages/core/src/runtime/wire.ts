@@ -25,7 +25,7 @@ export function encode(value: unknown): string {
  * Decode a wire string back into a JS value. Returns `undefined` for empty /
  * missing strings so callers don't have to special-case `null` / `""`.
  */
-export function decode(s: string | undefined | null): unknown {
+function decode(s: string | undefined | null): unknown {
   if (s == null || s === "") return undefined;
   return parse(s);
 }

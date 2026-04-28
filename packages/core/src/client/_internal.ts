@@ -159,15 +159,6 @@ export function binFetch(path: string, query?: Record<string, string>): Promise<
   return binCall({ path, query, response: "bytes" });
 }
 
-/** POST raw bytes to the `tynd-bin://` IPC scheme and receive raw bytes back. */
-export function binExchange(
-  path: string,
-  query: Record<string, string> | undefined,
-  body: Uint8Array | ArrayBuffer,
-): Promise<Uint8Array> {
-  return binCall({ path, query, body, response: "bytes" });
-}
-
 /** POST raw bytes and receive a UTF-8 string (for APIs like `compute/hash`). */
 export function binExchangeText(
   path: string,
