@@ -4,6 +4,7 @@
 use dashmap::DashMap;
 use serde_json::{Map, Value};
 use std::fs;
+use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -176,16 +177,32 @@ fn load_if_needed(namespace: &str) -> Result<(), String> {
 
 fn persist(namespace: &str) -> Result<(), String> {
     let path = store_path(namespace)?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("store: mkdir {}: {e}", parent.display()))?;
-    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("store: path {} has no parent dir", path.display()))?;
+    fs::create_dir_all(parent)
+        .map_err(|e| format!("store: mkdir {}: {e}", parent.display()))?;
     let data = stores()
         .get(namespace)
         .map(|r| r.value().clone())
         .unwrap_or_default();
     let serialized = serde_json::to_string(&data).map_err(|e| e.to_string())?;
-    fs::write(&path, serialized).map_err(|e| format!("store: write {}: {e}", path.display()))?;
+
+    // Crash-safe persist: write to a sibling temp file in the same
+    // directory, fsync, then atomically rename over the target.
+    // Replaces a `fs::write` that was vulnerable to leaving a
+    // truncated `store.json` if the process died mid-write. `persist`
+    // (not `persist_noclobber`) — the store overwrite is the desired
+    // semantic for `set` / `delete` / `clear`.
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|e| format!("store: tempfile in {}: {e}", parent.display()))?;
+    tmp.write_all(serialized.as_bytes())
+        .map_err(|e| format!("store: write {}: {e}", path.display()))?;
+    tmp.as_file_mut()
+        .sync_all()
+        .map_err(|e| format!("store: fsync {}: {e}", path.display()))?;
+    tmp.persist(&path)
+        .map_err(|e| format!("store: persist -> {}: {e}", path.display()))?;
     Ok(())
 }
 

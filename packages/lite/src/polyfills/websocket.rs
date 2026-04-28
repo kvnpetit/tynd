@@ -9,21 +9,22 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use parking_lot::Mutex;
 use rquickjs::{Ctx, Function, Object};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::OnceLock;
 use tynd_host::os::websocket::{run_session_with, Cmd};
 
+use super::_session::Sessions;
 use crate::quickjs::JsMsg;
 
-// `parking_lot::Mutex` (no poisoning) — `std::sync::Mutex` would crash every
-// subsequent socket op if any holder panicked while holding the lock.
-fn sessions() -> &'static Mutex<HashMap<String, mpsc::Sender<Cmd>>> {
-    static REG: OnceLock<Mutex<HashMap<String, mpsc::Sender<Cmd>>>> = OnceLock::new();
-    REG.get_or_init(|| Mutex::new(HashMap::new()))
+/// Process-global session table. The polyfill bridges all hand work
+/// off to background threads keyed by JS-side session id, so a single
+/// `Sessions<Cmd>` (defined in `_session.rs`) replaces what used to
+/// be a `Mutex<HashMap<String, mpsc::Sender<Cmd>>>` declared inline.
+fn sessions() -> &'static Sessions<Cmd> {
+    static REG: OnceLock<Sessions<Cmd>> = OnceLock::new();
+    REG.get_or_init(Sessions::new)
 }
 
 pub(crate) fn register<'js>(
@@ -39,13 +40,13 @@ pub(crate) fn register<'js>(
                 ctx.clone(),
                 move |id: String, url: String, _protocols_json: String| {
                     let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
-                    sessions().lock().insert(id.clone(), cmd_tx);
+                    sessions().insert(id.clone(), cmd_tx);
                     let tx = tx.clone();
                     std::thread::spawn(move || {
                         run_session_with(&url, &cmd_rx, |name, data| {
                             deliver(&tx, &id, name, &data);
                         });
-                        sessions().lock().remove(&id);
+                        sessions().remove(&id);
                     });
                 },
             )?,
@@ -57,15 +58,13 @@ pub(crate) fn register<'js>(
         Function::new(
             ctx.clone(),
             |id: String, payload: String, is_binary: bool| {
-                if let Some(tx) = sessions().lock().get(&id) {
-                    let cmd = if is_binary {
-                        let bytes = STANDARD.decode(payload.as_bytes()).unwrap_or_default();
-                        Cmd::SendBinary(bytes)
-                    } else {
-                        Cmd::SendText(payload)
-                    };
-                    let _ = tx.send(cmd);
-                }
+                let cmd = if is_binary {
+                    let bytes = STANDARD.decode(payload.as_bytes()).unwrap_or_default();
+                    Cmd::SendBinary(bytes)
+                } else {
+                    Cmd::SendText(payload)
+                };
+                sessions().send(&id, cmd);
             },
         )?,
     )?;
@@ -73,9 +72,7 @@ pub(crate) fn register<'js>(
     g.set(
         "__tynd_ws_close__",
         Function::new(ctx.clone(), |id: String, code: u16, reason: String| {
-            if let Some(tx) = sessions().lock().get(&id) {
-                let _ = tx.send(Cmd::Close(Some((code, reason))));
-            }
+            sessions().send(&id, Cmd::Close(Some((code, reason))));
         })?,
     )?;
 

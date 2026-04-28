@@ -143,56 +143,30 @@ fn canonicalize_fs(path: &str) -> String {
     }
 }
 
-/// Tiny glob: `**` = any sequence (incl. `/`), `*` = any sequence without
-/// `/`, everything else literal. Case folded to match `canonicalize_fs`.
+/// Glob match via the `globset` crate. The pattern's separator is
+/// normalized the same way `canonicalize_fs` normalizes the input on
+/// Windows (`\\` → `/` + lowercase) so a rule written as
+/// `C:\Users\*\Desktop` still matches `c:/users/jane/desktop`. The old
+/// hand-rolled matcher only normalized the *input*, leaving Windows
+/// patterns asymmetric — that's fixed here.
+///
+/// `globset` compiles patterns into a regex DFA and short-circuits on
+/// the first mismatch, so it doesn't need the recursion cap the
+/// previous implementation carried (which silently denied legitimate
+/// matches when policies had many `**` segments).
 fn matches(pattern: &str, input: &str) -> bool {
     let pat = if cfg!(target_os = "windows") {
         pattern.replace('\\', "/").to_lowercase()
     } else {
         pattern.to_string()
     };
-    glob_match(&pat, input)
-}
-
-fn glob_match(pattern: &str, input: &str) -> bool {
-    // Translate to a simple state machine without regex deps.
-    let pat: Vec<char> = pattern.chars().collect();
-    let inp: Vec<char> = input.chars().collect();
-    matcher(&pat, 0, &inp, 0, 0)
-}
-
-/// Hard cap on recursion. Patterns with many `*` segments can otherwise
-/// grow combinatorially — a crafted user-supplied policy like
-/// `**/**/**/…` against a long path would blow the stack. Returning false
-/// past the cap is the safe fallback (denied by allow list, ignored by
-/// deny list; caller can widen the allow rule if needed).
-const GLOB_MAX_DEPTH: u32 = 64;
-
-fn matcher(pat: &[char], pi: usize, inp: &[char], ii: usize, depth: u32) -> bool {
-    if depth > GLOB_MAX_DEPTH {
-        return false;
-    }
-    if pi == pat.len() {
-        return ii == inp.len();
-    }
-    if pat[pi] == '*' {
-        let cross_sep = pi + 1 < pat.len() && pat[pi + 1] == '*';
-        let next_pi = if cross_sep { pi + 2 } else { pi + 1 };
-        // Try every split of the remaining input.
-        for i in ii..=inp.len() {
-            if !cross_sep && i > ii && inp[i - 1] == '/' {
-                break;
-            }
-            if matcher(pat, next_pi, inp, i, depth + 1) {
-                return true;
-            }
-        }
-        return false;
-    }
-    if ii < inp.len() && pat[pi] == inp[ii] {
-        return matcher(pat, pi + 1, inp, ii + 1, depth + 1);
-    }
-    false
+    // `literal_separator(true)` keeps `*` confined to a single path
+    // segment — only `**` crosses `/`. Mirrors the previous matcher's
+    // behaviour and is what the security policy contract documents.
+    globset::GlobBuilder::new(&pat)
+        .literal_separator(true)
+        .build()
+        .is_ok_and(|g| g.compile_matcher().is_match(input))
 }
 
 // Cross-module test gate: anything hitting `check_fs` or `check_http`
@@ -210,20 +184,20 @@ mod tests {
 
     #[test]
     fn glob_literal() {
-        assert!(glob_match("/home/a.txt", "/home/a.txt"));
-        assert!(!glob_match("/home/a.txt", "/home/b.txt"));
+        assert!(matches("/home/a.txt", "/home/a.txt"));
+        assert!(!matches("/home/a.txt", "/home/b.txt"));
     }
 
     #[test]
     fn glob_star_within_segment() {
-        assert!(glob_match("/home/*.txt", "/home/a.txt"));
-        assert!(!glob_match("/home/*.txt", "/home/sub/a.txt"));
+        assert!(matches("/home/*.txt", "/home/a.txt"));
+        assert!(!matches("/home/*.txt", "/home/sub/a.txt"));
     }
 
     #[test]
     fn glob_double_star_crosses_segments() {
-        assert!(glob_match("/home/**", "/home/sub/a.txt"));
-        assert!(glob_match("/home/**/*.log", "/home/a/b/c.log"));
+        assert!(matches("/home/**", "/home/sub/a.txt"));
+        assert!(matches("/home/**/*.log", "/home/a/b/c.log"));
     }
 
     #[test]

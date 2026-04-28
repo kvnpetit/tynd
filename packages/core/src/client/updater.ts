@@ -67,11 +67,7 @@ export interface UpdaterInstallResult {
 
 export const updater = {
   async check(options: UpdaterCheckOptions): Promise<UpdateInfo | null> {
-    const result = await osCall<{ available: boolean } & UpdateInfo>(
-      "updater",
-      "check",
-      options,
-    );
+    const result = await osCall<{ available: boolean } & UpdateInfo>("updater", "check", options);
     return result.available ? result : null;
   },
 

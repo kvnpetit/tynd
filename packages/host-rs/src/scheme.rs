@@ -26,7 +26,12 @@ fn dev_mode() -> bool {
 
 struct Asset {
     bytes: &'static [u8],
-    mime: &'static str,
+    /// MIME stored as a heap string so `mime_guess` can return arbitrary
+    /// content types — we used to keep this `&'static str` against a
+    /// hand-rolled match, but `mime_guess::Mime::essence_str` borrows from
+    /// the per-extension table which the compiler can't see as `'static`.
+    /// Boxing once at cache-load is free; the response builder copies.
+    mime: Box<str>,
     /// `Cache-Control` value — immutable for hashed assets, short for index.html
     cache_control: &'static str,
 }
@@ -104,7 +109,7 @@ fn walk(base: &PathBuf, cur: &PathBuf, map: &mut HashMap<String, Asset>) {
             key,
             Asset {
                 bytes,
-                mime,
+                mime: mime.into_boxed_str(),
                 cache_control: cache,
             },
         );
@@ -165,7 +170,7 @@ pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'sta
         Some(a) => {
             let mut rsp = Response::builder()
                 .status(StatusCode::OK)
-                .header("Content-Type", a.mime)
+                .header("Content-Type", a.mime.as_ref())
                 .header("Cache-Control", a.cache_control);
 
             if a.mime.starts_with("text/html") {
@@ -192,9 +197,14 @@ fn serve_from_disk(static_dir: &str, path: &str) -> Response<Cow<'static, [u8]>>
     let base = PathBuf::from(static_dir);
     let mut target = base.join(path);
     let has_extension = path.contains('.') && !path.ends_with('/');
-    // Reject `..` escapes out of the static dir before opening the file.
-    if let Ok(canon) = std::fs::canonicalize(&target) {
-        if !canon.starts_with(base.canonicalize().unwrap_or_else(|_| base.clone())) {
+    // `dunce::canonicalize` strips Windows UNC `\\?\` prefixes that
+    // `std::fs::canonicalize` would otherwise leave on the result —
+    // without that, a UNC `canon` could fail `starts_with(base)` even
+    // when both resolve to the same drive path, breaking the dev-mode
+    // path-traversal guard on Windows.
+    if let Ok(canon) = dunce::canonicalize(&target) {
+        let base_canon = dunce::canonicalize(&base).unwrap_or_else(|_| base.clone());
+        if !canon.starts_with(&base_canon) {
             return not_found();
         }
         target = canon;
@@ -209,7 +219,7 @@ fn serve_from_disk(static_dir: &str, path: &str) -> Response<Cow<'static, [u8]>>
     let mime = mime_for(&target);
     let mut rsp = Response::builder()
         .status(StatusCode::OK)
-        .header("Content-Type", mime)
+        .header("Content-Type", &mime)
         // Dev: never cache in the webview — editor saves must land.
         .header("Cache-Control", "no-store");
     if mime.starts_with("text/html") {
@@ -248,34 +258,37 @@ fn default_csp() -> &'static str {
      form-action 'self'"
 }
 
-fn mime_for(path: &std::path::Path) -> &'static str {
-    // If the extension is "gz", look at the extension before it
-    // e.g. "index.js.zst" -> use "js" to determine MIME
-    let ext = match path.extension().and_then(|e| e.to_str()) {
-        Some("gz") => path
+/// Resolve the response Content-Type for a static asset.
+///
+/// `mime_guess` carries the IANA registry, so we don't have to chase new
+/// extensions whenever the frontend pulls in another asset family. We
+/// strip transport-encoded suffixes (`.zst`, `.gz`) before lookup so an
+/// `index.js.gz` still reports as `application/javascript` — wry serves
+/// the bytes verbatim, the encoding header doesn't apply.
+fn mime_for(path: &std::path::Path) -> String {
+    let ext = path.extension().and_then(|e| e.to_str());
+    let lookup_path = match ext {
+        Some("gz" | "zst") => path
             .file_stem()
-            .map(std::path::Path::new)
-            .and_then(|p| p.extension())
-            .and_then(|e| e.to_str()),
-        other => other,
+            .map_or_else(|| path.to_path_buf(), PathBuf::from),
+        _ => path.to_path_buf(),
     };
-
-    match ext {
-        Some("html" | "htm") => "text/html; charset=utf-8",
-        Some("js" | "mjs" | "cjs" | "ts" | "tsx") => "application/javascript; charset=utf-8",
-        Some("css") => "text/css; charset=utf-8",
-        Some("json") => "application/json",
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("svg") => "image/svg+xml",
-        Some("ico") => "image/x-icon",
-        Some("woff") => "font/woff",
-        Some("woff2") => "font/woff2",
-        Some("ttf") => "font/ttf",
-        Some("otf") => "font/otf",
-        Some("webp") => "image/webp",
-        Some("wasm") => "application/wasm",
-        _ => "application/octet-stream",
+    // `.ts` / `.tsx` / `.mjs` / `.cjs` are bundler artefacts that webview
+    // serves as JavaScript. `mime_guess` would resolve `.ts` to
+    // `video/mp2t`, so override these explicitly before falling back to
+    // the registry.
+    let final_ext = lookup_path.extension().and_then(|e| e.to_str());
+    if matches!(final_ext, Some("ts" | "tsx" | "mjs" | "cjs" | "js")) {
+        return "application/javascript; charset=utf-8".to_string();
+    }
+    let mime = mime_guess::from_path(&lookup_path).first_or_octet_stream();
+    let s = mime.essence_str();
+    // Append `; charset=utf-8` only for the text-shaped MIMEs the host
+    // historically tagged that way — keeps the CSP + cache logic that
+    // pattern-matches on `text/html` working byte-identically.
+    if matches!(s, "text/html" | "text/css") {
+        format!("{s}; charset=utf-8")
+    } else {
+        s.to_string()
     }
 }

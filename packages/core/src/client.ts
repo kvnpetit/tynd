@@ -14,7 +14,7 @@
 
 export { base64ToBytes, bytesToBase64 } from "./client/_internal";
 export { type AppInfo, app } from "./client/app";
-export { autolaunch, type AutolaunchOptions } from "./client/autolaunch";
+export { type AutolaunchOptions, autolaunch } from "./client/autolaunch";
 export { type BackendClient, createBackend } from "./client/backend";
 export { type ClipboardImage, clipboard } from "./client/clipboard";
 export { compute, type HashAlgo } from "./client/compute";
@@ -65,6 +65,7 @@ export { type SingleInstanceResult, singleInstance } from "./client/single-insta
 export { createStore } from "./client/store";
 export { type TrayMenuItem, tray } from "./client/tray";
 export {
+  type UpdateInfo,
   type UpdaterCheckEvent,
   type UpdaterCheckOptions,
   type UpdaterDownloadOptions,
@@ -73,7 +74,6 @@ export {
   type UpdaterInstallResult,
   type UpdaterPeriodicOptions,
   type UpdaterProgress,
-  type UpdateInfo,
   updater,
 } from "./client/updater";
 

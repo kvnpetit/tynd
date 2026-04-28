@@ -40,28 +40,22 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 }
 
 fn hostname() -> Value {
-    // No std API; shell out to `hostname` — present on every target OS.
-    match std::process::Command::new("hostname").output() {
-        Ok(o) if o.status.success() => {
-            Value::String(String::from_utf8_lossy(&o.stdout).trim().to_string())
-        },
-        _ => Value::Null,
-    }
+    // `hostname::get` wraps `gethostname(2)` (Unix) and
+    // `GetComputerNameExW` (Windows) — drops the shell-out and the
+    // `OsString::from_utf8_lossy` round-trip.
+    hostname::get()
+        .ok()
+        .map_or(Value::Null, |h| Value::String(h.to_string_lossy().into_owned()))
 }
 
-/// BCP-47 locale guess from common env vars (LC_ALL, LC_MESSAGES, LANG).
-/// Good enough for UX defaults; apps needing strict BCP-47 should pass their
-/// own parser over the result.
+/// BCP-47 locale via `sys-locale`, which calls
+/// `GetUserDefaultLocaleName` (Win), `[NSLocale currentLocale]` (macOS),
+/// and `LC_*` env vars (Linux). Fixes a class of locale-detection bugs
+/// the env-only fallback missed (Windows installs without the LC_ vars
+/// set, modern macOS that exposes the locale via CoreFoundation).
 fn locale() -> Value {
-    for var in ["LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"] {
-        if let Ok(v) = std::env::var(var) {
-            let tag = v.split('.').next().unwrap_or(&v).replace('_', "-");
-            if !tag.is_empty() && tag != "C" && tag != "POSIX" {
-                return Value::String(tag);
-            }
-        }
-    }
-    Value::Null
+    sys_locale::get_locale()
+        .map_or(Value::Null, |s| Value::String(s.replace('_', "-")))
 }
 
 fn eol() -> &'static str {
@@ -72,53 +66,14 @@ fn eol() -> &'static str {
     }
 }
 
-/// Read the current system color scheme. Falls back to `false` on platforms
-/// where wry hasn't wired the detection (older WebKitGTK in particular).
+/// Read the current system color scheme via `dark-light`, which
+/// queries `UISettings::GetColorValue(Foreground)` (Windows),
+/// `NSUserDefaults` (macOS), and the freedesktop XDG portal D-Bus
+/// `Settings.Read('color-scheme')` (Linux) — the latter covers KDE,
+/// sway, and Flatpak'd apps that the previous `gsettings` shell-out
+/// missed entirely.
 fn is_dark_mode() -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        use std::process::Command;
-        // Registry: 0 = dark, 1 = light. Absent -> light.
-        let out = Command::new("reg")
-            .args([
-                "query",
-                r"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-                "/v",
-                "AppsUseLightTheme",
-            ])
-            .output()
-            .ok();
-        if let Some(o) = out {
-            if o.status.success() {
-                let txt = String::from_utf8_lossy(&o.stdout);
-                if let Some(idx) = txt.find("0x") {
-                    let hex = &txt[idx + 2..idx + 3];
-                    return hex == "0";
-                }
-            }
-        }
-        false
-    }
-    #[cfg(target_os = "macos")]
-    {
-        use std::process::Command;
-        // `defaults read -g AppleInterfaceStyle` prints "Dark" when set, errors otherwise.
-        let out = Command::new("defaults")
-            .args(["read", "-g", "AppleInterfaceStyle"])
-            .output()
-            .ok();
-        matches!(out, Some(o) if String::from_utf8_lossy(&o.stdout).trim().eq_ignore_ascii_case("dark"))
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        use std::process::Command;
-        // GNOME-ish desktops expose this via gsettings. Not universal but the common case.
-        let out = Command::new("gsettings")
-            .args(["get", "org.gnome.desktop.interface", "color-scheme"])
-            .output()
-            .ok();
-        matches!(out, Some(o) if String::from_utf8_lossy(&o.stdout).to_lowercase().contains("dark"))
-    }
+    matches!(dark_light::detect(), Ok(dark_light::Mode::Dark))
 }
 
 fn path_or_null(p: Option<std::path::PathBuf>) -> Value {
@@ -138,51 +93,17 @@ fn info() -> Value {
     })
 }
 
-/// Short OS version string (e.g. "10.0.26200" on Windows, "14.5" on macOS).
-/// Best-effort via `ver` / `sw_vers` / `uname -r`.
+/// Short OS version string (e.g. `"10.0.26200"`, `"14.5"`).
+///
+/// `os_info::get()` queries the appropriate native API on each
+/// platform: WMI / Registry on Windows, `sw_vers` (cached at
+/// process-init) on macOS, and `/etc/os-release` + `uname` on Linux.
+/// Replaces the previous `cmd /c ver` parser that broke on non-EN
+/// Windows installs (the localised `Version ` prefix wouldn't strip).
 fn os_version() -> Value {
-    #[cfg(target_os = "windows")]
-    {
-        let out = std::process::Command::new("cmd")
-            .args(["/c", "ver"])
-            .output()
-            .ok();
-        if let Some(o) = out {
-            if let Some(start) = String::from_utf8_lossy(&o.stdout).find('[') {
-                let s = String::from_utf8_lossy(&o.stdout).to_string();
-                if let Some(end) = s[start..].find(']') {
-                    let segment = &s[start + 1..start + end];
-                    // "Version 10.0.26200.xxx" -> "10.0.26200.xxx"
-                    if let Some(rest) = segment.strip_prefix("Version ") {
-                        return Value::String(rest.to_string());
-                    }
-                    return Value::String(segment.to_string());
-                }
-            }
-        }
-        Value::Null
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let out = std::process::Command::new("sw_vers")
-            .arg("-productVersion")
-            .output()
-            .ok();
-        match out {
-            Some(o) if o.status.success() => {
-                Value::String(String::from_utf8_lossy(&o.stdout).trim().to_string())
-            },
-            _ => Value::Null,
-        }
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let out = std::process::Command::new("uname").arg("-r").output().ok();
-        match out {
-            Some(o) if o.status.success() => {
-                Value::String(String::from_utf8_lossy(&o.stdout).trim().to_string())
-            },
-            _ => Value::Null,
-        }
+    let info = os_info::get();
+    match info.version() {
+        os_info::Version::Unknown => Value::Null,
+        v => Value::String(v.to_string()),
     }
 }

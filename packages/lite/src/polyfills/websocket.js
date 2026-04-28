@@ -74,14 +74,7 @@
     if (typeof data === "string") {
       payload = data;
     } else {
-      var bytes;
-      if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
-      else if (data instanceof Uint8Array) bytes = data;
-      else if (data && data.buffer instanceof ArrayBuffer) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-      else throw new TypeError("WebSocket.send: unsupported data type");
-      var s = "";
-      for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-      payload = btoa(s);
+      payload = globalThis.__tynd_b64_encode(globalThis.__tynd_to_bytes(data));
       isBinary = true;
     }
     __tynd_ws_send__(this._id, payload, isBinary);
@@ -93,13 +86,8 @@
     __tynd_ws_close__(this._id, code || 1000, reason || "");
   };
 
-  var _prev = globalThis.__tynd_polyfill_event__;
-  globalThis.__tynd_polyfill_event__ = function (name, dataJson) {
-    if (name !== "ws:open" && name !== "ws:message" && name !== "ws:close" && name !== "ws:error") {
-      if (typeof _prev === "function") return _prev(name, dataJson);
-      return;
-    }
-    var data; try { data = JSON.parse(dataJson); } catch (_) { return; }
+  // Register a "ws:*" handler with the shared dispatcher in _bridge.js.
+  globalThis.__tynd_polyfill_handlers.set("ws", function (name, data) {
     var ws = _sessions[data.id];
     if (!ws) return;
     if (name === "ws:open") {
@@ -109,9 +97,7 @@
     } else if (name === "ws:message") {
       var payload;
       if (data.isBinary) {
-        var s = atob(data.payload);
-        var u8 = new Uint8Array(s.length);
-        for (var i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+        var u8 = globalThis.__tynd_b64_decode(data.payload);
         payload = ws.binaryType === "arraybuffer" ? u8.buffer : u8;
       } else {
         payload = data.payload;
@@ -122,7 +108,7 @@
     } else if (name === "ws:close") {
       ws._fireClose(data.code || 1000, data.reason || "", data.wasClean !== false);
     }
-  };
+  });
 
   globalThis.WebSocket = WebSocket;
 })();

@@ -10,24 +10,31 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use parking_lot::Mutex;
 use rquickjs::{Ctx, Function, Object};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::Read;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use std::time::Duration;
 
+use super::_session::Sessions;
 use crate::quickjs::JsMsg;
 
-// `parking_lot::Mutex` (no poisoning) — `std::sync::Mutex` would crash every
-// subsequent fetch if any holder panicked while holding the lock.
-fn registry() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
-    static REG: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
-    REG.get_or_init(|| Mutex::new(HashMap::new()))
+/// Per-fetch worker command. The previous implementation used an
+/// `Arc<AtomicBool>` flag flipped from the abort handler; routing
+/// through the same `Sessions<Cmd>` helper as the WebSocket bridge
+/// folds the two cancel paths into one — and gives us a place to add
+/// future commands (pause, throttle, …) without redoing the
+/// registration plumbing.
+pub(crate) enum Cmd {
+    Abort,
+}
+
+fn sessions() -> &'static Sessions<Cmd> {
+    static REG: OnceLock<Sessions<Cmd>> = OnceLock::new();
+    REG.get_or_init(Sessions::new)
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,11 +66,12 @@ pub(crate) fn register<'js>(
             Function::new(
                 ctx.clone(),
                 move |id: String, url: String, opts_json: String| {
-                    let cancel = Arc::new(AtomicBool::new(false));
-                    registry().lock().insert(id.clone(), cancel.clone());
+                    let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
+                    sessions().insert(id.clone(), cmd_tx);
                     let tx = tx.clone();
                     std::thread::spawn(move || {
-                        run_fetch(&id, &url, &opts_json, &cancel, &tx);
+                        run_fetch(&id, &url, &opts_json, &cmd_rx, &tx);
+                        sessions().remove(&id);
                     });
                 },
             )?,
@@ -73,9 +81,7 @@ pub(crate) fn register<'js>(
     g.set(
         "__tynd_fetch_abort__",
         Function::new(ctx.clone(), |id: String| {
-            if let Some(flag) = registry().lock().get(&id) {
-                flag.store(true, Ordering::SeqCst);
-            }
+            sessions().send(&id, Cmd::Abort);
         })?,
     )?;
 
@@ -86,7 +92,7 @@ fn run_fetch(
     id: &str,
     url: &str,
     opts_json: &str,
-    cancel: &Arc<AtomicBool>,
+    cmd_rx: &mpsc::Receiver<Cmd>,
     js_tx: &mpsc::Sender<JsMsg>,
 ) {
     let opts: Opts = match serde_json::from_str(opts_json) {
@@ -117,21 +123,21 @@ fn run_fetch(
         Ok(r) => r,
         Err(ureq::Error::Status(code, r)) => {
             // Error-status responses are still iterable — forward like a normal response.
-            deliver_response(id, code, r, cancel, js_tx);
+            deliver_response(id, code, r, cmd_rx, js_tx);
             return;
         },
         Err(e) => return end_error(id, format!("network: {e}"), js_tx),
     };
 
     let status = response.status();
-    deliver_response(id, status, response, cancel, js_tx);
+    deliver_response(id, status, response, cmd_rx, js_tx);
 }
 
 fn deliver_response(
     id: &str,
     status: u16,
     response: ureq::Response,
-    cancel: &Arc<AtomicBool>,
+    cmd_rx: &mpsc::Receiver<Cmd>,
     js_tx: &mpsc::Sender<JsMsg>,
 ) {
     let status_text = response.status_text().to_string();
@@ -156,7 +162,11 @@ fn deliver_response(
     let mut reader = response.into_reader();
     let mut buf = [0u8; CHUNK];
     loop {
-        if cancel.load(Ordering::SeqCst) {
+        // Abort is signalled via `Sessions::send(id, Cmd::Abort)` from
+        // the JS-side abort callback. The receiver is non-blocking so
+        // the read loop only checks it between chunks — keeping the
+        // hot path identical to the previous `AtomicBool` poll.
+        if let Ok(Cmd::Abort) = cmd_rx.try_recv() {
             end_error(id, "aborted", js_tx);
             return;
         }
@@ -175,7 +185,8 @@ fn deliver_response(
     }
 
     send(js_tx, "fetch:end", json!({ "id": id }));
-    registry().lock().remove(id);
+    // `sessions().remove` is called by the spawn closure when
+    // `run_fetch` returns; nothing to do here.
 }
 
 fn end_error(id: &str, msg: impl AsRef<str>, js_tx: &mpsc::Sender<JsMsg>) {
@@ -184,7 +195,6 @@ fn end_error(id: &str, msg: impl AsRef<str>, js_tx: &mpsc::Sender<JsMsg>) {
         "fetch:end",
         json!({ "id": id, "error": msg.as_ref() }),
     );
-    registry().lock().remove(id);
 }
 
 fn send(js_tx: &mpsc::Sender<JsMsg>, name: &'static str, data: Value) {

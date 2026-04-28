@@ -45,22 +45,35 @@ fastrand.workspace           = true
 uuid.workspace               = true
 cap-std.workspace            = true
 cap-tempfile.workspace       = true
+# Always-on URL/path/mime helpers used across scheme handlers + util.
+mime_guess.workspace      = true
+form_urlencoded.workspace = true
+dunce.workspace           = true
+slug.workspace            = true
+# Always-on OS detection helpers. The `os::os_info` + `os::security`
+# modules sit outside the `api-*` feature gates (they're consumed by
+# every dispatch path), so their backing crates are too.
+globset.workspace    = true
+hostname.workspace   = true
+os_info.workspace    = true
+dark-light.workspace = true
+sys-locale.workspace = true
 
 # Optional — pulled only when their matching `api-*` feature is enabled.
-rfd           = { workspace = true, optional = true }
-arboard       = { workspace = true, optional = true }
-open          = { workspace = true, optional = true }
-notify-rust   = { workspace = true, optional = true }
-ureq          = { workspace = true, optional = true }
-fslock        = { workspace = true, optional = true }
-interprocess  = { workspace = true, optional = true }
-notify        = { workspace = true, optional = true }
-trash         = { workspace = true, optional = true }
-tungstenite   = { workspace = true, optional = true }
-ed25519-dalek = { workspace = true, optional = true }
-self-replace  = { workspace = true, optional = true }
-auto-launch   = { workspace = true, optional = true }
-keyring       = { workspace = true, optional = true }
+rfd                   = { workspace = true, optional = true }
+arboard               = { workspace = true, optional = true }
+open                  = { workspace = true, optional = true }
+notify-rust           = { workspace = true, optional = true }
+ureq                  = { workspace = true, optional = true }
+fslock                = { workspace = true, optional = true }
+interprocess          = { workspace = true, optional = true }
+notify-debouncer-full = { workspace = true, optional = true }
+trash                 = { workspace = true, optional = true }
+tungstenite           = { workspace = true, optional = true }
+ed25519-dalek         = { workspace = true, optional = true }
+self-replace          = { workspace = true, optional = true }
+auto-launch           = { workspace = true, optional = true }
+keyring               = { workspace = true, optional = true }
 
 rquickjs = { workspace = true, optional = true }
 
@@ -108,7 +121,7 @@ api-autolaunch      = [ "dep:auto-launch" ]
 api-clipboard       = [ "dep:arboard" ]
 api-compute         = [  ]
 api-dialog          = [ "dep:rfd" ]
-api-fs              = [ "dep:notify", "dep:trash" ]
+api-fs              = [ "dep:notify-debouncer-full", "dep:trash" ]
 api-http            = [ "dep:ureq" ]
 api-keyring         = [ "dep:keyring" ]
 api-notification    = [ "dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys" ]

@@ -53,22 +53,9 @@ pub(crate) fn register<'js>(ctx: &Ctx<'js>, g: &Object<'js>) -> rquickjs::Result
             |algo: String, key_b64: String, data_b64: String| -> String {
                 let key = STANDARD.decode(key_b64.as_bytes()).unwrap_or_default();
                 let data = STANDARD.decode(data_b64.as_bytes()).unwrap_or_default();
-                let tag = match algo.as_str() {
-                    "sha256" => Hmac::<Sha256>::new_from_slice(&key).ok().map(|mut m| {
-                        m.update(&data);
-                        m.finalize().into_bytes().to_vec()
-                    }),
-                    "sha384" => Hmac::<Sha384>::new_from_slice(&key).ok().map(|mut m| {
-                        m.update(&data);
-                        m.finalize().into_bytes().to_vec()
-                    }),
-                    "sha512" => Hmac::<Sha512>::new_from_slice(&key).ok().map(|mut m| {
-                        m.update(&data);
-                        m.finalize().into_bytes().to_vec()
-                    }),
-                    _ => None,
-                };
-                tag.map(|t| STANDARD.encode(&t)).unwrap_or_default()
+                hmac_sign(&algo, &key, &data)
+                    .map(|t| STANDARD.encode(&t))
+                    .unwrap_or_default()
             },
         )?,
     )?;
@@ -81,33 +68,55 @@ pub(crate) fn register<'js>(ctx: &Ctx<'js>, g: &Object<'js>) -> rquickjs::Result
                 let key = STANDARD.decode(key_b64.as_bytes()).unwrap_or_default();
                 let sig = STANDARD.decode(sig_b64.as_bytes()).unwrap_or_default();
                 let data = STANDARD.decode(data_b64.as_bytes()).unwrap_or_default();
-                match algo.as_str() {
-                    "sha256" => Hmac::<Sha256>::new_from_slice(&key)
-                        .ok()
-                        .and_then(|mut m| {
-                            m.update(&data);
-                            m.verify_slice(&sig).ok()
-                        })
-                        .is_some(),
-                    "sha384" => Hmac::<Sha384>::new_from_slice(&key)
-                        .ok()
-                        .and_then(|mut m| {
-                            m.update(&data);
-                            m.verify_slice(&sig).ok()
-                        })
-                        .is_some(),
-                    "sha512" => Hmac::<Sha512>::new_from_slice(&key)
-                        .ok()
-                        .and_then(|mut m| {
-                            m.update(&data);
-                            m.verify_slice(&sig).ok()
-                        })
-                        .is_some(),
-                    _ => false,
-                }
+                hmac_verify(&algo, &key, &sig, &data)
             },
         )?,
     )?;
 
     Ok(())
+}
+
+/// Compute an HMAC tag for one of the WebCrypto algorithm strings, or
+/// `None` if the algorithm isn't recognised. The closure body for all
+/// three SHA arms is identical except for the digest type, so a tiny
+/// `match` on `algo.as_str()` dispatches to the right `Hmac<H>` once
+/// instead of repeating the tag-building dance per arm.
+fn hmac_sign(algo: &str, key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+    macro_rules! run {
+        ($H:ty) => {
+            Hmac::<$H>::new_from_slice(key).ok().map(|mut m| {
+                m.update(data);
+                m.finalize().into_bytes().to_vec()
+            })
+        };
+    }
+    match algo {
+        "sha256" => run!(Sha256),
+        "sha384" => run!(Sha384),
+        "sha512" => run!(Sha512),
+        _ => None,
+    }
+}
+
+/// Constant-time HMAC verification mirroring [`hmac_sign`]. Returns
+/// `false` on unknown algorithm so the JS side can treat that as a
+/// regular "tag mismatch" without a separate error path.
+fn hmac_verify(algo: &str, key: &[u8], sig: &[u8], data: &[u8]) -> bool {
+    macro_rules! run {
+        ($H:ty) => {
+            Hmac::<$H>::new_from_slice(key)
+                .ok()
+                .and_then(|mut m| {
+                    m.update(data);
+                    m.verify_slice(sig).ok()
+                })
+                .is_some()
+        };
+    }
+    match algo {
+        "sha256" => run!(Sha256),
+        "sha384" => run!(Sha384),
+        "sha512" => run!(Sha512),
+        _ => false,
+    }
 }

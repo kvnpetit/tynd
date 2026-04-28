@@ -2,7 +2,13 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, OpenOptions};
-use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher as _};
+// Use the `notify` re-export from `notify_debouncer_full` so the
+// debouncer's `Watcher` bound (which it pins to notify 8.x via
+// transitive deps) and our types reference the *same* crate version.
+// The workspace also has a direct `notify = "6.1"` for non-debouncer
+// use sites, but the watcher path now goes through this re-export.
+use notify_debouncer_full::notify::{EventKind, RecommendedWatcher, RecursiveMode};
+use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 use std::fs::File;
@@ -430,22 +436,46 @@ fn hardlink(args: &Value) -> Result<Value, String> {
     Ok(Value::Null)
 }
 
-static WATCHERS: OnceLock<Mutex<ahash::HashMap<u64, RecommendedWatcher>>> = OnceLock::new();
+/// Watcher handle stored per `fs.watch` registration. The
+/// `notify_debouncer_full::Debouncer` owns the `notify` recommended
+/// watcher *plus* a cache of file IDs and a debounce/sort thread —
+/// dropping it joins the thread and unregisters every path. Replaces
+/// the bare `RecommendedWatcher` map and gives us:
+///
+/// - dedup of multi-event renames (a Windows save emits `Remove` +
+///   `Create` on the same path; the debouncer collapses them into a
+///   single `Modify`/`Rename`),
+/// - tracked rename `from` → `to` paths so events buffered before the
+///   rename land with the post-rename path,
+/// - exactly-once `Remove` for a recursive directory delete.
+///
+/// The IPC payload shape stays unchanged — we still emit
+/// `{ id, kind, path }` per event, one per affected path.
+type WatchHandle = Debouncer<RecommendedWatcher, RecommendedCache>;
+
+static WATCHERS: OnceLock<Mutex<ahash::HashMap<u64, WatchHandle>>> = OnceLock::new();
 static NEXT_WATCH_ID: AtomicU64 = AtomicU64::new(1);
 
-fn watchers() -> &'static Mutex<ahash::HashMap<u64, RecommendedWatcher>> {
+fn watchers() -> &'static Mutex<ahash::HashMap<u64, WatchHandle>> {
     WATCHERS.get_or_init(|| Mutex::new(ahash::HashMap::default()))
 }
 
 fn kind_label(kind: EventKind) -> &'static str {
     match kind {
         EventKind::Create(_) => "create",
-        EventKind::Modify(notify::event::ModifyKind::Name(_)) => "rename",
+        EventKind::Modify(notify_debouncer_full::notify::event::ModifyKind::Name(_)) => "rename",
         EventKind::Modify(_) => "modify",
         EventKind::Remove(_) => "delete",
         _ => "other",
     }
 }
+
+/// Debounce window — short enough that interactive saves still feel
+/// instant, long enough that the OS coalescing windows on each platform
+/// catch the multi-event bursts they emit per save (Windows
+/// ReadDirectoryChangesW fires three to four events, FSEvents on macOS
+/// can fan out renames as Remove + Create).
+const WATCH_DEBOUNCE_MS: u64 = 100;
 
 fn watch(args: &Value) -> Result<Value, String> {
     let path_str = string_arg(args, "path")?;
@@ -463,40 +493,47 @@ fn watch(args: &Value) -> Result<Value, String> {
 
     let id = NEXT_WATCH_ID.fetch_add(1, Ordering::Relaxed);
 
-    let mut watcher =
-        notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
-            Ok(event) => {
-                let kind = kind_label(event.kind);
-                for p in &event.paths {
+    let mut debouncer = new_debouncer(
+        std::time::Duration::from_millis(WATCH_DEBOUNCE_MS),
+        None,
+        move |result: DebounceEventResult| match result {
+            Ok(events_batch) => {
+                for evt in events_batch {
+                    let kind = kind_label(evt.kind);
+                    for p in &evt.paths {
+                        events::emit(
+                            "fs:change",
+                            &json!({
+                                "id": id,
+                                "kind": kind,
+                                "path": p.to_string_lossy(),
+                            }),
+                        );
+                    }
+                }
+            },
+            Err(errs) => {
+                for e in errs {
                     events::emit(
                         "fs:change",
-                        &json!({
-                            "id": id,
-                            "kind": kind,
-                            "path": p.to_string_lossy(),
-                        }),
+                        &json!({ "id": id, "kind": "error", "error": e.to_string() }),
                     );
                 }
             },
-            Err(e) => {
-                events::emit(
-                    "fs:change",
-                    &json!({ "id": id, "kind": "error", "error": e.to_string() }),
-                );
-            },
-        })
-        .map_err(|e| format!("fs.watch: {e}"))?;
+        },
+    )
+    .map_err(|e| format!("fs.watch: {e}"))?;
 
     let mode = if recursive {
         RecursiveMode::Recursive
     } else {
         RecursiveMode::NonRecursive
     };
-    watcher
+    debouncer
         .watch(Path::new(path_str), mode)
         .map_err(|e| format!("fs.watch({path_str}): {e}"))?;
 
-    watchers().lock().insert(id, watcher);
+    watchers().lock().insert(id, debouncer);
     Ok(json!({ "id": id }))
 }
 

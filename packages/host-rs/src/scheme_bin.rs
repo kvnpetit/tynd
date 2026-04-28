@@ -175,47 +175,17 @@ fn cache_headers(b: wry::http::response::Builder) -> wry::http::response::Builde
     b.header("Cache-Control", "no-store")
 }
 
+/// Parse a `tynd-bin://` query string into a typed map.
+///
+/// `form_urlencoded` does the percent-decode + `+`-to-space + UTF-8
+/// validation — replaces a hand-rolled state machine that silently
+/// substituted `U+FFFD` on any non-UTF-8 byte run. Last-wins semantics
+/// mirror the previous behaviour: collecting into `HashMap` lets the
+/// final occurrence of a repeated key clobber earlier ones.
 fn parse_query(q: &str) -> HashMap<String, String> {
-    let mut out = HashMap::new();
-    for pair in q.split('&') {
-        if pair.is_empty() {
-            continue;
-        }
-        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-        let k = url_decode(k);
-        let v = url_decode(v);
-        out.insert(k, v);
-    }
-    out
-}
-
-fn url_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'+' => {
-                out.push(b' ');
-                i += 1;
-            },
-            b'%' if i + 2 < bytes.len() => {
-                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("");
-                if let Ok(b) = u8::from_str_radix(hex, 16) {
-                    out.push(b);
-                    i += 3;
-                } else {
-                    out.push(bytes[i]);
-                    i += 1;
-                }
-            },
-            b => {
-                out.push(b);
-                i += 1;
-            },
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
+    form_urlencoded::parse(q.as_bytes())
+        .into_owned()
+        .collect::<HashMap<_, _>>()
 }
 
 #[cfg(test)]
@@ -298,9 +268,14 @@ mod tests {
     }
 
     #[test]
-    fn url_decode_handles_percent_and_plus() {
-        assert_eq!(url_decode("a%20b"), "a b");
-        assert_eq!(url_decode("a+b"), "a b");
-        assert_eq!(url_decode("C%3A%2Ffoo"), "C:/foo");
+    fn parse_query_handles_percent_and_plus() {
+        // `form_urlencoded` covers the same ground as the old
+        // `url_decode` helper — keep an integration check so a future
+        // dep upgrade doesn't silently regress percent-decoding or
+        // `+`-as-space mapping.
+        let q = parse_query("k=a%20b&j=a+b&c=C%3A%2Ffoo");
+        assert_eq!(q.get("k").map(String::as_str), Some("a b"));
+        assert_eq!(q.get("j").map(String::as_str), Some("a b"));
+        assert_eq!(q.get("c").map(String::as_str), Some("C:/foo"));
     }
 }

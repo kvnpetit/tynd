@@ -215,11 +215,8 @@
     }
   }
 
-  function bytesToBase64Local(u8) {
-    var s = "";
-    for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
-    return btoa(s);
-  }
+  var bytesToBase64Local = globalThis.__tynd_b64_encode;
+  var toBytes = globalThis.__tynd_to_bytes;
 
   // Drain a ReadableStream into a single Uint8Array. Used for streaming
   // upload bodies — we still base64 the whole payload before handing it
@@ -238,10 +235,7 @@
         }
         var chunk = r.value;
         if (typeof chunk === "string") chunk = new TextEncoder().encode(chunk);
-        else if (chunk instanceof ArrayBuffer) chunk = new Uint8Array(chunk);
-        else if (!(chunk instanceof Uint8Array) && chunk && chunk.buffer instanceof ArrayBuffer) {
-          chunk = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-        }
+        else chunk = toBytes(chunk);
         chunks.push(chunk);
         total += chunk.length;
         return pump();
@@ -321,36 +315,27 @@
     return Promise.reject(new TypeError("fetch: unsupported body type"));
   }
 
-  // Called by Rust via __tynd_polyfill_event__(name, dataJson). Each polyfill
-  // that needs native-thread callbacks checks for its own "name:*" prefix.
-  var _prev = globalThis.__tynd_polyfill_event__;
-  globalThis.__tynd_polyfill_event__ = function (name, dataJson) {
-    var data;
-    try { data = JSON.parse(dataJson); } catch (_) { return; }
-    if (name === "fetch:meta" || name === "fetch:chunk" || name === "fetch:end") {
-      var p = _pending[data.id];
-      if (!p) return;
-      if (name === "fetch:meta") {
-        p.resolveHead({
-          status: data.status,
-          statusText: data.statusText,
-          headers: data.headers,
-          stream: p.stream,
-        });
-      } else if (name === "fetch:chunk") {
-        var s = atob(data.chunk);
-        var u8 = new Uint8Array(s.length);
-        for (var i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
-        p.controller.enqueue(u8);
-      } else if (name === "fetch:end") {
-        if (data.error) p.controller.error(new Error(data.error));
-        else p.controller.close();
-        delete _pending[data.id];
-      }
-      return;
+  // Register a "fetch:*" handler with the shared dispatcher in _bridge.js.
+  // The dispatcher does the JSON.parse + try/catch wrapper for us, so we
+  // only see well-formed `data` here.
+  globalThis.__tynd_polyfill_handlers.set("fetch", function (name, data) {
+    var p = _pending[data.id];
+    if (!p) return;
+    if (name === "fetch:meta") {
+      p.resolveHead({
+        status: data.status,
+        statusText: data.statusText,
+        headers: data.headers,
+        stream: p.stream,
+      });
+    } else if (name === "fetch:chunk") {
+      p.controller.enqueue(globalThis.__tynd_b64_decode(data.chunk));
+    } else if (name === "fetch:end") {
+      if (data.error) p.controller.error(new Error(data.error));
+      else p.controller.close();
+      delete _pending[data.id];
     }
-    if (typeof _prev === "function") _prev(name, dataJson);
-  };
+  });
 
   globalThis.fetch = function (input, init) {
     var req = input instanceof Request ? input : new Request(input, init);

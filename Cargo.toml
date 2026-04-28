@@ -173,6 +173,47 @@ ctrlc = { version = "3.5", features = [ "termination" ] }
 # lower memory footprint. Pair with zstd for compressed patches.
 bidiff = "1.0"
 
+# MIME detection from path extension — replaces a hand-rolled match arm
+# that drifted whenever a new asset extension showed up.
+mime_guess = "2"
+
+# Strict UTF-8 query-string parser — dropping the in-house `parse_query`
+# + `url_decode` pair removed a silent UTF-8 fallthrough bug.
+form_urlencoded = "1.2"
+
+# Windows UNC normalize — `dunce::canonicalize` returns plain drive
+# paths instead of `\\?\C:\…` so `Path::starts_with(base)` keeps
+# matching after canonicalization in the dev-mode path-traversal guard.
+dunce = "1.0"
+
+# Cargo-safe slug for app-name → on-disk directory. Replaces an inline
+# sanitizer in `webview_data_dir`.
+slug = "0.1"
+
+# Pattern matching for the security policy globs. Drops a hand-rolled
+# recursive matcher and fixes a `\\` → `/` asymmetry on Windows.
+globset = "0.4"
+
+# `gethostname()` wrapper without shelling out to `hostname(1)`.
+hostname = "0.4"
+
+# OS version via WMI / sw_vers / uname — locale-independent, replaces
+# the brittle `cmd /c ver` parser that broke on non-EN Windows.
+os_info = "3.12"
+
+# Dark-mode detection through the freedesktop XDG portal D-Bus call,
+# Win32 Registry, and CFPreferences — handles KDE / sway / Flatpak that
+# the old `gsettings` shell-out missed.
+dark-light = "2.0"
+
+# BCP-47 locale via `GetUserDefaultLocaleName` (Win),
+# `[NSLocale currentLocale]` (macOS), and `LC_*` env (Linux).
+sys-locale = "0.3"
+
+# Debounced FS watcher — collapses multi-event renames + tracks paths
+# across moves. Sits on top of `notify` and keeps the same OS backend.
+notify-debouncer-full = "0.7"
+
 [workspace.lints.rust]
 unused_must_use               = "deny"
 unsafe_op_in_unsafe_fn        = "deny"

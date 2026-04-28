@@ -3,26 +3,13 @@
 // password hashing / KDFs are intentionally not polyfilled — ship a pure-JS
 // lib (@noble/ciphers, @noble/hashes, hash-wasm) in userland if you need
 // them. See ALTERNATIVES.md.
+//
+// Helpers `__tynd_b64_encode` / `__tynd_b64_decode` come from base64.js,
+// `__tynd_to_bytes` from _bridge.js — both load earlier in mod.rs.
 (function () {
-  function bytesToBase64(u8) {
-    var s = "";
-    for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
-    return btoa(s);
-  }
-  function base64ToBytes(b64) {
-    var s = atob(b64);
-    var u8 = new Uint8Array(s.length);
-    for (var i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
-    return u8;
-  }
-  function toBytes(data) {
-    if (data instanceof Uint8Array) return data;
-    if (data instanceof ArrayBuffer) return new Uint8Array(data);
-    if (data && data.buffer instanceof ArrayBuffer) {
-      return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-    }
-    throw new TypeError("crypto: expected BufferSource");
-  }
+  var bytesToBase64 = globalThis.__tynd_b64_encode;
+  var base64ToBytes = globalThis.__tynd_b64_decode;
+  var toBytes = globalThis.__tynd_to_bytes;
 
   function getRandomValues(view) {
     if (!view || typeof view.byteLength !== "number") {

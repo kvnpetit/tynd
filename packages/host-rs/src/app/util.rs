@@ -17,23 +17,12 @@ pub(super) fn take_string(v: &mut Value, key: &str) -> String {
 /// macOS   : ~/Library/Application Support/<app>/WebView2
 /// Linux   : ~/.local/share/<app>/webview
 pub(super) fn webview_data_dir(app_name: &str) -> Option<PathBuf> {
-    // Sanitize app name: keep [A-Za-z0-9_], collapse other chars to single dashes.
-    let mut safe = String::new();
-    let mut prev_dash = true; // start true to suppress leading dashes
-    for c in app_name.chars() {
-        if c.is_alphanumeric() || c == '_' {
-            safe.push(c);
-            prev_dash = false;
-        } else if !prev_dash {
-            safe.push('-');
-            prev_dash = true;
-        }
-    }
-    while safe.ends_with('-') {
-        safe.pop();
-    }
-    if safe.is_empty() {
-        safe = "tynd".to_string();
-    }
+    // `slug::slugify` returns a filesystem-safe ASCII slug with the same
+    // shape the hand-rolled sanitizer produced (alphanumerics + dashes,
+    // no leading/trailing separators). Falls back to `"tynd"` when the
+    // app name strips down to an empty string — same default the inline
+    // sanitizer carried.
+    let slug = slug::slugify(app_name);
+    let safe = if slug.is_empty() { "tynd".to_string() } else { slug };
     dirs::data_local_dir().map(|d| d.join(safe).join("WebView2"))
 }

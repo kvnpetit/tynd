@@ -15,7 +15,7 @@ export type {
 } from "./types";
 
 import * as v from "valibot";
-import { fireClose, fireReady, getEmitFn, lifecycleFlags, onCloseFns, onReadyFns } from "./lifecycle";
+import { getEmitFn, lifecycleFlags, onCloseFns, onReadyFns } from "./lifecycle";
 import { tynd } from "./logger";
 import { startFull } from "./runtime/full";
 import { startLite } from "./runtime/lite";
@@ -101,16 +101,6 @@ export const app = {
         .join("\n");
       tynd.error(`app.start() received invalid config:\n${issues}`);
       throw new Error("Invalid app.start() config");
-    }
-    // Smoke-test escape hatch — when TYND_SMOKE=1 is set, the backend
-    // bypasses the IPC listener + webview entirely. We fire the lifecycle
-    // hooks (so user code that wires onReady/onClose still runs) then exit
-    // cleanly. Used by the E2E smoke test to verify build + spawn on
-    // headless CI runners that have no display.
-    if (typeof process !== "undefined" && process.env?.TYND_SMOKE === "1") {
-      fireReady();
-      fireClose();
-      process.exit(0);
     }
     // The CLI's bundler replaces `globalThis.__TYND_RUNTIME__` at build
     // time with a string literal ("lite" | "full") so the unused branch

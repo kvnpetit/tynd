@@ -1,5 +1,9 @@
 // atob / btoa — browser-standard base64 helpers.
 // Accepts/produces only Latin-1 strings, per WHATWG spec.
+//
+// Also exposes `__tynd_b64_encode(u8)` / `__tynd_b64_decode(b64)` for the
+// other polyfills (crypto, fetch, websocket) to share — drops three
+// copies of the same `String.fromCharCode` / charCodeAt loop.
 (function () {
   var A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   var LOOKUP = new Uint8Array(128);
@@ -46,5 +50,19 @@
       }
     }
     return out;
+  };
+
+  // Bytes <-> base64 helpers shared across polyfills. Kept in this file
+  // so `btoa` / `atob` are guaranteed to be defined first.
+  globalThis.__tynd_b64_encode = function (u8) {
+    var s = "";
+    for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+    return globalThis.btoa(s);
+  };
+  globalThis.__tynd_b64_decode = function (b64) {
+    var s = globalThis.atob(b64);
+    var u8 = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+    return u8;
   };
 })();

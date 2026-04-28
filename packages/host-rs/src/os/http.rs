@@ -233,43 +233,40 @@ fn download(args: &Value) -> Result<Value, String> {
         }
     }
 
-    // Atomic write: stream into `<dest>.tmp.<pid>.<rand>` then rename — keeps
-    // the original `dest` intact when the network drops mid-transfer.
-    let tmp = format!("{dest}.tmp-{}-{:x}", std::process::id(), {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos())
-    });
-    let mut file =
-        fs::File::create(&tmp).map_err(|e| format!("http.download: create {tmp}: {e}"))?;
+    // Atomic write via `tempfile::NamedTempFile`. Streams into a
+    // sibling temp file in `dest`'s parent so the rename at the end is
+    // a same-volume move; on Windows `persist` calls `ReplaceFileW`
+    // (atomic rename-if-exists), which the manual `tmp-<pid>-<nanos>`
+    // dance the previous code did couldn't guarantee. Drop on the
+    // temp file removes it automatically when an error path returns.
+    let parent = std::path::Path::new(dest)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map_or_else(|| std::path::PathBuf::from("."), std::path::Path::to_path_buf);
+    let mut tmp = tempfile::NamedTempFile::new_in(&parent)
+        .map_err(|e| format!("http.download: tempfile in {}: {e}", parent.display()))?;
     let mut reader = resp.into_reader().take(MAX_DOWNLOAD);
     let mut buf = vec![0u8; 64 * 1024];
     let mut written: u64 = 0;
     let mut emitter = ProgressEmitter::new(progress_id, "download", total);
-    let download_result: Result<(), String> = (|| {
-        loop {
-            let n = reader
-                .read(&mut buf)
-                .map_err(|e| format!("http.download: read: {e}"))?;
-            if n == 0 {
-                emitter.advance(0, true);
-                break;
-            }
-            file.write_all(&buf[..n])
-                .map_err(|e| format!("http.download: write: {e}"))?;
-            written += n as u64;
-            emitter.advance(n, false);
+    loop {
+        let n = reader
+            .read(&mut buf)
+            .map_err(|e| format!("http.download: read: {e}"))?;
+        if n == 0 {
+            emitter.advance(0, true);
+            break;
         }
-        file.flush().map_err(|e| format!("http.download: flush: {e}"))?;
-        Ok(())
-    })();
-
-    if let Err(e) = download_result {
-        let _ = fs::remove_file(&tmp);
-        return Err(e);
+        tmp.write_all(&buf[..n])
+            .map_err(|e| format!("http.download: write: {e}"))?;
+        written += n as u64;
+        emitter.advance(n, false);
     }
-    drop(file);
-    fs::rename(&tmp, dest)
-        .map_err(|e| format!("http.download: rename {tmp} -> {dest}: {e}"))?;
+    tmp.as_file_mut()
+        .flush()
+        .map_err(|e| format!("http.download: flush: {e}"))?;
+    tmp.persist(dest)
+        .map_err(|e| format!("http.download: persist -> {dest}: {e}"))?;
 
     Ok(json!({ "path": dest, "bytes": written }))
 }
