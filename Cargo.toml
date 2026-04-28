@@ -8,16 +8,12 @@ members = [ "packages/host-rs", "packages/full", "packages/lite" ]
 [workspace.metadata.cargo-shear]
 ignored = [
     "anyhow",
-    "auto-launch",
     "bidiff",
     "cap-tempfile",
-    "ed25519-dalek",
     "fastrand",
     "global-hotkey",
-    "keyring",
     "portable-pty",
     "rusqlite",
-    "self-replace",
     "thiserror",
     "user-idle",
 ]

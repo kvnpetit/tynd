@@ -14,6 +14,7 @@
 
 export { base64ToBytes, bytesToBase64 } from "./client/_internal";
 export { type AppInfo, app } from "./client/app";
+export { autolaunch, type AutolaunchOptions } from "./client/autolaunch";
 export { type BackendClient, createBackend } from "./client/backend";
 export { type ClipboardImage, clipboard } from "./client/clipboard";
 export { compute, type HashAlgo } from "./client/compute";
@@ -42,6 +43,7 @@ export {
   type HttpResponse,
   http,
 } from "./client/http";
+export { type KeyringEntry, keyring } from "./client/keyring";
 export { type ContextMenuItem, menu } from "./client/menu";
 export { type Monitor, monitors } from "./client/monitor";
 export { type NotificationOptions, notification } from "./client/notification";
@@ -62,6 +64,18 @@ export { sidecar } from "./client/sidecar";
 export { type SingleInstanceResult, singleInstance } from "./client/single-instance";
 export { createStore } from "./client/store";
 export { type TrayMenuItem, tray } from "./client/tray";
+export {
+  type UpdaterCheckEvent,
+  type UpdaterCheckOptions,
+  type UpdaterDownloadOptions,
+  type UpdaterDownloadResult,
+  type UpdaterInstallOptions,
+  type UpdaterInstallResult,
+  type UpdaterPeriodicOptions,
+  type UpdaterProgress,
+  type UpdateInfo,
+  updater,
+} from "./client/updater";
 
 // Web-platform globals re-exported so `import * as tynd from "@tynd/core/client"`
 // gives you `tynd.fetch`, `tynd.WebSocket`, `tynd.crypto`, etc. without

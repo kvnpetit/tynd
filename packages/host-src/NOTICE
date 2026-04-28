@@ -100,12 +100,9 @@ Plugins ship their own Rust native crates; each is statically linked into
 the app's host binary when the plugin is enabled. All are licensed under
 `Apache-2.0 OR MIT` and live at https://github.com/kvnpetit/tynd/tree/main/plugins.
 
-- tynd_plugin_autolaunch
 - tynd_plugin_clipboard_history
-- tynd_plugin_keyring
 - tynd_plugin_log
 - tynd_plugin_power
 - tynd_plugin_shortcuts
 - tynd_plugin_sql
 - tynd_plugin_terminal
-- tynd_plugin_updater

@@ -4632,15 +4632,12 @@ dependencies = [
  "serde",
  "serde_json",
  "tynd-host",
- "tynd_plugin_autolaunch",
  "tynd_plugin_clipboard_history",
- "tynd_plugin_keyring",
  "tynd_plugin_log",
  "tynd_plugin_power",
  "tynd_plugin_shortcuts",
  "tynd_plugin_sql",
  "tynd_plugin_terminal",
- "tynd_plugin_updater",
  "zstd",
 ]
 
@@ -4651,6 +4648,7 @@ dependencies = [
  "ahash",
  "anyhow",
  "arboard",
+ "auto-launch",
  "base64",
  "blake3",
  "cap-std",
@@ -4660,11 +4658,13 @@ dependencies = [
  "ctrlc",
  "dashmap",
  "dirs 6.0.0",
+ "ed25519-dalek",
  "fastrand",
  "fslock",
  "gtk",
  "image",
  "interprocess",
+ "keyring",
  "mac-notification-sys",
  "muda",
  "notify",
@@ -4675,6 +4675,7 @@ dependencies = [
  "rand 0.8.6",
  "rfd",
  "rquickjs",
+ "self-replace",
  "serde",
  "serde_json",
  "sha2",
@@ -4708,25 +4709,13 @@ dependencies = [
  "serde_json",
  "sha2",
  "tynd-host",
- "tynd_plugin_autolaunch",
  "tynd_plugin_clipboard_history",
- "tynd_plugin_keyring",
  "tynd_plugin_log",
  "tynd_plugin_power",
  "tynd_plugin_shortcuts",
  "tynd_plugin_sql",
  "tynd_plugin_terminal",
- "tynd_plugin_updater",
  "ureq",
-]
-
-[[package]]
-name = "tynd_plugin_autolaunch"
-version = "1.0.0"
-dependencies = [
- "auto-launch",
- "serde_json",
- "tynd_plugin_sdk",
 ]
 
 [[package]]
@@ -4735,15 +4724,6 @@ version = "1.0.0"
 dependencies = [
  "arboard",
  "parking_lot",
- "serde_json",
- "tynd_plugin_sdk",
-]
-
-[[package]]
-name = "tynd_plugin_keyring"
-version = "1.0.0"
-dependencies = [
- "keyring",
  "serde_json",
  "tynd_plugin_sdk",
 ]
@@ -4809,19 +4789,6 @@ dependencies = [
  "portable-pty",
  "serde_json",
  "tynd_plugin_sdk",
-]
-
-[[package]]
-name = "tynd_plugin_updater"
-version = "1.0.0"
-dependencies = [
- "base64",
- "ed25519-dalek",
- "parking_lot",
- "self-replace",
- "serde_json",
- "tynd_plugin_sdk",
- "ureq",
 ]
 
 [[package]]

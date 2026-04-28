@@ -12,6 +12,8 @@ pub mod window_cmd;
 // Gatable user-facing OS APIs. Each feature flag flips both the module
 // and its `dispatch` arm. Preset builds enable `api-all` (default);
 // custom builds pick a subset.
+#[cfg(feature = "api-autolaunch")]
+pub mod autolaunch;
 #[cfg(feature = "api-clipboard")]
 pub mod clipboard;
 #[cfg(feature = "api-compute")]
@@ -22,6 +24,8 @@ pub mod dialog;
 pub mod fs;
 #[cfg(feature = "api-http")]
 pub mod http;
+#[cfg(feature = "api-keyring")]
+pub mod keyring;
 #[cfg(feature = "api-notification")]
 pub mod notification;
 #[cfg(feature = "api-process")]
@@ -34,6 +38,8 @@ pub mod sidecar;
 pub mod single_instance;
 #[cfg(feature = "api-store")]
 pub mod store;
+#[cfg(feature = "api-updater")]
+pub mod updater;
 #[cfg(feature = "api-websocket")]
 pub mod websocket;
 
@@ -66,6 +72,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         // populated at process startup from the CLI-generated main.rs).
         "plugin" => crate::plugins::dispatch(method, args),
 
+        "autolaunch" => {
+            #[cfg(feature = "api-autolaunch")]
+            {
+                autolaunch::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-autolaunch"))]
+            {
+                Err(api_disabled("autolaunch"))
+            }
+        },
         "clipboard" => {
             #[cfg(feature = "api-clipboard")]
             {
@@ -114,6 +130,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-http"))]
             {
                 Err(api_disabled("http"))
+            }
+        },
+        "keyring" => {
+            #[cfg(feature = "api-keyring")]
+            {
+                keyring::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-keyring"))]
+            {
+                Err(api_disabled("keyring"))
             }
         },
         "notification" => {
@@ -174,6 +200,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-store"))]
             {
                 Err(api_disabled("store"))
+            }
+        },
+        "updater" => {
+            #[cfg(feature = "api-updater")]
+            {
+                updater::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-updater"))]
+            {
+                Err(api_disabled("updater"))
             }
         },
         "websocket" => {
