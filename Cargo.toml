@@ -130,8 +130,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 anyhow             = "1.0"
 thiserror          = "2.0"
 
-# Binary diff for delta updates (replaces full-binary downloads in the updater).
-bsdiff             = "0.2"
+# Binary diff for delta updates (replaces full-binary downloads in the
+# updater). `bidiff` over `bsdiff` — parallel scanning, divsufsort,
+# lower memory footprint. Pair with zstd for compressed patches.
+bidiff             = "1.0"
 
 [workspace.lints.rust]
 unused_must_use               = "deny"

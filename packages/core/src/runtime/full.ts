@@ -1,3 +1,4 @@
+import { match } from "ts-pattern";
 import * as v from "valibot";
 import { dispatchFrontendEmit, FRONTEND_EMIT_FN } from "../frontend-events";
 import { fireClose, fireReady, onCloseFns, setEmitFn } from "../lifecycle";
@@ -157,54 +158,46 @@ async function handleLine(line: string, entryPath: string): Promise<void> {
     tynd.error(`Invalid IPC message shape: ${preview(line)}`);
     return;
   }
-  const msg = parsed.output;
-
-  switch (msg.type) {
-    case "call":
-      await handleCall(msg, entryPath);
-      break;
-
-    case "cancel": {
-      const stream = _activeStreams.get(msg.id);
-      if (stream) {
-        _activeStreams.delete(msg.id);
-        // Release any pending yield so it can observe the stream is gone.
-        stream.waiter?.();
-        if (typeof stream.iter.return === "function") {
-          stream.iter.return(undefined).catch(() => {
-            /* swallow: cancel is best-effort */
-          });
-        }
+  // Exhaustive dispatch over the IPC message union. `ts-pattern`'s
+  // `.exhaustive()` makes the TS compiler refuse the build if a new
+  // variant is added to `IpcMsgSchema` without a matching arm here —
+  // an upgrade over the previous switch which silently fell through.
+  await match(parsed.output)
+    .with({ type: "call" }, (m) => handleCall(m, entryPath))
+    .with({ type: "cancel" }, (m) => {
+      const stream = _activeStreams.get(m.id);
+      if (!stream) return;
+      _activeStreams.delete(m.id);
+      // Release any pending yield so it can observe the stream is gone.
+      stream.waiter?.();
+      if (typeof stream.iter.return === "function") {
+        stream.iter.return(undefined).catch(() => {
+          /* swallow: cancel is best-effort */
+        });
       }
-      break;
-    }
-
-    case "ack": {
-      const stream = _activeStreams.get(msg.id);
-      if (stream) {
-        // Cap credit at STREAM_CREDIT — a buggy / hostile host sending a
-        // huge ack value could otherwise grow credit without bound and
-        // defeat the back-pressure cap.
-        stream.credit = Math.min(stream.credit + msg.n, STREAM_CREDIT);
-        // Wake a yield blocked on empty credit, if any.
-        if (stream.waiter) {
-          const wake = stream.waiter;
-          stream.waiter = null;
-          wake();
-        }
+    })
+    .with({ type: "ack" }, (m) => {
+      const stream = _activeStreams.get(m.id);
+      if (!stream) return;
+      // Cap credit at STREAM_CREDIT — a buggy / hostile host sending a
+      // huge ack value could otherwise grow credit without bound and
+      // defeat the back-pressure cap.
+      stream.credit = Math.min(stream.credit + m.n, STREAM_CREDIT);
+      // Wake a yield blocked on empty credit, if any.
+      if (stream.waiter) {
+        const wake = stream.waiter;
+        stream.waiter = null;
+        wake();
       }
-      break;
-    }
-
-    case "tynd:ready":
+    })
+    .with({ type: "tynd:ready" }, () => {
       fireReady();
-      break;
-
-    case "tynd:close":
+    })
+    .with({ type: "tynd:close" }, () => {
       fireClose();
       process.exit(0);
-      break;
-  }
+    })
+    .exhaustive();
 }
 
 async function handleCall(
