@@ -11,11 +11,9 @@ ignored = [
     "bidiff",
     "cap-tempfile",
     "fastrand",
-    "global-hotkey",
     "portable-pty",
     "rusqlite",
     "thiserror",
-    "user-idle",
 ]
 # Generated/vendored trees that should not be members of the monorepo
 # workspace. `packages/host-src/native/` is a flattened mirror of

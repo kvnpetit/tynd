@@ -74,6 +74,8 @@ ed25519-dalek         = { workspace = true, optional = true }
 self-replace          = { workspace = true, optional = true }
 auto-launch           = { workspace = true, optional = true }
 keyring               = { workspace = true, optional = true }
+global-hotkey         = { workspace = true, optional = true }
+user-idle             = { workspace = true, optional = true }
 
 rquickjs = { workspace = true, optional = true }
 
@@ -105,12 +107,16 @@ api-all = [
     "api-fs",
     "api-http",
     "api-keyring",
+    "api-log",
     "api-notification",
+    "api-power",
     "api-process",
     "api-shell",
+    "api-shortcuts",
     "api-sidecar",
     "api-single-instance",
     "api-store",
+    "api-theme",
     "api-updater",
     "api-websocket",
 ]
@@ -124,12 +130,16 @@ api-dialog          = [ "dep:rfd" ]
 api-fs              = [ "dep:notify-debouncer-full", "dep:trash" ]
 api-http            = [ "dep:ureq" ]
 api-keyring         = [ "dep:keyring" ]
+api-log             = [  ]
 api-notification    = [ "dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys" ]
+api-power           = [ "dep:user-idle" ]
 api-process         = [  ]
 api-shell           = [ "dep:open" ]
+api-shortcuts       = [ "dep:global-hotkey" ]
 api-sidecar         = [  ]
 api-single-instance = [ "dep:fslock", "dep:interprocess" ]
 api-store           = [  ]
+api-theme           = [  ]
 api-updater         = [ "dep:ureq", "dep:ed25519-dalek", "dep:self-replace" ]
 api-websocket       = [ "dep:tungstenite" ]
 
@@ -145,7 +155,7 @@ tauri-winrt-notification = { workspace = true, optional = true }
 # system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
 # 0.61 introduces `windows-link` (raw-dylib resolution) which drops the
 # 6 MB `windows-targets` import-lib bloat the older 0.59 line pulled in.
-windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Com" ] }
+windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_System_Power" ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = { workspace = true, optional = true }

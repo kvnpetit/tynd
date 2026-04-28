@@ -4918,9 +4918,6 @@ dependencies = [
  "serde_json",
  "tynd-host",
  "tynd_plugin_clipboard_history",
- "tynd_plugin_log",
- "tynd_plugin_power",
- "tynd_plugin_shortcuts",
  "tynd_plugin_sql",
  "tynd_plugin_terminal",
  "zstd",
@@ -4949,6 +4946,7 @@ dependencies = [
  "fastrand",
  "form_urlencoded",
  "fslock",
+ "global-hotkey",
  "globset",
  "gtk",
  "hostname",
@@ -4983,6 +4981,7 @@ dependencies = [
  "tungstenite",
  "tynd_plugin_sdk",
  "ureq",
+ "user-idle",
  "uuid",
  "windows-sys 0.61.2",
  "wry",
@@ -5004,9 +5003,6 @@ dependencies = [
  "sha2",
  "tynd-host",
  "tynd_plugin_clipboard_history",
- "tynd_plugin_log",
- "tynd_plugin_power",
- "tynd_plugin_shortcuts",
  "tynd_plugin_sql",
  "tynd_plugin_terminal",
  "ureq",
@@ -5023,25 +5019,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tynd_plugin_log"
-version = "1.0.0"
-dependencies = [
- "dirs 6.0.0",
- "parking_lot",
- "serde_json",
- "tynd_plugin_sdk",
-]
-
-[[package]]
-name = "tynd_plugin_power"
-version = "1.0.0"
-dependencies = [
- "serde_json",
- "tynd_plugin_sdk",
- "user-idle",
-]
-
-[[package]]
 name = "tynd_plugin_sdk"
 version = "1.0.0"
 dependencies = [
@@ -5050,17 +5027,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "tynd_plugin_shortcuts"
-version = "1.0.0"
-dependencies = [
- "dashmap",
- "global-hotkey",
- "parking_lot",
- "serde_json",
- "tynd_plugin_sdk",
 ]
 
 [[package]]

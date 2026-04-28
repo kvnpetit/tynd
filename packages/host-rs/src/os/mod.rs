@@ -26,18 +26,26 @@ pub mod fs;
 pub mod http;
 #[cfg(feature = "api-keyring")]
 pub mod keyring;
+#[cfg(feature = "api-log")]
+pub mod log;
 #[cfg(feature = "api-notification")]
 pub mod notification;
+#[cfg(feature = "api-power")]
+pub mod power;
 #[cfg(feature = "api-process")]
 pub mod process;
 #[cfg(feature = "api-shell")]
 pub mod shell;
+#[cfg(feature = "api-shortcuts")]
+pub mod shortcuts;
 #[cfg(feature = "api-sidecar")]
 pub mod sidecar;
 #[cfg(feature = "api-single-instance")]
 pub mod single_instance;
 #[cfg(feature = "api-store")]
 pub mod store;
+#[cfg(feature = "api-theme")]
+pub mod theme;
 #[cfg(feature = "api-updater")]
 pub mod updater;
 #[cfg(feature = "api-websocket")]
@@ -142,6 +150,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
                 Err(api_disabled("keyring"))
             }
         },
+        "log" => {
+            #[cfg(feature = "api-log")]
+            {
+                log::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-log"))]
+            {
+                Err(api_disabled("log"))
+            }
+        },
         "notification" => {
             #[cfg(feature = "api-notification")]
             {
@@ -150,6 +168,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-notification"))]
             {
                 Err(api_disabled("notification"))
+            }
+        },
+        "power" => {
+            #[cfg(feature = "api-power")]
+            {
+                power::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-power"))]
+            {
+                Err(api_disabled("power"))
             }
         },
         "process" => {
@@ -170,6 +198,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-shell"))]
             {
                 Err(api_disabled("shell"))
+            }
+        },
+        "shortcuts" => {
+            #[cfg(feature = "api-shortcuts")]
+            {
+                shortcuts::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-shortcuts"))]
+            {
+                Err(api_disabled("shortcuts"))
             }
         },
         "sidecar" => {
@@ -200,6 +238,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-store"))]
             {
                 Err(api_disabled("store"))
+            }
+        },
+        "theme" => {
+            #[cfg(feature = "api-theme")]
+            {
+                theme::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-theme"))]
+            {
+                Err(api_disabled("theme"))
             }
         },
         "updater" => {

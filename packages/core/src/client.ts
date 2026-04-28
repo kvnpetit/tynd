@@ -44,12 +44,14 @@ export {
   http,
 } from "./client/http";
 export { type KeyringEntry, keyring } from "./client/keyring";
+export { type LogConfigureOptions, type LogLevel, log } from "./client/log";
 export { type ContextMenuItem, menu } from "./client/menu";
 export { type Monitor, monitors } from "./client/monitor";
 export { type NotificationOptions, notification } from "./client/notification";
 export { type OsInfo, os } from "./client/os";
 export { path } from "./client/path";
 export { createPluginClient, type PluginClient, type PluginShape } from "./client/plugin";
+export { type PowerStatus, power } from "./client/power";
 export { type ExecOptions, type ExecResult, process } from "./client/process";
 export {
   abortable,
@@ -60,9 +62,17 @@ export {
 } from "./client/rpc-helpers";
 export { type SecurityPolicy, type SecurityScope, security } from "./client/security";
 export { shell } from "./client/shell";
+export { type ShortcutHandle, shortcuts } from "./client/shortcuts";
 export { sidecar } from "./client/sidecar";
 export { type SingleInstanceResult, singleInstance } from "./client/single-instance";
 export { createStore } from "./client/store";
+export {
+  type ConfigureOptions as ThemeConfigureOptions,
+  type EffectiveTheme,
+  type Palette,
+  type ThemePreference,
+  theme,
+} from "./client/theme";
 export { type TrayMenuItem, tray } from "./client/tray";
 export {
   type UpdateInfo,

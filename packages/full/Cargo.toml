@@ -44,9 +44,6 @@ crossbeam-channel.workspace = true
 # included" UX. Custom builds skip this feature entirely.
 tynd_plugin_sql               = { path = "../../../plugins/sql/native", optional = true }
 tynd_plugin_terminal          = { path = "../../../plugins/terminal/native", optional = true }
-tynd_plugin_shortcuts         = { path = "../../../plugins/shortcuts/native", optional = true }
-tynd_plugin_power             = { path = "../../../plugins/power/native", optional = true }
-tynd_plugin_log               = { path = "../../../plugins/log/native", optional = true }
 tynd_plugin_clipboard_history = { path = "../../../plugins/clipboard-history/native", optional = true }
 
 [features]
@@ -60,8 +57,5 @@ preset  = ["tynd-host/api-all", "bundled-plugins"]
 bundled-plugins = [
     "dep:tynd_plugin_sql",
     "dep:tynd_plugin_terminal",
-    "dep:tynd_plugin_shortcuts",
-    "dep:tynd_plugin_power",
-    "dep:tynd_plugin_log",
     "dep:tynd_plugin_clipboard_history",
 ]

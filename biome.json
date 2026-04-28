@@ -130,6 +130,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["packages/core/src/client/log.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ]
 }

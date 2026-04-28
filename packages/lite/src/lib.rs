@@ -60,8 +60,5 @@ fn register_bundled_plugins() {
     use tynd_host::plugins::register;
     register(tynd_plugin_sql::__tynd_plugin());
     register(tynd_plugin_terminal::__tynd_plugin());
-    register(tynd_plugin_shortcuts::__tynd_plugin());
-    register(tynd_plugin_power::__tynd_plugin());
-    register(tynd_plugin_log::__tynd_plugin());
     register(tynd_plugin_clipboard_history::__tynd_plugin());
 }
