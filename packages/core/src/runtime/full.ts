@@ -1,7 +1,7 @@
 import { match } from "ts-pattern";
 import * as v from "valibot";
 import { dispatchFrontendEmit, FRONTEND_EMIT_FN } from "../frontend-events";
-import { fireClose, fireReady, onCloseFns, setEmitFn } from "../lifecycle";
+import { fireClose, fireReady, setEmitFn } from "../lifecycle";
 import { tynd } from "../logger";
 import { getPluginMethod, parsePluginCall } from "../plugin";
 import type { AppConfig } from "../types";
@@ -146,13 +146,9 @@ function startListener(entryPath: string): void {
   });
 
   process.stdin.on("end", () => {
-    for (const fn of onCloseFns) {
-      try {
-        fn();
-      } catch {
-        /* best-effort cleanup */
-      }
-    }
+    // Same fan-out as the explicit `tynd:close` lifecycle message — the
+    // stdin-end path (parent host went away) is just a less polite close.
+    fireClose();
     process.exit(0);
   });
   process.stdin.on("error", () => process.exit(0));

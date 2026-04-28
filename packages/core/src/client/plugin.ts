@@ -10,8 +10,7 @@
  * populated by `app.start({ plugins: [...] })`.
  */
 
-import { tynd } from "../logger";
-import "./_internal.js";
+import { createCallProxy } from "./_internal";
 
 /**
  * Plugin identity shape — same as the `Plugin<T>` type exported by the
@@ -58,18 +57,9 @@ export type PluginClient<P> =
 export function createPluginClient<
   P extends PluginShape<Record<string, (...a: never[]) => unknown>>,
 >(name: string): PluginClient<P> {
-  return new Proxy({} as PluginClient<P>, {
-    get(_target, prop: string | symbol) {
-      if (typeof prop !== "string") return undefined;
-      // Avoid accidental thenable behaviour on the proxy itself.
-      if (prop === "then" || prop === "catch" || prop === "finally") return undefined;
-
-      if (!window.__tynd__) {
-        tynd.error("window.__tynd__ is not available — are you running outside a tynd app?");
-        return () => Promise.reject(new Error("[tynd] not in a tynd app context"));
-      }
-
-      return (...args: unknown[]) => window.__tynd__.call(`$plugin$${name}$${prop}`, args);
-    },
-  }) as PluginClient<P>;
+  // Plugin RPC: prop name is wrapped in the `$plugin$<name>$<method>`
+  // wire envelope so the runtime dispatcher routes to the plugin registry.
+  return createCallProxy<PluginClient<P> & object>(
+    (prop) => `$plugin$${name}$${prop}`,
+  ) as PluginClient<P>;
 }

@@ -6,14 +6,18 @@
  * (`__tynd_fe_emit__`) so it travels over the existing IPC path without
  * adding a new message type — runtimes just intercept the reserved name
  * before looking it up in the user module.
+ *
+ * The bus itself is a tiny `mitt` emitter; we wrap it only to keep the
+ * unsubscribe-callback ergonomics of the previous custom Map<Set>
+ * implementation and to fan out errors via the tynd logger.
  */
 
+import mitt, { type Handler } from "mitt";
 import { tynd } from "./logger";
 
 export const FRONTEND_EMIT_FN = "__tynd_fe_emit__";
 
-type Listener = (payload: unknown) => void;
-const _listeners = new Map<string, Set<Listener>>();
+const _bus = mitt<Record<string, unknown>>();
 
 /**
  * Register a backend handler for a reserved frontend event. Returns an
@@ -25,16 +29,9 @@ const _listeners = new Map<string, Set<Listener>>();
  * teardown), use `clearFrontendListeners`.
  */
 export function onFrontendEmit<T>(name: string, handler: (payload: T) => void): () => void {
-  let bucket = _listeners.get(name);
-  if (!bucket) {
-    bucket = new Set();
-    _listeners.set(name, bucket);
-  }
-  bucket.add(handler as Listener);
-  return () => {
-    bucket?.delete(handler as Listener);
-    if (bucket?.size === 0) _listeners.delete(name);
-  };
+  const wrapped = handler as Handler<unknown>;
+  _bus.on(name, wrapped);
+  return () => _bus.off(name, wrapped);
 }
 
 /**
@@ -45,17 +42,21 @@ export function onFrontendEmit<T>(name: string, handler: (payload: T) => void): 
  */
 export function clearFrontendListeners(name?: string): void {
   if (name === undefined) {
-    _listeners.clear();
+    _bus.all.clear();
     return;
   }
-  _listeners.delete(name);
+  _bus.all.delete(name);
 }
 
 /** Called by the runtime when the frontend posts a reserved emit call. */
 export function dispatchFrontendEmit(name: string, payload: unknown): void {
-  const bucket = _listeners.get(name);
-  if (!bucket) return;
-  for (const h of bucket) {
+  const bucket = _bus.all.get(name);
+  if (!bucket || bucket.length === 0) return;
+  // Snapshot the handler list before iterating so a handler that
+  // unsubscribes itself doesn't skip its neighbour. mitt mutates the
+  // array in-place on `off`, so mirroring the previous Set-based
+  // semantics requires a copy.
+  for (const h of bucket.slice() as Array<Handler<unknown>>) {
     try {
       h(payload);
     } catch (e) {

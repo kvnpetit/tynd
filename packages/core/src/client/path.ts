@@ -1,29 +1,39 @@
+/**
+ * Frontend path helpers — auto-detect Windows vs POSIX from `navigator.platform`
+ * and forward to the matching `pathe` backend. `pathe` ships pure-JS
+ * implementations of both flavours (no `node:path` runtime dep) so the
+ * helpers work inside the WebView.
+ *
+ * Public signature is preserved for back-compat: callers keep using
+ * `path.join`, `path.dirname`, etc. without knowing about pathe.
+ */
+
+import { posix, win32 } from "pathe";
+
+const _isWindows = typeof navigator !== "undefined" && /win/i.test(navigator.platform ?? "");
+const _impl = _isWindows ? win32 : posix;
+const _sep: "/" | "\\" = _isWindows ? "\\" : "/";
+
 export const path = {
   sep(): "/" | "\\" {
-    return typeof navigator !== "undefined" && /win/i.test(navigator.platform) ? "\\" : "/";
+    return _sep;
   },
   join(...parts: string[]): string {
-    const s = path.sep();
-    return parts
-      .filter((p) => p.length > 0)
-      .join(s)
-      .replace(/[/\\]+/g, s);
+    // Filter empties to match the previous behaviour (pathe.join would
+    // otherwise emit a `.` for `join("")`).
+    const cleaned = parts.filter((p) => p.length > 0);
+    return cleaned.length === 0 ? "" : _impl.join(...cleaned);
   },
   dirname(p: string): string {
-    const m = p.replace(/[/\\]$/, "").match(/^(.*)[/\\][^/\\]+$/);
-    return m?.[1] ?? "";
+    const stripped = p.replace(/[/\\]$/, "");
+    if (!stripped.includes("/") && !stripped.includes("\\")) return "";
+    const result = _impl.dirname(stripped);
+    return result === "." ? "" : result;
   },
   basename(p: string, ext?: string): string {
-    const name =
-      p
-        .replace(/[/\\]$/, "")
-        .split(/[/\\]/)
-        .pop() ?? "";
-    return ext && name.endsWith(ext) ? name.slice(0, -ext.length) : name;
+    return _impl.basename(p.replace(/[/\\]$/, ""), ext);
   },
   extname(p: string): string {
-    const name = path.basename(p);
-    const i = name.lastIndexOf(".");
-    return i > 0 ? name.slice(i) : "";
+    return _impl.extname(p);
   },
 };

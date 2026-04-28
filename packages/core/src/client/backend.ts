@@ -1,6 +1,6 @@
 import { tynd } from "../logger";
 import type { Emitter } from "../types";
-import "./_internal.js";
+import { createCallProxy } from "./_internal";
 
 type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
   k: infer I,
@@ -55,21 +55,15 @@ export type BackendClient<T> = ModuleFunctions<T> & {
  * await api.greet("Alice")
  */
 export function createBackend<T>(): BackendClient<T> {
-  return new Proxy({} as BackendClient<T>, {
-    get(_target, prop: string | symbol) {
-      if (typeof prop !== "string") return undefined;
-      // Block thenable traps so `await api` doesn't fire a backend call.
-      if (prop === "then" || prop === "catch" || prop === "finally") return undefined;
-
-      if (!window.__tynd__) {
-        tynd.error("window.__tynd__ is not available — are you running outside a tynd app?");
-        return () => Promise.reject(new Error("[tynd] not in a tynd app context"));
-      }
-
+  return createCallProxy<BackendClient<T>>(
+    // Backend RPC: prop name == wire fn name.
+    (prop) => prop,
+    // Subscription helpers (`on`/`once`) are not RPC calls — handled here
+    // before the default `(...args) => window.__tynd__.call(...)` path runs.
+    (prop) => {
       if (prop === "on") {
         return (event: string, handler: (p: unknown) => void) => window.__tynd__.on(event, handler);
       }
-
       if (prop === "once") {
         return (event: string, handler: (p: unknown) => void) => {
           let called = false;
@@ -89,8 +83,7 @@ export function createBackend<T>(): BackendClient<T> {
           return () => window.__tynd__.off(event, wrapper);
         };
       }
-
-      return (...args: unknown[]) => window.__tynd__.call(prop, args);
+      return undefined;
     },
-  });
+  );
 }
