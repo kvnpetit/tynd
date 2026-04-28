@@ -17,7 +17,8 @@
       "!**/bun.lock",
       "!**/release",
       "!packages/lite/src/polyfills/*.js",
-      "!packages/lite/src/quickjs/*.js"
+      "!packages/lite/src/quickjs/*.js",
+      "!packages/host-rs/src/devalue.bundle.js"
     ]
   },
   "formatter": {

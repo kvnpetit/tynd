@@ -5,20 +5,36 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::window::WindowConfig;
 
 /// A message coming from the backend runtime to the frontend.
+///
+/// `value` / `payload` carry an already-serialized payload string — either
+/// devalue-encoded (full runtime, Date/Map/Set/BigInt roundtrip) or plain
+/// JSON (lite runtime, where porting devalue into QuickJS would be its own
+/// project). The webview shim tries devalue first then falls back to JSON,
+/// so both producers work transparently.
+///
+/// For framework-internal payloads that the Rust host needs to inspect
+/// natively (currently only `evalInFrontend`), use `EvalInFrontend` —
+/// it carries plain fields the Rust side can read without parsing.
 #[derive(Debug)]
 pub enum BackendEvent {
     /// Result of a frontend function call (resolve/reject). For streaming calls,
-    /// marks the end of the stream; `value` is the generator's return value (or Null).
-    Return { id: String, ok: bool, value: Value },
+    /// marks the end of the stream; `value` is the generator's return value
+    /// (or `"null"` for void). On error, `value` is the error message.
+    Return { id: String, ok: bool, value: String },
     /// A single chunk from a streaming (async-iterable) backend call.
-    Yield { id: String, value: Value },
-    /// Event pushed by the backend to frontend subscribers
+    Yield { id: String, value: String },
+    /// Event pushed by the backend to frontend subscribers.
     Emit {
         name: String,
-        payload: Value,
+        payload: String,
         /// Target window label; when `None` every webview receives the event.
         to: Option<String>,
     },
+    /// Framework-only: backend asked the host to evaluate a raw JS string in
+    /// one or every webview. Replaces the previous `__tynd:eval__`
+    /// stringly-named event so the script field doesn't need to ride
+    /// through devalue/JSON encoding.
+    EvalInFrontend { script: String, to: Option<String> },
     /// Dev-mode: backend was hot-reloaded — the host should soft-reload the webview
     /// so the frontend picks up the new backend without losing the native window.
     Reload,

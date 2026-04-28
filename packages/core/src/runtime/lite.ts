@@ -2,6 +2,7 @@ import { fireClose, fireReady, setEmitFn } from "../lifecycle";
 import { tynd } from "../logger";
 import type { AppConfig } from "../types";
 import { safeStringify } from "./stringify";
+import { encode as encodeWire } from "./wire";
 
 /**
  * Lite boot: config via `globalThis.__tynd_config__`, events via injected
@@ -40,11 +41,18 @@ export function startLite(config: AppConfig): void {
       }
       return;
     }
-    // Match full-mode: surface BigInt / circular refs as explicit log
-    // rather than silently JSON-crashing inside `nativeEmit`.
-    const encoded = safeStringify(payload);
-    if (encoded === null) {
-      tynd.error(`emit("${name}"): payload is not JSON-serializable — dropped`);
+    // Encode via devalue (loaded into QuickJS by host-rs at startup) so
+    // `Date` / `Map` / `Set` / `BigInt` / cyclic refs roundtrip cleanly.
+    // Lite's `__tynd_emit__` Rust binding shuttles the string verbatim
+    // to the BackendEvent::Emit pipe, where the webview shim devalue-
+    // parses on receipt.
+    let encoded: string;
+    try {
+      encoded = encodeWire(payload);
+    } catch (e) {
+      tynd.error(
+        `emit("${name}"): payload is not encodable (${e instanceof Error ? e.message : String(e)}) — dropped`,
+      );
       return;
     }
     nativeEmit(name, encoded, to);

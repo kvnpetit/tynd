@@ -72,7 +72,24 @@ globalThis.__tynd_mod__ = globalThis;
   var STREAM_CREDIT = 64;
 
   var streams = {};
-  function stringify(v) { try { return JSON.stringify(v === undefined ? null : v); } catch (_) { return 'null'; } }
+  // Wire helpers — devalue when available (loaded by host before this file),
+  // JSON fallback otherwise. Both sides of the IPC use the same helpers so
+  // `Date` / `Map` / `Set` / `BigInt` / cyclic refs roundtrip cleanly.
+  function stringify(v) {
+    var dv = globalThis.__tynd_dv__;
+    if (dv && typeof dv.stringify === 'function') {
+      try { return dv.stringify(v === undefined ? null : v); } catch (_) {}
+    }
+    try { return JSON.stringify(v === undefined ? null : v); } catch (_) { return 'null'; }
+  }
+  function decode(s) {
+    if (s == null) return [];
+    var dv = globalThis.__tynd_dv__;
+    if (dv && typeof dv.parse === 'function') {
+      try { return dv.parse(s); } catch (_) {}
+    }
+    try { return JSON.parse(s); } catch (_) { return []; }
+  }
   function isAsyncIterable(x) {
     return x != null && (typeof x === 'object' || typeof x === 'function')
       && typeof x[Symbol.asyncIterator] === 'function';
@@ -111,11 +128,11 @@ globalThis.__tynd_mod__ = globalThis;
     // Reserved: frontend -> backend emit bus. Dispatches to listeners
     // registered via `onFrontendEmit` without touching the user module.
     if (fnName === '__tynd_fe_emit__') {
-      var a;
-      try { a = JSON.parse(argsJson); } catch (_) { a = []; }
+      var a = decode(argsJson);
+      if (!Array.isArray(a)) a = [];
       var dispatcher = globalThis.__tynd_fe_dispatch__;
       if (typeof dispatcher === 'function') dispatcher(a[0], a[1]);
-      __tynd_return__(id, true, 'null');
+      __tynd_return__(id, true, stringify(null));
       return;
     }
 
@@ -149,8 +166,8 @@ globalThis.__tynd_mod__ = globalThis;
       }
     }
 
-    var args;
-    try { args = JSON.parse(argsJson); } catch (_) { args = []; }
+    var args = decode(argsJson);
+    if (!Array.isArray(args)) args = [];
     var result;
     try { result = fn.apply(mod, args); }
     catch (e) { __tynd_return__(id, false, stringify(String(e && e.message || e))); return; }

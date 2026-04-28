@@ -230,6 +230,9 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let mut wb = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_initialization_script(inject_window_label(PRIMARY_LABEL))
         .with_initialization_script(ipc::JS_PAGE_READY)
+        // Devalue must run before JS_SHIM so the shim's encoders/decoders
+        // resolve `window.__tynd_dv__` on the first IPC frame.
+        .with_initialization_script(ipc::JS_DEVALUE)
         .with_initialization_script(ipc::JS_SHIM)
         .with_ipc_handler(move |req: Request<String>| {
             dispatch::handle_ipc_body(req.into_body(), PRIMARY_LABEL, &call_tx_ipc, &proxy_for_ipc);
@@ -296,7 +299,10 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let frontend_dir_owned = config.frontend_dir.clone();
 
     // Yield batching — one evaluate_script per webview per flush instead of per-yield.
-    let mut yield_buffer: HashMap<String, Vec<(String, Value)>> = HashMap::new();
+    // Tuples are `(call_id, wire_value_string)` — the wire value is already
+    // devalue/JSON-encoded by the runtime that produced it; the webview
+    // shim decodes once on receipt.
+    let mut yield_buffer: HashMap<String, Vec<(String, String)>> = HashMap::new();
     // Cache setZoom writes; wry has no getter.
     let mut zoom_levels: HashMap<String, f64> = HashMap::new();
     let mut hide_on_focus_lost: HashMap<String, bool> = HashMap::new();
@@ -374,24 +380,22 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     }
                 },
                 BackendEvent::Emit { name, payload, to } => {
-                    // Reserved event: backend asked us to evaluate raw JS on
-                    // the target webview(s). Used by `evalInFrontend` to
-                    // inject code without round-tripping through an RPC call.
-                    if name == "__tynd:eval__" {
-                        if let Some(script) = payload.get("script").and_then(Value::as_str) {
-                            if let Some(label) = to {
-                                let wv = webview_for(&label, &webview, &secondaries);
-                                let _ = wv.evaluate_script(script);
-                            } else {
-                                let _ = webview.evaluate_script(script);
-                                for entry in secondaries.values() {
-                                    let _ = entry.webview.evaluate_script(script);
-                                }
-                            }
-                        }
-                        return;
-                    }
                     let script = ipc::eval_dispatch(&name, &payload);
+                    if let Some(label) = to {
+                        let wv = webview_for(&label, &webview, &secondaries);
+                        let _ = wv.evaluate_script(&script);
+                    } else {
+                        let _ = webview.evaluate_script(&script);
+                        for entry in secondaries.values() {
+                            let _ = entry.webview.evaluate_script(&script);
+                        }
+                    }
+                },
+                BackendEvent::EvalInFrontend { script, to } => {
+                    // Backend asked us to evaluate raw JS on the target
+                    // webview(s). Replaces the previous `__tynd:eval__`
+                    // string-named event so the script payload doesn't
+                    // need to ride through devalue/JSON encoding.
                     if let Some(label) = to {
                         let wv = webview_for(&label, &webview, &secondaries);
                         let _ = wv.evaluate_script(&script);
@@ -851,7 +855,7 @@ fn cancel_streams_for_label(label: &str, call_tx: &std::sync::mpsc::Sender<Backe
 /// per-stream FIFO order (each id's yields arrive together via
 /// `__tynd_yield_batch__` on the frontend shim).
 fn flush_yields(
-    buffer: &mut HashMap<String, Vec<(String, Value)>>,
+    buffer: &mut HashMap<String, Vec<(String, String)>>,
     primary: &WebView,
     secondaries: &HashMap<String, SecondaryEntry>,
 ) {
@@ -1065,6 +1069,9 @@ fn create_secondary(
         // keeping secondary windows on the same visibility + lifecycle path
         // if future refactors gate any behaviour on it.
         .with_initialization_script(ipc::JS_PAGE_READY)
+        // Devalue must execute before JS_SHIM so the shim's _decode/_encode
+        // helpers see `window.__tynd_dv__` already populated.
+        .with_initialization_script(ipc::JS_DEVALUE)
         .with_initialization_script(ipc::JS_SHIM)
         .with_ipc_handler(move |req: Request<String>| {
             dispatch::handle_ipc_body(req.into_body(), &label_for_ipc, &call_tx, &proxy);

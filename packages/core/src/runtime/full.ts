@@ -6,13 +6,16 @@ import { tynd } from "../logger";
 import { getPluginMethod, parsePluginCall } from "../plugin";
 import type { AppConfig } from "../types";
 import { redirectConsoleToStderr } from "./console";
-import { safeStringify } from "./stringify";
+import { decodeArgs, encode as encodeWire } from "./wire";
 
 const CallMsgSchema = v.object({
   type: v.literal("call"),
   id: v.string(),
   fn: v.string(),
-  args: v.array(v.unknown()),
+  // `a` carries devalue-encoded args (string). The webview shim writes
+  // it; the legacy `args: <array>` field is no longer accepted — V1.0
+  // breaking change.
+  a: v.string(),
 });
 const CancelMsgSchema = v.object({
   type: v.literal("cancel"),
@@ -77,12 +80,30 @@ export function startFull(config: AppConfig): void {
   process.stdout.write(`${configMsg}\n`);
 
   setEmitFn((name, payload, to) => {
-    const encoded = safeStringify({ type: "event", name, payload, to });
-    if (encoded === null) {
-      tynd.error(`emit: payload for '${name}' is not JSON-serializable (circular ref?) — dropped`);
+    // Reserved framework event — `evalInFrontend` ships a raw JS script
+    // string the Rust host needs to read natively. Bypasses devalue so
+    // Rust doesn't have to ship a parser; the wire frame carries the
+    // script in plain.
+    if (name === "__tynd:eval__") {
+      const script = (payload as { script?: unknown } | null)?.script;
+      if (typeof script !== "string") {
+        tynd.error("__tynd:eval__: payload.script must be a string — dropped");
+        return;
+      }
+      process.stdout.write(`${JSON.stringify({ type: "evalInFrontend", script, to })}\n`);
       return;
     }
-    process.stdout.write(`${encoded}\n`);
+    let p: string;
+    try {
+      p = encodeWire(payload);
+    } catch (e) {
+      tynd.error(
+        `emit: payload for '${name}' is not encodable (${e instanceof Error ? e.message : String(e)}) — dropped`,
+      );
+      return;
+    }
+    // Frame is JSON; the user payload rides as a devalue string in `p`.
+    process.stdout.write(`${JSON.stringify({ type: "event", name, p, to })}\n`);
   });
 
   // Plugins are registered by the CLI-injected header at the top of the
@@ -201,10 +222,21 @@ async function handleLine(line: string, entryPath: string): Promise<void> {
 }
 
 async function handleCall(
-  msg: { id: string; fn: string; args: readonly unknown[] },
+  msg: { id: string; fn: string; a: string },
   entryPath: string,
 ): Promise<void> {
-  const { id, fn, args } = msg;
+  const { id, fn } = msg;
+  // Decode devalue-encoded args back into live JS values (Date / Map / Set /
+  // BigInt / cyclic refs all roundtrip cleanly here, unlike with JSON).
+  let args: unknown[];
+  try {
+    args = decodeArgs(msg.a);
+  } catch (e) {
+    process.stdout.write(
+      `${JSON.stringify({ type: "return", id, ok: false, error: `invalid args for '${fn}': ${e instanceof Error ? e.message : String(e)}` })}\n`,
+    );
+    return;
+  }
   try {
     // Reserved name: frontend emitter bus. Runs without touching the user
     // module so module loading failures don't block frontend -> backend
@@ -218,7 +250,9 @@ async function handleCall(
         );
       }
       dispatchFrontendEmit(eventName, args[1]);
-      process.stdout.write(`${safeStringify({ type: "return", id, ok: true, value: null })}\n`);
+      process.stdout.write(
+        `${JSON.stringify({ type: "return", id, ok: true, v: encodeWire(null) })}\n`,
+      );
       return;
     }
 
@@ -246,13 +280,15 @@ async function handleCall(
     if (_isAsyncIterable(resolved)) {
       await streamIterable(id, resolved);
     } else {
-      const encoded = safeStringify({ type: "return", id, ok: true, value: resolved });
-      if (encoded === null) {
+      let v: string;
+      try {
+        v = encodeWire(resolved);
+      } catch (e) {
         throw new Error(
-          `return value for '${fn}' is not JSON-serializable (circular ref / non-JSON type)`,
+          `return value for '${fn}' is not encodable: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
-      process.stdout.write(`${encoded}\n`);
+      process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, v })}\n`);
     }
   } catch (e) {
     _activeStreams.delete(id);
@@ -293,13 +329,15 @@ async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Pro
         if (!_activeStreams.has(id)) break;
       }
       state.credit -= 1;
-      const encoded = safeStringify({ type: "yield", id, value: step.value });
-      if (encoded === null) {
+      let v: string;
+      try {
+        v = encodeWire(step.value);
+      } catch (e) {
         throw new Error(
-          `yielded value is not JSON-serializable (circular ref / non-JSON type) on stream ${id}`,
+          `yielded value is not encodable on stream ${id}: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
-      process.stdout.write(`${encoded}\n`);
+      process.stdout.write(`${JSON.stringify({ type: "yield", id, v })}\n`);
       if (!_activeStreams.has(id)) break;
     }
   } finally {
@@ -320,12 +358,14 @@ async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Pro
   // recycled it for a new call — a stray `return` frame would resolve the
   // wrong pending call with `undefined`.
   if (!completed) return;
-  const encoded = safeStringify({ type: "return", id, ok: true, value: final });
-  if (encoded === null) {
+  let v: string;
+  try {
+    v = encodeWire(final);
+  } catch (e) {
     process.stdout.write(
-      `${JSON.stringify({ type: "return", id, ok: false, error: "final value is not JSON-serializable" })}\n`,
+      `${JSON.stringify({ type: "return", id, ok: false, error: `final value is not encodable: ${e instanceof Error ? e.message : String(e)}` })}\n`,
     );
     return;
   }
-  process.stdout.write(`${encoded}\n`);
+  process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, v })}\n`);
 }

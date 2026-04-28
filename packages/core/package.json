@@ -42,7 +42,8 @@
     "./client": "./src/client.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "build:devalue": "bun build scripts/devalue-shim-entry.ts --target=browser --format=iife --minify --outfile=../host-rs/src/devalue.bundle.js"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -50,6 +51,7 @@
     "typescript": "~6.0.2"
   },
   "dependencies": {
+    "devalue": "^5.1.1",
     "ts-pattern": "^5.7.0",
     "valibot": "^1.3.1"
   }

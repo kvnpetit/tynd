@@ -9,7 +9,6 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 use serde::Deserialize;
-use serde_json::Value;
 use tynd_host::{
     runtime::{BackendBridge, BackendCall, BackendConfig, BackendEvent, MenuItemDef, TrayConfig},
     tynd_log,
@@ -36,15 +35,29 @@ enum BunMsg {
     Return {
         id: String,
         ok: bool,
-        value: Option<Value>,
+        /// Devalue-encoded payload string. Bun emits this for every successful
+        /// return; the webview shim devalue-parses it. On error, only `error`
+        /// is populated.
+        #[serde(default)]
+        v: Option<String>,
         error: Option<String>,
     },
     #[serde(rename = "yield")]
-    Yield { id: String, value: Value },
+    Yield { id: String, v: String },
     #[serde(rename = "event")]
     Event {
         name: String,
-        payload: Value,
+        /// Devalue-encoded payload string for user emits. Routed verbatim
+        /// to the webview shim which devalue-parses. The framework's
+        /// `evalInFrontend` uses the separate `EvalInFrontend` variant
+        /// because Rust needs to read `script` natively.
+        p: String,
+        #[serde(default)]
+        to: Option<String>,
+    },
+    #[serde(rename = "evalInFrontend")]
+    EvalInFrontend {
+        script: String,
         #[serde(default)]
         to: Option<String>,
     },
@@ -233,24 +246,30 @@ fn spawn_bun(
                         continue;
                     }
                     match serde_json::from_str::<BunMsg>(trimmed) {
-                        Ok(BunMsg::Return {
-                            id,
-                            ok,
-                            value,
-                            error,
-                        }) => {
-                            let v = if ok {
-                                value.unwrap_or(Value::Null)
+                        Ok(BunMsg::Return { id, ok, v, error }) => {
+                            // On success, `v` carries the devalue payload. On
+                            // error, `error` is a plain string we surface as
+                            // the wire value (the webview's resolve hook
+                            // displays it without further parsing).
+                            let value = if ok {
+                                v.unwrap_or_else(|| "null".into())
                             } else {
-                                Value::String(error.unwrap_or_else(|| "unknown error".into()))
+                                error.unwrap_or_else(|| "unknown error".into())
                             };
-                            let _ = event_tx.send(BackendEvent::Return { id, ok, value: v });
+                            let _ = event_tx.send(BackendEvent::Return { id, ok, value });
                         },
-                        Ok(BunMsg::Yield { id, value }) => {
-                            let _ = event_tx.send(BackendEvent::Yield { id, value });
+                        Ok(BunMsg::Yield { id, v }) => {
+                            let _ = event_tx.send(BackendEvent::Yield { id, value: v });
                         },
-                        Ok(BunMsg::Event { name, payload, to }) => {
-                            let _ = event_tx.send(BackendEvent::Emit { name, payload, to });
+                        Ok(BunMsg::Event { name, p, to }) => {
+                            let _ = event_tx.send(BackendEvent::Emit {
+                                name,
+                                payload: p,
+                                to,
+                            });
+                        },
+                        Ok(BunMsg::EvalInFrontend { script, to }) => {
+                            let _ = event_tx.send(BackendEvent::EvalInFrontend { script, to });
                         },
                         Ok(BunMsg::Config { .. }) => {},
                         Err(e) => tynd_log!("Parse error ({e}): {trimmed}"),

@@ -73,9 +73,30 @@ fn install_globals(
                 Function::new(
                     ctx.clone(),
                     move |name: String, payload_json: String, to_json: rquickjs::Value<'_>| {
-                        let payload = serde_json::from_str(&payload_json).unwrap_or(Value::Null);
+                        // Lite emits plain JSON strings (devalue isn't loaded
+                        // in QuickJS yet — see TODO at top of file). The
+                        // webview shim's `_decode` falls back to JSON.parse
+                        // when devalue.parse fails, so this works untouched.
                         let to = to_json.as_string().and_then(|s| s.to_string().ok());
-                        let _ = tx.send(BackendEvent::Emit { name, payload, to });
+                        if name == "__tynd:eval__" {
+                            // Reserved framework event — strip the "{script}"
+                            // wrapper and forward as EvalInFrontend so Rust
+                            // can read the script field natively.
+                            if let Ok(v) = serde_json::from_str::<Value>(&payload_json) {
+                                if let Some(script) = v.get("script").and_then(Value::as_str) {
+                                    let _ = tx.send(BackendEvent::EvalInFrontend {
+                                        script: script.to_string(),
+                                        to,
+                                    });
+                                }
+                            }
+                            return;
+                        }
+                        let _ = tx.send(BackendEvent::Emit {
+                            name,
+                            payload: payload_json,
+                            to,
+                        });
                     },
                 )?,
             )?;
@@ -86,8 +107,10 @@ fn install_globals(
             g.set(
                 "__tynd_yield__",
                 Function::new(ctx.clone(), move |id: String, value_json: String| {
-                    let value = serde_json::from_str(&value_json).unwrap_or(Value::Null);
-                    let _ = tx.send(BackendEvent::Yield { id, value });
+                    let _ = tx.send(BackendEvent::Yield {
+                        id,
+                        value: value_json,
+                    });
                 })?,
             )?;
         }
@@ -99,8 +122,11 @@ fn install_globals(
                 Function::new(
                     ctx.clone(),
                     move |id: String, ok: bool, value_json: String| {
-                        let value = serde_json::from_str(&value_json).unwrap_or(Value::Null);
-                        let _ = tx.send(BackendEvent::Return { id, ok, value });
+                        let _ = tx.send(BackendEvent::Return {
+                            id,
+                            ok,
+                            value: value_json,
+                        });
                     },
                 )?,
             )?;
@@ -126,6 +152,11 @@ fn install_globals(
             )?;
         }
 
+        // Devalue runs first so `__tynd_dv__` is available to JS_GLOBALS
+        // and to user code calling `__tynd_call__` / `__tynd_emit__`.
+        // Same bundle the webview shim loads — keeps both sides on a
+        // single source of truth.
+        ctx.eval::<(), _>(tynd_host::ipc::JS_DEVALUE)?;
         ctx.eval::<(), _>(JS_GLOBALS)?;
         polyfills::install(&ctx, event_tx, js_tx)?;
         ctx.eval::<(), _>(bundle_code.as_bytes())?;
@@ -183,17 +214,26 @@ fn handle_call(ctx: &Context, call: BackendCall, event_tx: &mpsc::Sender<Backend
                     Ok(value) => BackendEvent::Return {
                         id,
                         ok: true,
-                        value,
+                        // Lifecycle handlers always return null — encode as
+                        // plain JSON so webview's `_decode` JSON-fallback
+                        // resolves cleanly.
+                        value: serde_json::to_string(&value)
+                            .unwrap_or_else(|_| "null".into()),
                     },
                     Err(error) => BackendEvent::Return {
                         id,
                         ok: false,
-                        value: Value::String(error),
+                        // Error path: wire value is the plain message text.
+                        value: error,
                     },
                 };
                 let _ = event_tx.send(evt);
             } else {
-                dispatch_call(ctx, &id, &fn_name, &args, event_tx);
+                // Typed path is hit by lifecycle calls only (no user args
+                // get here yet). Encode the Value array as JSON so the
+                // JS-side `__tynd_call__` decodes via its JSON fallback.
+                let args_str = serde_json::to_string(&args).unwrap_or_else(|_| "[]".into());
+                dispatch_call(ctx, &id, &fn_name, &args_str, event_tx);
             }
         },
         BackendCall::Raw(json) => {
@@ -202,8 +242,11 @@ fn handle_call(ctx: &Context, call: BackendCall, event_tx: &mpsc::Sender<Backend
             };
             let id = v["id"].as_str().unwrap_or("").to_string();
             let fn_name = v["fn"].as_str().unwrap_or("").to_string();
-            let args = v["args"].as_array().cloned().unwrap_or_default();
-            dispatch_call(ctx, &id, &fn_name, &args, event_tx);
+            // V1.0 wire: `a` is a wire-encoded string (devalue from the
+            // webview shim). Forward the raw string to the JS side which
+            // calls `__tynd_dv__.parse(a)` before invoking the user fn.
+            let args_str = v["a"].as_str().unwrap_or("[]").to_string();
+            dispatch_call(ctx, &id, &fn_name, &args_str, event_tx);
         },
         BackendCall::Cancel { id } => {
             let _ = ctx.with(|ctx| -> rquickjs::Result<()> {
@@ -260,29 +303,30 @@ fn call_global(ctx: &rquickjs::Ctx, fn_name: &str) -> Result<Value, String> {
 /// Dispatch a user-module call through the JS-side `__tynd_call__` helper.
 /// That helper handles async values and async iterables, invoking the native
 /// `__tynd_yield__` / `__tynd_return__` callbacks which push BackendEvents.
+/// `args_str` is the wire-encoded args (devalue or JSON) — the JS-side
+/// `__tynd_call__` decodes it once before invoking the user function.
 /// Any synchronous error (e.g. unknown function) is reported as a Return event.
 fn dispatch_call(
     rt_ctx: &Context,
     id: &str,
     fn_name: &str,
-    args: &[Value],
+    args_str: &str,
     event_tx: &mpsc::Sender<BackendEvent>,
 ) {
-    let args_json = serde_json::to_string(args).unwrap_or_else(|_| "[]".into());
     let result: Result<(), String> = rt_ctx.with(|ctx| {
         let call_fn: Function = ctx
             .globals()
             .get("__tynd_call__")
             .map_err(|e| format!("__tynd_call__ missing: {e}"))?;
         call_fn
-            .call::<_, ()>((id.to_string(), fn_name.to_string(), args_json))
+            .call::<_, ()>((id.to_string(), fn_name.to_string(), args_str.to_string()))
             .map_err(|e| e.to_string())
     });
     if let Err(error) = result {
         let _ = event_tx.send(BackendEvent::Return {
             id: id.to_string(),
             ok: false,
-            value: Value::String(error),
+            value: error,
         });
     }
 }
