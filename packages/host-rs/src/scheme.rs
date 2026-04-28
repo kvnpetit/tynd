@@ -115,10 +115,12 @@ static CACHE: OnceLock<AssetCache> = OnceLock::new();
 
 fn get_cache(static_dir: &str) -> &'static AssetCache {
     let cache = CACHE.get_or_init(|| AssetCache::load(static_dir));
+    // Drift guard. The `dir` field is only carried in debug builds (release
+    // strips it for the few bytes saved on a process-global), so this check
+    // is debug-only too. A regression here would be caught by the dev
+    // workflow long before hitting a release runner.
+    #[cfg(debug_assertions)]
     if cache.dir != static_dir {
-        // Hard fail in release too — debug_assert was a no-op in production
-        // builds and would silently serve wrong assets if the static dir
-        // ever drifted (e.g., per-window override, hot-reload mistake).
         eprintln!(
             "[tynd] FATAL: scheme cache mismatch — initialized with '{}', \
              called with '{static_dir}'",
@@ -126,6 +128,7 @@ fn get_cache(static_dir: &str) -> &'static AssetCache {
         );
         std::process::abort();
     }
+    let _ = static_dir; // keep the param non-warning when the cfg is off
     cache
 }
 

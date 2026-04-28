@@ -47,16 +47,20 @@ cap-std.workspace            = true
 cap-tempfile.workspace       = true
 
 # Optional — pulled only when their matching `api-*` feature is enabled.
-rfd          = { workspace = true, optional = true }
-arboard      = { workspace = true, optional = true }
-open         = { workspace = true, optional = true }
-notify-rust  = { workspace = true, optional = true }
-ureq         = { workspace = true, optional = true }
-fslock       = { workspace = true, optional = true }
-interprocess = { workspace = true, optional = true }
-notify       = { workspace = true, optional = true }
-trash        = { workspace = true, optional = true }
-tungstenite  = { workspace = true, optional = true }
+rfd           = { workspace = true, optional = true }
+arboard       = { workspace = true, optional = true }
+open          = { workspace = true, optional = true }
+notify-rust   = { workspace = true, optional = true }
+ureq          = { workspace = true, optional = true }
+fslock        = { workspace = true, optional = true }
+interprocess  = { workspace = true, optional = true }
+notify        = { workspace = true, optional = true }
+trash         = { workspace = true, optional = true }
+tungstenite   = { workspace = true, optional = true }
+ed25519-dalek = { workspace = true, optional = true }
+self-replace  = { workspace = true, optional = true }
+auto-launch   = { workspace = true, optional = true }
+keyring       = { workspace = true, optional = true }
 
 rquickjs = { workspace = true, optional = true }
 
@@ -81,33 +85,39 @@ embedded-js = [ "dep:rquickjs", "api-compute", "api-websocket" ]
 # how `runtime: "full-custom"` / `"lite-custom"` narrow the attack surface
 # and binary size.
 api-all = [
+    "api-autolaunch",
     "api-clipboard",
     "api-compute",
     "api-dialog",
     "api-fs",
     "api-http",
+    "api-keyring",
     "api-notification",
     "api-process",
     "api-shell",
     "api-sidecar",
     "api-single-instance",
     "api-store",
+    "api-updater",
     "api-websocket",
 ]
 
 # Per-API gates. Each feature enables its module + dispatch arm + pulls the
 # crate dependencies it needs. APIs with no external dep list nothing here.
+api-autolaunch      = [ "dep:auto-launch" ]
 api-clipboard       = [ "dep:arboard" ]
 api-compute         = [  ]
 api-dialog          = [ "dep:rfd" ]
 api-fs              = [ "dep:notify", "dep:trash" ]
 api-http            = [ "dep:ureq" ]
+api-keyring         = [ "dep:keyring" ]
 api-notification    = [ "dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys" ]
 api-process         = [  ]
 api-shell           = [ "dep:open" ]
 api-sidecar         = [  ]
 api-single-instance = [ "dep:fslock", "dep:interprocess" ]
 api-store           = [  ]
+api-updater         = [ "dep:ureq", "dep:ed25519-dalek", "dep:self-replace" ]
 api-websocket       = [ "dep:tungstenite" ]
 
 [target.'cfg(target_os = "linux")'.dependencies]

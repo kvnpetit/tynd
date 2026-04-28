@@ -29,12 +29,18 @@
     "fmt:rust": "cargo fmt --all",
     "fmt:rust:check": "cargo fmt --all -- --check",
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
-    "check:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo check --workspace --all-targets",
+    "deny:check": "cargo deny check",
+    "deps:check": "cargo shear",
+    "check:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo check --workspace --all-targets && cargo deny check && cargo shear && cargo test --workspace",
     "check:all": "bun run check:ts && bun run check:rust && bun run test",
     "fix:all": "biome check --write && cargo fmt --all",
     "test": "bun test && cargo test --workspace --quiet",
     "test:ts": "bun test",
-    "test:rust": "cargo test --workspace"
+    "test:rust": "cargo test --workspace",
+    "test:e2e": "bun test e2e/",
+    "bench:rust": "cargo bench -p tynd-host",
+    "coverage:ts": "bun test --coverage",
+    "coverage:rust": "cargo llvm-cov --workspace --html"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.12",
