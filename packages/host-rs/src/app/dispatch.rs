@@ -3,9 +3,9 @@
 //! The WebView handler runs on a wry-owned thread — we keep that closure
 //! minimal and delegate the parsing + fan-out here.
 
+use crossbeam_channel as mpsc;
 use dashmap::DashMap;
 use serde_json::Value;
-use std::sync::mpsc;
 use std::sync::OnceLock;
 use tao::event_loop::EventLoopProxy;
 

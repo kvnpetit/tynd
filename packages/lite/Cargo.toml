@@ -40,6 +40,7 @@ tungstenite.workspace = true
 hmac.workspace        = true
 sha2.workspace        = true
 parking_lot.workspace = true
+crossbeam-channel.workspace = true
 
 # Every official plugin — same list as tynd-full. `bundled-plugins` flips
 # them all on for the preset. Custom builds skip the feature entirely.

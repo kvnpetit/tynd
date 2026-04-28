@@ -1,6 +1,6 @@
+use crossbeam_channel::{Receiver, Sender};
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::mpsc::{Receiver, Sender};
 
 use crate::window::WindowConfig;
 

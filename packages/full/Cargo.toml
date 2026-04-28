@@ -36,6 +36,7 @@ serde_json.workspace = true
 mimalloc.workspace   = true
 zstd.workspace       = true
 dirs.workspace       = true
+crossbeam-channel.workspace = true
 
 # Every official plugin, pulled as an optional path dep. The `bundled-plugins`
 # feature flips them all on so the preset binary ships with every plugin

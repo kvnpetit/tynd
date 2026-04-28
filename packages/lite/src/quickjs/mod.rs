@@ -10,6 +10,7 @@
 //! `PolyfillEvent` messages from background threads (see
 //! `polyfills::fetch` / `polyfills::websocket`).
 
+use crossbeam_channel as bridge_chan;
 use parking_lot::Mutex;
 use serde_json::Value;
 use std::sync::mpsc;
@@ -44,7 +45,7 @@ pub(crate) struct ReloadHandle {
     /// The forwarder thread writes to this slot. On reload we swap its
     /// contents so the next message goes to the new JS thread.
     js_tx_slot: Arc<Mutex<mpsc::Sender<JsMsg>>>,
-    event_tx: mpsc::Sender<BackendEvent>,
+    event_tx: bridge_chan::Sender<BackendEvent>,
 }
 
 impl ReloadHandle {
@@ -113,8 +114,11 @@ pub(crate) fn start(
 
     let (js_tx, js_rx) = mpsc::channel::<JsMsg>();
     let (cfg_tx, cfg_rx) = mpsc::sync_channel::<BackendConfig>(1);
-    let (event_tx, event_rx) = mpsc::channel::<BackendEvent>();
-    let (call_tx, call_rx) = mpsc::channel::<BackendCall>();
+    // BackendBridge channels go through crossbeam — `select!` + native
+    // timeouts. Internal QuickJS-side channels (JsMsg, timer, polyfill)
+    // stay on std mpsc; they don't cross the bridge boundary.
+    let (event_tx, event_rx) = bridge_chan::unbounded::<BackendEvent>();
+    let (call_tx, call_rx) = bridge_chan::unbounded::<BackendCall>();
 
     // JS sender behind a mutex so ReloadHandle can swap it atomically.
     let js_tx_slot: Arc<Mutex<mpsc::Sender<JsMsg>>> = Arc::new(Mutex::new(js_tx.clone()));

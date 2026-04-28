@@ -5,6 +5,7 @@
 
 #![allow(elided_lifetimes_in_paths)]
 
+use crossbeam_channel as bridge_chan;
 use rquickjs::{Context, Function, Runtime};
 use serde_json::Value;
 use std::sync::mpsc;
@@ -25,7 +26,7 @@ pub(super) fn js_thread_main(
     js_tx: mpsc::Sender<JsMsg>,
     js_rx: mpsc::Receiver<JsMsg>,
     config_tx: mpsc::SyncSender<BackendConfig>,
-    event_tx: mpsc::Sender<BackendEvent>,
+    event_tx: bridge_chan::Sender<BackendEvent>,
 ) {
     let rt = Runtime::new().expect("QuickJS Runtime::new failed");
     let ctx = Context::full(&rt).expect("QuickJS Context::full failed");
@@ -49,7 +50,7 @@ pub(super) fn js_thread_main(
 /// sending a config so the outer `start` fails visibly.
 fn install_globals(
     ctx: &Context,
-    event_tx: &mpsc::Sender<BackendEvent>,
+    event_tx: &bridge_chan::Sender<BackendEvent>,
     js_tx: &mpsc::Sender<JsMsg>,
     timer_tx: &mpsc::SyncSender<TimerCmd>,
     bundle_code: &str,
@@ -182,7 +183,7 @@ fn read_config(ctx: &Context) -> BackendConfig {
 fn run_message_loop(
     ctx: &Context,
     js_rx: &mpsc::Receiver<JsMsg>,
-    event_tx: &mpsc::Sender<BackendEvent>,
+    event_tx: &bridge_chan::Sender<BackendEvent>,
     rt: &Runtime,
 ) {
     while let Ok(msg) = js_rx.recv() {
@@ -205,7 +206,7 @@ fn run_message_loop(
     }
 }
 
-fn handle_call(ctx: &Context, call: BackendCall, event_tx: &mpsc::Sender<BackendEvent>) {
+fn handle_call(ctx: &Context, call: BackendCall, event_tx: &bridge_chan::Sender<BackendEvent>) {
     match call {
         BackendCall::Typed { id, fn_name, args } => {
             if fn_name.starts_with("__tynd_") {
@@ -311,7 +312,7 @@ fn dispatch_call(
     id: &str,
     fn_name: &str,
     args_str: &str,
-    event_tx: &mpsc::Sender<BackendEvent>,
+    event_tx: &bridge_chan::Sender<BackendEvent>,
 ) {
     let result: Result<(), String> = rt_ctx.with(|ctx| {
         let call_fn: Function = ctx

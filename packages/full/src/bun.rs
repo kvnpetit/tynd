@@ -1,6 +1,6 @@
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc;
+use crossbeam_channel as mpsc;
 use std::sync::{Arc, Mutex};
 
 #[cfg(windows)]
@@ -107,8 +107,8 @@ impl ReloadHandle {
 /// plus a reload handle. When launched by a packed binary, TYND_BUN_PATH points
 /// to the embedded runtime instead of the system bun.
 pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
-    let (call_tx, call_rx) = mpsc::channel::<BackendCall>();
-    let (event_tx, event_rx) = mpsc::channel::<BackendEvent>();
+    let (call_tx, call_rx) = mpsc::unbounded::<BackendCall>();
+    let (event_tx, event_rx) = mpsc::unbounded::<BackendEvent>();
 
     let (child, stdin, config) = match spawn_bun(entry_path, event_tx.clone()) {
         Ok(t) => t,

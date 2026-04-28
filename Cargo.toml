@@ -116,6 +116,25 @@ rusqlite   = { version = "0.32", features = ["bundled"] }
 parking_lot = "0.12"   # lock-free fast path + no poison handling (saves a branch per lock)
 dashmap     = "6"      # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
 ahash       = "0.8"    # faster non-crypto hasher for small keys (sessions, routes)
+# MPMC sync channel with `select!` macro + native timeouts. Drop-in for
+# `std::sync::mpsc` on the BackendBridge event_rx loop.
+crossbeam-channel = "0.5"
+# Tiny non-crypto RNG — single file, zero deps. Use for jitter / pool
+# slot picks / non-secure IDs. `rand` stays for CSPRNG (token gen, nonces).
+fastrand = "2"
+# Time-ordered, sortable IDs (UUIDv7, RFC 9562). Replaces ad-hoc rand-based
+# IPC call IDs so traces sort temporally.
+uuid     = { version = "1", features = ["v7"] }
+# Capability-based filesystem from Bytecode Alliance — `Dir` handle
+# blocks `..`/symlink/abs-path escapes via `openat2` on Linux 5.6+ and
+# equivalent on macOS/Windows. Defense-in-depth wrapper for the scope
+# policy in `os::fs`.
+cap-std       = "4"
+cap-tempfile  = "4"
+# Cross-platform binary self-replacement primitive — handles the
+# Windows file-lock dance (rename-then-delete-on-reboot) so the
+# updater plugin doesn't reinvent the workaround.
+self-replace = "1.5"
 
 # Plugin SDK — sibling repo. Path dep keeps dev iteration fast; the CLI's
 # `.tynd/build/` template substitutes a registry version when generating

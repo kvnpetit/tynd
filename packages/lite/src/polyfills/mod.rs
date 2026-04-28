@@ -12,6 +12,7 @@
 //! argon2, gzip, …), see ALTERNATIVES.md rather than growing this
 //! file.
 
+use crossbeam_channel as bridge_chan;
 use rquickjs::Ctx;
 use std::sync::mpsc;
 use tynd_host::runtime::BackendEvent;
@@ -28,7 +29,7 @@ pub(crate) mod websocket;
 #[allow(clippy::elidable_lifetime_names)]
 pub(crate) fn install<'js>(
     ctx: &Ctx<'js>,
-    _event_tx: &mpsc::Sender<BackendEvent>,
+    _event_tx: &bridge_chan::Sender<BackendEvent>,
     js_tx: &mpsc::Sender<JsMsg>,
 ) -> rquickjs::Result<()> {
     let g = ctx.globals();

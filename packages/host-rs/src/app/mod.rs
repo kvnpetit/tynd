@@ -839,7 +839,7 @@ fn looks_like_url(s: &str) -> bool {
 /// up ids in `dispatch::call_labels()` and sends `BackendCall::Cancel` for
 /// each match. Without this, a closed secondary window leaves its async
 /// generators running forever on the backend.
-fn cancel_streams_for_label(label: &str, call_tx: &std::sync::mpsc::Sender<BackendCall>) {
+fn cancel_streams_for_label(label: &str, call_tx: &crossbeam_channel::Sender<BackendCall>) {
     let labels = dispatch::call_labels();
     let orphaned: Vec<String> = labels
         .iter()
@@ -995,7 +995,7 @@ fn create_secondary(
     target: &EventLoopWindowTarget<UserEvent>,
     args: &Value,
     debug: bool,
-    call_tx: &std::sync::mpsc::Sender<BackendCall>,
+    call_tx: &crossbeam_channel::Sender<BackendCall>,
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     dev_url: Option<&str>,
     frontend_dir: Option<&str>,

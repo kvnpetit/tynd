@@ -39,6 +39,11 @@ tempfile.workspace     = true
 tracing.workspace      = true
 tracing-subscriber.workspace = true
 anyhow.workspace       = true
+crossbeam-channel.workspace = true
+fastrand.workspace     = true
+uuid.workspace         = true
+cap-std.workspace      = true
+cap-tempfile.workspace = true
 
 # Optional — pulled only when their matching `api-*` feature is enabled.
 rfd              = { workspace = true, optional = true }
@@ -114,7 +119,9 @@ gtk.workspace = true
 tauri-winrt-notification = { workspace = true, optional = true }
 # Direct Win32 access for runtime-only features tao doesn't surface: DWM
 # system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
-windows-sys = { version = "0.59", features = [
+# 0.61 introduces `windows-link` (raw-dylib resolution) which drops the
+# 6 MB `windows-targets` import-lib bloat the older 0.59 line pulled in.
+windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_UI_Shell",
