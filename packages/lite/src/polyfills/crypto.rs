@@ -28,6 +28,16 @@ pub(crate) fn register<'js>(ctx: &Ctx<'js>, g: &Object<'js>) -> rquickjs::Result
         })?,
     )?;
 
+    // UUIDv7 (RFC 9562): time-ordered + globally unique. Backs
+    // `crypto.randomUUID()` in the lite polyfill so IPC call IDs minted on
+    // the QuickJS side are sortable by creation time. The browser-side shim
+    // (host-rs/src/ipc.rs JS_SHIM) still uses the platform's v4
+    // `crypto.randomUUID()` until a tiny v7 polyfill is worth shipping.
+    g.set(
+        "__tynd_random_uuid__",
+        Function::new(ctx.clone(), || -> String { compute::uuid_v7_string() })?,
+    )?;
+
     g.set(
         "__tynd_crypto_digest__",
         Function::new(ctx.clone(), |algo: String, input_b64: String| -> String {

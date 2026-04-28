@@ -42,7 +42,13 @@ pub const JS_SHIM: &str = r#"
 (function () {
   "use strict";
 
-  var _seq = 0;
+  // Call IDs use UUIDs so debug traces are globally unique across reloads
+  // and (for v7) sortable by creation time. Today we lean on the platform's
+  // `crypto.randomUUID()` which is UUIDv4 — globally unique but not
+  // time-ordered. The lite QuickJS runtime bridges to Rust (`uuid::Uuid::now_v7`)
+  // via `__tynd_random_uuid__`, so backend-side ack/yield IDs are already v7.
+  // Once a stable native browser UUIDv7 (or a tiny polyfill) lands, swap this
+  // to a v7 generator for sortable shim-side IDs as well.
   var _pending = {};
   var _os_pending = {};
   var _listeners = {};
@@ -178,7 +184,9 @@ pub const JS_SHIM: &str = r#"
     // the generator's `return` value for async-generators).
     // `for await (x of call(...))` -> yielded chunks.
     call: function (fn, args) {
-      var id = String(++_seq);
+      // crypto.randomUUID is native in webview (browser) — UUIDv4 today;
+      // migrate to v7 when a polyfill matures so call traces sort by time.
+      var id = crypto.randomUUID();
       var p;
       var finalPromise = new Promise(function (res, rej) {
         p = {
@@ -252,7 +260,8 @@ pub const JS_SHIM: &str = r#"
     // Call a native OS API — returns a Promise
     os_call: function (api, method, args) {
       return new Promise(function (resolve, reject) {
-        var id = "os_" + String(++_seq);
+        // See call() above — UUIDv4 native, v7 once a polyfill lands.
+        var id = "os_" + crypto.randomUUID();
         _os_pending[id] = { resolve: resolve, reject: reject };
         window.ipc.postMessage(
           JSON.stringify({ type: "os_call", id: id, api: api, method: method, args: args })

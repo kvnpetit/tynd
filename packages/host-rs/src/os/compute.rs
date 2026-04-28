@@ -36,6 +36,16 @@ pub fn random_bytes_raw(n: usize) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
+/// Generate a fresh UUIDv7 (RFC 9562) as the canonical hyphenated lowercase
+/// string. v7 IDs encode a millisecond Unix timestamp in their high bits, so
+/// sorting them lexicographically also sorts them by creation time — handy
+/// for IPC trace debugging and log correlation. Used by the lite QuickJS
+/// runtime to back `crypto.randomUUID()` (the v4 fallback is in `crypto.js`).
+#[inline]
+pub fn uuid_v7_string() -> String {
+    uuid::Uuid::now_v7().to_string()
+}
+
 /// Hash raw bytes with `algo` (blake3 / sha256 / sha512) and encode the digest
 /// with `encoding` (hex / base64). Called by the `tynd-bin://` scheme handler.
 pub fn hash_raw(data: &[u8], algo: &str, encoding: &str) -> Result<String, String> {

@@ -38,6 +38,12 @@
   }
 
   function randomUUID() {
+    // Prefer the Rust-bridged UUIDv7 (RFC 9562) — time-ordered IDs make
+    // IPC traces and log correlation sortable. Fall back to a local v4
+    // implementation if the bridge is missing (e.g. minimal embedder).
+    if (typeof __tynd_random_uuid__ === "function") {
+      return __tynd_random_uuid__();
+    }
     var b = new Uint8Array(16);
     getRandomValues(b);
     b[6] = (b[6] & 0x0f) | 0x40; // version 4
