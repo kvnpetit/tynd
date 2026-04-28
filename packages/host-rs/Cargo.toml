@@ -36,6 +36,9 @@ parking_lot.workspace  = true
 dashmap.workspace      = true
 ahash.workspace        = true
 tempfile.workspace     = true
+tracing.workspace      = true
+tracing-subscriber.workspace = true
+anyhow.workspace       = true
 
 # Optional — pulled only when their matching `api-*` feature is enabled.
 rfd              = { workspace = true, optional = true }
@@ -43,7 +46,7 @@ arboard          = { workspace = true, optional = true }
 open             = { workspace = true, optional = true }
 notify-rust      = { workspace = true, optional = true }
 ureq             = { workspace = true, optional = true }
-single-instance  = { workspace = true, optional = true }
+fslock           = { workspace = true, optional = true }
 interprocess     = { workspace = true, optional = true }
 notify           = { workspace = true, optional = true }
 trash            = { workspace = true, optional = true }
@@ -54,7 +57,7 @@ rquickjs         = { workspace = true, optional = true }
 # Native plugin contract. Pulled unconditionally — the trait + registry are
 # tiny and the host always needs them to dispatch plugin calls when one
 # or more native plugins are compiled in.
-tynd_plugin_sdk  = { path = "../plugin-sdk/native" }
+tynd_plugin_sdk.workspace = true
 
 [features]
 # Preset builds (tynd-full / tynd-lite) get `default = ["api-all"]` so every
@@ -97,7 +100,7 @@ api-notification    = ["dep:notify-rust", "dep:tauri-winrt-notification", "dep:m
 api-process         = []
 api-shell           = ["dep:open"]
 api-sidecar         = []
-api-single-instance = ["dep:single-instance", "dep:interprocess"]
+api-single-instance = ["dep:fslock", "dep:interprocess"]
 api-store           = []
 api-websocket       = ["dep:tungstenite"]
 

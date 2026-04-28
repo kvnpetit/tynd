@@ -14,6 +14,8 @@ use args::Args;
 
 /// Start the Tynd host in lite-mode. Blocks until the event loop exits.
 pub fn run() -> ! {
+    tynd_host::init_tracing();
+
     #[cfg(feature = "bundled-plugins")]
     register_bundled_plugins();
 

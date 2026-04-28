@@ -43,15 +43,15 @@ parking_lot.workspace = true
 
 # Every official plugin — same list as tynd-full. `bundled-plugins` flips
 # them all on for the preset. Custom builds skip the feature entirely.
-tynd_plugin_sql               = { path = "../../plugins/sql/native", optional = true }
-tynd_plugin_terminal          = { path = "../../plugins/terminal/native", optional = true }
-tynd_plugin_updater           = { path = "../../plugins/updater/native", optional = true }
-tynd_plugin_keyring           = { path = "../../plugins/keyring/native", optional = true }
-tynd_plugin_autolaunch        = { path = "../../plugins/autolaunch/native", optional = true }
-tynd_plugin_shortcuts         = { path = "../../plugins/shortcuts/native", optional = true }
-tynd_plugin_power             = { path = "../../plugins/power/native", optional = true }
-tynd_plugin_log               = { path = "../../plugins/log/native", optional = true }
-tynd_plugin_clipboard_history = { path = "../../plugins/clipboard-history/native", optional = true }
+tynd_plugin_sql               = { path = "../../../plugins/sql/native", optional = true }
+tynd_plugin_terminal          = { path = "../../../plugins/terminal/native", optional = true }
+tynd_plugin_updater           = { path = "../../../plugins/updater/native", optional = true }
+tynd_plugin_keyring           = { path = "../../../plugins/keyring/native", optional = true }
+tynd_plugin_autolaunch        = { path = "../../../plugins/autolaunch/native", optional = true }
+tynd_plugin_shortcuts         = { path = "../../../plugins/shortcuts/native", optional = true }
+tynd_plugin_power             = { path = "../../../plugins/power/native", optional = true }
+tynd_plugin_log               = { path = "../../../plugins/log/native", optional = true }
+tynd_plugin_clipboard_history = { path = "../../../plugins/clipboard-history/native", optional = true }
 
 [features]
 default = ["preset"]

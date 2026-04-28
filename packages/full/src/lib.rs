@@ -29,6 +29,8 @@ use args::Args;
 /// Reads `TYNDPKG` from the binary tail if present, otherwise falls back
 /// to the dev args (`--backend-entry <path>`).
 pub fn run() -> ! {
+    tynd_host::init_tracing();
+
     #[cfg(feature = "bundled-plugins")]
     register_bundled_plugins();
 

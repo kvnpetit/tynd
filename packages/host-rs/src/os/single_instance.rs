@@ -1,23 +1,29 @@
 //! Cross-OS single-instance lock + argv forwarding.
 //!
-//! The first launch holds the lock (`single-instance` crate) and spawns a
+//! The first launch acquires an exclusive `flock`/`LockFileEx` on a file
+//! under `dirs::cache_dir()/tynd/<id>.lock` (`fslock`). It also spawns a
 //! listener on a platform-local socket (named pipe on Windows, Unix socket
-//! elsewhere). A second launch finds the lock already held, connects to the
-//! socket, sends its argv + cwd, and exits — so the user sees the existing
-//! instance focus instead of a new duplicate window.
+//! elsewhere) via `interprocess`. A second launch fails to take the file
+//! lock, connects to the socket instead, sends its argv + cwd, and exits —
+//! so the user sees the existing instance focus instead of a new window.
+//!
+//! Migrated from the unmaintained `single-instance` crate to `fslock` —
+//! file-based, self-cleaning on process exit, no abstract socket trickery.
 
+use fslock::LockFile;
 use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions, Stream};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
-use single_instance::SingleInstance;
+use std::fs;
 use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use super::events;
 
-// Lock must outlive the process; keep it in a static so the OS release
-// only happens on real exit.
-static LOCK: OnceLock<Mutex<Option<SingleInstance>>> = OnceLock::new();
+// File lock outlives the process; keep it in a static so the OS releases
+// only on real exit.
+static LOCK: OnceLock<Mutex<Option<LockFile>>> = OnceLock::new();
 
 /// Rust-side callback fired alongside the `app:second-launch` OS event —
 /// lets `app.rs` refocus the primary window without going through the
@@ -37,6 +43,15 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     }
 }
 
+fn lock_path(id: &str) -> Result<PathBuf, String> {
+    let base = dirs::cache_dir()
+        .or_else(dirs::data_dir)
+        .ok_or_else(|| "singleInstance: no cache/data dir available".to_string())?;
+    let dir = base.join("tynd");
+    fs::create_dir_all(&dir).map_err(|e| format!("singleInstance: mkdir {}: {e}", dir.display()))?;
+    Ok(dir.join(format!("{id}.lock")))
+}
+
 fn acquire(args: &Value) -> Result<Value, String> {
     let id = args
         .get("id")
@@ -48,15 +63,17 @@ fn acquire(args: &Value) -> Result<Value, String> {
     if guard.is_some() {
         return Ok(json!({ "acquired": true, "already": true }));
     }
-    let instance = SingleInstance::new(id).map_err(|e| format!("singleInstance.acquire: {e}"))?;
-    let acquired = instance.is_single();
+    let path = lock_path(id)?;
+    let mut lock = LockFile::open(&path)
+        .map_err(|e| format!("singleInstance.acquire: open {}: {e}", path.display()))?;
+    let acquired = lock
+        .try_lock()
+        .map_err(|e| format!("singleInstance.acquire: try_lock: {e}"))?;
     if acquired {
-        *guard = Some(instance);
-        // First-instance only: stand up a listener so subsequent launches
-        // can forward their argv + cwd here before they exit.
+        *guard = Some(lock);
         spawn_forward_listener(id);
     } else {
-        // Lock is held by another process — forward our argv/cwd to it and
+        // Lock held by another process — forward our argv/cwd to it and
         // let the caller decide (typically: exit with code 0).
         let _ = forward_to_primary(id);
     }

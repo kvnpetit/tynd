@@ -3,22 +3,16 @@ members  = [
     "packages/host-rs",
     "packages/full",
     "packages/lite",
-    "packages/plugin-sdk/native",
-    "plugins/clipboard-history/native",
-    "plugins/sql/native",
-    "plugins/terminal/native",
-    "plugins/updater/native",
-    "plugins/keyring/native",
-    "plugins/autolaunch/native",
-    "plugins/shortcuts/native",
-    "plugins/power/native",
-    "plugins/log/native",
 ]
 # Generated/vendored trees that should not be members of the monorepo
 # workspace. `packages/host-src/native/` is a flattened mirror of
 # `packages/host-rs` produced by `bun run --cwd packages/host-src sync`;
 # it's consumed by the ad-hoc workspace the CLI generates under
 # `.tynd/build/` for custom runtimes.
+#
+# The plugin-sdk + 14 plugins live in sibling repos (`../plugin-sdk`,
+# `../plugins`) — they have their own Cargo workspaces and are pulled in
+# here via path deps for dev iteration but are not workspace members.
 exclude  = ["packages/host-src/native"]
 resolver = "2"
 
@@ -76,8 +70,10 @@ hmac   = { version = "0.12", default-features = false }
 # Ed25519 signatures for the auto-updater manifest + binary integrity.
 ed25519-dalek = { version = "2.2", default-features = false, features = ["std"] }
 
-# Single-instance lock across OSes
-single-instance = "0.3"
+# File-based single-instance lock — replaces the unmaintained `single-instance`
+# crate. `fslock` uses platform-native locking (`flock` on Unix, `LockFileEx`
+# on Windows) on a path under `dirs::cache_dir()` and releases on process exit.
+fslock = "0.2"
 # Cross-platform local socket for forwarding argv/cwd from a 2nd launch
 # to the 1st (Windows named pipe, Unix domain socket).
 interprocess = "2.2"
@@ -121,9 +117,21 @@ parking_lot = "0.12"   # lock-free fast path + no poison handling (saves a branc
 dashmap     = "6"      # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
 ahash       = "0.8"    # faster non-crypto hasher for small keys (sessions, routes)
 
-# Plugin SDK — referenced via workspace so plugin crates in the monorepo
-# and in `.tynd/build/` resolve the same version.
-tynd_plugin_sdk = { path = "packages/plugin-sdk/native" }
+# Plugin SDK — sibling repo. Path dep keeps dev iteration fast; the CLI's
+# `.tynd/build/` template substitutes a registry version when generating
+# custom runtimes for end users.
+tynd_plugin_sdk = { path = "../plugin-sdk/native" }
+
+# Structured logging + error helpers — `tracing` for spans/JSON output,
+# `anyhow` for app code with `.context()`, `thiserror` for typed public
+# error enums in libraries (plugin-sdk).
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+anyhow             = "1.0"
+thiserror          = "2.0"
+
+# Binary diff for delta updates (replaces full-binary downloads in the updater).
+bsdiff             = "0.2"
 
 [workspace.lints.rust]
 unused_must_use               = "deny"

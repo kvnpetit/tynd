@@ -2,7 +2,6 @@ pub mod app;
 pub mod cleanup;
 pub mod embed;
 pub mod ipc;
-pub mod log;
 pub(crate) mod menu;
 pub mod os;
 pub mod plugins;
@@ -16,49 +15,61 @@ pub mod window;
 // CLI-generated workspace) can reference a single authoritative version.
 pub use tynd_plugin_sdk as plugin_sdk;
 
+// Re-export tracing so the `tynd_log!` / `tynd_info!` / `tynd_warn!` /
+// `tynd_error!` / `tynd_debug!` macros below resolve through `$crate`
+// without consumer crates needing their own `tracing` dep. Hidden from
+// docs — consumers should prefer the macros or pull in `tracing`
+// themselves if they want spans/instrumentation.
+#[doc(hidden)]
+pub use tracing as __tracing;
+
+/// Initialize the framework's structured logger (`tracing` + `tracing-subscriber`).
+/// Idempotent — safe to call multiple times. Reads `TYND_LOG` (or `RUST_LOG`)
+/// to decide which levels surface; defaults to `info`.
+///
+/// Hosts (`tynd-full` / `tynd-lite`) call this once at startup. Plugins or
+/// embeddings that want their own log layout can skip this and configure
+/// `tracing_subscriber` themselves.
+pub fn init_tracing() {
+    use std::sync::Once;
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let filter = tracing_subscriber::EnvFilter::try_from_env("TYND_LOG")
+            .or_else(|_| tracing_subscriber::EnvFilter::try_from_default_env())
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_target(false)
+            .with_writer(std::io::stderr)
+            .compact()
+            .try_init();
+    });
+}
+
 /// Back-compat alias for `tynd_info!`. Prefer `tynd_info!` / `tynd_warn!` /
-/// `tynd_error!` / `tynd_debug!` in new code.
+/// `tynd_error!` / `tynd_debug!` in new code (or call the `tracing::*` macros
+/// directly).
 #[macro_export]
 macro_rules! tynd_log {
-    ($($arg:tt)*) => { $crate::tynd_info!($($arg)*) };
+    ($($arg:tt)*) => { $crate::__tracing::info!(target: "tynd", $($arg)*) };
 }
 
-/// Info-level framework log — always printed unless `TYND_LOG=warn|error|off`.
 #[macro_export]
 macro_rules! tynd_info {
-    ($($arg:tt)*) => {
-        if $crate::log::enabled($crate::log::Level::Info) {
-            eprintln!("[tynd] {}", format!($($arg)*));
-        }
-    };
+    ($($arg:tt)*) => { $crate::__tracing::info!(target: "tynd", $($arg)*) };
 }
 
-/// Warning-level framework log — on unless `TYND_LOG=error|off`.
 #[macro_export]
 macro_rules! tynd_warn {
-    ($($arg:tt)*) => {
-        if $crate::log::enabled($crate::log::Level::Warn) {
-            eprintln!("[tynd][warn] {}", format!($($arg)*));
-        }
-    };
+    ($($arg:tt)*) => { $crate::__tracing::warn!(target: "tynd", $($arg)*) };
 }
 
-/// Error-level framework log — on unless `TYND_LOG=off`.
 #[macro_export]
 macro_rules! tynd_error {
-    ($($arg:tt)*) => {
-        if $crate::log::enabled($crate::log::Level::Error) {
-            eprintln!("[tynd][error] {}", format!($($arg)*));
-        }
-    };
+    ($($arg:tt)*) => { $crate::__tracing::error!(target: "tynd", $($arg)*) };
 }
 
-/// Debug-level framework log — only shown when `TYND_LOG=debug`.
 #[macro_export]
 macro_rules! tynd_debug {
-    ($($arg:tt)*) => {
-        if $crate::log::enabled($crate::log::Level::Debug) {
-            eprintln!("[tynd][debug] {}", format!($($arg)*));
-        }
-    };
+    ($($arg:tt)*) => { $crate::__tracing::debug!(target: "tynd", $($arg)*) };
 }
