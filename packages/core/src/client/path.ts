@@ -11,7 +11,7 @@ export const path = {
   },
   dirname(p: string): string {
     const m = p.replace(/[/\\]$/, "").match(/^(.*)[/\\][^/\\]+$/);
-    return m ? m[1]! : "";
+    return m?.[1] ?? "";
   },
   basename(p: string, ext?: string): string {
     const name =

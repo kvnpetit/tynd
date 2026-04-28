@@ -119,6 +119,16 @@
       "includes": ["packages/cli/bin/**"],
       "linter": { "enabled": false },
       "formatter": { "enabled": false }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.spec.ts", "packages/host-src/scripts/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
     }
   ]
 }

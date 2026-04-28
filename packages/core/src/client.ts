@@ -47,7 +47,7 @@ export { type Monitor, monitors } from "./client/monitor";
 export { type NotificationOptions, notification } from "./client/notification";
 export { type OsInfo, os } from "./client/os";
 export { path } from "./client/path";
-export { createPluginClient, type PluginShape } from "./client/plugin";
+export { createPluginClient, type PluginClient, type PluginShape } from "./client/plugin";
 export { type ExecOptions, type ExecResult, process } from "./client/process";
 export {
   abortable,
