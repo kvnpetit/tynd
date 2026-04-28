@@ -1,22 +1,22 @@
-import { osCall } from "./_internal"
+import { osCall } from "./_internal";
 
 export interface SecurityScope {
   /** Glob patterns that are allowed. Empty = open (unless `defaultDeny`). */
-  allow?: string[]
+  allow?: string[];
   /** Glob patterns that are always denied (takes precedence over allow). */
-  deny?: string[]
+  deny?: string[];
 }
 
 export interface SecurityPolicy {
   /** Rules applied to every `fs.*` method (including binary reads / writes). */
-  fs?: SecurityScope
+  fs?: SecurityScope;
   /** Rules applied to `http.request` / `http.download` URLs. */
-  http?: SecurityScope
+  http?: SecurityScope;
   /**
    * When true, an empty `allow` list denies every call of that scope.
    * Default is `false` — i.e. no configuration means open.
    */
-  defaultDeny?: boolean
+  defaultDeny?: boolean;
 }
 
 export const security = {
@@ -33,12 +33,12 @@ export const security = {
    *   })
    */
   configure(policy: SecurityPolicy): Promise<void> {
-    return osCall("security", "configure", policy)
+    return osCall("security", "configure", policy);
   },
   isFsAllowed(path: string): Promise<boolean> {
-    return osCall("security", "isFsAllowed", { path })
+    return osCall("security", "isFsAllowed", { path });
   },
   isHttpAllowed(url: string): Promise<boolean> {
-    return osCall("security", "isHttpAllowed", { url })
+    return osCall("security", "isHttpAllowed", { url });
   },
-}
+};

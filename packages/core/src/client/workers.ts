@@ -1,15 +1,15 @@
-import { osCall } from "./_internal"
+import { osCall } from "./_internal";
 
 export interface WorkerHandle {
-  id: number
-  run<Out = unknown, In = unknown>(input: In): Promise<Out>
-  terminate(): Promise<void>
+  id: number;
+  run<Out = unknown, In = unknown>(input: In): Promise<Out>;
+  terminate(): Promise<void>;
 }
 
-let bunWorkerSeq = 0
+let bunWorkerSeq = 0;
 
 function spawnBunWorker(script: string): WorkerHandle {
-  const id = ++bunWorkerSeq
+  const id = ++bunWorkerSeq;
   const wrapped = `
     const __fn = (${script});
     self.onmessage = async (e) => {
@@ -21,62 +21,62 @@ function spawnBunWorker(script: string): WorkerHandle {
         postMessage({ rid, error: String((err && err.message) || err) })
       }
     }
-  `
-  const url = `data:application/javascript,${encodeURIComponent(wrapped)}`
-  const w = new (globalThis as unknown as { Worker: new (u: string) => Worker }).Worker(url)
-  const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>()
-  let rseq = 0
+  `;
+  const url = `data:application/javascript,${encodeURIComponent(wrapped)}`;
+  const w = new (globalThis as unknown as { Worker: new (u: string) => Worker }).Worker(url);
+  const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  let rseq = 0;
 
   w.onmessage = (e: MessageEvent) => {
-    const { rid, result, error } = e.data as { rid: number; result?: unknown; error?: string }
-    const p = pending.get(rid)
-    if (!p) return
-    pending.delete(rid)
-    if (error) p.reject(new Error(error))
-    else p.resolve(result)
-  }
+    const { rid, result, error } = e.data as { rid: number; result?: unknown; error?: string };
+    const p = pending.get(rid);
+    if (!p) return;
+    pending.delete(rid);
+    if (error) p.reject(new Error(error));
+    else p.resolve(result);
+  };
 
   return {
     id,
     run<Out, In>(input: In): Promise<Out> {
-      const rid = ++rseq
+      const rid = ++rseq;
       return new Promise<Out>((resolve, reject) => {
-        pending.set(rid, { resolve: resolve as (v: unknown) => void, reject })
-        w.postMessage({ rid, input })
-      })
+        pending.set(rid, { resolve: resolve as (v: unknown) => void, reject });
+        w.postMessage({ rid, input });
+      });
     },
     terminate() {
-      w.terminate()
+      w.terminate();
       // Without this, any awaited run() outstanding at terminate time would
       // hang forever — the worker is dead, nothing resolves the promise.
-      const err = new Error("Worker terminated")
-      for (const p of pending.values()) p.reject(err)
-      pending.clear()
-      return Promise.resolve()
+      const err = new Error("Worker terminated");
+      for (const p of pending.values()) p.reject(err);
+      pending.clear();
+      return Promise.resolve();
     },
-  }
+  };
 }
 
 function isBunWorkerAvailable(): boolean {
   return (
     typeof (globalThis as { Worker?: unknown }).Worker === "function" &&
     !(globalThis as { __tynd_lite__?: unknown }).__tynd_lite__
-  )
+  );
 }
 
 export const workers = {
   async spawn(taskFn: string | ((input: unknown) => unknown)): Promise<WorkerHandle> {
-    const script = typeof taskFn === "function" ? taskFn.toString() : taskFn
-    if (isBunWorkerAvailable()) return spawnBunWorker(script)
-    const { id } = await osCall<{ id: number }>("workers", "spawn", { script })
+    const script = typeof taskFn === "function" ? taskFn.toString() : taskFn;
+    if (isBunWorkerAvailable()) return spawnBunWorker(script);
+    const { id } = await osCall<{ id: number }>("workers", "spawn", { script });
     return {
       id,
       run: <Out, In>(input: In) => osCall<Out>("workers", "run", { id, input }),
       terminate: () => osCall<void>("workers", "terminate", { id }),
-    }
+    };
   },
   list(): Promise<number[]> {
-    if (isBunWorkerAvailable()) return Promise.resolve([])
-    return osCall("workers", "list")
+    if (isBunWorkerAvailable()) return Promise.resolve([]);
+    return osCall("workers", "list");
   },
-}
+};

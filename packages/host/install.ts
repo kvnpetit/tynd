@@ -19,117 +19,108 @@
  *     only touched via `rename` after verification.
  */
 
-import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs"
-import { join } from "node:path"
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { join } from "node:path";
 
 const pkg = (await Bun.file(join(import.meta.dir, "package.json")).json()) as {
-  version: string
-  repository: { url: string }
-}
+  version: string;
+  repository: { url: string };
+};
 
-const VERSION = pkg.version
-const REPO_URL = pkg.repository.url.replace(/^git\+/, "").replace(/\.git$/, "")
-const TAG = `v${VERSION}`
-const BASE_URL = `${REPO_URL}/releases/download/${TAG}`
+const VERSION = pkg.version;
+const REPO_URL = pkg.repository.url.replace(/^git\+/, "").replace(/\.git$/, "");
+const TAG = `v${VERSION}`;
+const BASE_URL = `${REPO_URL}/releases/download/${TAG}`;
 
-type Platform = "windows" | "macos" | "linux"
-type Arch = "x64" | "arm64"
+type Platform = "windows" | "macos" | "linux";
+type Arch = "x64" | "arm64";
 
 function getPlatform(): Platform {
   switch (process.platform) {
     case "win32":
-      return "windows"
+      return "windows";
     case "darwin":
-      return "macos"
+      return "macos";
     default:
-      return "linux"
+      return "linux";
   }
 }
 
 function getArch(): Arch {
-  return process.arch === "arm64" ? "arm64" : "x64"
+  return process.arch === "arm64" ? "arm64" : "x64";
 }
 
-const platform = getPlatform()
-const arch = getArch()
-const ext = platform === "windows" ? ".exe" : ""
-const platArch = `${platform}-${arch}`
+const platform = getPlatform();
+const arch = getArch();
+const ext = platform === "windows" ? ".exe" : "";
+const platArch = `${platform}-${arch}`;
 
-const binDir = join(import.meta.dir, "bin", platArch)
-mkdirSync(binDir, { recursive: true })
+const binDir = join(import.meta.dir, "bin", platArch);
+mkdirSync(binDir, { recursive: true });
 
 async function fetchSha256(url: string): Promise<string> {
-  const res = await fetch(`${url}.sha256`)
+  const res = await fetch(`${url}.sha256`);
   if (!res.ok) {
-    throw new Error(`missing checksum file ${url}.sha256: HTTP ${res.status}`)
+    throw new Error(`missing checksum file ${url}.sha256: HTTP ${res.status}`);
   }
   // Release checksum files are either `<hash>` or `<hash>  <filename>` — take the first token.
-  const text = (await res.text()).trim().split(/\s+/)[0]
+  const text = (await res.text()).trim().split(/\s+/)[0];
   if (!text || !/^[0-9a-f]{64}$/i.test(text)) {
-    throw new Error(`malformed checksum file at ${url}.sha256`)
+    throw new Error(`malformed checksum file at ${url}.sha256`);
   }
-  return text.toLowerCase()
+  return text.toLowerCase();
 }
 
 async function sha256(bytes: ArrayBuffer): Promise<string> {
-  const hash = new Bun.CryptoHasher("sha256")
-  hash.update(bytes)
-  return hash.digest("hex")
+  const hash = new Bun.CryptoHasher("sha256");
+  hash.update(bytes);
+  return hash.digest("hex");
 }
 
 async function download(runtime: "full" | "lite"): Promise<void> {
-  const assetName = `tynd-${runtime}-${platArch}${ext}`
-  const destPath = join(binDir, `tynd-${runtime}${ext}`)
+  const assetName = `tynd-${runtime}-${platArch}${ext}`;
+  const destPath = join(binDir, `tynd-${runtime}${ext}`);
 
   if (existsSync(destPath)) {
-    console.log(`  ✓ tynd-${runtime} already present, skipping`)
-    return
+    return;
   }
 
-  const url = `${BASE_URL}/${assetName}`
-  console.log(`  ↓ Downloading tynd-${runtime} (${platArch})…`)
+  const url = `${BASE_URL}/${assetName}`;
 
-  const [expected, res] = await Promise.all([fetchSha256(url), fetch(url)])
+  const [expected, res] = await Promise.all([fetchSha256(url), fetch(url)]);
   if (!res.ok) {
-    throw new Error(`Failed to download ${url}: HTTP ${res.status}`)
+    throw new Error(`Failed to download ${url}: HTTP ${res.status}`);
   }
 
-  const buffer = await res.arrayBuffer()
-  const actual = await sha256(buffer)
+  const buffer = await res.arrayBuffer();
+  const actual = await sha256(buffer);
   if (actual !== expected) {
-    throw new Error(`Checksum mismatch for ${assetName}: expected ${expected}, got ${actual}`)
+    throw new Error(`Checksum mismatch for ${assetName}: expected ${expected}, got ${actual}`);
   }
 
   // Write to a unique temp file, then atomically rename — safe under
   // concurrent postinstall from a monorepo. `.tmp-<rand>` also avoids
   // collisions with the destination when two processes race.
-  const tempPath = `${destPath}.tmp-${process.pid}-${Date.now().toString(36)}`
+  const tempPath = `${destPath}.tmp-${process.pid}-${Date.now().toString(36)}`;
   try {
-    await Bun.write(tempPath, buffer)
+    await Bun.write(tempPath, buffer);
     if (platform !== "windows") {
-      chmodSync(tempPath, 0o755)
+      chmodSync(tempPath, 0o755);
     }
-    renameSync(tempPath, destPath)
+    renameSync(tempPath, destPath);
   } catch (e) {
-    rmSync(tempPath, { force: true })
-    throw e
+    rmSync(tempPath, { force: true });
+    throw e;
   }
-
-  console.log(`  ✓ tynd-${runtime} ready`)
 }
 
 // In a monorepo workspace the script runs from packages/host/ directly —
 // no download needed (the dev is expected to `cargo build`).
-if (!import.meta.dir.includes("node_modules")) process.exit(0)
-
-console.log(`\n@tynd/host ${VERSION} — installing binaries (${platArch})\n`)
+if (!import.meta.dir.includes("node_modules")) process.exit(0);
 
 try {
-  await download("full")
-  await download("lite")
-  console.log()
-} catch (err) {
-  console.error(`\n[ERROR] @tynd/host postinstall failed:\n  ${err}`)
-  console.error(`  You can retry with: bun run install.ts\n`)
-  process.exit(1)
+  await download("full");
+  await download("lite");
+} catch (_err) {
+  process.exit(1);
 }

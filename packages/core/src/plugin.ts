@@ -16,14 +16,14 @@
  */
 
 /** Wire prefix for plugin-invoked methods. See dispatch in `runtime/*.ts`. */
-export const PLUGIN_WIRE_PREFIX = "$plugin$"
+export const PLUGIN_WIRE_PREFIX = "$plugin$";
 
 // biome-ignore lint/suspicious/noExplicitAny: generic plugin methods
-export type PluginMethod = (...args: any[]) => unknown
+export type PluginMethod = (...args: any[]) => unknown;
 
 export interface PluginDefinition<T extends Record<string, PluginMethod>> {
-  name: string
-  methods: T
+  name: string;
+  methods: T;
 }
 
 /**
@@ -32,9 +32,9 @@ export interface PluginDefinition<T extends Record<string, PluginMethod>> {
  * shaking renames other fields.
  */
 export interface Plugin<T extends Record<string, PluginMethod> = Record<string, PluginMethod>> {
-  readonly __tynd_plugin__: true
-  readonly name: string
-  readonly methods: T
+  readonly __tynd_plugin__: true;
+  readonly name: string;
+  readonly methods: T;
 }
 
 /**
@@ -53,15 +53,15 @@ export interface Plugin<T extends Record<string, PluginMethod> = Record<string, 
 export function definePlugin<T extends Record<string, PluginMethod>>(
   def: PluginDefinition<T>,
 ): Plugin<T> {
-  if (!def.name) throw new Error("definePlugin: `name` is required")
+  if (!def.name) throw new Error("definePlugin: `name` is required");
   if (!def.methods || typeof def.methods !== "object") {
-    throw new Error(`definePlugin(${def.name}): \`methods\` must be an object`)
+    throw new Error(`definePlugin(${def.name}): \`methods\` must be an object`);
   }
   return {
     __tynd_plugin__: true,
     name: def.name,
     methods: def.methods,
-  }
+  };
 }
 
 /** Narrow an arbitrary value to a `Plugin`. */
@@ -70,7 +70,7 @@ export function isPlugin(x: unknown): x is Plugin {
     typeof x === "object" &&
     x !== null &&
     (x as { __tynd_plugin__?: boolean }).__tynd_plugin__ === true
-  )
+  );
 }
 
 /**
@@ -80,13 +80,13 @@ export function isPlugin(x: unknown): x is Plugin {
  * through the same map for symmetry — one source of truth across runtimes.
  */
 interface PluginGlobals {
-  __tynd_plugin_methods__?: Record<string, Record<string, PluginMethod>>
+  __tynd_plugin_methods__?: Record<string, Record<string, PluginMethod>>;
 }
 
 function getGlobalRegistry(): Record<string, Record<string, PluginMethod>> {
-  const g = globalThis as unknown as PluginGlobals
-  if (!g.__tynd_plugin_methods__) g.__tynd_plugin_methods__ = {}
-  return g.__tynd_plugin_methods__
+  const g = globalThis as unknown as PluginGlobals;
+  if (!g.__tynd_plugin_methods__) g.__tynd_plugin_methods__ = {};
+  return g.__tynd_plugin_methods__;
 }
 
 /**
@@ -105,30 +105,30 @@ function getGlobalRegistry(): Record<string, Record<string, PluginMethod>> {
  */
 export function registerPlugin(plugin: Plugin): void {
   if (plugin.name.includes("$")) {
-    throw new Error(`Plugin name "${plugin.name}" contains "$" — reserved for the IPC wire format`)
+    throw new Error(`Plugin name "${plugin.name}" contains "$" — reserved for the IPC wire format`);
   }
-  const registry = getGlobalRegistry()
-  if (registry[plugin.name]) return
-  const methods: Record<string, PluginMethod> = {}
+  const registry = getGlobalRegistry();
+  if (registry[plugin.name]) return;
+  const methods: Record<string, PluginMethod> = {};
   for (const [key, fn] of Object.entries(plugin.methods)) {
     if (typeof fn !== "function") {
       // Silently dropping a misconfigured export makes every "why is my
       // method undefined on the client?" debugging session impossible.
       throw new Error(
         `definePlugin(${plugin.name}): method "${key}" is not a function (got ${typeof fn})`,
-      )
+      );
     }
     if (key.includes("$")) {
       throw new Error(
         `definePlugin(${plugin.name}): method "${key}" contains "$" — reserved for the IPC wire format`,
-      )
+      );
     }
-    methods[key] = fn
+    methods[key] = fn;
   }
   // Single assignment — the JS engine writes the property atomically,
   // so a concurrent read either sees the old value (undefined) or the
   // final map, never a half-populated object.
-  registry[plugin.name] = methods
+  registry[plugin.name] = methods;
 }
 
 /**
@@ -136,8 +136,8 @@ export function registerPlugin(plugin: Plugin): void {
  * callers translate that into an IPC error.
  */
 export function getPluginMethod(plugin: string, method: string): PluginMethod | null {
-  const registry = getGlobalRegistry()
-  return registry[plugin]?.[method] ?? null
+  const registry = getGlobalRegistry();
+  return registry[plugin]?.[method] ?? null;
 }
 
 /**
@@ -146,9 +146,9 @@ export function getPluginMethod(plugin: string, method: string): PluginMethod | 
  * fall through to the normal module-export path.
  */
 export function parsePluginCall(wireFn: string): { plugin: string; method: string } | null {
-  if (!wireFn.startsWith(PLUGIN_WIRE_PREFIX)) return null
-  const rest = wireFn.slice(PLUGIN_WIRE_PREFIX.length)
-  const sep = rest.indexOf("$")
-  if (sep <= 0 || sep === rest.length - 1) return null
-  return { plugin: rest.slice(0, sep), method: rest.slice(sep + 1) }
+  if (!wireFn.startsWith(PLUGIN_WIRE_PREFIX)) return null;
+  const rest = wireFn.slice(PLUGIN_WIRE_PREFIX.length);
+  const sep = rest.indexOf("$");
+  if (sep <= 0 || sep === rest.length - 1) return null;
+  return { plugin: rest.slice(0, sep), method: rest.slice(sep + 1) };
 }

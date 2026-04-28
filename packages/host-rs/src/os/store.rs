@@ -50,6 +50,10 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             Ok(Value::Null)
         },
         "clear" => {
+            // Validate before mutating in-memory state — otherwise an
+            // invalid namespace would clear the in-memory map and then fail
+            // to persist, leaving on-disk + in-memory desynchronised.
+            validate_namespace(&namespace)?;
             stores().insert(namespace.clone(), Map::new());
             persist(&namespace)?;
             Ok(Value::Null)
@@ -116,7 +120,34 @@ fn key_arg(args: &Value) -> Result<&str, String> {
         .ok_or_else(|| "store: missing 'key' argument".to_string())
 }
 
+fn validate_namespace(namespace: &str) -> Result<(), String> {
+    // Namespaces become directory names under `config_dir/`. Reject anything
+    // that would let a caller escape the parent directory or write to a
+    // sibling app's data: empty strings, leading dots, slashes, and any
+    // component outside [A-Za-z0-9_-].
+    if namespace.is_empty() {
+        return Err("store: namespace cannot be empty".into());
+    }
+    if namespace.starts_with('.') {
+        return Err(format!("store: namespace cannot start with '.' ('{namespace}')"));
+    }
+    for ch in namespace.chars() {
+        let ok = ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.';
+        if !ok {
+            return Err(format!(
+                "store: invalid character '{ch}' in namespace '{namespace}' \
+                 (allowed: A-Z, a-z, 0-9, '_', '-', '.')"
+            ));
+        }
+    }
+    if namespace.contains("..") {
+        return Err(format!("store: namespace cannot contain '..' ('{namespace}')"));
+    }
+    Ok(())
+}
+
 fn store_path(namespace: &str) -> Result<PathBuf, String> {
+    validate_namespace(namespace)?;
     let base = dirs::config_dir()
         .or_else(dirs::data_dir)
         .ok_or_else(|| "store: no config/data directory available".to_string())?;
@@ -135,7 +166,11 @@ fn load_if_needed(namespace: &str) -> Result<(), String> {
     } else {
         Map::new()
     };
-    stores().insert(namespace.to_string(), map);
+    // `entry().or_insert` is the atomic check-and-insert — without it, two
+    // concurrent threads can both miss `contains_key`, both read the file,
+    // and the second `insert` would silently clobber the first (losing any
+    // `set` that happened in between).
+    stores().entry(namespace.to_string()).or_insert(map);
     Ok(())
 }
 

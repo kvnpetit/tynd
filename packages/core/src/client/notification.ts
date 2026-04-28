@@ -1,9 +1,9 @@
-import type { NotificationActionEvent, NotificationOptions } from "../types"
-import { osCall } from "./_internal"
+import type { NotificationActionEvent, NotificationOptions } from "../types";
+import { osCall } from "./_internal";
 
-export type { NotificationActionEvent, NotificationOptions }
+export type { NotificationActionEvent, NotificationOptions };
 
-export type NotificationPermission = "granted" | "denied" | "default"
+export type NotificationPermission = "granted" | "denied" | "default";
 
 export const notification = {
   send(title: string, opts?: NotificationOptions): Promise<void> {
@@ -13,7 +13,7 @@ export const notification = {
       icon: opts?.icon,
       sound: opts?.sound,
       actions: opts?.actions,
-    })
+    });
   },
   /**
    * Schedule a notification to fire after `delayMs` milliseconds. Returns a
@@ -27,20 +27,20 @@ export const notification = {
       sound: opts?.sound,
       actions: opts?.actions,
       delayMs,
-    })
-    return id
+    });
+    return id;
   },
   /** Cancel a scheduled notification. Returns `false` if already fired. */
   cancel(id: number): Promise<boolean> {
-    return osCall("notification", "cancel", { id })
+    return osCall("notification", "cancel", { id });
   },
   /** Native OSes grant by default. Kept for web-API parity. */
   checkPermission(): Promise<NotificationPermission> {
-    return osCall("notification", "checkPermission")
+    return osCall("notification", "checkPermission");
   },
   /** No-op prompt on native (always granted). Kept for web-API parity. */
   requestPermission(): Promise<NotificationPermission> {
-    return osCall("notification", "requestPermission")
+    return osCall("notification", "requestPermission");
   },
   /**
    * Fires when the user clicks an action button. Works on all OS —
@@ -50,6 +50,6 @@ export const notification = {
   onAction(handler: (event: NotificationActionEvent) => void): () => void {
     return window.__tynd__.os_on("notification:action", (raw) =>
       handler(raw as NotificationActionEvent),
-    )
+    );
   },
-}
+};

@@ -10,8 +10,8 @@
  * populated by `app.start({ plugins: [...] })`.
  */
 
-import { tynd } from "../logger"
-import "./_internal.js"
+import { tynd } from "../logger";
+import "./_internal.js";
 
 /**
  * Plugin identity shape — same as the `Plugin<T>` type exported by the
@@ -19,9 +19,9 @@ import "./_internal.js"
  * the backend entry.
  */
 export interface PluginShape<T extends Record<string, (...args: never[]) => unknown>> {
-  readonly __tynd_plugin__: true
-  readonly name: string
-  readonly methods: T
+  readonly __tynd_plugin__: true;
+  readonly name: string;
+  readonly methods: T;
 }
 
 /**
@@ -29,7 +29,7 @@ export interface PluginShape<T extends Record<string, (...args: never[]) => unkn
  * Streaming generators surface as `AsyncIterable` promises; regular
  * functions surface as plain `Promise<Awaited<R>>`.
  */
-type PluginClient<P> =
+export type PluginClient<P> =
   P extends PluginShape<infer M>
     ? {
         [K in keyof M]: M[K] extends (...args: infer A) => AsyncGenerator<infer Y, infer R, unknown>
@@ -43,9 +43,9 @@ type PluginClient<P> =
               ) => PromiseLike<void> & AsyncIterable<Y> & { cancel(): Promise<IteratorResult<Y>> }
             : M[K] extends (...args: infer A) => infer R
               ? (...args: A) => Promise<Awaited<R>>
-              : never
+              : never;
       }
-    : never
+    : never;
 
 /**
  * Build a typed proxy for a plugin's frontend API.
@@ -60,16 +60,16 @@ export function createPluginClient<
 >(name: string): PluginClient<P> {
   return new Proxy({} as PluginClient<P>, {
     get(_target, prop: string | symbol) {
-      if (typeof prop !== "string") return undefined
+      if (typeof prop !== "string") return undefined;
       // Avoid accidental thenable behaviour on the proxy itself.
-      if (prop === "then" || prop === "catch" || prop === "finally") return undefined
+      if (prop === "then" || prop === "catch" || prop === "finally") return undefined;
 
       if (!window.__tynd__) {
-        tynd.error("window.__tynd__ is not available — are you running outside a tynd app?")
-        return () => Promise.reject(new Error("[tynd] not in a tynd app context"))
+        tynd.error("window.__tynd__ is not available — are you running outside a tynd app?");
+        return () => Promise.reject(new Error("[tynd] not in a tynd app context"));
       }
 
-      return (...args: unknown[]) => window.__tynd__.call(`$plugin$${name}$${prop}`, args)
+      return (...args: unknown[]) => window.__tynd__.call(`$plugin$${name}$${prop}`, args);
     },
-  }) as PluginClient<P>
+  }) as PluginClient<P>;
 }

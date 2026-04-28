@@ -1,17 +1,17 @@
 {
   "name": "@tynd/core",
   "version": "1.0.0",
-  "description": "Tynd framework core — backend API (app.start, createEmitter) and typed frontend client",
+  "description": "Tynd framework core — backend API (app.start, createEmitter) and typed frontend client.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
   "homepage": "https://tynd.kvnpetit.com/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kvnpetit/tynd.git",
+    "url": "git+https://github.com/tynd-apps/tynd.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/kvnpetit/tynd/issues"
+    "url": "https://github.com/tynd-apps/tynd/issues"
   },
   "keywords": [
     "tynd",
@@ -29,10 +29,13 @@
   "private": false,
   "type": "module",
   "files": [
-    "src"
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "CHANGELOG.md"
   ],
   "main": "./src/index.ts",
-  "types": "./src/index.ts",
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
@@ -42,18 +45,11 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@biomejs/biome": "2.4.12",
+    "typescript": "~6.0.2"
   },
   "dependencies": {
-    "valibot": "^1.3.1",
-    "@tynd/plugin-autolaunch": "workspace:*",
-    "@tynd/plugin-clipboard-history": "workspace:*",
-    "@tynd/plugin-keyring": "workspace:*",
-    "@tynd/plugin-log": "workspace:*",
-    "@tynd/plugin-power": "workspace:*",
-    "@tynd/plugin-shortcuts": "workspace:*",
-    "@tynd/plugin-sql": "workspace:*",
-    "@tynd/plugin-terminal": "workspace:*",
-    "@tynd/plugin-updater": "workspace:*"
+    "valibot": "^1.3.1"
   }
 }

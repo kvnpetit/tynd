@@ -1,23 +1,23 @@
-import { osCall } from "./_internal"
+import { osCall } from "./_internal";
 
 export interface SingleInstanceResult {
-  acquired: boolean
-  already: boolean
+  acquired: boolean;
+  already: boolean;
 }
 
 export interface SecondLaunchPayload {
   /** argv of the duplicate launch (including argv[0] = exe path). */
-  argv: string[]
+  argv: string[];
   /** Working directory the duplicate was launched from. */
-  cwd: string
+  cwd: string;
 }
 
 export const singleInstance = {
   acquire(id: string): Promise<SingleInstanceResult> {
-    return osCall("singleInstance", "acquire", { id })
+    return osCall("singleInstance", "acquire", { id });
   },
   isAcquired(): Promise<boolean> {
-    return osCall("singleInstance", "isAcquired")
+    return osCall("singleInstance", "isAcquired");
   },
   /**
    * Fires in the primary instance whenever a duplicate launch is detected.
@@ -26,7 +26,7 @@ export const singleInstance = {
    * or reopen a specific document.
    */
   onSecondLaunch(handler: (payload: SecondLaunchPayload) => void): () => void {
-    return window.__tynd__.os_on("app:second-launch", (raw) => handler(raw as SecondLaunchPayload))
+    return window.__tynd__.os_on("app:second-launch", (raw) => handler(raw as SecondLaunchPayload));
   },
   /**
    * Fires when the app is opened via a registered URL scheme (declared in
@@ -35,8 +35,8 @@ export const singleInstance = {
    */
   onOpenUrl(handler: (url: string) => void): () => void {
     return window.__tynd__.os_on("app:open-url", (raw) => {
-      const url = (raw as { url?: string } | undefined)?.url
-      if (typeof url === "string") handler(url)
-    })
+      const url = (raw as { url?: string } | undefined)?.url;
+      if (typeof url === "string") handler(url);
+    });
   },
-}
+};

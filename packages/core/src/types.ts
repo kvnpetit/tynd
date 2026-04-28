@@ -1,4 +1,4 @@
-import * as v from "valibot"
+import * as v from "valibot";
 
 const WindowConfigSchema = v.object({
   title: v.optional(v.string()),
@@ -16,8 +16,8 @@ const WindowConfigSchema = v.object({
   fullscreen: v.optional(v.boolean()),
   maximized: v.optional(v.boolean()),
   userAgent: v.optional(v.pipe(v.string(), v.minLength(1))),
-})
-export type WindowConfig = v.InferOutput<typeof WindowConfigSchema>
+});
+export type WindowConfig = v.InferOutput<typeof WindowConfigSchema>;
 
 /** Native OS roles for menu items. Role items are managed by the OS. */
 export const MENU_ROLES = [
@@ -32,11 +32,11 @@ export const MENU_ROLES = [
   "close",
   "separator",
   "about",
-] as const
-export type MenuRole = (typeof MENU_ROLES)[number]
+] as const;
+export type MenuRole = (typeof MENU_ROLES)[number];
 
-const MenuSeparatorSchema = v.object({ type: v.literal("separator") })
-export type MenuSeparator = v.InferOutput<typeof MenuSeparatorSchema>
+const MenuSeparatorSchema = v.object({ type: v.literal("separator") });
+export type MenuSeparator = v.InferOutput<typeof MenuSeparatorSchema>;
 
 const MenuActionSchema = v.object({
   type: v.optional(v.literal("item")),
@@ -46,8 +46,8 @@ const MenuActionSchema = v.object({
   role: v.optional(v.picklist(MENU_ROLES)),
   /** Keyboard accelerator (muda format — e.g. `"CmdOrCtrl+S"`, `"Alt+F4"`). */
   accelerator: v.optional(v.string()),
-})
-export type MenuAction = v.InferOutput<typeof MenuActionSchema>
+});
+export type MenuAction = v.InferOutput<typeof MenuActionSchema>;
 
 const MenuCheckboxSchema = v.object({
   type: v.literal("checkbox"),
@@ -56,8 +56,8 @@ const MenuCheckboxSchema = v.object({
   enabled: v.optional(v.boolean()),
   checked: v.optional(v.boolean()),
   accelerator: v.optional(v.string()),
-})
-export type MenuCheckbox = v.InferOutput<typeof MenuCheckboxSchema>
+});
+export type MenuCheckbox = v.InferOutput<typeof MenuCheckboxSchema>;
 
 /** Radio items behave like checkboxes; enforce single-selection in userland by
  * updating `checked` on click (native OS doesn't group muda check items). */
@@ -68,17 +68,17 @@ const MenuRadioSchema = v.object({
   enabled: v.optional(v.boolean()),
   checked: v.optional(v.boolean()),
   accelerator: v.optional(v.string()),
-})
-export type MenuRadio = v.InferOutput<typeof MenuRadioSchema>
+});
+export type MenuRadio = v.InferOutput<typeof MenuRadioSchema>;
 
 // Recursive — declare the type first, then the schema references itself.
 export interface MenuSubmenu {
-  type: "submenu"
-  label: string
-  enabled?: boolean | undefined
-  items: MenuItem[]
+  type: "submenu";
+  label: string;
+  enabled?: boolean | undefined;
+  items: MenuItem[];
 }
-export type MenuItem = MenuSeparator | MenuAction | MenuCheckbox | MenuRadio | MenuSubmenu
+export type MenuItem = MenuSeparator | MenuAction | MenuCheckbox | MenuRadio | MenuSubmenu;
 
 const MenuItemSchema: v.GenericSchema<MenuItem> = v.lazy(() =>
   v.union([
@@ -93,14 +93,14 @@ const MenuItemSchema: v.GenericSchema<MenuItem> = v.lazy(() =>
       items: v.array(MenuItemSchema),
     }),
   ]),
-)
+);
 
 const TrayConfigSchema = v.object({
   icon: v.pipe(v.string(), v.minLength(1)),
   tooltip: v.optional(v.string()),
   menu: v.optional(v.array(MenuItemSchema)),
-})
-export type TrayConfig = v.InferOutput<typeof TrayConfigSchema>
+});
+export type TrayConfig = v.InferOutput<typeof TrayConfigSchema>;
 
 export const AppConfigSchema = v.object({
   window: v.optional(WindowConfigSchema),
@@ -122,76 +122,76 @@ export const AppConfigSchema = v.object({
    * for tray-only apps that should stay alive after all windows are hidden.
    */
   quitOnLastWindowClosed: v.optional(v.boolean()),
-})
-export type AppConfig = v.InferOutput<typeof AppConfigSchema>
+});
+export type AppConfig = v.InferOutput<typeof AppConfigSchema>;
 
 export interface NotificationOptions {
   /** Notification body text */
-  body?: string
+  body?: string;
   /** Absolute path to an icon file (PNG / ICO). */
-  icon?: string
+  icon?: string;
   /** System sound name (`default`, `alarm`, ...). Platform-dependent. */
-  sound?: string
+  sound?: string;
   /**
    * Action buttons. Click emits `notification:action` with the clicked
    * `id`. Works on all OS — Linux via libnotify, Windows via WinRT
    * toasts, macOS via NSUserNotification (single button = direct action,
    * 2+ = native dropdown).
    */
-  actions?: { id: string; label: string }[]
+  actions?: { id: string; label: string }[];
 }
 
 export interface NotificationActionEvent {
   /** The `id` of the clicked action. */
-  action: string
+  action: string;
 }
 
-export type EmitterMap = Record<string, unknown>
+export type EmitterMap = Record<string, unknown>;
 
 /** Typed event emitter. Create via `createEmitter<T>()` in your backend. */
 export interface Emitter<T extends EmitterMap> {
   /** @internal — type marker for BackendClient inference */
-  readonly __tynd_emitter__: true
+  readonly __tynd_emitter__: true;
   /** @internal — phantom type field, never has a real runtime value */
-  readonly __tynd_event_types__: T
-  emit<K extends keyof T>(event: K & string, payload: T[K]): void
+  readonly __tynd_event_types__: T;
+  emit<K extends keyof T>(event: K & string, payload: T[K]): void;
   /**
    * Emit only to the window with the given `label`. Other windows don't
    * receive the event. Default label is `"main"` for the primary window.
    */
-  emitTo<K extends keyof T>(label: string, event: K & string, payload: T[K]): void
+  emitTo<K extends keyof T>(label: string, event: K & string, payload: T[K]): void;
 }
 
 export interface FileFilter {
   /** Display name, e.g. "Images" */
-  name: string
+  name: string;
   /** File extensions without the dot, e.g. ["png", "jpg"] */
-  extensions: string[]
+  extensions: string[];
 }
 
 export interface OpenFileOptions {
-  title?: string
-  defaultDir?: string
-  filters?: FileFilter[]
+  title?: string;
+  defaultDir?: string;
+  filters?: FileFilter[];
   /** macOS: allow the user to create directories from the picker. */
-  canCreateDirectories?: boolean
+  canCreateDirectories?: boolean;
 }
 
 export interface SaveFileOptions {
-  title?: string
+  title?: string;
   /** Suggested file name */
-  defaultName?: string
-  defaultDir?: string
-  filters?: FileFilter[]
+  defaultName?: string;
+  defaultDir?: string;
+  filters?: FileFilter[];
   /** macOS: allow the user to create directories from the picker. */
-  canCreateDirectories?: boolean
+  canCreateDirectories?: boolean;
 }
 
 export interface MessageOptions {
-  title?: string
-  kind?: "info" | "warning" | "error"
+  title?: string;
+  kind?: "info" | "warning" | "error";
 }
 
 export interface ConfirmOptions {
-  title?: string
+  title?: string;
 }

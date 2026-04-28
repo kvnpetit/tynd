@@ -1,7 +1,7 @@
-import { osCall } from "./_internal"
-import type { TrayMenuItem } from "./tray"
+import { osCall } from "./_internal";
+import type { TrayMenuItem } from "./tray";
 
-export type ContextMenuItem = TrayMenuItem
+export type ContextMenuItem = TrayMenuItem;
 
 /**
  * Menu event subscriptions. Declarative menu structure still lives in
@@ -12,9 +12,9 @@ export const menu = {
   /** Fire `handler` when the user clicks the menu item with the given `id`. */
   onClick(id: string, handler: () => void): () => void {
     return window.__tynd__.os_on("menu:action", (data: unknown) => {
-      if (typeof data !== "object" || data === null) return
-      if ((data as Record<string, unknown>)["id"] === id) handler()
-    })
+      if (typeof data !== "object" || data === null) return;
+      if ((data as Record<string, unknown>).id === id) handler();
+    });
   },
   /**
    * Show a native popup menu anchored on the current window. Clicks emit
@@ -27,6 +27,6 @@ export const menu = {
       items,
       x: position?.x,
       y: position?.y,
-    })
+    });
   },
-}
+};

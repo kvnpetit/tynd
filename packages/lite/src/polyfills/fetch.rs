@@ -10,6 +10,7 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use parking_lot::Mutex;
 use rquickjs::{Ctx, Function, Object};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -17,11 +18,13 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use crate::quickjs::JsMsg;
 
+// `parking_lot::Mutex` (no poisoning) — `std::sync::Mutex` would crash every
+// subsequent fetch if any holder panicked while holding the lock.
 fn registry() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
     static REG: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
     REG.get_or_init(|| Mutex::new(HashMap::new()))
@@ -57,10 +60,7 @@ pub(crate) fn register<'js>(
                 ctx.clone(),
                 move |id: String, url: String, opts_json: String| {
                     let cancel = Arc::new(AtomicBool::new(false));
-                    registry()
-                        .lock()
-                        .unwrap()
-                        .insert(id.clone(), cancel.clone());
+                    registry().lock().insert(id.clone(), cancel.clone());
                     let tx = tx.clone();
                     std::thread::spawn(move || {
                         run_fetch(&id, &url, &opts_json, &cancel, &tx);
@@ -73,7 +73,7 @@ pub(crate) fn register<'js>(
     g.set(
         "__tynd_fetch_abort__",
         Function::new(ctx.clone(), |id: String| {
-            if let Some(flag) = registry().lock().unwrap().get(&id) {
+            if let Some(flag) = registry().lock().get(&id) {
                 flag.store(true, Ordering::SeqCst);
             }
         })?,
@@ -175,7 +175,7 @@ fn deliver_response(
     }
 
     send(js_tx, "fetch:end", json!({ "id": id }));
-    registry().lock().unwrap().remove(id);
+    registry().lock().remove(id);
 }
 
 fn end_error(id: &str, msg: impl AsRef<str>, js_tx: &mpsc::Sender<JsMsg>) {
@@ -184,7 +184,7 @@ fn end_error(id: &str, msg: impl AsRef<str>, js_tx: &mpsc::Sender<JsMsg>) {
         "fetch:end",
         json!({ "id": id, "error": msg.as_ref() }),
     );
-    registry().lock().unwrap().remove(id);
+    registry().lock().remove(id);
 }
 
 fn send(js_tx: &mpsc::Sender<JsMsg>, name: &'static str, data: Value) {

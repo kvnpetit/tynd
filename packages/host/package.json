@@ -7,11 +7,11 @@
   "homepage": "https://tynd.kvnpetit.com/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kvnpetit/tynd.git",
+    "url": "git+https://github.com/tynd-apps/tynd.git",
     "directory": "packages/host"
   },
   "bugs": {
-    "url": "https://github.com/kvnpetit/tynd/issues"
+    "url": "https://github.com/tynd-apps/tynd/issues"
   },
   "keywords": [
     "tynd",
@@ -41,6 +41,17 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
-    "install.ts"
-  ]
+    "install.ts",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "type": "module",
+  "devDependencies": {
+    "@biomejs/biome": "2.4.12",
+    "typescript": "~6.0.2",
+    "@types/bun": "latest"
+  },
+  "sideEffects": false
 }

@@ -50,7 +50,11 @@ fn worker_loop() {
             }
             q.pop_front().expect("queue was non-empty")
         };
-        job();
+        // Catch panics so a single bad job (plugin OS call, dialog handler)
+        // doesn't kill the worker thread and silently inflate `alive_workers`
+        // — over time that would degrade the pool to zero real workers while
+        // the counter still reports max_workers.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
     }
 }
 

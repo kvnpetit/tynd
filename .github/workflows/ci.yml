@@ -90,7 +90,3 @@ jobs:
 
       - name: bun test
         run: bun test
-
-      - name: Build @tynd/cli
-        run: bun run build
-        working-directory: packages/cli

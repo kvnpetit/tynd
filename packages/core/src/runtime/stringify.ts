@@ -14,10 +14,10 @@
 export function safeStringify(value: unknown): string | null {
   try {
     return JSON.stringify(value, (_key, v) => {
-      if (typeof v === "bigint") return v.toString()
-      return v
-    })
+      if (typeof v === "bigint") return v.toString();
+      return v;
+    });
   } catch {
-    return null
+    return null;
   }
 }

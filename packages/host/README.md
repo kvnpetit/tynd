@@ -1,6 +1,6 @@
 # @tynd/host
 
-Prebuilt native host binaries for [Tynd](https://github.com/kvnpetit/tynd) — `tynd-full.exe` and `tynd-lite.exe` (plus the platform variants).
+Prebuilt native host binaries for [Tynd](https://github.com/tynd-apps/tynd) — `tynd-full.exe` and `tynd-lite.exe` (plus the platform variants).
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ Binaries land in `node_modules/@tynd/host/bin/<plat>-<arch>/`. The CLI's `findBi
 
 Both share the same native host: the WebView event loop, the `tynd://` + `tynd-bin://` custom IPC schemes, and all OS APIs.
 
-See [RUNTIMES.md](https://github.com/kvnpetit/tynd/blob/main/RUNTIMES.md).
+See [RUNTIMES.md](https://github.com/tynd-apps/tynd/blob/main/RUNTIMES.md).
 
 ## Building from source
 

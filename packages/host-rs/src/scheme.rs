@@ -115,11 +115,17 @@ static CACHE: OnceLock<AssetCache> = OnceLock::new();
 
 fn get_cache(static_dir: &str) -> &'static AssetCache {
     let cache = CACHE.get_or_init(|| AssetCache::load(static_dir));
-    #[cfg(debug_assertions)]
-    debug_assert_eq!(
-        cache.dir, static_dir,
-        "scheme::handle called with different static_dir after cache init"
-    );
+    if cache.dir != static_dir {
+        // Hard fail in release too — debug_assert was a no-op in production
+        // builds and would silently serve wrong assets if the static dir
+        // ever drifted (e.g., per-window override, hot-reload mistake).
+        eprintln!(
+            "[tynd] FATAL: scheme cache mismatch — initialized with '{}', \
+             called with '{static_dir}'",
+            cache.dir
+        );
+        std::process::abort();
+    }
     cache
 }
 

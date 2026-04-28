@@ -1,36 +1,36 @@
-import { osCall } from "./_internal"
+import { osCall } from "./_internal";
 
 export interface Monitor {
   /** OS-assigned monitor name (null on some Linux setups). */
-  name: string | null
+  name: string | null;
   /** Top-left of the monitor in the virtual desktop (physical pixels). */
-  position: { x: number; y: number }
+  position: { x: number; y: number };
   /** Raw pixel size. Divide by `scale` for logical pixels. */
-  size: { width: number; height: number }
+  size: { width: number; height: number };
   /** DPI scale factor (1.0 for 96 DPI, 2.0 for Retina, 1.5 for 150 %). */
-  scale: number
-  isPrimary: boolean
+  scale: number;
+  isPrimary: boolean;
 }
 
 export const monitors = {
   /** List every monitor connected to the system. */
   all(): Promise<Monitor[]> {
-    return osCall("window", "monitors")
+    return osCall("window", "monitors");
   },
   /** Primary monitor (the one the taskbar / menu bar is attached to). */
   primary(): Promise<Monitor | null> {
-    return osCall("window", "primaryMonitor")
+    return osCall("window", "primaryMonitor");
   },
   /** Monitor currently hosting the primary window. */
   current(): Promise<Monitor | null> {
-    return osCall("window", "currentMonitor")
+    return osCall("window", "currentMonitor");
   },
   /** Monitor containing a given virtual-desktop point (physical pixels). */
   fromPoint(x: number, y: number): Promise<Monitor | null> {
-    return osCall("window", "monitorFromPoint", { x, y })
+    return osCall("window", "monitorFromPoint", { x, y });
   },
   /** Global cursor position in the virtual desktop (physical pixels). */
   cursorPosition(): Promise<{ x: number; y: number }> {
-    return osCall("window", "globalCursorPosition")
+    return osCall("window", "globalCursorPosition");
   },
-}
+};

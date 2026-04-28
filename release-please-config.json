@@ -7,76 +7,12 @@
       "changelog-path": "CHANGELOG.md",
       "pull-request-title-pattern": "chore: release ${version}",
       "extra-files": [
-        { "type": "json", "path": "packages/cli/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/core/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/host/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/plugin-sdk/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/autolaunch/package.json", "jsonpath": "$.version" },
-        {
-          "type": "json",
-          "path": "plugins/clipboard-history/package.json",
-          "jsonpath": "$.version"
-        },
-        { "type": "json", "path": "plugins/command-palette/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/deeplink/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/i18n/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/keyring/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/log/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/power/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/qr/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/shortcuts/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/sql/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/terminal/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/theme/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/updater/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/host-src/package.json", "jsonpath": "$.version" },
         {
           "type": "toml",
-          "path": "packages/plugin-sdk/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/autolaunch/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/clipboard-history/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/keyring/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/log/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/power/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/shortcuts/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/sql/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/terminal/native/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "plugins/updater/native/Cargo.toml",
+          "path": "packages/host-src/native/Cargo.toml",
           "jsonpath": "$.package.version"
         }
       ]

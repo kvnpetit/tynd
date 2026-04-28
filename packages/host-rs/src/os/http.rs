@@ -221,26 +221,55 @@ fn download(args: &Value) -> Result<Value, String> {
             .map_err(|e| format!("http.download: mkdir {}: {e}", parent.display()))?;
     }
 
+    // 10 GiB cap — large enough for any reasonable update binary while still
+    // bounding pathological / hostile responses (servers without
+    // content-length).
+    const MAX_DOWNLOAD: u64 = 10 * 1024 * 1024 * 1024;
+    if let Some(t) = total {
+        if t > MAX_DOWNLOAD {
+            return Err(format!(
+                "http.download: response size {t} exceeds the {MAX_DOWNLOAD}-byte cap"
+            ));
+        }
+    }
+
+    // Atomic write: stream into `<dest>.tmp.<pid>.<rand>` then rename — keeps
+    // the original `dest` intact when the network drops mid-transfer.
+    let tmp = format!("{dest}.tmp-{}-{:x}", std::process::id(), {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos())
+    });
     let mut file =
-        fs::File::create(dest).map_err(|e| format!("http.download: create {dest}: {e}"))?;
-    let mut reader = resp.into_reader();
+        fs::File::create(&tmp).map_err(|e| format!("http.download: create {tmp}: {e}"))?;
+    let mut reader = resp.into_reader().take(MAX_DOWNLOAD);
     let mut buf = vec![0u8; 64 * 1024];
     let mut written: u64 = 0;
     let mut emitter = ProgressEmitter::new(progress_id, "download", total);
-    loop {
-        let n = reader
-            .read(&mut buf)
-            .map_err(|e| format!("http.download: read: {e}"))?;
-        if n == 0 {
-            emitter.advance(0, true);
-            break;
+    let download_result: Result<(), String> = (|| {
+        loop {
+            let n = reader
+                .read(&mut buf)
+                .map_err(|e| format!("http.download: read: {e}"))?;
+            if n == 0 {
+                emitter.advance(0, true);
+                break;
+            }
+            file.write_all(&buf[..n])
+                .map_err(|e| format!("http.download: write: {e}"))?;
+            written += n as u64;
+            emitter.advance(n, false);
         }
-        file.write_all(&buf[..n])
-            .map_err(|e| format!("http.download: write: {e}"))?;
-        written += n as u64;
-        emitter.advance(n, false);
+        file.flush().map_err(|e| format!("http.download: flush: {e}"))?;
+        Ok(())
+    })();
+
+    if let Err(e) = download_result {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
     }
-    file.flush().map_err(|e| e.to_string())?;
+    drop(file);
+    fs::rename(&tmp, dest)
+        .map_err(|e| format!("http.download: rename {tmp} -> {dest}: {e}"))?;
 
     Ok(json!({ "path": dest, "bytes": written }))
 }

@@ -15,18 +15,18 @@ export function listenN<T = unknown>(
   handler: (payload: T) => void,
 ): () => void {
   if (!Number.isFinite(n) || n < 1) {
-    throw new RangeError(`listenN: \`n\` must be a positive integer, got ${n}`)
+    throw new RangeError(`listenN: \`n\` must be a positive integer, got ${n}`);
   }
-  let remaining = n
+  let remaining = n;
   const wrapper = (raw: unknown) => {
-    handler(raw as T)
-    remaining -= 1
+    handler(raw as T);
+    remaining -= 1;
     if (remaining <= 0) {
-      window.__tynd__.off(event, wrapper)
+      window.__tynd__.off(event, wrapper);
     }
-  }
-  window.__tynd__.on(event, wrapper)
-  return () => window.__tynd__.off(event, wrapper)
+  };
+  window.__tynd__.on(event, wrapper);
+  return () => window.__tynd__.off(event, wrapper);
 }
 
 /**
@@ -35,13 +35,13 @@ export function listenN<T = unknown>(
  * helper is the untyped variant for ad-hoc events like `window:focused`.
  */
 export function once<T = unknown>(event: string, handler: (payload: T) => void): () => void {
-  return listenN<T>(event, 1, handler)
+  return listenN<T>(event, 1, handler);
 }
 
 export class RpcTimeoutError extends Error {
   constructor(ms: number) {
-    super(`RPC timed out after ${ms}ms`)
-    this.name = "RpcTimeoutError"
+    super(`RPC timed out after ${ms}ms`);
+    this.name = "RpcTimeoutError";
   }
 }
 
@@ -53,18 +53,18 @@ export class RpcTimeoutError extends Error {
  */
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new RpcTimeoutError(ms)), ms)
+    const timer = setTimeout(() => reject(new RpcTimeoutError(ms)), ms);
     promise.then(
       (value) => {
-        clearTimeout(timer)
-        resolve(value)
+        clearTimeout(timer);
+        resolve(value);
       },
       (error) => {
-        clearTimeout(timer)
-        reject(error)
+        clearTimeout(timer);
+        reject(error);
       },
-    )
-  })
+    );
+  });
 }
 
 /**
@@ -75,23 +75,23 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  */
 export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) {
-    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
+    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
   }
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => {
-      signal.removeEventListener("abort", onAbort)
-      reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
-    }
-    signal.addEventListener("abort", onAbort, { once: true })
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
     promise.then(
       (value) => {
-        signal.removeEventListener("abort", onAbort)
-        resolve(value)
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
       },
       (error) => {
-        signal.removeEventListener("abort", onAbort)
-        reject(error)
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
       },
-    )
-  })
+    );
+  });
 }

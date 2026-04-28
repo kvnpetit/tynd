@@ -24,13 +24,32 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
     let mut icon_path_opt: Option<String> = None;
     let mut sidecars_pending: Vec<(String, PathBuf)> = Vec::new();
 
+    // Reject any path component that could escape the destination — a
+    // malformed or adversarial pack with `../` or absolute paths could
+    // otherwise overwrite arbitrary files on disk during extraction.
+    fn safe_subpath(rest: &str) -> Option<&str> {
+        if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') {
+            return None;
+        }
+        for comp in rest.split(['/', '\\']) {
+            if comp == ".." || comp == "." {
+                return None;
+            }
+        }
+        Some(rest)
+    }
+
     while let Some((rel, data_len)) = pack.next_header() {
         let dest: PathBuf = if rel == "bundle.js" {
             let p = paths.bundle_dir.join("bundle.js");
             bundle_path_opt = Some(p.to_string_lossy().into_owned());
             p
         } else if let Some(rest) = rel.strip_prefix("frontend/") {
-            let p = paths.frontend_dir.join(rest);
+            let Some(safe) = safe_subpath(rest) else {
+                pack.skip(data_len).ok()?;
+                continue;
+            };
+            let p = paths.frontend_dir.join(safe);
             if let Some(parent) = p.parent() {
                 let _ = fs::create_dir_all(parent);
             }
@@ -43,11 +62,15 @@ pub(crate) fn try_load_embedded() -> Option<EmbeddedAssets> {
             icon_path_opt = Some(p.to_string_lossy().into_owned());
             p
         } else if let Some(rest) = rel.strip_prefix("sidecar/") {
-            let p = paths.temp_dir.join("sidecar").join(rest);
+            let Some(safe) = safe_subpath(rest) else {
+                pack.skip(data_len).ok()?;
+                continue;
+            };
+            let p = paths.temp_dir.join("sidecar").join(safe);
             if let Some(parent) = p.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            sidecars_pending.push((rest.to_string(), p.clone()));
+            sidecars_pending.push((safe.to_string(), p.clone()));
             p
         } else {
             pack.skip(data_len).ok()?;

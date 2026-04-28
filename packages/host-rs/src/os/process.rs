@@ -27,12 +27,21 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
         })
         .unwrap_or_default();
 
+    // `execShell` mode runs `cmd` through the system shell, which interprets
+    // metacharacters. Naively appending caller-controlled `args` would let any
+    // value containing spaces, `&&`, `;`, `|`, or backticks inject extra
+    // commands. Refuse `args` in shell mode so callers must embed everything
+    // they need into the `cmd` string explicitly.
+    if shell && !argv.is_empty() {
+        return Err(
+            "process.execShell: extra 'args' are not allowed in shell mode — \
+             embed them in the 'cmd' string yourself (and quote them)"
+                .into(),
+        );
+    }
+
     let mut command = if shell {
-        let joined = if argv.is_empty() {
-            cmd_str.to_string()
-        } else {
-            format!("{cmd_str} {}", argv.join(" "))
-        };
+        let joined = cmd_str.to_string();
         #[cfg(target_os = "windows")]
         {
             let mut c = Command::new("cmd");
@@ -77,9 +86,14 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
 
     if let Some(data) = input {
         if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(data.as_bytes())
-                .map_err(|e| format!("stdin write failed: {e}"))?;
+            // Kill the child if stdin write fails — otherwise it hangs on
+            // `wait_with_output` with a half-filled stdin pipe and the
+            // process leaks until the OS cleans it up.
+            if let Err(e) = stdin.write_all(data.as_bytes()) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("stdin write failed: {e}"));
+            }
         }
     }
 

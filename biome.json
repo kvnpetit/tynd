@@ -35,7 +35,8 @@
       "arrowParentheses": "always",
       "bracketSameLine": false,
       "bracketSpacing": true
-    }
+    },
+    "globals": ["Bun"]
   },
   "json": {
     "formatter": {

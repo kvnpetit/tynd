@@ -12,11 +12,11 @@
 // Swapping runtimes doesn't change where imports come from — preset
 // and custom both resolve plugins from their own package.
 
-export { base64ToBytes, bytesToBase64 } from "./client/_internal"
-export { type AppInfo, app } from "./client/app"
-export { type BackendClient, createBackend } from "./client/backend"
-export { type ClipboardImage, clipboard } from "./client/clipboard"
-export { compute, type HashAlgo } from "./client/compute"
+export { base64ToBytes, bytesToBase64 } from "./client/_internal";
+export { type AppInfo, app } from "./client/app";
+export { type BackendClient, createBackend } from "./client/backend";
+export { type ClipboardImage, clipboard } from "./client/clipboard";
+export { compute, type HashAlgo } from "./client/compute";
 export {
   type ConfirmOptions,
   dialog,
@@ -24,8 +24,8 @@ export {
   type OpenDirectoryOptions,
   type OpenFileOptions,
   type SaveFileOptions,
-} from "./client/dialog"
-export { createFrontendEmitter } from "./client/frontend-emitter"
+} from "./client/dialog";
+export { createFrontendEmitter } from "./client/frontend-emitter";
 export {
   type DirEntry,
   type FileHandle,
@@ -35,33 +35,33 @@ export {
   type OpenOptions,
   type SeekFrom,
   type WatchHandle,
-} from "./client/fs"
+} from "./client/fs";
 export {
   type HttpProgress,
   type HttpRequestOptions,
   type HttpResponse,
   http,
-} from "./client/http"
-export { type ContextMenuItem, menu } from "./client/menu"
-export { type Monitor, monitors } from "./client/monitor"
-export { type NotificationOptions, notification } from "./client/notification"
-export { type OsInfo, os } from "./client/os"
-export { path } from "./client/path"
-export { createPluginClient, type PluginShape } from "./client/plugin"
-export { type ExecOptions, type ExecResult, process } from "./client/process"
+} from "./client/http";
+export { type ContextMenuItem, menu } from "./client/menu";
+export { type Monitor, monitors } from "./client/monitor";
+export { type NotificationOptions, notification } from "./client/notification";
+export { type OsInfo, os } from "./client/os";
+export { path } from "./client/path";
+export { createPluginClient, type PluginShape } from "./client/plugin";
+export { type ExecOptions, type ExecResult, process } from "./client/process";
 export {
   abortable,
   listenN,
   once,
   RpcTimeoutError,
   withTimeout,
-} from "./client/rpc-helpers"
-export { type SecurityPolicy, type SecurityScope, security } from "./client/security"
-export { shell } from "./client/shell"
-export { sidecar } from "./client/sidecar"
-export { type SingleInstanceResult, singleInstance } from "./client/single-instance"
-export { createStore } from "./client/store"
-export { type TrayMenuItem, tray } from "./client/tray"
+} from "./client/rpc-helpers";
+export { type SecurityPolicy, type SecurityScope, security } from "./client/security";
+export { shell } from "./client/shell";
+export { sidecar } from "./client/sidecar";
+export { type SingleInstanceResult, singleInstance } from "./client/single-instance";
+export { createStore } from "./client/store";
+export { type TrayMenuItem, tray } from "./client/tray";
 
 // Web-platform globals re-exported so `import * as tynd from "@tynd/core/client"`
 // gives you `tynd.fetch`, `tynd.WebSocket`, `tynd.crypto`, etc. without
@@ -88,12 +88,12 @@ export {
   URL,
   URLSearchParams,
   WebSocket,
-} from "./client/web"
+} from "./client/web";
 export {
   type WebSocketHandle,
   type WebSocketMessage,
   websocket,
-} from "./client/websocket"
-export { tyndWindow, type WindowPreset } from "./client/window"
-export { type WorkerHandle, workers } from "./client/workers"
-export type { Emitter, EmitterMap } from "./types"
+} from "./client/websocket";
+export { tyndWindow, type WindowPreset } from "./client/window";
+export { type WorkerHandle, workers } from "./client/workers";
+export type { Emitter, EmitterMap } from "./types";

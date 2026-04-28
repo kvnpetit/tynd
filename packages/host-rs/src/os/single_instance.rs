@@ -69,13 +69,13 @@ fn is_held() -> bool {
 
 /// Cross-platform local-socket name derived from the user-supplied id.
 /// Windows: `\\.\pipe\tynd-<id>` · Unix: abstract / path-based socket.
-fn socket_name(id: &str) -> Result<interprocess::local_socket::Name<'_>, String> {
-    // Return a `Name<'static>`? We borrow the &str so callers must keep it alive.
-    // interprocess's GenericNamespaced::to_ns_name is zero-copy on valid input.
-    let sanitized = format!("tynd-{id}");
-    // `Box::leak` gives a `&'static str` — fine since the socket lives for the
-    // process lifetime anyway.
-    let leaked: &'static str = Box::leak(sanitized.into_boxed_str());
+///
+/// `Box::leak` the formatted string once per call. Acquire is invoked at
+/// most twice per process lifetime (listener + forwarder), so the leak is
+/// bounded to a few dozen bytes. Earlier OnceLock-cached versions silently
+/// returned a stale name when called with a different `id`.
+fn socket_name(id: &str) -> Result<interprocess::local_socket::Name<'static>, String> {
+    let leaked: &'static str = Box::leak(format!("tynd-{id}").into_boxed_str());
     leaked
         .to_ns_name::<GenericNamespaced>()
         .map_err(|e| format!("socket name: {e}"))

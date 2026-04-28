@@ -7,11 +7,11 @@
   "homepage": "https://tynd.kvnpetit.com/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kvnpetit/tynd.git",
+    "url": "git+https://github.com/tynd-apps/tynd.git",
     "directory": "packages/host-src"
   },
   "bugs": {
-    "url": "https://github.com/kvnpetit/tynd/issues"
+    "url": "https://github.com/tynd-apps/tynd/issues"
   },
   "keywords": [
     "tynd",
@@ -35,6 +35,9 @@
   "files": [
     "native/**",
     "scripts/**",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md"
   ]
 }

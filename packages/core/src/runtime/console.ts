@@ -5,26 +5,26 @@
  */
 
 // Bun's other console methods (group/trace/table/…) already go to stderr by default.
-const METHODS = ["log", "info", "debug", "warn", "error"] as const
+const METHODS = ["log", "info", "debug", "warn", "error"] as const;
 
 function formatArg(a: unknown): string {
-  if (a === null) return "null"
-  if (a === undefined) return "undefined"
+  if (a === null) return "null";
+  if (a === undefined) return "undefined";
   if (typeof a === "object" || typeof a === "function") {
     try {
-      return JSON.stringify(a, null, 0)
+      return JSON.stringify(a, null, 0);
     } catch {
-      return String(a)
+      return String(a);
     }
   }
-  return String(a)
+  return String(a);
 }
 
 export function redirectConsoleToStderr(): void {
-  const con = console as unknown as Record<(typeof METHODS)[number], (...args: unknown[]) => void>
+  const con = console as unknown as Record<(typeof METHODS)[number], (...args: unknown[]) => void>;
   for (const method of METHODS) {
     con[method] = (...args: unknown[]) => {
-      process.stderr.write(`[${method.toUpperCase()}] ${args.map(formatArg).join(" ")}\n`)
-    }
+      process.stderr.write(`[${method.toUpperCase()}] ${args.map(formatArg).join(" ")}\n`);
+    };
   }
 }

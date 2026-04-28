@@ -1,26 +1,23 @@
 {
   "name": "tynd",
   "version": "1.0.0",
-  "description": "Native desktop apps in TypeScript — workspace root",
+  "description": "Native desktop apps in TypeScript — workspace root.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
   "homepage": "https://tynd.kvnpetit.com/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kvnpetit/tynd.git"
+    "url": "git+https://github.com/tynd-apps/tynd.git"
   },
   "bugs": {
-    "url": "https://github.com/kvnpetit/tynd/issues"
+    "url": "https://github.com/tynd-apps/tynd/issues"
   },
   "engines": {
     "bun": ">=1.3.0"
   },
   "private": true,
   "workspaces": [
-    "packages/*",
-    "plugins/*",
-    "playground/*",
-    "docs"
+    "packages/*"
   ],
   "scripts": {
     "typecheck": "bun run --filter '@tynd/*' typecheck",
@@ -41,9 +38,17 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.12",
-    "@tynd/cli": "workspace:*",
     "@tynd/core": "workspace:*",
     "@types/bun": "latest",
     "typescript": "~6.0.2"
-  }
+  },
+  "keywords": [
+    "tynd",
+    "desktop",
+    "webview",
+    "typescript",
+    "bun",
+    "rust",
+    "monorepo"
+  ]
 }

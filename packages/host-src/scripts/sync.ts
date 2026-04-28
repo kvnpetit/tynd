@@ -11,163 +11,163 @@
  * pulling in a full TOML parser.
  */
 
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs"
-import { dirname, join, relative } from "node:path"
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 
-const ROOT = join(import.meta.dir, "..", "..", "..")
-const HOST_RS = join(ROOT, "packages", "host-rs")
-const HOST_SRC_NATIVE = join(import.meta.dir, "..", "native")
-const WORKSPACE_TOML = join(ROOT, "Cargo.toml")
-const HOST_RS_TOML = join(HOST_RS, "Cargo.toml")
+const ROOT = join(import.meta.dir, "..", "..", "..");
+const HOST_RS = join(ROOT, "packages", "host-rs");
+const HOST_SRC_NATIVE = join(import.meta.dir, "..", "native");
+const WORKSPACE_TOML = join(ROOT, "Cargo.toml");
+const HOST_RS_TOML = join(HOST_RS, "Cargo.toml");
 
 type WorkspaceValues = {
-  pkg: Record<string, string>
-  deps: Record<string, string>
-}
+  pkg: Record<string, string>;
+  deps: Record<string, string>;
+};
 
 async function readWorkspaceValues(): Promise<WorkspaceValues> {
-  const text = await Bun.file(WORKSPACE_TOML).text()
+  const text = await Bun.file(WORKSPACE_TOML).text();
 
-  const pkg: Record<string, string> = {}
-  const deps: Record<string, string> = {}
+  const pkg: Record<string, string> = {};
+  const deps: Record<string, string> = {};
 
-  const sections = splitSections(text)
+  const sections = splitSections(text);
 
   for (const [header, body] of sections) {
     if (header === "workspace.package") {
-      for (const [k, v] of parseKv(body)) pkg[k] = v
+      for (const [k, v] of parseKv(body)) pkg[k] = v;
     } else if (header === "workspace.dependencies") {
-      for (const [k, v] of parseKv(body)) deps[k] = v
+      for (const [k, v] of parseKv(body)) deps[k] = v;
     }
   }
 
-  return { pkg, deps }
+  return { pkg, deps };
 }
 
-type Section = [header: string, body: string]
+type Section = [header: string, body: string];
 
 function splitSections(toml: string): Section[] {
-  const out: Section[] = []
-  let header = ""
-  let body: string[] = []
+  const out: Section[] = [];
+  let header = "";
+  let body: string[] = [];
   for (const line of toml.split(/\r?\n/)) {
-    const m = line.match(/^\s*\[([^\]]+)\]\s*$/)
+    const m = line.match(/^\s*\[([^\]]+)\]\s*$/);
     if (m) {
-      if (header) out.push([header, body.join("\n")])
-      header = m[1]!.trim()
-      body = []
+      if (header) out.push([header, body.join("\n")]);
+      header = m[1]?.trim();
+      body = [];
     } else {
-      body.push(line)
+      body.push(line);
     }
   }
-  if (header) out.push([header, body.join("\n")])
-  return out
+  if (header) out.push([header, body.join("\n")]);
+  return out;
 }
 
 /** Parse `key = value` pairs, skipping blank/comment lines. */
 function parseKv(body: string): Array<[string, string]> {
-  const out: Array<[string, string]> = []
+  const out: Array<[string, string]> = [];
   for (const raw of body.split(/\r?\n/)) {
-    const line = raw.replace(/\s+#.*$/, "").trim()
-    if (!line) continue
-    const eq = line.indexOf("=")
-    if (eq === -1) continue
-    const key = line.slice(0, eq).trim()
-    const value = line.slice(eq + 1).trim()
-    out.push([key, value])
+    const line = raw.replace(/\s+#.*$/, "").trim();
+    if (!line) continue;
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    const value = line.slice(eq + 1).trim();
+    out.push([key, value]);
   }
-  return out
+  return out;
 }
 
 function flattenCargoToml(src: string, ws: WorkspaceValues): string {
-  const lines = src.split(/\r?\n/)
-  const out: string[] = []
-  let inPackage = false
-  let skippingSection = false
+  const lines = src.split(/\r?\n/);
+  const out: string[] = [];
+  let inPackage = false;
+  let skippingSection = false;
   for (const raw of lines) {
-    const sectionMatch = raw.match(/^\s*\[([^\]]+)\]\s*$/)
+    const sectionMatch = raw.match(/^\s*\[([^\]]+)\]\s*$/);
     if (sectionMatch) {
-      const name = sectionMatch[1]!.trim()
-      inPackage = name === "package"
+      const name = sectionMatch[1]?.trim();
+      inPackage = name === "package";
       // [lints] inherits from workspace — doesn't apply to the
       // standalone crate shipped to users; strip it.
-      skippingSection = name === "lints"
-      if (skippingSection) continue
-      out.push(raw)
-      continue
+      skippingSection = name === "lints";
+      if (skippingSection) continue;
+      out.push(raw);
+      continue;
     }
-    if (skippingSection) continue
+    if (skippingSection) continue;
 
-    const stripped = raw.replace(/\s+#.*$/, "")
-    const trimmed = stripped.trim()
+    const stripped = raw.replace(/\s+#.*$/, "");
+    const trimmed = stripped.trim();
 
     // `readme.workspace = true` / `readme = "../../README.md"` — the path
     // escapes the crate dir once vendored into `.tynd/build/host/`. Drop it.
-    if (inPackage && /^readme\b/.test(trimmed)) continue
+    if (inPackage && /^readme\b/.test(trimmed)) continue;
 
     // `foo.workspace = true` — top-level inheritance.
-    const shortForm = trimmed.match(/^([A-Za-z0-9_-]+)\.workspace\s*=\s*true\s*$/)
+    const shortForm = trimmed.match(/^([A-Za-z0-9_-]+)\.workspace\s*=\s*true\s*$/);
     if (shortForm) {
-      const key = shortForm[1]!
-      const replacement = inPackage ? workspacePkgValue(ws, key) : workspaceDepShortValue(ws, key)
+      const key = shortForm[1]!;
+      const replacement = inPackage ? workspacePkgValue(ws, key) : workspaceDepShortValue(ws, key);
       if (replacement !== null) {
-        out.push(raw.replace(trimmed, replacement))
-        continue
+        out.push(raw.replace(trimmed, replacement));
+        continue;
       }
     }
 
     // `foo = { workspace = true, ... }` — long form with extra flags.
     const longForm = trimmed.match(
       /^([A-Za-z0-9_-]+)\s*=\s*\{\s*workspace\s*=\s*true\s*(,.*)?\s*\}\s*$/,
-    )
+    );
     if (longForm) {
-      const key = longForm[1]!
+      const key = longForm[1]!;
       const extras = (longForm[2] ?? "")
         .replace(/^,\s*/, "")
         .replace(/\s*\}\s*$/, "")
-        .trim()
-      const version = workspaceDepVersion(ws, key)
+        .trim();
+      const version = workspaceDepVersion(ws, key);
       if (version !== null) {
-        const extrasSuffix = extras ? `, ${extras}` : ""
+        const extrasSuffix = extras ? `, ${extras}` : "";
         out.push(
           raw.replace(
             trimmed,
             `${key} = { version = "${version}"${extrasSuffix}${mergeExtrasFromWorkspace(ws, key)} }`,
           ),
-        )
-        continue
+        );
+        continue;
       }
     }
 
-    out.push(raw)
+    out.push(raw);
   }
-  return out.join("\n")
+  return out.join("\n");
 }
 
 function workspacePkgValue(ws: WorkspaceValues, key: string): string | null {
-  const v = ws.pkg[key]
-  if (!v) return null
-  return `${key} = ${v}`
+  const v = ws.pkg[key];
+  if (!v) return null;
+  return `${key} = ${v}`;
 }
 
 function workspaceDepShortValue(ws: WorkspaceValues, key: string): string | null {
-  const raw = ws.deps[key]
-  if (!raw) return null
+  const raw = ws.deps[key];
+  if (!raw) return null;
   if (raw.startsWith('"')) {
-    return `${key} = ${raw}`
+    return `${key} = ${raw}`;
   }
   // Inline table like `{ version = "1.0", features = [...] }` — just copy verbatim.
-  return `${key} = ${raw}`
+  return `${key} = ${raw}`;
 }
 
 function workspaceDepVersion(ws: WorkspaceValues, key: string): string | null {
-  const raw = ws.deps[key]
-  if (!raw) return null
+  const raw = ws.deps[key];
+  if (!raw) return null;
   if (raw.startsWith('"')) {
-    return raw.slice(1, -1)
+    return raw.slice(1, -1);
   }
-  const m = raw.match(/version\s*=\s*"([^"]+)"/)
-  return m ? m[1]! : null
+  const m = raw.match(/version\s*=\s*"([^"]+)"/);
+  return m ? m[1]! : null;
 }
 
 /**
@@ -175,51 +175,50 @@ function workspaceDepVersion(ws: WorkspaceValues, key: string): string | null {
  * default-features, etc.), forward those into the per-crate long form too.
  */
 function mergeExtrasFromWorkspace(ws: WorkspaceValues, key: string): string {
-  const raw = ws.deps[key]
-  if (!raw || raw.startsWith('"')) return ""
-  const parts: string[] = []
-  const features = raw.match(/features\s*=\s*(\[[^\]]*\])/)
-  if (features) parts.push(`features = ${features[1]!}`)
-  const defaultFeatures = raw.match(/default-features\s*=\s*(true|false)/)
-  if (defaultFeatures) parts.push(`default-features = ${defaultFeatures[1]!}`)
-  return parts.length ? `, ${parts.join(", ")}` : ""
+  const raw = ws.deps[key];
+  if (!raw || raw.startsWith('"')) return "";
+  const parts: string[] = [];
+  const features = raw.match(/features\s*=\s*(\[[^\]]*\])/);
+  if (features) parts.push(`features = ${features[1]!}`);
+  const defaultFeatures = raw.match(/default-features\s*=\s*(true|false)/);
+  if (defaultFeatures) parts.push(`default-features = ${defaultFeatures[1]!}`);
+  return parts.length ? `, ${parts.join(", ")}` : "";
 }
 
 function copyDir(from: string, to: string) {
-  mkdirSync(to, { recursive: true })
+  mkdirSync(to, { recursive: true });
   for (const entry of readdirSync(from)) {
-    const src = join(from, entry)
-    const dst = join(to, entry)
-    const st = statSync(src)
+    const src = join(from, entry);
+    const dst = join(to, entry);
+    const st = statSync(src);
     if (st.isDirectory()) {
-      copyDir(src, dst)
+      copyDir(src, dst);
     } else {
-      mkdirSync(dirname(dst), { recursive: true })
+      mkdirSync(dirname(dst), { recursive: true });
       // Preserve byte-exact content via Bun.write.
-      const data = Bun.file(src)
-      Bun.write(dst, data)
+      const data = Bun.file(src);
+      Bun.write(dst, data);
     }
   }
 }
 
 if (!existsSync(HOST_RS_TOML)) {
-  throw new Error(`host-rs not found at ${HOST_RS_TOML}`)
+  throw new Error(`host-rs not found at ${HOST_RS_TOML}`);
 }
 
-const ws = await readWorkspaceValues()
-const rawHostToml = await Bun.file(HOST_RS_TOML).text()
-const flattened = flattenCargoToml(rawHostToml, ws)
+const ws = await readWorkspaceValues();
+const rawHostToml = await Bun.file(HOST_RS_TOML).text();
+const flattened = flattenCargoToml(rawHostToml, ws);
 
 if (existsSync(HOST_SRC_NATIVE)) {
-  rmSync(HOST_SRC_NATIVE, { recursive: true, force: true })
+  rmSync(HOST_SRC_NATIVE, { recursive: true, force: true });
 }
-mkdirSync(HOST_SRC_NATIVE, { recursive: true })
+mkdirSync(HOST_SRC_NATIVE, { recursive: true });
 
 // Source tree — copy verbatim.
-copyDir(join(HOST_RS, "src"), join(HOST_SRC_NATIVE, "src"))
+copyDir(join(HOST_RS, "src"), join(HOST_SRC_NATIVE, "src"));
 
 // Flattened Cargo.toml — preserves crate name + features + optional deps.
-await Bun.write(join(HOST_SRC_NATIVE, "Cargo.toml"), flattened)
+await Bun.write(join(HOST_SRC_NATIVE, "Cargo.toml"), flattened);
 
-const ok = relative(ROOT, HOST_SRC_NATIVE)
-console.log(`✓ synced host-rs -> ${ok}`)
+const _ok = relative(ROOT, HOST_SRC_NATIVE);

@@ -1,16 +1,16 @@
-import { tynd } from "../logger"
-import type { Emitter } from "../types"
-import "./_internal.js"
+import { tynd } from "../logger";
+import type { Emitter } from "../types";
+import "./_internal.js";
 
 type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
   k: infer I,
 ) => void
   ? I
-  : never
+  : never;
 
 type ModuleEvents<T> = UnionToIntersection<
   { [K in keyof T]: T[K] extends Emitter<infer E> ? E : never }[keyof T]
->
+>;
 
 /**
  * Awaitable + async-iterable handle for a streaming backend call.
@@ -20,8 +20,8 @@ type ModuleEvents<T> = UnionToIntersection<
  */
 export type StreamCall<Y, R> = PromiseLike<Awaited<R>> &
   AsyncIterable<Y> & {
-    cancel(): Promise<IteratorResult<Y>>
-  }
+    cancel(): Promise<IteratorResult<Y>>;
+  };
 
 type ModuleFunctions<T> = {
   [K in keyof T as T[K] extends (...args: infer _A) => infer _R ? K : never]: T[K] extends (
@@ -32,19 +32,19 @@ type ModuleFunctions<T> = {
       ? (...args: A) => StreamCall<Y, void>
       : T[K] extends (...args: infer A) => infer R
         ? (...args: A) => Promise<Awaited<R>>
-        : never
-}
+        : never;
+};
 
 export type BackendClient<T> = ModuleFunctions<T> & {
   on<K extends keyof ModuleEvents<T> & string>(
     event: K,
     handler: (payload: ModuleEvents<T>[K]) => void,
-  ): () => void
+  ): () => void;
   once<K extends keyof ModuleEvents<T> & string>(
     event: K,
     handler: (payload: ModuleEvents<T>[K]) => void,
-  ): () => void
-}
+  ): () => void;
+};
 
 /**
  * Create a fully type-safe proxy to the backend.
@@ -57,40 +57,40 @@ export type BackendClient<T> = ModuleFunctions<T> & {
 export function createBackend<T>(): BackendClient<T> {
   return new Proxy({} as BackendClient<T>, {
     get(_target, prop: string | symbol) {
-      if (typeof prop !== "string") return undefined
+      if (typeof prop !== "string") return undefined;
       // Block thenable traps so `await api` doesn't fire a backend call.
-      if (prop === "then" || prop === "catch" || prop === "finally") return undefined
+      if (prop === "then" || prop === "catch" || prop === "finally") return undefined;
 
       if (!window.__tynd__) {
-        tynd.error("window.__tynd__ is not available — are you running outside a tynd app?")
-        return () => Promise.reject(new Error("[tynd] not in a tynd app context"))
+        tynd.error("window.__tynd__ is not available — are you running outside a tynd app?");
+        return () => Promise.reject(new Error("[tynd] not in a tynd app context"));
       }
 
       if (prop === "on") {
-        return (event: string, handler: (p: unknown) => void) => window.__tynd__.on(event, handler)
+        return (event: string, handler: (p: unknown) => void) => window.__tynd__.on(event, handler);
       }
 
       if (prop === "once") {
         return (event: string, handler: (p: unknown) => void) => {
-          let called = false
+          let called = false;
           const wrapper = (p: unknown) => {
             if (called) {
               // Extra fires usually mean emitter/receiver disagree on multiplicity — surface them.
               tynd.warn(
                 `on.once(${JSON.stringify(event)}): handler fired more than once — extra invocation ignored`,
-              )
-              return
+              );
+              return;
             }
-            called = true
-            window.__tynd__.off(event, wrapper)
-            handler(p)
-          }
-          window.__tynd__.on(event, wrapper)
-          return () => window.__tynd__.off(event, wrapper)
-        }
+            called = true;
+            window.__tynd__.off(event, wrapper);
+            handler(p);
+          };
+          window.__tynd__.on(event, wrapper);
+          return () => window.__tynd__.off(event, wrapper);
+        };
       }
 
-      return (...args: unknown[]) => window.__tynd__.call(prop, args)
+      return (...args: unknown[]) => window.__tynd__.call(prop, args);
     },
-  })
+  });
 }

@@ -24,6 +24,26 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 .as_str()
                 .or_else(|| args.get("path").and_then(|p| p.as_str()))
                 .ok_or_else(|| "shell.openPath: missing path argument".to_string())?;
+            // On Windows, `open::that` calls ShellExecuteW which will *execute*
+            // .exe / .bat / .ps1 / .msi / .cmd files. Block executable
+            // extensions so a frontend bug or XSS can't turn this into RCE.
+            // Frontend code that needs to launch a binary should use
+            // `process.exec` (which goes through capability checks).
+            const EXEC_EXTS: &[&str] = &[
+                "exe", "bat", "cmd", "ps1", "psm1", "msi", "msp", "scr", "vbs", "vbe", "wsf",
+                "wsh", "com", "pif", "cpl", "jar",
+            ];
+            if let Some(ext) = std::path::Path::new(path)
+                .extension()
+                .and_then(|e| e.to_str())
+            {
+                if EXEC_EXTS.iter().any(|e| e.eq_ignore_ascii_case(ext)) {
+                    return Err(format!(
+                        "shell.openPath: refusing to open executable '{path}' — \
+                         use process.exec for binaries"
+                    ));
+                }
+            }
             open::that(path).map_err(|e| e.to_string())?;
             Ok(Value::Null)
         },

@@ -29,8 +29,14 @@ fn new_cb() -> Result<Clipboard, String> {
 
 fn read_text() -> Result<Value, String> {
     let mut cb = new_cb()?;
-    let text = cb.get_text().unwrap_or_default();
-    Ok(Value::String(text))
+    // arboard returns `Err(ContentNotAvailable)` for empty clipboard — that's
+    // a legitimate empty case, not an error. Other errors (X11 lock, perm)
+    // must propagate so callers can distinguish "empty" from "broken".
+    match cb.get_text() {
+        Ok(t) => Ok(Value::String(t)),
+        Err(arboard::Error::ContentNotAvailable) => Ok(Value::String(String::new())),
+        Err(e) => Err(format!("clipboard.readText: {e}")),
+    }
 }
 
 fn write_text(args: &Value) -> Result<Value, String> {

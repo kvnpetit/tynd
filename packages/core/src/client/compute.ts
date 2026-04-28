@@ -1,6 +1,6 @@
-import { base64ToBytes, binExchangeText, osCall } from "./_internal"
+import { base64ToBytes, binExchangeText, osCall } from "./_internal";
 
-export type HashAlgo = "blake3" | "sha256" | "sha384" | "sha512"
+export type HashAlgo = "blake3" | "sha256" | "sha384" | "sha512";
 
 export const compute = {
   /**
@@ -13,10 +13,10 @@ export const compute = {
       "compute/hash",
       { algo: opts?.algo ?? "blake3", encoding: "base64" },
       data,
-    )
+    );
   },
   async randomBytes(n: number): Promise<Uint8Array> {
-    const b64 = await osCall<string>("compute", "randomBytes", { n })
-    return base64ToBytes(b64)
+    const b64 = await osCall<string>("compute", "randomBytes", { n });
+    return base64ToBytes(b64);
   },
-}
+};

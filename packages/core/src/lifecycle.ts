@@ -6,29 +6,29 @@
  * pulling in runtime-specific code paths.
  */
 
-import { clearFrontendListeners } from "./frontend-events"
+import { clearFrontendListeners } from "./frontend-events";
 
-type EmitFn = (name: string, payload: unknown, to?: string) => void
+type EmitFn = (name: string, payload: unknown, to?: string) => void;
 
-let _emitFn: EmitFn | null = null
+let _emitFn: EmitFn | null = null;
 export function setEmitFn(fn: EmitFn): void {
-  _emitFn = fn
+  _emitFn = fn;
 }
 export function getEmitFn(): EmitFn | null {
-  return _emitFn
+  return _emitFn;
 }
 
-export const onReadyFns: Array<() => void> = []
-export const onCloseFns: Array<() => void> = []
+export const onReadyFns: Array<() => void> = [];
+export const onCloseFns: Array<() => void> = [];
 
-export const lifecycleFlags = { readyFired: false, closeFired: false }
+export const lifecycleFlags = { readyFired: false, closeFired: false };
 
 /** Fire every registered `app.onReady` handler; swallow individual errors. */
 export function fireReady(): void {
-  lifecycleFlags.readyFired = true
+  lifecycleFlags.readyFired = true;
   for (const fn of onReadyFns) {
     try {
-      fn()
+      fn();
     } catch {
       /* best-effort: one handler's error must not block the others */
     }
@@ -37,10 +37,10 @@ export function fireReady(): void {
 
 /** Fire every registered `app.onClose` handler; swallow individual errors. */
 export function fireClose(): void {
-  lifecycleFlags.closeFired = true
+  lifecycleFlags.closeFired = true;
   for (const fn of onCloseFns) {
     try {
-      fn()
+      fn();
     } catch {
       /* best-effort: one handler's error must not block the others */
     }
@@ -48,5 +48,5 @@ export function fireClose(): void {
   // Drop any frontend-emit handlers so the listener map doesn't outlive
   // the app. User code that relies on its own unsubscribe pattern is
   // unaffected (that path already ran during normal teardown).
-  clearFrontendListeners()
+  clearFrontendListeners();
 }

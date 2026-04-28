@@ -1,18 +1,18 @@
-import { osCall } from "./_internal"
+import { osCall } from "./_internal";
 
 export interface ClipboardImage {
   /** Base64-encoded PNG bytes. */
-  png: string
-  width: number
-  height: number
+  png: string;
+  width: number;
+  height: number;
 }
 
 export const clipboard = {
   readText(): Promise<string> {
-    return osCall("clipboard", "readText")
+    return osCall("clipboard", "readText");
   },
   writeText(text: string): Promise<void> {
-    return osCall("clipboard", "writeText", { text })
+    return osCall("clipboard", "writeText", { text });
   },
   /**
    * Read HTML from the clipboard. arboard doesn't expose a reader — the OS
@@ -20,26 +20,26 @@ export const clipboard = {
    * always returns `null`. Use `readText` as a fallback.
    */
   readHtml(): Promise<string | null> {
-    return osCall("clipboard", "readHtml")
+    return osCall("clipboard", "readHtml");
   },
   /**
    * Write rich HTML to the clipboard, with an optional plain-text fallback
    * for apps that don't understand `text/html`.
    */
   writeHtml(html: string, alt?: string): Promise<void> {
-    return osCall("clipboard", "writeHtml", alt === undefined ? { html } : { html, alt })
+    return osCall("clipboard", "writeHtml", alt === undefined ? { html } : { html, alt });
   },
   /** Read a PNG image from the clipboard (null if the clipboard has no image). */
   readImage(): Promise<ClipboardImage | null> {
-    return osCall("clipboard", "readImage")
+    return osCall("clipboard", "readImage");
   },
   /** Write a PNG image (base64-encoded bytes) to the clipboard. */
   writeImage(png: string): Promise<void> {
-    return osCall("clipboard", "writeImage", { png })
+    return osCall("clipboard", "writeImage", { png });
   },
   /** Empty the clipboard. */
   clear(): Promise<void> {
-    return osCall("clipboard", "clear")
+    return osCall("clipboard", "clear");
   },
 
   /**
@@ -53,11 +53,13 @@ export const clipboard = {
   ): Promise<() => Promise<void>> {
     await osCall("clipboard", "startMonitoring", {
       intervalMs: options?.intervalMs,
-    })
-    const off = window.__tynd__.os_on("clipboard:change", (raw) => handler(raw as { text: string }))
+    });
+    const off = window.__tynd__.os_on("clipboard:change", (raw) =>
+      handler(raw as { text: string }),
+    );
     return async () => {
-      off()
-      await osCall("clipboard", "stopMonitoring")
-    }
+      off();
+      await osCall("clipboard", "stopMonitoring");
+    };
   },
-}
+};
