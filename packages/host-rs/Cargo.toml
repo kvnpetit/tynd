@@ -18,46 +18,47 @@ workspace = true
 
 [dependencies]
 # Always-on — structural or used by more than one always-on module.
-wry.workspace          = true
-tao.workspace          = true
-serde.workspace        = true
-serde_json.workspace   = true
-pollster.workspace     = true
-image.workspace        = true
-muda.workspace         = true
-tray-icon.workspace    = true
-dirs.workspace         = true
-zstd.workspace         = true
-base64.workspace       = true
-sha2.workspace         = true
-blake3.workspace       = true
-rand.workspace         = true
-parking_lot.workspace  = true
-dashmap.workspace      = true
-ahash.workspace        = true
-tempfile.workspace     = true
-tracing.workspace      = true
+wry.workspace                = true
+tao.workspace                = true
+serde.workspace              = true
+serde_json.workspace         = true
+pollster.workspace           = true
+image.workspace              = true
+muda.workspace               = true
+tray-icon.workspace          = true
+dirs.workspace               = true
+zstd.workspace               = true
+base64.workspace             = true
+sha2.workspace               = true
+blake3.workspace             = true
+rand.workspace               = true
+parking_lot.workspace        = true
+dashmap.workspace            = true
+ahash.workspace              = true
+tempfile.workspace           = true
+tracing.workspace            = true
 tracing-subscriber.workspace = true
-anyhow.workspace       = true
-crossbeam-channel.workspace = true
-fastrand.workspace     = true
-uuid.workspace         = true
-cap-std.workspace      = true
-cap-tempfile.workspace = true
+ctrlc.workspace              = true
+anyhow.workspace             = true
+crossbeam-channel.workspace  = true
+fastrand.workspace           = true
+uuid.workspace               = true
+cap-std.workspace            = true
+cap-tempfile.workspace       = true
 
 # Optional — pulled only when their matching `api-*` feature is enabled.
-rfd              = { workspace = true, optional = true }
-arboard          = { workspace = true, optional = true }
-open             = { workspace = true, optional = true }
-notify-rust      = { workspace = true, optional = true }
-ureq             = { workspace = true, optional = true }
-fslock           = { workspace = true, optional = true }
-interprocess     = { workspace = true, optional = true }
-notify           = { workspace = true, optional = true }
-trash            = { workspace = true, optional = true }
-tungstenite      = { workspace = true, optional = true }
+rfd          = { workspace = true, optional = true }
+arboard      = { workspace = true, optional = true }
+open         = { workspace = true, optional = true }
+notify-rust  = { workspace = true, optional = true }
+ureq         = { workspace = true, optional = true }
+fslock       = { workspace = true, optional = true }
+interprocess = { workspace = true, optional = true }
+notify       = { workspace = true, optional = true }
+trash        = { workspace = true, optional = true }
+tungstenite  = { workspace = true, optional = true }
 
-rquickjs         = { workspace = true, optional = true }
+rquickjs = { workspace = true, optional = true }
 
 # Native plugin contract. Pulled unconditionally — the trait + registry are
 # tiny and the host always needs them to dispatch plugin calls when one
@@ -69,12 +70,12 @@ tynd_plugin_sdk.workspace = true
 # OS API is compiled in. Custom builds pass `--no-default-features` and pick
 # the exact set of `api-*` features they want, which also drops the matching
 # crate dependencies from the compile graph.
-default = ["api-all"]
+default = [ "api-all" ]
 
 # Embedded QuickJS runtime (lite only — keeps rquickjs out of full).
 # Lite's JS polyfills call into `os::compute` (SubtleCrypto) and
 # `os::websocket` (WebSocket), so those two APIs ride along mandatorily.
-embedded-js = ["dep:rquickjs", "api-compute", "api-websocket"]
+embedded-js = [ "dep:rquickjs", "api-compute", "api-websocket" ]
 
 # Meta feature: every gatable OS API. Disabling this and picking a subset is
 # how `runtime: "full-custom"` / `"lite-custom"` narrow the attack surface
@@ -96,23 +97,23 @@ api-all = [
 
 # Per-API gates. Each feature enables its module + dispatch arm + pulls the
 # crate dependencies it needs. APIs with no external dep list nothing here.
-api-clipboard       = ["dep:arboard"]
-api-compute         = []
-api-dialog          = ["dep:rfd"]
-api-fs              = ["dep:notify", "dep:trash"]
-api-http            = ["dep:ureq"]
-api-notification    = ["dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys"]
-api-process         = []
-api-shell           = ["dep:open"]
-api-sidecar         = []
-api-single-instance = ["dep:fslock", "dep:interprocess"]
-api-store           = []
-api-websocket       = ["dep:tungstenite"]
+api-clipboard       = [ "dep:arboard" ]
+api-compute         = [  ]
+api-dialog          = [ "dep:rfd" ]
+api-fs              = [ "dep:notify", "dep:trash" ]
+api-http            = [ "dep:ureq" ]
+api-notification    = [ "dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys" ]
+api-process         = [  ]
+api-shell           = [ "dep:open" ]
+api-sidecar         = [  ]
+api-single-instance = [ "dep:fslock", "dep:interprocess" ]
+api-store           = [  ]
+api-websocket       = [ "dep:tungstenite" ]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Linux needs the wayland-data-control feature on arboard; re-declared here
 # as optional so it's only pulled with api-clipboard.
-arboard = { version = "3", features = ["wayland-data-control"], optional = true }
+arboard       = { version = "3", features = [ "wayland-data-control" ], optional = true }
 gtk.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -121,13 +122,33 @@ tauri-winrt-notification = { workspace = true, optional = true }
 # system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
 # 0.61 introduces `windows-link` (raw-dylib resolution) which drops the
 # 6 MB `windows-targets` import-lib bloat the older 0.59 line pulled in.
-windows-sys = { version = "0.61", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Dwm",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_System_Com",
-] }
+windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Com" ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = { workspace = true, optional = true }
+
+# Criterion drives the IPC + plugin-dispatch micro-benches under
+# `benches/`. Pulled at dev only — never linked into the shipped host.
+# License: Apache-2.0 OR MIT (matches our workspace policy).
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = [ "cargo_bench_support" ] }
+
+# `harness = false` lets criterion's own runner take over from libtest,
+# which is what gives us the criterion HTML reports + per-bench
+# regression detection. Each file under `benches/` needs its own entry.
+
+[[bench]]
+name    = "ipc_eval_str"
+harness = false
+
+[[bench]]
+name    = "ipc_yield_batch"
+harness = false
+
+[[bench]]
+name    = "scheme_bin"
+harness = false
+
+[[bench]]
+name    = "plugin_dispatch"
+harness = false

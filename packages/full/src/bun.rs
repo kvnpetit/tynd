@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use crossbeam_channel as mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 #[cfg(windows)]
@@ -70,6 +71,10 @@ pub(crate) struct ReloadHandle {
     stdin_slot: Arc<Mutex<Option<ChildStdin>>>,
     child_slot: Arc<Mutex<Option<Child>>>,
     event_tx: mpsc::Sender<BackendEvent>,
+    /// Set to `true` for the duration of a controlled reload kill so the
+    /// reader thread can tell an expected stdout-close apart from a real
+    /// Bun crash. Shared between the reload trigger and the reader.
+    reload_in_progress: Arc<AtomicBool>,
 }
 
 impl ReloadHandle {
@@ -81,6 +86,10 @@ impl ReloadHandle {
     }
 
     pub(crate) fn reload(&self) {
+        // Mark the upcoming stdout close as expected so the reader thread
+        // doesn't surface it as a Bun crash.
+        self.reload_in_progress.store(true, Ordering::SeqCst);
+
         // Killing the child closes stdout which unblocks the reader thread.
         if let Some(mut child) = self.child_slot.lock().unwrap().take() {
             let _ = child.kill();
@@ -88,13 +97,21 @@ impl ReloadHandle {
         }
         *self.stdin_slot.lock().unwrap() = None;
 
-        match spawn_bun(&self.entry_path, self.event_tx.clone()) {
+        match spawn_bun(
+            &self.entry_path,
+            self.event_tx.clone(),
+            self.reload_in_progress.clone(),
+        ) {
             Ok((child, stdin, _config)) => {
                 *self.child_slot.lock().unwrap() = Some(child);
                 *self.stdin_slot.lock().unwrap() = Some(stdin);
+                // The new reader is up; clear the flag so the *next* close
+                // is treated as unexpected unless reload() flips it again.
+                self.reload_in_progress.store(false, Ordering::SeqCst);
                 let _ = self.event_tx.send(BackendEvent::Reload);
             },
             Err(e) => {
+                self.reload_in_progress.store(false, Ordering::SeqCst);
                 let _ = self.event_tx.send(BackendEvent::Error {
                     message: format!("Failed to reload backend: {e}"),
                 });
@@ -109,14 +126,16 @@ impl ReloadHandle {
 pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     let (call_tx, call_rx) = mpsc::unbounded::<BackendCall>();
     let (event_tx, event_rx) = mpsc::unbounded::<BackendEvent>();
+    let reload_in_progress = Arc::new(AtomicBool::new(false));
 
-    let (child, stdin, config) = match spawn_bun(entry_path, event_tx.clone()) {
-        Ok(t) => t,
-        Err(e) => {
-            tynd_log!("{e}");
-            std::process::exit(1);
-        },
-    };
+    let (child, stdin, config) =
+        match spawn_bun(entry_path, event_tx.clone(), reload_in_progress.clone()) {
+            Ok(t) => t,
+            Err(e) => {
+                tynd_log!("{e}");
+                std::process::exit(1);
+            },
+        };
 
     let stdin_slot: Arc<Mutex<Option<ChildStdin>>> = Arc::new(Mutex::new(Some(stdin)));
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(Some(child)));
@@ -192,6 +211,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
         stdin_slot,
         child_slot,
         event_tx,
+        reload_in_progress,
     };
     (bridge, reload)
 }
@@ -201,6 +221,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
 fn spawn_bun(
     entry_path: &str,
     event_tx: mpsc::Sender<BackendEvent>,
+    reload_in_progress: Arc<AtomicBool>,
 ) -> Result<(Child, ChildStdin, BackendConfig), String> {
     let bun_bin = std::env::var("TYND_BUN_PATH").unwrap_or_else(|_| "bun".into());
 
@@ -233,6 +254,7 @@ fn spawn_bun(
 
     // Reader thread — forwards Bun stdout events. Dies when stdout closes
     // (on Bun exit or kill during reload). A new reader is spawned by ReloadHandle.
+    let reader_event_tx = event_tx.clone();
     std::thread::spawn(move || {
         for line in reader.lines() {
             match line {
@@ -256,20 +278,21 @@ fn spawn_bun(
                             } else {
                                 error.unwrap_or_else(|| "unknown error".into())
                             };
-                            let _ = event_tx.send(BackendEvent::Return { id, ok, value });
+                            let _ = reader_event_tx.send(BackendEvent::Return { id, ok, value });
                         },
                         Ok(BunMsg::Yield { id, v }) => {
-                            let _ = event_tx.send(BackendEvent::Yield { id, value: v });
+                            let _ = reader_event_tx.send(BackendEvent::Yield { id, value: v });
                         },
                         Ok(BunMsg::Event { name, p, to }) => {
-                            let _ = event_tx.send(BackendEvent::Emit {
+                            let _ = reader_event_tx.send(BackendEvent::Emit {
                                 name,
                                 payload: p,
                                 to,
                             });
                         },
                         Ok(BunMsg::EvalInFrontend { script, to }) => {
-                            let _ = event_tx.send(BackendEvent::EvalInFrontend { script, to });
+                            let _ =
+                                reader_event_tx.send(BackendEvent::EvalInFrontend { script, to });
                         },
                         Ok(BunMsg::Config { .. }) => {},
                         Err(e) => tynd_log!("Parse error ({e}): {trimmed}"),
@@ -277,8 +300,27 @@ fn spawn_bun(
                 },
                 // Any error means Bun closed or crashed — the reader thread exits.
                 // ReloadHandle will spawn a fresh reader if/when a new Bun starts.
-                Err(_) => return,
+                Err(_) => break,
             }
+        }
+        // Reader thread is exiting. If it's not because of a controlled
+        // reload, this is an unexpected Bun death — the runtime crashed,
+        // ran out of memory, or was OOM-killed by the OS. Surface it loudly
+        // so the dev sees it instead of hitting a silent "no IPC response"
+        // deadlock, and forward an error overlay so the dev-mode UI shows
+        // a banner the user can read.
+        if reload_in_progress.load(Ordering::SeqCst) {
+            tynd_host::tynd_debug!("Bun stdout closed during reload (expected)");
+        } else {
+            tynd_host::tynd_error!(
+                "Bun subprocess exited unexpectedly — IPC channel is dead. \
+                 The runtime crashed, was OOM-killed, or terminated on its own. \
+                 Restart the host to recover."
+            );
+            let _ = reader_event_tx.send(BackendEvent::Error {
+                message: "Backend runtime exited unexpectedly. Check host logs and restart."
+                    .to_string(),
+            });
         }
     });
 

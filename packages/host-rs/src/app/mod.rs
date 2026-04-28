@@ -98,6 +98,20 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         }));
     }
 
+    // Wire the signal handler into the event loop. When SIGINT / SIGTERM
+    // fires, `signals.rs` calls this closure on whichever OS thread
+    // delivered the signal (Windows: the console-control thread; Unix:
+    // the thread that consumed `sigaction`). We just bounce a `ForceExit`
+    // user event to the main thread — `ForceExit`'s arm already runs
+    // `cleanup::run()` and `process::exit(0)` under the `exit_started`
+    // guard, so we get the same shutdown path as the OS-close watchdog.
+    {
+        let proxy = proxy.clone();
+        crate::cleanup::set_shutdown_hook(move || {
+            let _ = proxy.send_event(UserEvent::ForceExit);
+        });
+    }
+
     // Install the plugin event bus against the now-wired emitter so
     // native plugins can raise events alongside OS APIs.
     crate::plugins::install_default_emit();

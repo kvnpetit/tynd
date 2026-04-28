@@ -1,8 +1,25 @@
 [workspace]
-members  = [
-    "packages/host-rs",
-    "packages/full",
-    "packages/lite",
+members = [ "packages/host-rs", "packages/full", "packages/lite" ]
+
+# cargo-shear can't see consumers across workspace boundaries — these crates
+# are declared here so sibling repos (../plugins, ../plugin-sdk) can pick them
+# up via `workspace = true` when resolved through the path-deps graph during
+# `tynd build`. They're not unused, just consumed off-tree.
+[workspace.metadata.cargo-shear]
+ignored = [
+    "anyhow",
+    "auto-launch",
+    "bidiff",
+    "cap-tempfile",
+    "ed25519-dalek",
+    "fastrand",
+    "global-hotkey",
+    "keyring",
+    "portable-pty",
+    "rusqlite",
+    "self-replace",
+    "thiserror",
+    "user-idle",
 ]
 # Generated/vendored trees that should not be members of the monorepo
 # workspace. `packages/host-src/native/` is a flattened mirror of
@@ -13,7 +30,7 @@ members  = [
 # The plugin-sdk + 14 plugins live in sibling repos (`../plugin-sdk`,
 # `../plugins`) — they have their own Cargo workspaces and are pulled in
 # here via path deps for dev iteration but are not workspace members.
-exclude  = ["packages/host-src/native"]
+exclude  = [ "packages/host-src/native" ]
 resolver = "2"
 
 [workspace.package]
@@ -24,39 +41,39 @@ license       = "Apache-2.0"
 repository    = "https://github.com/tynd-apps/tynd"
 homepage      = "https://tynd.kvnpetit.com/"
 documentation = "https://tynd.kvnpetit.com/docs"
-authors       = ["Kevin Petit <74395438+kvnpetit@users.noreply.github.com>"]
-keywords      = ["desktop", "webview", "typescript", "bun", "gui"]
-categories    = ["gui", "web-programming"]
+authors       = [ "Kevin Petit <74395438+kvnpetit@users.noreply.github.com>" ]
+keywords      = [ "desktop", "webview", "typescript", "bun", "gui" ]
+categories    = [ "gui", "web-programming" ]
 readme        = "../../README.md"
 
 [workspace.dependencies]
 # Shared foundations
-serde       = { version = "1.0.228", features = ["derive"] }
-serde_json  = "1.0.149"
-tempfile    = "3.27"
-dirs        = "6"
-zstd        = { version = "0.13.3", default-features = false }
-mimalloc    = { version = "0.1.48", default-features = false }
+serde      = { version = "1.0.228", features = [ "derive" ] }
+serde_json = "1.0.149"
+tempfile   = "3.27"
+dirs       = "6"
+zstd       = { version = "0.13.3", default-features = false }
+mimalloc   = { version = "0.1.48", default-features = false }
 
 # wry / tao ecosystem
-wry         = "0.55.0"
-tao         = "0.35.0"
-muda        = "0.17.2"
-tray-icon   = "0.22"
+wry       = "0.55.0"
+tao       = "0.35.0"
+muda      = "0.17.2"
+tray-icon = "0.22"
 
 # OS integration
 rfd         = "0.17.2"
 arboard     = "3.6.1"
-open        = { version = "5.3.3", features = ["shellexecute-on-windows"] }
+open        = { version = "5.3.3", features = [ "shellexecute-on-windows" ] }
 pollster    = "0.4"
 notify-rust = "4.15.0"
-image       = { version = "0.25.10", default-features = false, features = ["png", "ico", "bmp"] }
+image       = { version = "0.25.10", default-features = false, features = [ "png", "ico", "bmp" ] }
 
 # Embedded JS runtime (lite)
-rquickjs    = { version = "0.11.0", features = ["full"] }
+rquickjs = { version = "0.11.0", features = [ "full" ] }
 
 # HTTP + binary encoding. `json` dropped — we parse via serde_json directly.
-ureq   = { version = "2.12", default-features = false, features = ["tls", "gzip", "brotli"] }
+ureq   = { version = "2.12", default-features = false, features = [ "tls", "gzip", "brotli" ] }
 base64 = "0.22"
 
 # Cross-platform pseudo-terminal for the embedded terminal API
@@ -68,7 +85,7 @@ blake3 = { version = "1.5", default-features = false }
 hmac   = { version = "0.12", default-features = false }
 
 # Ed25519 signatures for the auto-updater manifest + binary integrity.
-ed25519-dalek = { version = "2.2", default-features = false, features = ["std"] }
+ed25519-dalek = { version = "2.2", default-features = false, features = [ "std" ] }
 
 # File-based single-instance lock — replaces the unmaintained `single-instance`
 # crate. `fslock` uses platform-native locking (`flock` on Unix, `LockFileEx`
@@ -84,13 +101,13 @@ notify        = "6.1"
 global-hotkey = "0.5"
 # Cross-platform recycle bin (IShellItem on Windows, NSFileManager trashItemAtURL
 # on macOS, freedesktop.org Trash Spec on Linux).
-trash         = "5"
+trash = "5"
 # User idle time — GetLastInputInfo (Win), CGEventSource (macOS), XScreenSaver (Linux).
-user-idle     = "0.6"
+user-idle = "0.6"
 
 # Linux-only gtk3 bindings — needed so we can upcast tao's gtk::ApplicationWindow
 # to the gtk::Window that muda's show_context_menu_for_gtk_window expects.
-gtk           = "0.18"
+gtk = "0.18"
 
 # Platform-specific notification backends with action callbacks — notify-rust
 # only surfaces them on Linux. Windows: tauri-winrt-notification adds WinRT
@@ -105,17 +122,17 @@ auto-launch = "0.5"
 
 # Secure credential storage — Keychain (macOS), Credential Manager + DPAPI
 # (Windows), Secret Service / kwallet (Linux).
-keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+keyring = { version = "3", features = [ "apple-native", "windows-native", "sync-secret-service" ] }
 
 # CSPRNG + WebSocket + embedded SQL (lite parity with bun:sqlite)
-rand       = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
-tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
-rusqlite   = { version = "0.32", features = ["bundled"] }
+rand        = { version = "0.8", default-features = false, features = [ "std", "std_rng" ] }
+tungstenite = { version = "0.24", default-features = false, features = [ "rustls-tls-webpki-roots", "handshake" ] }
+rusqlite    = { version = "0.32", features = [ "bundled" ] }
 
 # Performance primitives
-parking_lot = "0.12"   # lock-free fast path + no poison handling (saves a branch per lock)
-dashmap     = "6"      # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
-ahash       = "0.8"    # faster non-crypto hasher for small keys (sessions, routes)
+parking_lot = "0.12" # lock-free fast path + no poison handling (saves a branch per lock)
+dashmap     = "6"    # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
+ahash       = "0.8"  # faster non-crypto hasher for small keys (sessions, routes)
 # MPMC sync channel with `select!` macro + native timeouts. Drop-in for
 # `std::sync::mpsc` on the BackendBridge event_rx loop.
 crossbeam-channel = "0.5"
@@ -124,13 +141,13 @@ crossbeam-channel = "0.5"
 fastrand = "2"
 # Time-ordered, sortable IDs (UUIDv7, RFC 9562). Replaces ad-hoc rand-based
 # IPC call IDs so traces sort temporally.
-uuid     = { version = "1", features = ["v7"] }
+uuid = { version = "1", features = [ "v7" ] }
 # Capability-based filesystem from Bytecode Alliance — `Dir` handle
 # blocks `..`/symlink/abs-path escapes via `openat2` on Linux 5.6+ and
 # equivalent on macOS/Windows. Defense-in-depth wrapper for the scope
 # policy in `os::fs`.
-cap-std       = "4"
-cap-tempfile  = "4"
+cap-std      = "4"
+cap-tempfile = "4"
 # Cross-platform binary self-replacement primitive — handles the
 # Windows file-lock dance (rename-then-delete-on-reboot) so the
 # updater plugin doesn't reinvent the workaround.
@@ -145,14 +162,20 @@ tynd_plugin_sdk = { path = "../plugin-sdk/native" }
 # `anyhow` for app code with `.context()`, `thiserror` for typed public
 # error enums in libraries (plugin-sdk).
 tracing            = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3", features = [ "env-filter", "fmt" ] }
 anyhow             = "1.0"
 thiserror          = "2.0"
+
+# Cross-platform Ctrl+C / SIGTERM handler — installs a single OS-level
+# signal trap (SetConsoleCtrlHandler on Windows, sigaction on Unix) and
+# routes both SIGINT *and* SIGTERM (with the `termination` feature) into
+# a Rust closure. ~250 lines, zero deps, MIT/Apache-2.0.
+ctrlc = { version = "3.5", features = [ "termination" ] }
 
 # Binary diff for delta updates (replaces full-binary downloads in the
 # updater). `bidiff` over `bsdiff` — parallel scanning, divsufsort,
 # lower memory footprint. Pair with zstd for compressed patches.
-bidiff             = "1.0"
+bidiff = "1.0"
 
 [workspace.lints.rust]
 unused_must_use               = "deny"
