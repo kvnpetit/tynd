@@ -36,7 +36,8 @@ serde_json.workspace = true
 mimalloc.workspace   = true
 ureq.workspace        = true
 base64.workspace      = true
-tungstenite.workspace = true
+# tungstenite — WebSocket impl is fully delegated to `tynd_host`; lite
+# doesn't link tungstenite directly. Removed by cargo-shear hygiene.
 hmac.workspace        = true
 sha2.workspace        = true
 parking_lot.workspace = true
@@ -46,9 +47,6 @@ crossbeam-channel.workspace = true
 # them all on for the preset. Custom builds skip the feature entirely.
 tynd_plugin_sql               = { path = "../../../plugins/sql/native", optional = true }
 tynd_plugin_terminal          = { path = "../../../plugins/terminal/native", optional = true }
-tynd_plugin_updater           = { path = "../../../plugins/updater/native", optional = true }
-tynd_plugin_keyring           = { path = "../../../plugins/keyring/native", optional = true }
-tynd_plugin_autolaunch        = { path = "../../../plugins/autolaunch/native", optional = true }
 tynd_plugin_shortcuts         = { path = "../../../plugins/shortcuts/native", optional = true }
 tynd_plugin_power             = { path = "../../../plugins/power/native", optional = true }
 tynd_plugin_log               = { path = "../../../plugins/log/native", optional = true }
@@ -61,9 +59,6 @@ preset  = ["tynd-host/api-all", "bundled-plugins"]
 bundled-plugins = [
     "dep:tynd_plugin_sql",
     "dep:tynd_plugin_terminal",
-    "dep:tynd_plugin_updater",
-    "dep:tynd_plugin_keyring",
-    "dep:tynd_plugin_autolaunch",
     "dep:tynd_plugin_shortcuts",
     "dep:tynd_plugin_power",
     "dep:tynd_plugin_log",

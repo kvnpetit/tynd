@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -17,7 +19,7 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  rust:
+  lint-rust:
     name: Rust (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -26,6 +28,18 @@ jobs:
         runner: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # plugins workspace + plugin-sdk are referenced via path deps
+          # (`../plugin-sdk/native`) — checkout sibling repos so cargo can resolve.
+          submodules: false
+
+      - name: Checkout plugin-sdk (sibling path dep)
+        uses: actions/checkout@v4
+        with:
+          repository: tynd-apps/plugin-sdk
+          path: ../plugin-sdk
+          ref: main
+        continue-on-error: true
 
       - name: Install Linux system deps (cached)
         if: startsWith(matrix.runner, 'ubuntu')
@@ -42,6 +56,11 @@ jobs:
         with:
           shared-key: tynd-rust
 
+      # Prebuilt binaries — far faster than `cargo install`.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-shear
+
       - name: cargo fmt --check
         if: startsWith(matrix.runner, 'ubuntu')
         run: cargo fmt --all -- --check
@@ -49,10 +68,21 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: cargo deny check (license + advisories + bans + sources)
+        if: startsWith(matrix.runner, 'ubuntu')
+        run: cargo deny check
+
+      - name: cargo shear (unused deps)
+        if: startsWith(matrix.runner, 'ubuntu')
+        run: cargo shear
+
+      - name: cargo check --workspace
+        run: cargo check --workspace --all-targets
+
       - name: cargo test --workspace
         run: cargo test --workspace
 
-  typescript:
+  lint-ts:
     name: TypeScript
     runs-on: ubuntu-latest
     steps:
