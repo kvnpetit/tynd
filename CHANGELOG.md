@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Workspace deps for V1 hardening pass: `specta` + `specta-typescript` (Rust → TS type generation), `camino` (UTF-8-guaranteed paths at IPC boundary), `miette` (rustc-style diagnostic errors), `serialize-to-javascript` (XSS-safe webview init scripts), `window-vibrancy` (native blur — macOS vibrancy + Windows Mica/Acrylic/Tabbed), `embed_plist` (macOS entitlements for CLI helpers), `tauri-icns` (cross-platform `.icns` encode), `handlebars` (installer templating), `walkdir` (bundler asset staging), `zip` (modern archive read/write), `goblin` (PE/ELF/Mach-O parser for pre-flight signing checks), `data-url` (custom-scheme handler), `scopeguard` (panic-safe RAII).
+- `@tynd/core/config` — c12-backed config loader with layered overrides (base + env + local), `extends:` chains (GitHub/GitLab templates), and `watchTyndConfig` for HMR of `tynd.config.ts` in `tynd dev`.
+
+### Changed
+
+- `@tynd/core` now declares `c12`, `hookable`, and `std-env` as runtime deps to back the V1 config + plugin-lifecycle surface.
+
+### Roadmap
+
+Annotation passes still pending — these libs are wired but not yet exercised everywhere:
+
+- `specta` over every IPC command + plugin trait → emit `.d.ts` from build pipeline, drop manual TS surface.
+- `camino` over fs / process / scope-policy signatures (paired with the specta emission so generated TS types stay accurate).
+- `miette` over user-facing CLI / bundler / config errors.
+- `serialize-to-javascript` over every webview init-script injection site.
+- `@tynd/host` split into 6 OS-specific packages via `optionalDependencies` (drops the postinstall download step).
+
 ## [1.0.0] — 2026-04-22
 
 First stable release. The framework ships the runtime, CLI, and every

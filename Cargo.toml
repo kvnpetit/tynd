@@ -212,6 +212,67 @@ sys-locale = "0.3"
 # across moves. Sits on top of `notify` and keeps the same OS backend.
 notify-debouncer-full = "0.7"
 
+# === V1 hardening additions ===
+
+# Generate TypeScript types from Rust IPC structs. Source-of-truth for
+# `@tynd/core/client` — no manual `.d.ts` drift between Rust IPC commands
+# and the typed JS proxy.
+specta = { version = "2.0.0-rc.22", features = [ "derive" ] }
+specta-typescript = "0.0.9"
+
+# UTF-8-guaranteed paths. Used at the IPC boundary to eliminate
+# `.to_string_lossy()` data loss and OsStr footguns on Windows.
+camino = { version = "1.1", features = [ "serde1" ] }
+
+# Diagnostic-grade error reporter (rustc-style source spans + labels +
+# help URLs) for user-facing CLI / bundler / config errors. Compatible
+# with `anyhow` via `.into_diagnostic()`. Internals stay on anyhow.
+miette = { version = "7", features = [ "fancy" ] }
+
+# Safely embed serde values into JS template literals — closes XSS
+# surface in webview init scripts. Drop-in for `format!`-based injection.
+serialize-to-javascript = "0.1"
+
+# Native blur/material — macOS vibrancy + Windows 11 Mica/Acrylic/Tabbed.
+# Same maintainer org as `tao` / `wry`.
+window-vibrancy = "0.5"
+
+# Embed `Info.plist` into a CLI binary's `__TEXT,__info_plist` section so
+# direct invocations get entitlements (microphone, accessibility, ...)
+# prompts on macOS. Build-time linker-section helper.
+embed_plist = "1.2"
+
+# Pure-Rust `.icns` encoder — generates macOS icon bundles without the
+# `iconutil` shell-out, so Linux/Windows runners can cross-build.
+tauri-icns = "0.1"
+
+# Templating for installer artefacts (WiX `.wxs`, NSIS `.nsi`, AppImage
+# scripts, .desktop entries, Info.plist scaffolding).
+handlebars = "6"
+
+# Recursive directory traversal — bundler asset staging, plugin
+# discovery, dev-server file scans. Faster + cleaner than ad-hoc
+# `read_dir` recursion.
+walkdir = "2"
+
+# Modern ZIP read/write — `.app` archives, MSIX assembly, plugin
+# packages. Replaces shell-outs to the `zip` CLI.
+zip = "2.2"
+
+# Pure-Rust PE / ELF / Mach-O parser. Pre-flight notarization
+# (LC_CODE_SIGNATURE), universal-binary inspection, dependency rewriting.
+# Replaces `otool` / `dumpbin` shell-outs.
+goblin = "0.8"
+
+# RFC-compliant `data:` URL parser — custom-scheme handler receives data
+# URLs from the WebView (image previews, paste, drag-drop). Replaces
+# regex + manual base64 split.
+data-url = "0.3"
+
+# RAII cleanup that survives panic unwind — webview spawn/teardown,
+# single-instance lock release, build temp-dir cleanup.
+scopeguard = "1.2"
+
 [workspace.lints.rust]
 unused_must_use               = "deny"
 unsafe_op_in_unsafe_fn        = "deny"
