@@ -24,7 +24,6 @@ Annotation passes still pending — these libs are wired but not yet exercised e
 - `camino` over fs / process / scope-policy signatures (paired with the specta emission so generated TS types stay accurate).
 - `miette` over user-facing CLI / bundler / config errors.
 - `serialize-to-javascript` over every webview init-script injection site.
-- `@tynd/host` split into 6 OS-specific packages via `optionalDependencies` (drops the postinstall download step).
 
 ## [1.0.0] — 2026-04-22
 
