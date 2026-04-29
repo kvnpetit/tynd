@@ -176,7 +176,7 @@ jobs:
             tynd-lite-macos-arm64
 
   publish:
-    name: Publish npm packages (cli + core + host + plugin-sdk + plugins)
+    name: Publish npm packages (core + host + host-src)
     needs: [build, build-macos]
     runs-on: ubuntu-latest
     permissions:
@@ -209,7 +209,6 @@ jobs:
           path: |
             node_modules
             packages/*/node_modules
-            playground/*/node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: node-modules-${{ runner.os }}-
 
@@ -219,15 +218,8 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Build @tynd/cli
-        run: bun run build
-        working-directory: packages/cli
-
       - name: Define publish_with_retry
         run: |
-          cat >> "$GITHUB_ENV" <<'EOF'
-          PUBLISH_WITH_RETRY=1
-          EOF
           cat > "$RUNNER_TEMP/publish.sh" <<'EOF'
           #!/usr/bin/env bash
           set -euo pipefail
@@ -247,20 +239,9 @@ jobs:
           EOF
           chmod +x "$RUNNER_TEMP/publish.sh"
 
-      - name: Publish @tynd/plugin-sdk
+      - name: Publish @tynd/core
         run: "$RUNNER_TEMP/publish.sh"
-        working-directory: packages/plugin-sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish plugins
-        run: |
-          for dir in plugins/*/; do
-            if [ -f "$dir/package.json" ]; then
-              echo "Publishing $dir"
-              (cd "$dir" && "$RUNNER_TEMP/publish.sh")
-            fi
-          done
+        working-directory: packages/core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -270,14 +251,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @tynd/core
+      - name: Publish @tynd/host-src
         run: "$RUNNER_TEMP/publish.sh"
-        working-directory: packages/core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @tynd/cli
-        run: "$RUNNER_TEMP/publish.sh"
-        working-directory: packages/cli
+        working-directory: packages/host-src
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
