@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use specta::Type;
 use tao::{
     dpi::LogicalSize,
     event_loop::EventLoop,
@@ -6,8 +7,9 @@ use tao::{
 };
 
 /// Window configuration provided by the TypeScript backend via `app.start()`.
-#[derive(Debug, Deserialize, Default, Clone)]
+#[derive(Debug, Deserialize, Default, Clone, Type)]
 #[serde(rename_all = "camelCase")]
+#[specta(rename_all = "camelCase")]
 pub struct WindowConfig {
     pub title: Option<String>,
     pub width: Option<u32>,

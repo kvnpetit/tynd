@@ -22,6 +22,7 @@ wry.workspace                = true
 tao.workspace                = true
 serde.workspace              = true
 serde_json.workspace         = true
+specta.workspace             = true
 pollster.workspace           = true
 image.workspace              = true
 muda.workspace               = true

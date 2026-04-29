@@ -14,8 +14,9 @@ use std::{path::Path, sync::OnceLock};
 use parking_lot::RwLock;
 use serde::Deserialize;
 use serde_json::Value;
+use specta::Type;
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Type)]
 pub struct PolicyInput {
     #[serde(default)]
     pub fs: ScopeInput,
@@ -24,10 +25,11 @@ pub struct PolicyInput {
     /// When true, an empty `allow` list denies every call of that scope.
     /// Default is false (open-by-default).
     #[serde(default, rename = "defaultDeny")]
+    #[specta(rename = "defaultDeny")]
     pub default_deny: bool,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Type)]
 pub struct ScopeInput {
     #[serde(default)]
     pub allow: Vec<String>,

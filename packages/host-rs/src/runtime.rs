@@ -1,6 +1,7 @@
 use crossbeam_channel::{Receiver, Sender};
 use serde::Deserialize;
 use serde_json::Value;
+use specta::Type;
 
 use crate::window::WindowConfig;
 
@@ -118,11 +119,12 @@ pub struct BackendConfig {
 
 /// A single menu item — separator, action, submenu, or native role.
 /// Flat struct covers all variants (missing fields are `None`).
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, Type)]
 pub struct MenuItemDef {
     /// "separator" | "submenu" | "checkbox" | "radio" | "item"
     /// (omitted -> action item)
     #[serde(rename = "type")]
+    #[specta(rename = "type")]
     pub kind: Option<String>,
     /// User-defined ID — emitted as `{ id }` on click
     pub id: Option<String>,
@@ -142,7 +144,7 @@ pub struct MenuItemDef {
 }
 
 /// System tray configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
 pub struct TrayConfig {
     /// Path to tray icon (PNG/ICO/BMP recommended)
     pub icon: String,
