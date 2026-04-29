@@ -107,7 +107,6 @@ jobs:
           path: |
             node_modules
             packages/*/node_modules
-            playground/*/node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: node-modules-${{ runner.os }}-
 

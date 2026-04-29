@@ -4,7 +4,7 @@
 //! sign/verify + getRandomValues. Anything more exotic (AES-GCM, RSA,
 //! ECDSA, argon2, scrypt, PBKDF2, HKDF) is intentionally left to
 //! userland pure-JS libs (`@noble/ciphers`, `@noble/hashes`,
-//! `hash-wasm`) — see ALTERNATIVES.md.
+//! `hash-wasm`).
 //!
 //! All three bridge fns forward to `tynd_host::os::compute` so hash
 //! and random are implemented once in the workspace.

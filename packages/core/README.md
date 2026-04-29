@@ -81,7 +81,7 @@ Native integrations — identical surface in both `full` and `lite` modes:
 
 Plus Web-standard re-exports (`fetch`, `WebSocket`, `crypto`, `URL`, `Blob`, `AbortController`, `TextEncoder`, …) so `import * as tynd from "@tynd/core/client"` gives you the whole namespace at once.
 
-**Full reference:** [API.md](https://github.com/tynd-apps/tynd/blob/main/API.md).
+**Full reference:** [API docs](https://tynd.kvnpetit.com/docs/api).
 
 ## Runtime modes
 
@@ -95,7 +95,7 @@ Plus Web-standard re-exports (`fetch`, `WebSocket`, `crypto`, `URL`, `Blob`, `Ab
 
 The CLI's bundler swaps in the right module at build time via a `define`-based dead-code-elimination trick — only one runtime ships in any given binary.
 
-See [RUNTIMES.md](https://github.com/tynd-apps/tynd/blob/main/RUNTIMES.md).
+See the [runtimes guide](https://tynd.kvnpetit.com/docs/runtimes).
 
 ## Related packages
 

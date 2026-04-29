@@ -24,7 +24,7 @@ Write your backend and frontend in TypeScript, ship a small native binary — no
 bunx @tynd/cli create my-app
 ```
 
-**-> [Getting Started in 5 minutes](./GETTING_STARTED.md)**
+**-> [Getting Started in 5 minutes](https://tynd.kvnpetit.com/docs/getting-started)**
 
 </div>
 
@@ -84,7 +84,7 @@ TypeScript backend                         Native OS window
 | Binary size | smaller (~6.5 MB) | larger (~44 MB, Bun compressed) |
 | Startup | faster (everything in-process) | slower (spawns Bun) |
 
--> See [`RUNTIMES.md`](RUNTIMES.md) for the full comparison (APIs, performance, detection, examples).
+-> See the [runtime guide](https://tynd.kvnpetit.com/docs/runtimes) for the full comparison (APIs, performance, detection, examples).
 
 ---
 
@@ -156,7 +156,7 @@ tynd sign <file>             # sign a file with an updater private key
 
 **Blocked (SSR):** Next.js, Nuxt, SvelteKit, Remix, Gatsby, Blitz.js, RedwoodJS, SolidStart, Angular Universal, Analog, Qwik City, Astro, TanStack Start, Vike. Use the SPA variant instead (plain Svelte vs SvelteKit, plain Solid vs SolidStart, …).
 
-See [`FRAMEWORKS.md`](FRAMEWORKS.md) for the full matrix, per-framework notes, output-dir rules, and the React Compiler workaround.
+See the [frontend frameworks guide](https://tynd.kvnpetit.com/docs/guides/frontend-frameworks) for the full matrix, per-framework notes, output-dir rules, and the React Compiler workaround.
 
 ---
 
@@ -213,7 +213,7 @@ await fs.writeText("data.json", JSON.stringify(state))
 const { stdout } = await process.exec("git", { args: ["status"] })
 ```
 
-**Full reference:** [API.md](./API.md) — every method, signature, and example.
+**Full reference:** [API docs](https://tynd.kvnpetit.com/docs/api) — every method, signature, and example.
 
 ---
 
@@ -240,7 +240,7 @@ export default {
 
 | Field | Default | Description |
 |---|---|---|
-| `runtime` | `"full"` | `"full"` or `"lite"` — see [RUNTIMES.md](RUNTIMES.md) |
+| `runtime` | `"full"` | `"full"` or `"lite"` — see the [runtime guide](https://tynd.kvnpetit.com/docs/runtimes) |
 | `backend` | `"backend/main.ts"` | Backend entry file |
 | `frontendDir` | `"frontend"` | Built frontend output directory |
 | `frontendEntry` | — | Simple TS/JS entry (no framework) — auto-bundled by tynd |
@@ -303,14 +303,12 @@ packages/
 
 | Doc | When to read it |
 |---|---|
-| [GETTING_STARTED.md](./GETTING_STARTED.md) | First project — scaffold, dev, build, ship in 5 min |
-| [API.md](./API.md) | Every backend / frontend / OS API with signatures + examples |
-| [RUNTIMES.md](./RUNTIMES.md) | `lite` vs `full` — what each exposes, when to pick which |
-| [FRAMEWORKS.md](./FRAMEWORKS.md) | Per-framework matrix (React, Vue, Svelte, Solid, Angular, Preact, Lit) |
+| [Getting Started](https://tynd.kvnpetit.com/docs/getting-started) | First project — scaffold, dev, build, ship in 5 min |
+| [API Reference](https://tynd.kvnpetit.com/docs/api) | Every backend / frontend / OS API with signatures + examples |
+| [Runtimes](https://tynd.kvnpetit.com/docs/runtimes) | `lite` vs `full` — what each exposes, when to pick which |
+| [Frontend Frameworks](https://tynd.kvnpetit.com/docs/guides/frontend-frameworks) | Per-framework matrix (React, Vue, Svelte, Solid, Angular, Preact, Lit) |
 | [COMPARISON.md](./COMPARISON.md) | Tynd vs Tauri / Wails / Electron across 39 categories |
-| [SIGNING.md](./SIGNING.md) | Code signing + notarization workflows per OS |
-| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common errors: missing binary, WebView2, GTK deps, Gatekeeper, etc. |
+| [Code Signing](https://tynd.kvnpetit.com/docs/guides/code-signing) | Code signing + notarization workflows per OS |
+| [Troubleshooting](https://tynd.kvnpetit.com/docs/troubleshooting) | Common errors: missing binary, WebView2, GTK deps, Gatekeeper, etc. |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Dev loop, commit style, PR process |
-| Per-package READMEs | [@tynd/core](./packages/core/README.md) · [@tynd/cli](./packages/cli/README.md) · [@tynd/host](./packages/host/README.md) |
-| Working examples | [playground/full](./playground/full/README.md) (LLM chatbot, full runtime) · [playground/example](./playground/example/README.md) (minimal demo, lite runtime) |
-| [docs/](./docs/README.md) | Next.js 16 + Nextra 4 docs site (landing + versioned docs). Static export, deploys to Cloudflare Pages. `bun --cwd docs run dev` |
+| Per-package READMEs | [@tynd/core](./packages/core/README.md) · [@tynd/host](./packages/host/README.md) · [@tynd/cli](https://github.com/tynd-apps/cli) |

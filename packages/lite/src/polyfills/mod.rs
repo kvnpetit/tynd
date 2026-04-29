@@ -9,8 +9,8 @@
 //! identically on both runtimes.
 //!
 //! For gaps that have a good pure-JS library available (AES-GCM,
-//! argon2, gzip, …), see ALTERNATIVES.md rather than growing this
-//! file.
+//! argon2, gzip, …), let userland code pull a Web-compatible lib
+//! rather than growing this file.
 
 use std::sync::mpsc;
 

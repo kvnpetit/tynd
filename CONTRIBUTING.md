@@ -31,7 +31,7 @@ The Rust toolchain auto-installs on first `cargo` run (pinned via `rust-toolchai
 
 ## Repository layout
 
-Hybrid Bun + Cargo monorepo. See [`CLAUDE.md`](./CLAUDE.md) for the full architecture tour, but the short version:
+Hybrid Bun + Cargo monorepo:
 
 | Directory | What |
 |---|---|
@@ -39,9 +39,14 @@ Hybrid Bun + Cargo monorepo. See [`CLAUDE.md`](./CLAUDE.md) for the full archite
 | `packages/full` | Rust bin (`tynd-full`) — spawns Bun subprocess |
 | `packages/lite` | Rust bin (`tynd-lite`) — embeds QuickJS (~6.5 MB) |
 | `packages/host` | `@tynd/host` npm — postinstall downloads pre-built binaries |
+| `packages/host-src` | `@tynd/host-src` npm — Rust source consumed by the CLI when building custom runtimes |
 | `packages/core` | `@tynd/core` — backend + `/client` frontend APIs |
-| `packages/cli` | `@tynd/cli` — `tynd create/dev/start/build/init/...` |
-| `playground/*` | Hand-testing apps (`lite`, `full`, per-framework smoke) |
+
+Sibling repos (under [`tynd-apps`](https://github.com/tynd-apps)):
+
+- [`tynd-apps/cli`](https://github.com/tynd-apps/cli) — `@tynd/cli` (`tynd create/dev/start/build/init/...`).
+- [`tynd-apps/plugin-sdk`](https://github.com/tynd-apps/plugin-sdk) — `@tynd/plugin-sdk` + Rust SDK trait.
+- [`tynd-apps/plugins`](https://github.com/tynd-apps/plugins) — official plugins (sql, terminal, qr, i18n, …).
 
 ---
 
@@ -78,14 +83,14 @@ cargo build -p tynd-lite --release
 bun run --cwd packages/cli build         # bundles CLI to packages/cli/bin/index.js
 ```
 
-### Test against a playground
+### Test against a sample app
+
+GUI behavior (windows, menus, tray, dialogs, WebView rendering) must be exercised by hand in a sample app — unit tests don't cover that. Scaffold one with the CLI from a sibling clone:
 
 ```bash
-bun run --cwd playground/example build
-./playground/example/release/example.exe
+bunx @tynd/cli create sample-app --runtime full
+cd sample-app && bun run dev
 ```
-
-GUI behavior (windows, menus, tray, dialogs, WebView rendering) must be exercised by hand in a `playground/` app — unit tests don't cover that.
 
 ---
 
@@ -117,22 +122,20 @@ A `feat:` commit without tests on a covered surface is a review smell.
 
 ## Docs — update in the same commit
 
-Docs drift silently. After any user-visible feature/fix/behavior change, touch the relevant file(s) below **in the same commit** as the code:
+Docs drift silently. After any user-visible feature/fix/behavior change, touch the relevant file(s) below **in the same commit** as the code (or in a synchronized PR against the [`tynd-apps/docs`](https://github.com/tynd-apps/docs) repo when the change targets the docs site):
 
 | File | Update when |
 |---|---|
-| [`COMPARISON.md`](./COMPARISON.md) | **Every feature** touching a tracked category — flip ❌/⚠️ to ✅ and bump `Last updated`. |
-| [`API.md`](./API.md) | Public OS API, backend API, or frontend RPC surface changed. |
 | [`README.md`](./README.md) | Pitch, quickstart, API summary table, or headline comparison changed. |
-| [`RUNTIMES.md`](./RUNTIMES.md) | Feature lands in only one of `full`/`lite`, or parity shifted. |
-| [`ALTERNATIVES.md`](./ALTERNATIVES.md) | New lite gap with a known pure-JS fill, or a gap closed natively. |
-| [`FRAMEWORKS.md`](./FRAMEWORKS.md) | Frontend framework support / detection / scaffolding changed. |
-| [`GETTING_STARTED.md`](./GETTING_STARTED.md) | Quickstart flow, CLI command names, first-app sample changed. |
-| [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md) | New user-facing failure mode or error message. |
-| [`SIGNING.md`](./SIGNING.md) | Signing / notarization workflow changed. |
-| `packages/<pkg>/README.md` | That package's public API or CLI surface changed. |
+| [`COMPARISON.md`](./COMPARISON.md) | **Every feature** touching a tracked category — flip ❌/⚠️ to ✅ and bump `Last updated`. |
+| `packages/<pkg>/README.md` | That package's public API surface changed. |
 | [`NOTICE`](./NOTICE) | Added or removed a significant third-party dep. |
-| [`CLAUDE.md`](./CLAUDE.md) | Architecture, IPC, cache keys, packaging format, workflow changed. |
+| Docs site — [API reference](https://tynd.kvnpetit.com/docs/api) | Public OS API, backend API, or frontend RPC surface changed. |
+| Docs site — [runtimes](https://tynd.kvnpetit.com/docs/runtimes) | Feature lands in only one of `full`/`lite`, or parity shifted. |
+| Docs site — [frontend frameworks](https://tynd.kvnpetit.com/docs/guides/frontend-frameworks) | Frontend framework support / detection / scaffolding changed. |
+| Docs site — [getting started](https://tynd.kvnpetit.com/docs/getting-started) | Quickstart flow, CLI command names, first-app sample changed. |
+| Docs site — [troubleshooting](https://tynd.kvnpetit.com/docs/troubleshooting) | New user-facing failure mode or error message. |
+| Docs site — [code signing](https://tynd.kvnpetit.com/docs/guides/code-signing) | Signing / notarization workflow changed. |
 
 Doc-only PRs skip the build step but never skip this table.
 
@@ -201,7 +204,7 @@ Releases are cut manually by maintainers. The flow:
 2. Update `CHANGELOG.md` with the new entry.
 3. Commit `chore: release vX.Y.Z`, tag `vX.Y.Z`, push tag.
 
-Rust binaries (`tynd-full`, `tynd-lite`) are built on the `v*` tag push by `.github/workflows/build-host.yml` across 6 architectures. `@tynd/cli`, `@tynd/core`, `@tynd/host` publish to npm in lockstep with the tag.
+Rust binaries (`tynd-full`, `tynd-lite`) are built on the `v*` tag push by `.github/workflows/build-host.yml` across 6 architectures. `@tynd/core`, `@tynd/host`, `@tynd/host-src` publish to npm in lockstep with the tag. Sibling repos (`cli`, `plugin-sdk`, `plugins`) cut their own releases.
 
 Contributors don't touch versions — only maintainers cut releases.
 
@@ -209,4 +212,4 @@ Contributors don't touch versions — only maintainers cut releases.
 
 ## Questions?
 
-Open an [issue](https://github.com/tynd-apps/tynd/issues) or a draft PR. For architectural questions, skim [`CLAUDE.md`](./CLAUDE.md) first — it covers the non-obvious bits of IPC, the TYNDPKG format, cache keys, and the `embedded-js` feature gate.
+Open an [issue](https://github.com/tynd-apps/tynd/issues), a [GitHub Discussion](https://github.com/tynd-apps/tynd/discussions), or a draft PR. For architectural context, the [docs site concepts section](https://tynd.kvnpetit.com/docs/concepts) covers IPC, the TYNDPKG format, cache keys, and the runtime split.

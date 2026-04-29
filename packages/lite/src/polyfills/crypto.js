@@ -1,8 +1,7 @@
 // crypto.getRandomValues / randomUUID / subtle.digest / sign / verify / importKey
 // (HMAC only). Web-standard surface. AES / RSA / ECDSA encryption and
 // password hashing / KDFs are intentionally not polyfilled — ship a pure-JS
-// lib (@noble/ciphers, @noble/hashes, hash-wasm) in userland if you need
-// them. See ALTERNATIVES.md.
+// lib (@noble/ciphers, @noble/hashes, hash-wasm) in userland if you need them.
 //
 // Helpers `__tynd_b64_encode` / `__tynd_b64_decode` come from base64.js,
 // `__tynd_to_bytes` from _bridge.js — both load earlier in mod.rs.
@@ -73,7 +72,7 @@
     // algo can be { name: "HMAC" } or "HMAC"; we only support HMAC here.
     var name = (typeof algo === "string" ? algo : (algo && algo.name) || "").toUpperCase();
     if (name !== "HMAC") {
-      return Promise.reject(new Error("crypto.subtle.sign: only HMAC is supported on lite (see ALTERNATIVES.md for RSA/ECDSA)"));
+      return Promise.reject(new Error("crypto.subtle.sign: only HMAC is supported on lite (use a pure-JS lib like @noble/curves for RSA/ECDSA)"));
     }
     var keyBytes = key && key._rawKey instanceof Uint8Array ? key._rawKey : toBytes(key);
     try {
