@@ -999,10 +999,14 @@ fn page_load_handler(label: &str) -> impl Fn(PageLoadEvent, String) + 'static {
 
 /// Init script injected into every webview so frontend code knows which window
 /// it's running in (for filtering broadcast `window:*` events by label).
+///
+/// The label is JSON-encoded via `serde_json` so embedded newlines, U+2028 /
+/// U+2029, quotes, backslashes, and other JS-string-terminating characters
+/// can't break the script — same defence in depth pattern used for all the
+/// other webview eval strings in `ipc.rs`.
 fn inject_window_label(label: &str) -> String {
-    // Escape any quote / backslash so the label can't break the script.
-    let esc = label.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("window.__TYND_WINDOW_LABEL__ = \"{esc}\";")
+    let label_js = serde_json::to_string(label).unwrap_or_else(|_| "\"\"".into());
+    format!("window.__TYND_WINDOW_LABEL__ = {label_js};")
 }
 
 /// Create a secondary window + webview + state tracker. Called on the main
