@@ -4,18 +4,18 @@
 
 ### Desktop apps in TypeScript. One language, native binary, no glue code.
 
-[![CI](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/kvnpetit/tynd?color=blue)](./LICENSE)
+[![CI](https://github.com/tynd-apps/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/tynd-apps/tynd/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/tynd-apps/tynd?color=blue)](./LICENSE)
 [![npm @tynd/cli](https://img.shields.io/npm/v/@tynd/cli?label=%40tynd%2Fcli&color=06b6d4)](https://www.npmjs.com/package/@tynd/cli)
 [![npm @tynd/core](https://img.shields.io/npm/v/@tynd/core?label=%40tynd%2Fcore&color=06b6d4)](https://www.npmjs.com/package/@tynd/core)
 [![npm downloads](https://img.shields.io/npm/dw/@tynd/cli?label=downloads&color=10b981)](https://www.npmjs.com/package/@tynd/cli)
-[![GitHub stars](https://img.shields.io/github/stars/kvnpetit/tynd?style=flat&color=yellow)](https://github.com/kvnpetit/tynd/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/tynd-apps/tynd?style=flat&color=yellow)](https://github.com/tynd-apps/tynd/stargazers)
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Bun](https://img.shields.io/badge/Bun-runtime-fbf0df?logo=bun&logoColor=000)](https://bun.sh)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
-[![Last commit](https://img.shields.io/github/last-commit/kvnpetit/tynd)](https://github.com/kvnpetit/tynd/commits/main)
-[![Open issues](https://img.shields.io/github/issues/kvnpetit/tynd?color=d93f0b)](https://github.com/kvnpetit/tynd/issues)
+[![Last commit](https://img.shields.io/github/last-commit/tynd-apps/tynd)](https://github.com/tynd-apps/tynd/commits/main)
+[![Open issues](https://img.shields.io/github/issues/tynd-apps/tynd?color=d93f0b)](https://github.com/tynd-apps/tynd/issues)
 
 **Native window. Zero network. TypeScript end-to-end.**
 Write your backend and frontend in TypeScript, ship a small native binary — no extra language to learn, no codegen step.

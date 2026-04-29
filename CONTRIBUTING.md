@@ -11,7 +11,7 @@ By opening a pull request, you agree that your contribution is licensed under th
 ## Setup
 
 ```bash
-git clone https://github.com/kvnpetit/tynd
+git clone https://github.com/tynd-apps/tynd
 cd tynd
 bun install
 ```
@@ -156,16 +156,16 @@ No smart quotes (`"` `"` `'` `'`), no Unicode arrows (`->`, `<-`, `|>`). Use ASC
 
 ## Commit style
 
-Conventional Commits — release-please drives the changelog and version bumps from them:
+Conventional Commits — used to structure the changelog at release time:
 
-| Prefix | Effect |
+| Prefix | Meaning |
 |---|---|
-| `feat:` | new feature — minor bump |
-| `fix:` | bug fix — patch bump |
-| `feat!:` or `BREAKING CHANGE:` footer | major bump |
-| `chore:`, `docs:`, `refactor:`, `perf:`, `ci:`, `build:`, `test:` | no version bump |
+| `feat:` | new feature (minor version bump) |
+| `fix:` | bug fix (patch version bump) |
+| `feat!:` or `BREAKING CHANGE:` footer | major version bump |
+| `chore:`, `docs:`, `refactor:`, `perf:`, `ci:`, `build:`, `test:` | no version change |
 
-Scope when useful: `feat(cli): …`, `fix(core): …`, `fix(host): …`. Components map to release-please: `cli`, `core`, `host`.
+Scope when useful: `feat(cli): …`, `fix(core): …`, `fix(host): …`.
 
 **One logical change per commit.** Don't squash unrelated fixes — release notes are cut straight from subjects.
 
@@ -195,14 +195,18 @@ Scope when useful: `feat(cli): …`, `fix(core): …`, `fix(host): …`. Compone
 
 ## Releases
 
-Releases are cut by **release-please** from commit messages. Every merged `feat:` / `fix:` to `main` accumulates into a release PR maintained by the bot. Maintainers merge that PR to publish.
+Releases are cut manually by maintainers. The flow:
+
+1. Bump versions in `package.json` + `Cargo.toml` (workspace + members).
+2. Update `CHANGELOG.md` with the new entry.
+3. Commit `chore: release vX.Y.Z`, tag `vX.Y.Z`, push tag.
 
 Rust binaries (`tynd-full`, `tynd-lite`) are built on the `v*` tag push by `.github/workflows/build-host.yml` across 6 architectures. `@tynd/cli`, `@tynd/core`, `@tynd/host` publish to npm in lockstep with the tag.
 
-Contributors never touch versions by hand — release-please handles it.
+Contributors don't touch versions — only maintainers cut releases.
 
 ---
 
 ## Questions?
 
-Open an [issue](https://github.com/kvnpetit/tynd/issues) or a draft PR. For architectural questions, skim [`CLAUDE.md`](./CLAUDE.md) first — it covers the non-obvious bits of IPC, the TYNDPKG format, cache keys, and the `embedded-js` feature gate.
+Open an [issue](https://github.com/tynd-apps/tynd/issues) or a draft PR. For architectural questions, skim [`CLAUDE.md`](./CLAUDE.md) first — it covers the non-obvious bits of IPC, the TYNDPKG format, cache keys, and the `embedded-js` feature gate.

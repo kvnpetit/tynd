@@ -15,13 +15,9 @@ We provide security fixes only for the current `1.x` line. Pre-1.0 releases were
 
 **Please do not open a public GitHub issue for security reports.**
 
-Use one of the two private channels below:
-
-1. **GitHub Security Advisory (preferred)** — open a private advisory at
-   <https://github.com/tynd-apps/tynd/security/advisories/new>.
-   Settings -> Security -> Report a vulnerability.
-2. **Email** — send details to `security@kvnpetit.com`. Encrypt with PGP if
-   you have keys exchanged with the maintainer; otherwise plaintext is fine.
+Open a private GitHub Security Advisory at
+<https://github.com/tynd-apps/tynd/security/advisories/new>.
+Settings -> Security -> Report a vulnerability.
 
 Please include:
 
@@ -83,4 +79,4 @@ We don't run a paid bounty program at this time.
 
 ## Maintainer
 
-Security contact: **Kevin Petit** (`security@kvnpetit.com`).
+Security contact: **Kevin Petit** ([@kvnpetit](https://github.com/kvnpetit)).

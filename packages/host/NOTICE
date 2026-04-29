@@ -2,7 +2,7 @@ Tynd
 Copyright 2026 Kevin Petit (@kvnpetit)
 
 This product includes software developed by Kevin Petit (@kvnpetit) and
-the Tynd contributors (https://github.com/kvnpetit/tynd).
+the Tynd contributors (https://github.com/tynd-apps/tynd).
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -98,7 +98,7 @@ copy of the Bun runtime:
 
 Plugins ship their own Rust native crates; each is statically linked into
 the app's host binary when the plugin is enabled. All are licensed under
-`Apache-2.0 OR MIT` and live at https://github.com/kvnpetit/tynd/tree/main/plugins.
+`Apache-2.0 OR MIT` and live at https://github.com/tynd-apps/plugins.
 
 - tynd_plugin_clipboard_history
 - tynd_plugin_sql
