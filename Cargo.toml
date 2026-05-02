@@ -95,6 +95,13 @@ fslock = "0.2"
 # Cross-platform local socket for forwarding argv/cwd from a 2nd launch
 # to the 1st (Windows named pipe, Unix domain socket).
 interprocess = "2.2"
+# Windows registry access — used by `os::deep_link` to write the
+# per-user `HKCU\Software\Classes\<scheme>\…` entries that bind a
+# custom URL scheme to the running binary. Only consumed inside a
+# `cfg(target_os = "windows")` block on the host crate, but declared
+# at the workspace level so the version stays coherent if other
+# Windows-only code paths ever need it.
+winreg = "0.52"
 
 # FS watcher (ReadDirectoryChangesW on Windows, FSEvents on macOS, inotify
 # on Linux) + global hotkey manager for system-wide shortcuts.

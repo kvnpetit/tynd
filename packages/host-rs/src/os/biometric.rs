@@ -15,6 +15,18 @@ use robius_authentication::{
 use serde_json::{json, Value};
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
+    // W3.2 — ACL gate. `isAvailable` is left ungated because it returns
+    // a static `true` (no side-effects, no secret data) and admin
+    // tooling needs to introspect availability before the user grants
+    // the capability. `authenticate` is the actual gated mutator.
+    #[cfg(feature = "api-acl")]
+    {
+        if method == "authenticate"
+            && !crate::os::acl::authority().is_allowed("biometric:authenticate", None, None, None)
+        {
+            return Err("biometric.authenticate: permission denied by ACL".into());
+        }
+    }
     match method {
         "isAvailable" => Ok(Value::Bool(true)),
         "authenticate" => authenticate(args),

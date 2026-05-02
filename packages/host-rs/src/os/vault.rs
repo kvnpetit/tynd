@@ -16,6 +16,19 @@ use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
+    // W3.2 — ACL gate (additive on top of `security::check_fs`).
+    // The `acl::Authority` is "fail open" until an admin loads at least
+    // one capability manifest, so apps that don't opt into the granular
+    // ACL model see no behaviour change. Once loaded, every `vault.*`
+    // method is gated by `vault:<method>` (e.g. `vault:write`) — see
+    // `os::acl` docs for the full capability shape.
+    #[cfg(feature = "api-acl")]
+    {
+        let cmd = format!("vault:{method}");
+        if !crate::os::acl::authority().is_allowed(&cmd, None, None, None) {
+            return Err(format!("vault.{method}: permission denied by ACL"));
+        }
+    }
     match method {
         "read" => read(args),
         "write" => write(args),
@@ -162,6 +175,83 @@ mod tests {
     fn take_password_rejects_missing_and_empty() {
         assert!(take_password(&json!({})).is_err());
         assert!(take_password(&json!({ "password": "" })).is_err());
+    }
+
+    // -----------------------------------------------------------------
+    // W3.2 — ACL wire smoke test
+    //
+    // Both branches of the `api-acl`-cfg-gated check are exercised:
+    //   1. unconfigured authority → `is_allowed` returns true → dispatch
+    //      reaches the underlying handler (which then errors on the
+    //      bogus path, but only AFTER the ACL gate let it through).
+    //   2. configured authority WITHOUT a vault grant → dispatch
+    //      short-circuits with "permission denied by ACL".
+    // The acl::authority() singleton is process-wide; the test
+    // serializes via the same lock the `acl::tests` module uses.
+    // -----------------------------------------------------------------
+    #[cfg(feature = "api-acl")]
+    #[test]
+    fn dispatch_acl_gate_short_circuits_when_denied() {
+        use std::num::NonZeroU64;
+        use tauri_utils::acl::{
+            capability::{Capability, PermissionEntry},
+            manifest::Manifest,
+            Commands, Identifier, Permission,
+        };
+
+        // Reset the singleton, register a manifest for a *different*
+        // plugin, then add a capability that grants nothing under
+        // `vault:*`. With at least one capability loaded, the authority
+        // flips into "deny by default" — `vault:read` must surface the
+        // ACL error rather than reaching the file-open path.
+        let auth = crate::os::acl::authority();
+        let mut perms = std::collections::BTreeMap::new();
+        perms.insert(
+            "allow-read".to_string(),
+            Permission {
+                version: NonZeroU64::new(1),
+                identifier: "allow-read".into(),
+                description: None,
+                commands: Commands {
+                    allow: vec!["read".into()],
+                    deny: vec![],
+                },
+                scope: Default::default(),
+                platforms: None,
+            },
+        );
+        let manifest = Manifest {
+            default_permission: None,
+            permissions: perms,
+            permission_sets: std::collections::BTreeMap::new(),
+            global_scope_schema: None,
+        };
+        auth.register_manifest("fs", manifest).expect("manifest");
+        let id = Identifier::try_from("fs:allow-read".to_string()).expect("ident");
+        let cap = Capability {
+            identifier: "vault-acl-test".into(),
+            description: String::new(),
+            remote: None,
+            local: true,
+            windows: vec![],
+            webviews: vec![],
+            permissions: vec![PermissionEntry::PermissionRef(id)],
+            platforms: None,
+        };
+        auth.add_capability(cap).expect("add");
+
+        let err = dispatch("read", &json!({ "path": "/tmp/whatever" })).unwrap_err();
+        assert!(
+            err.contains("permission denied by ACL"),
+            "expected ACL denial, got: {err}"
+        );
+
+        // Cleanup — drop the test capability so other tests in the same
+        // binary aren't affected. The test_lock in `acl::tests` keeps
+        // tests in *that* module serialized, but we can't grab it from
+        // outside. Documented limitation: don't run vault::dispatch ACL
+        // tests in parallel with `acl::tests`.
+        auth.remove_capability("vault-acl-test").expect("remove");
     }
 
     #[test]

@@ -16,6 +16,25 @@ use args::Args;
 pub fn run() -> ! {
     tynd_host::init_tracing();
 
+    // Deep-link init MUST happen before any window / IPC setup. A second
+    // launch carrying a `myapp://...` URL forwards to the running master
+    // via a local socket and we then exit cleanly *without* spawning a
+    // webview. Skipping the early exit means the user briefly sees a
+    // second window flash on screen before we tear it down.
+    //
+    // Gated on the local `deep-link` feature, which the `preset` build
+    // turns on alongside `tynd-host/api-deep-link`. Custom builds that
+    // explicitly opt out drop the call entirely.
+    #[cfg(feature = "deep-link")]
+    {
+        if let Err(e) = tynd_host::os::deep_link::init() {
+            eprintln!("deep-link init: {e}");
+        }
+        if tynd_host::os::deep_link::was_forwarded_to_primary() {
+            std::process::exit(0);
+        }
+    }
+
     #[cfg(feature = "bundled-plugins")]
     register_bundled_plugins();
 

@@ -41,18 +41,25 @@ pub fn dispatch(method: &str, _args: &Value) -> Result<Value, String> {
 /// `power:lock` / `power:unlock` on the global event bus — the TS client's
 /// `power.onSuspend` etc. is just `os_on` against those names.
 ///
-/// Platform status (current as of W7.3):
-/// - **Windows**: deferred — `WM_POWERBROADCAST` and `WTS_SESSION_*` need a
-///   message-only window hooked into the existing tao window proc, which is
-///   a separate refactor. Subscribing succeeds; no events fire yet.
-/// - **macOS**: deferred — `NSWorkspace` notification observers need an
-///   Objective-C runtime bridge (objc2-app-kit) that's not currently wired.
-/// - **Linux**: deferred — `org.freedesktop.login1` signals need a DBus
-///   client (zbus) which isn't in the workspace deps yet.
+/// Each backend runs on its own dedicated `std::thread` so it doesn't have
+/// to coordinate with the main `tao` event loop:
+/// - **Windows**: hidden message-only window (`HWND_MESSAGE`) +
+///   `WTSRegisterSessionNotification` + a private `GetMessageW` pump.
+///   `WM_POWERBROADCAST` (suspend/resume) and `WM_WTSSESSION_CHANGE`
+///   (lock/unlock) are routed into `os::events::emit`.
+/// - **macOS**: `NSWorkspace.sharedWorkspace.notificationCenter`
+///   `addObserverForName:object:queue:usingBlock:` against the four
+///   sleep/wake/session notification names. Blocks fire on the system
+///   default queue and call straight into `os::events::emit`.
+/// - **Linux**: `zbus::blocking::Proxy` against
+///   `org.freedesktop.login1.Manager.PrepareForSleep` (boolean — true =
+///   about to sleep) and `org.freedesktop.login1.Session.Lock` /
+///   `Unlock` on the current session object.
 ///
-/// The TS API works on every platform (subscribe + dispose are pure
-/// frontend bookkeeping). When the platform backend lands the events flow
-/// without any client-side change.
+/// On `macOS` and `Linux` the watcher is gated behind the
+/// `power-events-mac` / `power-events-linux` sub-features so a
+/// `--no-default-features` build that drops `api-power` doesn't pull
+/// `objc2` / `zbus` for nothing. They're auto-enabled by `api-power`.
 fn ensure_power_monitor() {
     static MONITOR_INSTALLED: OnceLock<()> = OnceLock::new();
     let _ = MONITOR_INSTALLED.get_or_init(|| {
@@ -62,33 +69,449 @@ fn ensure_power_monitor() {
 
 #[cfg(target_os = "windows")]
 fn install_power_monitor() {
+    windows_power::spawn_watcher();
+}
+
+#[cfg(all(target_os = "macos", feature = "power-events-mac"))]
+fn install_power_monitor() {
+    macos_power::spawn_watcher();
+}
+
+#[cfg(all(target_os = "macos", not(feature = "power-events-mac")))]
+fn install_power_monitor() {
     crate::tynd_log!(
-        "power: Windows event source not yet wired (WM_POWERBROADCAST + WTSRegisterSessionNotification \
-         pending — tracking PR for hidden message-only window). API is callable; events won't fire \
-         until the listener lands."
+        "power: macOS event source disabled (build without `power-events-mac` feature). \
+         API is callable; events won't fire."
     );
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "linux", feature = "power-events-linux"))]
 fn install_power_monitor() {
-    crate::tynd_log!(
-        "power: macOS event source not yet wired (NSWorkspace observers pending objc2-app-kit \
-         binding). API is callable; events won't fire until the listener lands."
-    );
+    linux_power::spawn_watcher();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "power-events-linux")))]
 fn install_power_monitor() {
     crate::tynd_log!(
-        "power: Linux event source not yet wired (org.freedesktop.login1 PrepareForSleep / \
-         Lock signals pending zbus dep). API is callable; events won't fire until the listener \
-         lands."
+        "power: Linux event source disabled (build without `power-events-linux` feature). \
+         API is callable; events won't fire."
     );
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 fn install_power_monitor() {
     // Other platforms — no power-event source planned.
+}
+
+// ─────────────────────────── Windows backend ───────────────────────────
+
+#[cfg(target_os = "windows")]
+mod windows_power {
+    //! Hidden message-only window + private message pump for
+    //! `WM_POWERBROADCAST` and `WM_WTSSESSION_CHANGE`. The window class is
+    //! registered lazily on first call; the watcher thread owns the HWND
+    //! and never returns (process lifetime), so `UnregisterClass` is
+    //! intentionally skipped — Windows reclaims everything on process exit.
+    use serde_json::json;
+    use windows_sys::Win32::{
+        Foundation::{HWND, LPARAM, LRESULT, WPARAM},
+        System::{
+            LibraryLoader::GetModuleHandleW,
+            RemoteDesktop::{
+                NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification,
+                WTSUnRegisterSessionNotification,
+            },
+        },
+        UI::WindowsAndMessaging::{
+            CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassExW,
+            HWND_MESSAGE, MSG, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND, PBT_APMSUSPEND,
+            TranslateMessage, WM_POWERBROADCAST, WM_WTSSESSION_CHANGE, WNDCLASSEXW,
+            WTS_SESSION_LOCK, WTS_SESSION_UNLOCK,
+        },
+    };
+
+    use crate::os::events;
+
+    /// UTF-16 NUL-terminated. Must outlive `RegisterClassExW` /
+    /// `CreateWindowExW`; we leak via a `static` to keep the lifetime
+    /// trivially `'static` without a one-shot `Box::leak`.
+    const CLASS_NAME: &[u16] = &[
+        b'T' as u16, b'y' as u16, b'n' as u16, b'd' as u16, b'P' as u16, b'o' as u16, b'w' as u16,
+        b'e' as u16, b'r' as u16, b'W' as u16, b'a' as u16, b't' as u16, b'c' as u16, b'h' as u16,
+        b'e' as u16, b'r' as u16, 0,
+    ];
+
+    pub(super) fn spawn_watcher() {
+        std::thread::Builder::new()
+            .name("tynd-power-win".into())
+            .spawn(|| {
+                if let Err(e) = run() {
+                    crate::tynd_log!("power[win]: watcher exited: {e}");
+                }
+            })
+            .ok();
+    }
+
+    fn run() -> Result<(), String> {
+        // SAFETY: `GetModuleHandleW(NULL)` returns the current module's
+        // HINSTANCE — a documented, infallible operation when called
+        // with a null `lpModuleName`.
+        let hinstance = unsafe { GetModuleHandleW(std::ptr::null()) };
+
+        let class = WNDCLASSEXW {
+            cbSize: size_of::<WNDCLASSEXW>() as u32,
+            style: 0,
+            lpfnWndProc: Some(wnd_proc),
+            cbClsExtra: 0,
+            cbWndExtra: 0,
+            hInstance: hinstance,
+            hIcon: std::ptr::null_mut(),
+            hCursor: std::ptr::null_mut(),
+            hbrBackground: std::ptr::null_mut(),
+            lpszMenuName: std::ptr::null(),
+            lpszClassName: CLASS_NAME.as_ptr(),
+            hIconSm: std::ptr::null_mut(),
+        };
+        // SAFETY: `class` is fully populated, the lifetime of
+        // `CLASS_NAME` is `'static`, and `hinstance` is the current
+        // process module. RegisterClassExW returns 0 on failure —
+        // duplicate registration also returns 0 with last_error
+        // `ERROR_CLASS_ALREADY_EXISTS`, which we tolerate (subsequent
+        // CreateWindowExW will succeed against the existing class).
+        let _atom = unsafe { RegisterClassExW(&raw const class) };
+
+        // SAFETY: `HWND_MESSAGE` is a documented sentinel handle for
+        // message-only windows. All other pointer args are null
+        // (no menu, no parent params, no creation data).
+        let hwnd: HWND = unsafe {
+            CreateWindowExW(
+                0,
+                CLASS_NAME.as_ptr(),
+                CLASS_NAME.as_ptr(),
+                0,
+                0,
+                0,
+                0,
+                0,
+                HWND_MESSAGE,
+                std::ptr::null_mut(),
+                hinstance,
+                std::ptr::null(),
+            )
+        };
+        if hwnd.is_null() {
+            return Err("CreateWindowExW(HWND_MESSAGE) failed".into());
+        }
+
+        // SAFETY: `hwnd` is owned by this thread; registration scopes
+        // notifications to this session only (matches the user's logon
+        // — the only one that `os::power` cares about for lock/unlock).
+        let session_ok =
+            unsafe { WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) } != 0;
+        if !session_ok {
+            crate::tynd_log!(
+                "power[win]: WTSRegisterSessionNotification failed; lock/unlock events disabled. \
+                 Power suspend/resume still work via WM_POWERBROADCAST."
+            );
+        }
+
+        // Standard Win32 message pump — blocks until WM_QUIT (which we
+        // never post), so this thread runs for the process lifetime.
+        let mut msg = MSG::default();
+        loop {
+            // SAFETY: `&raw mut msg` is a valid `*mut MSG` for the
+            // duration of the call; the other args restrict messages
+            // to the watcher window so we don't accidentally pump
+            // unrelated thread messages.
+            let r = unsafe { GetMessageW(&raw mut msg, std::ptr::null_mut(), 0, 0) };
+            if r == 0 || r == -1 {
+                break;
+            }
+            // SAFETY: `msg` was just populated by GetMessageW.
+            unsafe {
+                TranslateMessage(&raw const msg);
+                DispatchMessageW(&raw const msg);
+            }
+        }
+
+        if session_ok {
+            // SAFETY: `hwnd` is still valid (we own it) and the
+            // session was successfully registered above.
+            unsafe { WTSUnRegisterSessionNotification(hwnd) };
+        }
+        Ok(())
+    }
+
+    /// Windows window procedure — translates the two messages we care
+    /// about into host bus events and forwards everything else to
+    /// `DefWindowProcW`. Runs on the watcher thread (the one that
+    /// called `CreateWindowExW`), so the bus emit happens on the same
+    /// thread that owns the HWND.
+    unsafe extern "system" fn wnd_proc(
+        hwnd: HWND,
+        msg: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        match msg {
+            WM_POWERBROADCAST => {
+                // wparam carries the PBT_* event code.
+                #[allow(clippy::cast_possible_truncation)]
+                let code = wparam as u32;
+                match code {
+                    PBT_APMSUSPEND => events::emit("power:suspend", &json!({})),
+                    PBT_APMRESUMEAUTOMATIC | PBT_APMRESUMESUSPEND => {
+                        events::emit("power:resume", &json!({}));
+                    },
+                    _ => {},
+                }
+                // Returning TRUE (1) is the documented ACK. DefWindowProcW
+                // would also return TRUE for unhandled PBT_* codes.
+                1
+            },
+            WM_WTSSESSION_CHANGE => {
+                #[allow(clippy::cast_possible_truncation)]
+                let code = wparam as u32;
+                match code {
+                    WTS_SESSION_LOCK => events::emit("power:lock", &json!({})),
+                    WTS_SESSION_UNLOCK => events::emit("power:unlock", &json!({})),
+                    _ => {},
+                }
+                0
+            },
+            // SAFETY: forwarding non-handled messages to DefWindowProcW
+            // is the standard Win32 contract.
+            _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+        }
+    }
+
+}
+
+// ─────────────────────────── macOS backend ───────────────────────────
+
+#[cfg(all(target_os = "macos", feature = "power-events-mac"))]
+mod macos_power {
+    //! `NSWorkspace.notificationCenter` observer blocks bridged into
+    //! `os::events::emit`. The four notifications cover sleep/wake
+    //! (system-level power) and session active/inactive (fast user
+    //! switching + screen lock on modern macOS where Quartz reports
+    //! the screen-locked state via the session-resign notification).
+    use objc2_app_kit::{
+        NSWorkspace, NSWorkspaceDidWakeNotification,
+        NSWorkspaceSessionDidBecomeActiveNotification,
+        NSWorkspaceSessionDidResignActiveNotification, NSWorkspaceWillSleepNotification,
+    };
+    use objc2_foundation::{NSNotification, NSNotificationName};
+    use serde_json::json;
+
+    use crate::os::events;
+
+    pub(super) fn spawn_watcher() {
+        // The actual observers must be installed on the main thread
+        // (NSNotificationCenter is documented as MT-safe but
+        // NSWorkspace.sharedWorkspace requires the main thread on
+        // older macOS releases). `dispatch_async` to the main queue
+        // would be the canonical move, but the Tynd host already runs
+        // its tao event loop on the main thread, and observers
+        // installed from any thread that owns a runloop are honored.
+        // We spawn a thread purely so the registration doesn't block
+        // `subscribePowerEvents`; the thread exits immediately after.
+        std::thread::Builder::new()
+            .name("tynd-power-mac".into())
+            .spawn(install)
+            .ok();
+    }
+
+    fn install() {
+        // SAFETY: `NSWorkspace::sharedWorkspace()` is a documented
+        // singleton accessor that returns a +1 retained pointer; the
+        // generated binding wraps it in `Retained<NSWorkspace>` so the
+        // refcount lifetime is tracked.
+        let workspace = unsafe { NSWorkspace::sharedWorkspace() };
+        let center = unsafe { workspace.notificationCenter() };
+
+        // SAFETY: each `addObserverForName:object:queue:usingBlock:`
+        // call retains the block for the lifetime of the observer
+        // token. We intentionally leak the returned token via
+        // `std::mem::forget` (semantically equivalent here — the
+        // process keeps the observer for its lifetime, and dropping
+        // the `Retained` would `removeObserver:` and silently lose
+        // events).
+        unsafe {
+            register(&center, NSWorkspaceWillSleepNotification, "power:suspend");
+            register(&center, NSWorkspaceDidWakeNotification, "power:resume");
+            register(
+                &center,
+                NSWorkspaceSessionDidResignActiveNotification,
+                "power:lock",
+            );
+            register(
+                &center,
+                NSWorkspaceSessionDidBecomeActiveNotification,
+                "power:unlock",
+            );
+        }
+    }
+
+    /// SAFETY: caller must ensure `center` is a valid
+    /// `NSNotificationCenter` and `name` is one of the four constants
+    /// defined in `NSWorkspace`. We pass a `nil` queue, which means
+    /// the block runs on the posting thread (the main runloop for
+    /// these specific notifications), and `nil` object so we observe
+    /// across all senders.
+    unsafe fn register(
+        center: &objc2_foundation::NSNotificationCenter,
+        name: &NSNotificationName,
+        event: &'static str,
+    ) {
+        let block = block2::RcBlock::new(move |_n: std::ptr::NonNull<NSNotification>| {
+            events::emit(event, &json!({}));
+        });
+        let token = unsafe {
+            center.addObserverForName_object_queue_usingBlock(Some(name), None, None, &block)
+        };
+        // Retain the observer for the process lifetime — see comment
+        // in `install()`.
+        std::mem::forget(token);
+    }
+}
+
+// ─────────────────────────── Linux backend ───────────────────────────
+
+#[cfg(all(target_os = "linux", feature = "power-events-linux"))]
+mod linux_power {
+    //! systemd-logind DBus signals via `zbus::blocking`. Two signals
+    //! ride on different interfaces:
+    //!
+    //! - `org.freedesktop.login1.Manager.PrepareForSleep(bool)` —
+    //!   `true` immediately before suspend, `false` immediately after
+    //!   resume. Mapped to `power:suspend` / `power:resume`.
+    //! - `org.freedesktop.login1.Session.Lock` / `.Unlock` (no body)
+    //!   on the *current session* path. Mapped to `power:lock` /
+    //!   `power:unlock`.
+    //!
+    //! If the system bus isn't available (sandboxed container, no
+    //! systemd, …) we log once and exit the watcher thread — the
+    //! TS API still works, it just never sees events on this host.
+    use serde_json::json;
+    use zbus::blocking::{Connection, Proxy};
+
+    use crate::os::events;
+
+    pub(super) fn spawn_watcher() {
+        std::thread::Builder::new()
+            .name("tynd-power-linux-sleep".into())
+            .spawn(|| {
+                if let Err(e) = run_sleep() {
+                    crate::tynd_log!("power[linux]: PrepareForSleep watcher exited: {e}");
+                }
+            })
+            .ok();
+        std::thread::Builder::new()
+            .name("tynd-power-linux-session".into())
+            .spawn(|| {
+                if let Err(e) = run_session() {
+                    crate::tynd_log!("power[linux]: session Lock/Unlock watcher exited: {e}");
+                }
+            })
+            .ok();
+    }
+
+    fn run_sleep() -> Result<(), String> {
+        let conn = Connection::system().map_err(|e| format!("system bus: {e}"))?;
+        let proxy = Proxy::new(
+            &conn,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+        )
+        .map_err(|e| format!("Manager proxy: {e}"))?;
+
+        let signals = proxy
+            .receive_signal("PrepareForSleep")
+            .map_err(|e| format!("receive_signal PrepareForSleep: {e}"))?;
+        for msg in signals {
+            // Body is `(b)` — single boolean.
+            match msg.body().deserialize::<bool>() {
+                Ok(true) => events::emit("power:suspend", &json!({})),
+                Ok(false) => events::emit("power:resume", &json!({})),
+                Err(e) => crate::tynd_log!("power[linux]: PrepareForSleep body: {e}"),
+            }
+        }
+        Ok(())
+    }
+
+    fn run_session() -> Result<(), String> {
+        let conn = Connection::system().map_err(|e| format!("system bus: {e}"))?;
+        // The current session's object path is exposed by
+        // `Manager.GetSessionByPID(self_pid) -> ObjectPath`. We avoid
+        // the round-trip and use the magic alias `auto` which logind
+        // resolves to "the current session" on most distros; if that
+        // fails we fall through and the watcher exits with a logged
+        // error rather than panicking the host.
+        let manager = Proxy::new(
+            &conn,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+        )
+        .map_err(|e| format!("Manager proxy: {e}"))?;
+        let pid = std::process::id();
+        let session_path: zbus::zvariant::OwnedObjectPath = manager
+            .call("GetSessionByPID", &(pid))
+            .map_err(|e| format!("GetSessionByPID({pid}): {e}"))?;
+
+        let session = Proxy::new(
+            &conn,
+            "org.freedesktop.login1",
+            session_path.as_str(),
+            "org.freedesktop.login1.Session",
+        )
+        .map_err(|e| format!("Session proxy: {e}"))?;
+
+        // Two SignalIterators interleaved via a non-blocking spin
+        // would let us share the connection, but `blocking::Proxy`
+        // doesn't expose a select(). Spawn a sibling thread for
+        // Unlock so each iterator gets its own blocking pump.
+        let unlock_conn = conn.clone();
+        let unlock_path = session_path.clone();
+        std::thread::Builder::new()
+            .name("tynd-power-linux-unlock".into())
+            .spawn(move || {
+                if let Err(e) = run_unlock(&unlock_conn, &unlock_path) {
+                    crate::tynd_log!("power[linux]: Unlock watcher exited: {e}");
+                }
+            })
+            .ok();
+
+        let signals = session
+            .receive_signal("Lock")
+            .map_err(|e| format!("receive_signal Lock: {e}"))?;
+        for _ in signals {
+            events::emit("power:lock", &json!({}));
+        }
+        Ok(())
+    }
+
+    fn run_unlock(
+        conn: &Connection,
+        session_path: &zbus::zvariant::OwnedObjectPath,
+    ) -> Result<(), String> {
+        let session = Proxy::new(
+            conn,
+            "org.freedesktop.login1",
+            session_path.as_str(),
+            "org.freedesktop.login1.Session",
+        )
+        .map_err(|e| format!("Session proxy (unlock): {e}"))?;
+        let signals = session
+            .receive_signal("Unlock")
+            .map_err(|e| format!("receive_signal Unlock: {e}"))?;
+        for _ in signals {
+            events::emit("power:unlock", &json!({}));
+        }
+        Ok(())
+    }
 }
 
 /// Cross-platform battery snapshot via the `battery` crate.

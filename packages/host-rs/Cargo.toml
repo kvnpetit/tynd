@@ -182,6 +182,10 @@ api-all = [
     "api-updater",
     "api-vault",
     "api-websocket",
+    "api-window-state",
+    "api-deep-link",
+    "api-keys",
+    "api-cli",
 ]
 
 # Per-API gates. Each feature enables its module + dispatch arm + pulls the
@@ -201,7 +205,14 @@ api-keyring         = [ "dep:keyring" ]
 api-log             = [  ]
 api-network         = [ "dep:if-addrs" ]
 api-notification    = [ "dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys" ]
-api-power           = [ "dep:user-idle", "dep:battery" ]
+api-power           = [ "dep:user-idle", "dep:battery", "power-events-mac", "power-events-linux" ]
+# Internal helper sub-features — let the per-target dep tables flip the
+# matching crates on without leaking them on the wrong OS. `Cargo` skips
+# `target.'cfg(...)'.dependencies` entries automatically when their
+# `optional = true` deps aren't enabled, so `dep:objc2` / `dep:zbus`
+# resolve to no-ops on Windows / Linux respectively.
+power-events-mac    = [ "dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:block2" ]
+power-events-linux  = [ "dep:zbus" ]
 api-process         = [  ]
 api-screenshot      = [ "dep:xcap" ]
 api-shell           = [ "dep:open" ]
@@ -218,6 +229,21 @@ api-updater         = [ "dep:ureq", "dep:ed25519-dalek", "dep:self-replace", "de
 # leak the cleartext to a future allocator request.
 api-vault           = [ "dep:cocoon", "dep:zeroize" ]
 api-websocket       = [ "dep:tungstenite" ]
+# Window-state persistence — promoted from `@tynd/plugin-window-state`.
+# No external dep: rides on always-on `dirs` + `serde_json` + `parking_lot`.
+api-window-state    = [  ]
+# Deep-link OS API — scheme registration (HKCU on Windows,
+# LSSetDefaultHandlerForURLScheme on macOS, .desktop on Linux) plus
+# multi-instance URL forwarding (master file lock + local socket, same
+# `fslock`/`interprocess` building blocks as `api-single-instance`).
+# `winreg` is the only Windows-only dep — declared optional in the
+# `target.'cfg(target_os = "windows")'.dependencies` table below so it
+# only resolves on Windows builds.
+api-deep-link       = [ "dep:fslock", "dep:interprocess", "dep:winreg" ]
+# Browser key intercept (Ctrl+R, F5, …). Pure logic — no external dep.
+api-keys            = [  ]
+# Process argv parsing exposed to the frontend. Pure logic — no external dep.
+api-cli             = [  ]
 
 # Production observability — strictly opt-in. Both gates are off by
 # default (including in `api-all`) because the OTel + Sentry pipelines
@@ -239,17 +265,42 @@ obs-sentry = [ "dep:sentry" ]
 # as optional so it's only pulled with api-clipboard.
 arboard       = { version = "3", features = [ "wayland-data-control" ], optional = true }
 gtk.workspace = true
+# systemd-logind DBus signals (PrepareForSleep, Session.Lock/Unlock) for
+# the `os::power` watcher. `default-features = false` + `blocking-api`
+# keeps the async-io runtime out of the dep graph — the watcher runs on
+# its own dedicated `std::thread`.
+zbus = { version = "5.14", default-features = false, features = [ "blocking-api" ], optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tauri-winrt-notification = { workspace = true, optional = true }
+# Per-user `HKCU\Software\Classes\<scheme>` registry write/read for the
+# deep-link OS API. Only consumed in `os::deep_link::registry` (Windows
+# only); kept optional here so non-Windows builds and `api-deep-link`-off
+# builds skip the dep entirely.
+winreg = { workspace = true, optional = true }
 # Direct Win32 access for runtime-only features tao doesn't surface: DWM
 # system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
 # 0.61 introduces `windows-link` (raw-dylib resolution) which drops the
 # 6 MB `windows-targets` import-lib bloat the older 0.59 line pulled in.
-windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_System_Power" ] }
+#
+# `Win32_System_RemoteDesktop` + `Win32_System_LibraryLoader` +
+# `Win32_Graphics_Gdi` are pulled by the `os::power` watcher: it spawns
+# a hidden message-only window (`HWND_MESSAGE`) and registers
+# `WTSRegisterSessionNotification` against it so `WM_POWERBROADCAST`
+# (suspend/resume) and `WM_WTSSESSION_CHANGE` (lock/unlock) get pumped
+# into the host event bus. `WNDCLASSEXW` references `HBRUSH` (Gdi) and
+# `GetModuleHandleW` lives in `LibraryLoader`.
+windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_System_Power", "Win32_System_RemoteDesktop", "Win32_System_LibraryLoader" ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = { workspace = true, optional = true }
+# NSWorkspace.notificationCenter observers for the `os::power` watcher
+# (sleep/wake + session active/inactive). Only pulled with `api-power`
+# so non-power builds stay free of objc2-app-kit's generated bindings.
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "0.3", default-features = false, features = [ "std", "NSString", "NSNotification", "NSOperation", "block2" ], optional = true }
+objc2-app-kit = { version = "0.3", default-features = false, features = [ "std", "NSWorkspace" ], optional = true }
+block2 = { version = "0.6", optional = true }
 
 # Criterion drives the IPC + plugin-dispatch micro-benches under
 # `benches/`. Pulled at dev only — never linked into the shipped host.

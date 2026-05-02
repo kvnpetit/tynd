@@ -15,6 +15,22 @@ use serde_json::{json, Value};
 use xcap::{Monitor, Window};
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
+    // W3.2 — ACL gate. The two `capture*` methods are the privacy-
+    // sensitive surface (anything that returns a frame buffer of the
+    // user's screen). The `list*` introspection methods are kept open
+    // so admin / settings UIs can populate a monitor / window picker
+    // *before* the user grants `screenshot:captureScreen` — same
+    // posture as `biometric.isAvailable`.
+    #[cfg(feature = "api-acl")]
+    {
+        let needs_gate = matches!(method, "captureScreen" | "captureWindow");
+        if needs_gate {
+            let cmd = format!("screenshot:{method}");
+            if !crate::os::acl::authority().is_allowed(&cmd, None, None, None) {
+                return Err(format!("screenshot.{method}: permission denied by ACL"));
+            }
+        }
+    }
     match method {
         "captureScreen" => capture_screen(args),
         "captureWindow" => capture_window(args),

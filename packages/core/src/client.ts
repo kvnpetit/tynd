@@ -16,8 +16,10 @@ export { base64ToBytes, bytesToBase64 } from "./client/_internal";
 export { type AppInfo, app } from "./client/app";
 export { type AutolaunchOptions, autolaunch } from "./client/autolaunch";
 export { type BackendClient, createBackend } from "./client/backend";
+export { cli, type CliMatches } from "./client/cli";
 export { type ClipboardImage, clipboard } from "./client/clipboard";
 export { compute, type HashAlgo } from "./client/compute";
+export { deepLink } from "./client/deepLink";
 export {
   type ConfirmOptions,
   dialog,
@@ -43,6 +45,7 @@ export {
   type HttpResponse,
   http,
 } from "./client/http";
+export { keys } from "./client/keys";
 export { type KeyringEntry, keyring } from "./client/keyring";
 export { type LogConfigureOptions, type LogLevel, log } from "./client/log";
 export { type ContextMenuItem, menu } from "./client/menu";
@@ -118,6 +121,11 @@ export {
   websocket,
 } from "./client/websocket";
 export { tyndWindow, type WindowPreset } from "./client/window";
+export {
+  windowState,
+  type WindowStateInitOptions,
+  type WindowStateSnapshot,
+} from "./client/windowState";
 export { type WorkerHandle, workers } from "./client/workers";
 export { TyndIpcError, type TyndIpcErrorCode } from "./errors";
 export type { Emitter, EmitterMap } from "./types";

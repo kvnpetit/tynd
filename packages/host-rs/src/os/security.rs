@@ -8,11 +8,40 @@
 //! Precedence: deny overrides allow. An empty `allow` list means "allow
 //! everything" unless `defaultDeny` is set, in which case it means "deny
 //! everything".
+//!
+//! # Persisted grants (folded from `@tynd/plugin-persisted-scope`)
+//!
+//! In addition to the live policy, we persist a JSON file under
+//! `<data_dir>/<exe_stem>/security-persisted-grants.json` so that paths
+//! the user grants at runtime (typically through a folder picker) survive
+//! across launches without re-prompting. The on-disk shape:
+//!
+//! ```json
+//! { "fs": ["~/Documents", "/Users/jane/Project"], "http": ["https://api.example.com"] }
+//! ```
+//!
+//! Tilde (`~/foo`) entries are kept verbatim on disk so the file stays
+//! portable across machines / users; expansion happens at load time
+//! (because the policy globs match against absolute paths).
+//!
+//! Auto-load fires lazily on the first `configure(...)` /
+//! `add_*_allow(...)` call (or first `persist_grant(...)`) — there's no
+//! explicit boot hook, callers just see the persisted entries already in
+//! the live allow-list.
 
-use std::{path::Path, sync::OnceLock};
+use std::{
+    collections::BTreeSet,
+    fs,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    },
+};
 
 use parking_lot::RwLock;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
 
@@ -84,20 +113,199 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 .ok_or_else(|| "security.isHttpAllowed: missing 'url'".to_string())?;
             Ok(Value::Bool(check_http(url).is_ok()))
         },
+        // ----- W2.2 — live policy mutation -------------------------------
+        // The legacy `configure` REPLACES the entire policy; plugins like
+        // `persisted-scope` need to extend the live allow-list with paths
+        // the user just granted via a folder picker, without forcing the
+        // app to re-call `configure(...)` from scratch (which would race
+        // against in-flight FS calls on a different thread). Each helper
+        // returns `true` when the entry was newly added / removed so the
+        // caller can short-circuit on idempotent calls.
+        "addFsAllow" => {
+            let path = args
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "security.addFsAllow: missing 'path'".to_string())?;
+            Ok(Value::Bool(add_fs_allow(path)))
+        },
+        "removeFsAllow" => {
+            let path = args
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "security.removeFsAllow: missing 'path'".to_string())?;
+            Ok(Value::Bool(remove_fs_allow(path)))
+        },
+        "addHttpAllow" => {
+            let url = args
+                .get("url")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "security.addHttpAllow: missing 'url'".to_string())?;
+            Ok(Value::Bool(add_http_allow(url)))
+        },
+        "removeHttpAllow" => {
+            let url = args
+                .get("url")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "security.removeHttpAllow: missing 'url'".to_string())?;
+            Ok(Value::Bool(remove_http_allow(url)))
+        },
+        // ----- Persisted grants (folded from `@tynd/plugin-persisted-scope`) ----
+        // These extend the live policy AND remember the grant on disk so
+        // a user-picked folder survives the next launch without re-
+        // prompting. `kind` defaults to `"fs"` to match the JS surface.
+        "persistGrant" => {
+            let path = args
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "security.persistGrant: missing 'path'".to_string())?;
+            let kind = parse_grant_kind(args)?;
+            persist_grant(path, kind)
+                .map(Value::Bool)
+                .map_err(|e| format!("security.persistGrant: {e}"))
+        },
+        "revokePersisted" => {
+            let path = args
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "security.revokePersisted: missing 'path'".to_string())?;
+            let kind = parse_grant_kind(args)?;
+            revoke_persisted(path, kind)
+                .map(Value::Bool)
+                .map_err(|e| format!("security.revokePersisted: {e}"))
+        },
+        "listPersisted" => {
+            let kind = parse_grant_kind(args)?;
+            Ok(Value::Array(
+                list_persisted(kind)
+                    .into_iter()
+                    .map(Value::String)
+                    .collect(),
+            ))
+        },
+        "hasPersisted" => {
+            let path = args
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "security.hasPersisted: missing 'path'".to_string())?;
+            let kind = parse_grant_kind(args)?;
+            Ok(Value::Bool(has_persisted(path, kind)))
+        },
+        "clearPersisted" => {
+            let kind = parse_grant_kind(args)?;
+            clear_persisted(kind)
+                .map(|()| Value::Null)
+                .map_err(|e| format!("security.clearPersisted: {e}"))
+        },
         _ => Err(format!("security.{method}: unknown method")),
     }
+}
+
+/// Parse the `kind` argument shared by every `*Persisted*` dispatch arm.
+/// Defaults to `Fs` when absent or not a string. Returns an error only on
+/// an explicitly invalid value (e.g. `"filesystem"`).
+fn parse_grant_kind(args: &Value) -> Result<GrantKind, String> {
+    match args.get("kind").and_then(Value::as_str) {
+        None | Some("fs") => Ok(GrantKind::Fs),
+        Some("http") => Ok(GrantKind::Http),
+        Some(other) => Err(format!(
+            "security: invalid 'kind' — expected 'fs' or 'http', got '{other}'"
+        )),
+    }
+}
+
+/// Add a path glob to the live `fs.allow` list. Returns `true` when the
+/// entry was newly added, `false` when it was already present (idempotent).
+///
+/// SECURITY: this is the only sanctioned way to extend the policy at
+/// runtime — it preserves every other field (`deny`, `default_deny`,
+/// `shell_exec_allowed`, `configured`) verbatim, swap is atomic under
+/// the same `RwLock` `check_fs` reads. Used by the persisted-grants
+/// auto-restore so user-granted folders survive across launches without
+/// forcing the app to rebuild + re-call `security.configure({ ... })`.
+///
+/// Once you've called this, the policy becomes "configured" — every
+/// subsequent `check_fs` call enforces the allow-list (whereas an
+/// unconfigured policy fails open). Adding a path to a previously-
+/// unconfigured policy therefore flips the gate ON.
+pub fn add_fs_allow(path: &str) -> bool {
+    // Lazy auto-restore on the first allow-mutation call. Idempotent:
+    // subsequent calls see the latch flipped and short-circuit before
+    // touching disk.
+    auto_restore_persisted();
+    let mut p = policy().write();
+    if p.fs.allow.iter().any(|existing| existing == path) {
+        // Still mark as configured so a no-op `add` after `configure`
+        // doesn't leave a stale "open by default" state if the caller
+        // intended to switch into ACL mode.
+        p.configured = true;
+        return false;
+    }
+    p.fs.allow.push(path.to_string());
+    p.configured = true;
+    true
+}
+
+/// Remove a path glob from the live `fs.allow` list. Returns `true` when
+/// an entry was actually removed, `false` when nothing matched.
+pub fn remove_fs_allow(path: &str) -> bool {
+    let mut p = policy().write();
+    let before = p.fs.allow.len();
+    p.fs.allow.retain(|existing| existing != path);
+    before != p.fs.allow.len()
+}
+
+/// HTTP twin of [`add_fs_allow`]. Same semantics — newly-added vs. already-
+/// present, atomic swap under the same lock the `check_http` hot path
+/// reads.
+pub fn add_http_allow(url: &str) -> bool {
+    auto_restore_persisted();
+    let mut p = policy().write();
+    if p.http.allow.iter().any(|existing| existing == url) {
+        p.configured = true;
+        return false;
+    }
+    p.http.allow.push(url.to_string());
+    p.configured = true;
+    true
+}
+
+/// HTTP twin of [`remove_fs_allow`].
+pub fn remove_http_allow(url: &str) -> bool {
+    let mut p = policy().write();
+    let before = p.http.allow.len();
+    p.http.allow.retain(|existing| existing != url);
+    before != p.http.allow.len()
 }
 
 fn configure(args: &Value) -> Result<Value, String> {
     let input: PolicyInput = serde_json::from_value(args.clone())
         .map_err(|e| format!("security.configure: invalid shape — {e}"))?;
+    // Merge persisted grants into the deployer-provided allow lists so
+    // user-granted folders survive a `configure(...)` reset (which is
+    // otherwise REPLACE semantics). Tilde entries are expanded + the FS
+    // entries grow a `/**` suffix to cover the user-picked subtree.
+    let persisted = load_persisted_unlocked();
+    let mut fs_allow = input.fs.allow;
+    for entry in &persisted.fs {
+        let absolute = expand_tilde(entry);
+        let pattern = format!("{}/**", absolute.trim_end_matches('/'));
+        if !fs_allow.iter().any(|p| p == &pattern) {
+            fs_allow.push(pattern);
+        }
+    }
+    let mut http_allow = input.http.allow;
+    for entry in &persisted.http {
+        if !http_allow.iter().any(|p| p == entry) {
+            http_allow.push(entry.clone());
+        }
+    }
     let next = Policy {
         fs: Scope {
-            allow: input.fs.allow,
+            allow: fs_allow,
             deny: input.fs.deny,
         },
         http: Scope {
-            allow: input.http.allow,
+            allow: http_allow,
             deny: input.http.deny,
         },
         default_deny: input.default_deny,
@@ -105,6 +313,8 @@ fn configure(args: &Value) -> Result<Value, String> {
         shell_exec_allowed: input.shell_exec_allowed_commands,
     };
     *policy().write() = next;
+    // Latch so subsequent `add_*_allow(...)` calls don't try to re-merge.
+    persisted_state().auto_restored.store(true, Ordering::SeqCst);
     Ok(Value::Null)
 }
 
@@ -241,6 +451,294 @@ fn matches(pattern: &str, input: &str) -> bool {
         .literal_separator(true)
         .build()
         .is_ok_and(|g| g.compile_matcher().is_match(input))
+}
+
+// =====================================================================
+// Persisted grants
+// =====================================================================
+//
+// Folded from the former `@tynd/plugin-persisted-scope` crate. Stores
+// user-granted FS / HTTP entries in a JSON file under `<data_dir>/<exe>`
+// so a folder picked from a dialog isn't re-prompted on the next launch.
+// Tilde-prefixed entries (`~/Documents`) are kept verbatim on disk for
+// portability across machines / users; expansion happens at load time
+// because the live policy globs are matched against absolute paths.
+
+/// Discriminator on every persisted-grant API. Mirrors the JS
+/// `"fs" | "http"` literal union the dispatch arms accept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GrantKind {
+    Fs,
+    Http,
+}
+
+/// On-disk shape. `BTreeSet` keeps the JSON entries in stable order
+/// (diff-friendly when the file lands in a synced folder) and dedupes
+/// for free.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct PersistedGrants {
+    #[serde(default)]
+    fs: BTreeSet<String>,
+    #[serde(default)]
+    http: BTreeSet<String>,
+}
+
+/// Process-global state: the in-memory mirror of the JSON file plus a
+/// "have we already auto-restored?" latch so the first
+/// `add_*_allow(...)` / `configure(...)` call hydrates the live policy
+/// and subsequent calls short-circuit. Wrapped behind an accessor so the
+/// `OnceLock` initializer reads disk exactly once per process.
+struct PersistedState {
+    grants: RwLock<PersistedGrants>,
+    storage_path: RwLock<Option<PathBuf>>,
+    auto_restored: AtomicBool,
+}
+
+static PERSISTED: OnceLock<PersistedState> = OnceLock::new();
+
+fn persisted_state() -> &'static PersistedState {
+    PERSISTED.get_or_init(|| {
+        let path = default_persisted_path();
+        let grants = path
+            .as_ref()
+            .and_then(|p| match fs::read_to_string(p) {
+                Ok(raw) => Some(serde_json::from_str::<PersistedGrants>(&raw).unwrap_or_default()),
+                // Missing or corrupted file = empty state. We never
+                // panic here — startup must be resilient against a
+                // freshly-installed app, a mid-write crash, or a hostile
+                // edit of the JSON.
+                Err(e) if e.kind() == ErrorKind::NotFound => None,
+                Err(_) => None,
+            })
+            .unwrap_or_default();
+        PersistedState {
+            grants: RwLock::new(grants),
+            storage_path: RwLock::new(path),
+            auto_restored: AtomicBool::new(false),
+        }
+    })
+}
+
+/// `<data_dir>/<exe_stem>/security-persisted-grants.json`. Returns
+/// `None` only on the rare host where `dirs::data_dir()` returns nothing
+/// — in which case the grants module still works in memory but doesn't
+/// persist across launches.
+fn default_persisted_path() -> Option<PathBuf> {
+    let base = dirs::data_dir()?;
+    let app_id = persisted_exe_stem();
+    Some(base.join(app_id).join("security-persisted-grants.json"))
+}
+
+/// Same shape `os::notification::exe_stem` uses to derive an app id.
+/// Falls back to a stable string so two co-installed apps without a
+/// proper executable name still get distinct (but predictable) folders.
+fn persisted_exe_stem() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| "tynd-app".to_string())
+}
+
+/// Expand a leading `~` to the user's home directory. Returned for
+/// callers that want the canonical absolute path before feeding the
+/// entry into the live security policy. Other paths and entries without
+/// a tilde are returned unchanged.
+#[must_use]
+pub fn expand_tilde(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest).to_string_lossy().into_owned();
+        }
+    } else if path == "~" {
+        if let Some(home) = dirs::home_dir() {
+            return home.to_string_lossy().into_owned();
+        }
+    }
+    path.to_string()
+}
+
+/// Read a snapshot of the persisted grants without touching the live
+/// policy. Used by `configure(...)` to fold persisted entries into the
+/// fresh policy under a single write lock.
+fn load_persisted_unlocked() -> PersistedGrants {
+    let s = persisted_state();
+    let g = s.grants.read();
+    PersistedGrants {
+        fs: g.fs.clone(),
+        http: g.http.clone(),
+    }
+}
+
+/// Lazy auto-restore: on the first `add_*_allow(...)` call after process
+/// start, push every persisted entry into the live policy. Idempotent —
+/// the latch flips on first run, so subsequent calls cost a single
+/// atomic load. `configure(...)` flips the latch directly because it
+/// already merges persisted grants into its initial allow-list.
+fn auto_restore_persisted() {
+    let s = persisted_state();
+    if s.auto_restored.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    // Snapshot under the read lock, then mutate the policy without
+    // holding it (avoids any chance of deadlock against the policy
+    // RwLock — they're independent locks but reentry is still cheaper
+    // to dodge).
+    let snapshot = {
+        let g = s.grants.read();
+        (
+            g.fs.iter().cloned().collect::<Vec<_>>(),
+            g.http.iter().cloned().collect::<Vec<_>>(),
+        )
+    };
+    for entry in snapshot.0 {
+        let absolute = expand_tilde(&entry);
+        let pattern = format!("{}/**", absolute.trim_end_matches('/'));
+        // Direct policy mutation — `add_fs_allow` would recurse into
+        // `auto_restore_persisted()` and short-circuit, but we already
+        // hold the latch, so call the lock-touching code inline to keep
+        // the call graph obvious.
+        let mut p = policy().write();
+        if !p.fs.allow.iter().any(|existing| existing == &pattern) {
+            p.fs.allow.push(pattern);
+        }
+        p.configured = true;
+    }
+    for entry in snapshot.1 {
+        let mut p = policy().write();
+        if !p.http.allow.iter().any(|existing| existing == &entry) {
+            p.http.allow.push(entry);
+        }
+        p.configured = true;
+    }
+}
+
+/// Write the in-memory grants to disk. Best-effort: a tmp-then-rename
+/// keeps a crash mid-write from leaving a half-written file the next
+/// launch would silently treat as empty. Errors bubble up so the
+/// dispatch arms can surface them — callers shouldn't silently lose a
+/// "grant accepted" UX response when the disk write actually failed.
+fn flush_persisted() -> Result<(), String> {
+    let s = persisted_state();
+    let Some(path) = s.storage_path.read().clone() else {
+        return Ok(());
+    };
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create parent: {e}"))?;
+    }
+    let payload = {
+        let g = s.grants.read();
+        serde_json::to_string(&*g).map_err(|e| format!("serialize: {e}"))?
+    };
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, payload).map_err(|e| format!("write tmp: {e}"))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("rename: {e}"))?;
+    Ok(())
+}
+
+/// Persist a path so it's auto-restored on the next launch. Adds the
+/// entry to the live policy too — the persisted JSON is the durable
+/// mirror of the in-memory allow-list, not a separate authorization.
+/// Returns `true` if the entry is newly persisted, `false` if it was
+/// already there (idempotent).
+pub fn persist_grant(path: &str, kind: GrantKind) -> Result<bool, String> {
+    auto_restore_persisted();
+    // Always extend the live policy first — even on a duplicate-persist
+    // call, the live policy might have been wiped by a `configure(...)`
+    // that didn't merge persisted entries (legacy callers, tests).
+    match kind {
+        GrantKind::Fs => {
+            let absolute = expand_tilde(path);
+            let pattern = format!("{}/**", absolute.trim_end_matches('/'));
+            add_fs_allow(&pattern);
+        },
+        GrantKind::Http => {
+            add_http_allow(path);
+        },
+    }
+    let s = persisted_state();
+    let added = {
+        let mut g = s.grants.write();
+        match kind {
+            GrantKind::Fs => g.fs.insert(path.to_string()),
+            GrantKind::Http => g.http.insert(path.to_string()),
+        }
+    };
+    if added {
+        flush_persisted()?;
+    }
+    Ok(added)
+}
+
+/// Remove an entry from the persisted JSON. Does NOT touch the live
+/// policy — the caller decides whether to also `removeFsAllow(...)` /
+/// `removeHttpAllow(...)`. This split mirrors the original plugin
+/// contract: persistence and the runtime allow-list are separate
+/// concerns once the user has granted them.
+pub fn revoke_persisted(path: &str, kind: GrantKind) -> Result<bool, String> {
+    let s = persisted_state();
+    let removed = {
+        let mut g = s.grants.write();
+        match kind {
+            GrantKind::Fs => g.fs.remove(path),
+            GrantKind::Http => g.http.remove(path),
+        }
+    };
+    if removed {
+        flush_persisted()?;
+    }
+    Ok(removed)
+}
+
+/// Snapshot of every currently-persisted entry of the requested kind.
+/// Order is stable thanks to `BTreeSet` — handy for diffing.
+pub fn list_persisted(kind: GrantKind) -> Vec<String> {
+    let s = persisted_state();
+    let g = s.grants.read();
+    match kind {
+        GrantKind::Fs => g.fs.iter().cloned().collect(),
+        GrantKind::Http => g.http.iter().cloned().collect(),
+    }
+}
+
+/// Membership check — no I/O, no policy mutation.
+pub fn has_persisted(path: &str, kind: GrantKind) -> bool {
+    let s = persisted_state();
+    let g = s.grants.read();
+    match kind {
+        GrantKind::Fs => g.fs.contains(path),
+        GrantKind::Http => g.http.contains(path),
+    }
+}
+
+/// Drop every persisted entry of a kind. Returns success even when the
+/// list was already empty — the disk write is the only failure mode and
+/// it only fires on actual changes.
+pub fn clear_persisted(kind: GrantKind) -> Result<(), String> {
+    let s = persisted_state();
+    let cleared = {
+        let mut g = s.grants.write();
+        let set = match kind {
+            GrantKind::Fs => &mut g.fs,
+            GrantKind::Http => &mut g.http,
+        };
+        let was_empty = set.is_empty();
+        set.clear();
+        !was_empty
+    };
+    if cleared {
+        flush_persisted()?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn set_persisted_storage_for_tests(path: PathBuf) {
+    // Re-init the persisted state with a sandbox path. Used by every
+    // grants test to avoid stomping the user's real data dir.
+    let s = persisted_state();
+    *s.grants.write() = PersistedGrants::default();
+    *s.storage_path.write() = Some(path);
+    s.auto_restored.store(false, Ordering::SeqCst);
 }
 
 // Cross-module test gate: anything hitting `check_fs` or `check_http`
@@ -539,6 +1037,102 @@ mod tests {
         assert!(check_fs("C:/Users/Jane/SECRET~1.TXT").is_ok());
     }
 
+    // -----------------------------------------------------------------
+    // W2.2 — live policy mutation (`add_fs_allow` / `add_http_allow`)
+    //
+    // Each helper has to be (a) idempotent — duplicate calls return
+    // `false` rather than growing the allow-list, (b) atomic — the
+    // `check_fs` hot path must never see a partial write, and (c) the
+    // `remove_*` twin must surface "wasn't there" as a return value
+    // so the persisted-scope plugin can stay in sync with what the
+    // user actually granted.
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn add_fs_allow_is_idempotent_and_observed_by_check_fs() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        // First add returns `true` (newly added). Calling `add` flips the
+        // policy from "unconfigured" → "configured" too, so a path
+        // OUTSIDE the allow-list now rejects.
+        assert!(add_fs_allow("/runtime/granted/**"));
+        assert!(check_fs("/runtime/granted/file.txt").is_ok());
+        assert!(
+            check_fs("/somewhere/else").is_err(),
+            "policy must enforce after first add (configured=true)"
+        );
+
+        // Second add of the same entry returns `false` (idempotent) and
+        // the allow-list MUST NOT grow.
+        assert!(!add_fs_allow("/runtime/granted/**"));
+        let p = policy().read();
+        assert_eq!(
+            p.fs.allow.iter().filter(|x| *x == "/runtime/granted/**").count(),
+            1,
+            "duplicate add must not grow allow list"
+        );
+    }
+
+    #[test]
+    fn remove_fs_allow_returns_false_when_absent() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        // Nothing added yet → remove is a no-op that returns `false`.
+        assert!(!remove_fs_allow("/never/added"));
+        // Round-trip: add, then remove twice — first remove succeeds,
+        // second is a no-op.
+        assert!(add_fs_allow("/granted/**"));
+        assert!(remove_fs_allow("/granted/**"));
+        assert!(!remove_fs_allow("/granted/**"));
+    }
+
+    #[test]
+    fn add_http_allow_does_not_touch_fs_scope() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        // Cross-scope contamination is the primary regression risk —
+        // `add_http_allow` writing into `policy().fs` would silently
+        // grant FS access on every HTTP grant. Pin the boundary.
+        assert!(add_http_allow("https://api.example.com/**"));
+        let p = policy().read();
+        assert_eq!(p.http.allow.len(), 1);
+        assert!(p.fs.allow.is_empty(), "fs scope must stay untouched");
+    }
+
+    #[test]
+    fn dispatch_routes_add_fs_allow_to_helper() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        // Round-trip via the IPC dispatch arm so the persisted-scope
+        // plugin's `cx.os_call("security", "addFsAllow", ...)` path
+        // stays covered. First call → true; second → false.
+        let r1 = dispatch(
+            "addFsAllow",
+            &serde_json::json!({ "path": "/dispatch/granted" }),
+        )
+        .expect("addFsAllow");
+        assert_eq!(r1, Value::Bool(true));
+        let r2 = dispatch(
+            "addFsAllow",
+            &serde_json::json!({ "path": "/dispatch/granted" }),
+        )
+        .expect("addFsAllow idempotent");
+        assert_eq!(r2, Value::Bool(false));
+
+        // Missing 'path' surfaces the same actionable error every
+        // other dispatch arm uses.
+        let err = dispatch("addFsAllow", &serde_json::json!({})).unwrap_err();
+        assert!(err.contains("missing 'path'"), "got: {err}");
+    }
+
     #[test]
     fn canonicalize_fs_lowercase_consistent_on_windows() {
         // `canonicalize_fs` must produce deterministic output regardless
@@ -555,5 +1149,203 @@ mod tests {
             // normalize because we replace `\\` unconditionally.
             assert_eq!(canonicalize_fs("/Home/Jane"), "/Home/Jane");
         }
+    }
+
+    // -----------------------------------------------------------------
+    // Persisted grants — folded from `@tynd/plugin-persisted-scope`
+    //
+    // Every test points the persisted state at a sandbox JSON via
+    // `set_persisted_storage_for_tests` so the user's real
+    // `<data_dir>/.../security-persisted-grants.json` stays untouched.
+    // We also grab `test_lock()` because `persist_grant` mutates the
+    // process-global policy.
+    // -----------------------------------------------------------------
+
+    fn temp_persisted(label: &str) -> PathBuf {
+        // Mix in pid + nanos to keep parallel test threads from
+        // colliding on the same sandbox file.
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "tynd-security-persisted-{}-{}-{label}.json",
+            std::process::id(),
+            stamp
+        ));
+        let _ = fs::remove_file(&p);
+        p
+    }
+
+    #[test]
+    fn persist_grant_round_trips_through_disk() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        let file = temp_persisted("roundtrip");
+        set_persisted_storage_for_tests(file.clone());
+
+        assert!(persist_grant("~/Documents", GrantKind::Fs).unwrap());
+        assert!(persist_grant("https://api.example.com", GrantKind::Http).unwrap());
+
+        // File now exists + parses back to the same set.
+        let raw = fs::read_to_string(&file).expect("file written");
+        let parsed: PersistedGrants = serde_json::from_str(&raw).unwrap();
+        assert!(parsed.fs.contains("~/Documents"));
+        assert!(parsed.http.contains("https://api.example.com"));
+
+        // List APIs reflect the in-memory mirror.
+        assert_eq!(list_persisted(GrantKind::Fs), vec!["~/Documents"]);
+        assert_eq!(
+            list_persisted(GrantKind::Http),
+            vec!["https://api.example.com"]
+        );
+        assert!(has_persisted("~/Documents", GrantKind::Fs));
+        assert!(!has_persisted("~/Other", GrantKind::Fs));
+
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn persist_grant_is_idempotent() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        let file = temp_persisted("idem");
+        set_persisted_storage_for_tests(file.clone());
+
+        assert!(persist_grant("/tmp/foo", GrantKind::Fs).unwrap());
+        // Second call returns false (no-op on the persisted set) but
+        // still keeps the file consistent.
+        assert!(!persist_grant("/tmp/foo", GrantKind::Fs).unwrap());
+        assert_eq!(list_persisted(GrantKind::Fs).len(), 1);
+
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn persist_grant_extends_live_policy_with_glob_suffix() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        let file = temp_persisted("live-policy");
+        set_persisted_storage_for_tests(file.clone());
+
+        persist_grant("/granted/dir", GrantKind::Fs).unwrap();
+        // The persisted entry hits the live `fs.allow` as `/granted/dir/**`
+        // so an FS call inside the granted subtree passes the policy
+        // check that just got flipped on (configured = true).
+        assert!(check_fs("/granted/dir/file.txt").is_ok());
+        assert!(check_fs("/elsewhere/file.txt").is_err());
+
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn revoke_persisted_does_not_touch_live_policy() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        let file = temp_persisted("revoke-live-untouched");
+        set_persisted_storage_for_tests(file.clone());
+
+        persist_grant("/granted/dir", GrantKind::Fs).unwrap();
+        // Revoking the persisted entry must NOT remove `/granted/dir/**`
+        // from the live policy — that's a separate decision the caller
+        // makes via `removeFsAllow(...)`. Mirrors the original plugin
+        // contract documented on `revoke_persisted`.
+        assert!(revoke_persisted("/granted/dir", GrantKind::Fs).unwrap());
+        assert!(check_fs("/granted/dir/file.txt").is_ok());
+        assert!(!has_persisted("/granted/dir", GrantKind::Fs));
+
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn clear_persisted_only_drops_target_kind() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        let file = temp_persisted("clear-kind");
+        set_persisted_storage_for_tests(file.clone());
+
+        persist_grant("/data", GrantKind::Fs).unwrap();
+        persist_grant("https://x", GrantKind::Http).unwrap();
+        clear_persisted(GrantKind::Fs).unwrap();
+        assert!(list_persisted(GrantKind::Fs).is_empty());
+        assert_eq!(list_persisted(GrantKind::Http), vec!["https://x"]);
+
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn dispatch_routes_persist_grant() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        let file = temp_persisted("dispatch");
+        set_persisted_storage_for_tests(file.clone());
+
+        let r = dispatch(
+            "persistGrant",
+            &serde_json::json!({ "path": "/from/dispatch", "kind": "fs" }),
+        )
+        .expect("persistGrant");
+        assert_eq!(r, Value::Bool(true));
+        let listed = dispatch("listPersisted", &serde_json::json!({ "kind": "fs" }))
+            .expect("listPersisted");
+        assert_eq!(listed, serde_json::json!(["/from/dispatch"]));
+        let has = dispatch(
+            "hasPersisted",
+            &serde_json::json!({ "path": "/from/dispatch", "kind": "fs" }),
+        )
+        .expect("hasPersisted");
+        assert_eq!(has, Value::Bool(true));
+
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn dispatch_persist_grant_invalid_kind_errors() {
+        let _g = test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _p = install_policy(Policy::default());
+        let file = temp_persisted("bad-kind");
+        set_persisted_storage_for_tests(file.clone());
+
+        let err = dispatch(
+            "persistGrant",
+            &serde_json::json!({ "path": "/x", "kind": "filesystem" }),
+        )
+        .unwrap_err();
+        assert!(err.contains("kind"), "got: {err}");
+
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn expand_tilde_resolves_home_when_available() {
+        if let Some(home) = dirs::home_dir() {
+            let expanded = expand_tilde("~/foo");
+            assert!(
+                expanded.starts_with(&home.to_string_lossy().into_owned()),
+                "expected expansion under {home:?}, got {expanded}"
+            );
+            assert!(expanded.ends_with("foo"));
+        }
+    }
+
+    #[test]
+    fn expand_tilde_passes_absolute_paths_through() {
+        assert_eq!(expand_tilde("/tmp/foo"), "/tmp/foo");
+        assert_eq!(expand_tilde("relative/foo"), "relative/foo");
     }
 }

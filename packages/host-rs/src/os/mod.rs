@@ -20,8 +20,14 @@ pub mod autolaunch;
 pub mod biometric;
 #[cfg(feature = "api-clipboard")]
 pub mod clipboard;
+#[cfg(feature = "api-cli")]
+pub mod cli;
 #[cfg(feature = "api-compute")]
 pub mod compute;
+#[cfg(feature = "api-keys")]
+pub mod keys;
+#[cfg(feature = "api-deep-link")]
+pub mod deep_link;
 #[cfg(feature = "api-dialog")]
 pub mod dialog;
 #[cfg(feature = "api-fs")]
@@ -62,6 +68,8 @@ pub mod updater;
 pub mod vault;
 #[cfg(feature = "api-websocket")]
 pub mod websocket;
+#[cfg(feature = "api-window-state")]
+pub mod window_persistence;
 
 #[cfg(feature = "embedded-js")]
 pub mod workers;
@@ -132,6 +140,26 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
                 Err(api_disabled("clipboard"))
             }
         },
+        "keys" => {
+            #[cfg(feature = "api-keys")]
+            {
+                keys::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-keys"))]
+            {
+                Err(api_disabled("keys"))
+            }
+        },
+        "cli" => {
+            #[cfg(feature = "api-cli")]
+            {
+                cli::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-cli"))]
+            {
+                Err(api_disabled("cli"))
+            }
+        },
         "compute" => {
             #[cfg(feature = "api-compute")]
             {
@@ -140,6 +168,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-compute"))]
             {
                 Err(api_disabled("compute"))
+            }
+        },
+        "deepLink" => {
+            #[cfg(feature = "api-deep-link")]
+            {
+                deep_link::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-deep-link"))]
+            {
+                Err(api_disabled("deep-link"))
             }
         },
         "dialog" => {
@@ -340,6 +378,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-websocket"))]
             {
                 Err(api_disabled("websocket"))
+            }
+        },
+        "windowState" => {
+            #[cfg(feature = "api-window-state")]
+            {
+                window_persistence::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-window-state"))]
+            {
+                Err(api_disabled("window-state"))
             }
         },
 

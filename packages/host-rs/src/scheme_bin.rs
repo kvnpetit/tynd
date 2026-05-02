@@ -245,6 +245,11 @@ mod tests {
     #[cfg(feature = "api-fs")]
     #[test]
     fn fs_read_binary_round_trips() {
+        // Hold the security policy lock — sibling tests below mutate
+        // the global policy via `configure(...)`. Without this the
+        // 403-returning policy from a parallel test races with the
+        // round-trip and we get a flaky FORBIDDEN where 200 is expected.
+        let _g = lock();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("raw.bin");
         let bytes: Vec<u8> = (0..=255u8).collect();
@@ -258,6 +263,8 @@ mod tests {
     #[cfg(feature = "api-fs")]
     #[test]
     fn fs_write_binary_writes_body() {
+        // Same race-protection as `fs_read_binary_round_trips` above.
+        let _g = lock();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("out.bin");
         let body: Vec<u8> = vec![9, 8, 7, 6];

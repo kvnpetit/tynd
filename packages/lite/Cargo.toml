@@ -55,10 +55,17 @@ tynd_plugin_clipboard_history = { path = "../../../plugins/clipboard-history/nat
 
 [features]
 default = ["preset"]
-preset  = ["tynd-host/api-all", "bundled-plugins"]
+preset  = ["tynd-host/api-all", "bundled-plugins", "deep-link"]
 
 bundled-plugins = [
     "dep:tynd_plugin_sql",
     "dep:tynd_plugin_terminal",
     "dep:tynd_plugin_clipboard_history",
 ]
+
+# Local mirror of `tynd-host/api-deep-link`. Calling
+# `tynd_host::os::deep_link::init()` early in `run()` (before the event
+# loop) is a `cfg(feature = ...)`-gated block that needs a feature on
+# *this* crate; this gate is the bridge. Custom builds that drop deep-
+# link from `tynd-host/api-*` should also drop it here.
+deep-link = ["tynd-host/api-deep-link"]

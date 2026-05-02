@@ -33,11 +33,12 @@ impl Args {
                 },
                 "--help" | "-h" => {
                     println!(
-                        "Usage: tynd-full --backend-entry <path> [--debug]\n\nFlags:\n  -e, \
-                         --backend-entry <path>  Absolute path to backend TS entry\n  -d, \
-                         --debug                  Enable WebView devtools + dev scheme\n  -V, \
-                         --version                Print version and exit\n  -h, --help          \
-                         \      Print this help"
+                        "Usage: tynd-full --backend-entry <path> [--debug]\n\n\
+                         Flags:\n  \
+                         -e, --backend-entry <path>  Absolute path to backend TS entry\n  \
+                         -d, --debug                 Enable WebView devtools + dev scheme\n  \
+                         -V, --version               Print version and exit\n  \
+                         -h, --help                  Print this help"
                     );
                     std::process::exit(0);
                 },
