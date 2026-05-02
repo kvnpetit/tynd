@@ -7695,6 +7695,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tynd_plugin_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "tynd_plugin_sdk"
 version = "1.0.0"
 dependencies = [
@@ -7705,6 +7714,7 @@ dependencies = [
  "serde_json",
  "specta",
  "thiserror 2.0.18",
+ "tynd_plugin_macros",
 ]
 
 [[package]]
