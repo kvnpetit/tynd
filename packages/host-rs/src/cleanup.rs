@@ -11,6 +11,7 @@ use std::{path::PathBuf, sync::OnceLock};
 /// proxy exists; signal handlers (`init_signals()`) invoke it to send a quit
 /// `UserEvent` so the loop unwinds cleanly instead of dying mid-frame.
 use parking_lot::Mutex;
+use scopeguard::defer;
 
 static DIRS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
@@ -49,7 +50,13 @@ pub fn trigger_shutdown() -> bool {
 
 /// Delete all registered directories. Called by `run_app` before every exit
 /// and by the panic / signal hooks before `std::process::exit`.
+///
+/// `defer!` ensures the tracing span emitted here fires even if a future
+/// refactor introduces an early-return path — RAII logging at no cost.
 pub fn run() {
+    defer! {
+        tracing::debug!(target: "tynd::cleanup", "cleanup::run complete");
+    }
     for path in DIRS.lock().iter() {
         let _ = std::fs::remove_dir_all(path);
     }

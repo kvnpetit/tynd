@@ -19,7 +19,7 @@
  *   })
  */
 
-import { type ResolvedConfig, type WatchConfigOptions, loadConfig, watchConfig } from "c12";
+import { loadConfig, type ResolvedConfig, type WatchConfigOptions, watchConfig } from "c12";
 
 /**
  * Resolved Tynd app config — a JSON-serialisable shape. The CLI carries
@@ -84,7 +84,9 @@ const CONFIG_NAME = "tynd";
  *  5. `tynd.config.local.{ts,js,mjs,json}`  (gitignored, dev-only)
  *  6. `overrides`
  */
-export async function loadTyndConfig(opts: LoadTyndConfigOptions = {}): Promise<ResolvedTyndConfig> {
+export async function loadTyndConfig(
+  opts: LoadTyndConfigOptions = {},
+): Promise<ResolvedTyndConfig> {
   const resolved = await loadConfig<TyndAppConfig>({
     name: CONFIG_NAME,
     cwd: opts.cwd,

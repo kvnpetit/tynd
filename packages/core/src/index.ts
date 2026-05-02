@@ -21,6 +21,7 @@ import { startFull } from "./runtime/full";
 import { startLite } from "./runtime/lite";
 import { type AppConfig, AppConfigSchema, type Emitter, type EmitterMap } from "./types";
 
+export { TyndIpcError, type TyndIpcErrorCode } from "./errors";
 export { clearFrontendListeners, onFrontendEmit } from "./frontend-events";
 export {
   definePlugin,

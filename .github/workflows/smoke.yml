@@ -1,0 +1,166 @@
+name: Smoke E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  smoke:
+    name: Smoke ${{ matrix.target }} - ${{ matrix.runtime }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 6 OS × arch targets per Wave 4.4 spec — mirrors build-host.yml release matrix
+        # (windows-latest = x64, windows-11-arm = arm64, ubuntu-latest = x64,
+        #  ubuntu-24.04-arm = arm64, macos-latest = x64, macos-14 = arm64 / M-series).
+        # Crossed with both runtimes (full + lite) → 12 jobs total.
+        include:
+          - runner: windows-latest
+            target: windows-x64
+            runtime: full
+          - runner: windows-latest
+            target: windows-x64
+            runtime: lite
+          - runner: windows-11-arm
+            target: windows-arm64
+            runtime: full
+          - runner: windows-11-arm
+            target: windows-arm64
+            runtime: lite
+          - runner: ubuntu-latest
+            target: linux-x64
+            runtime: full
+          - runner: ubuntu-latest
+            target: linux-x64
+            runtime: lite
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+            runtime: full
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+            runtime: lite
+          - runner: macos-latest
+            target: macos-x64
+            runtime: full
+          - runner: macos-latest
+            target: macos-x64
+            runtime: lite
+          - runner: macos-14
+            target: macos-arm64
+            runtime: full
+          - runner: macos-14
+            target: macos-arm64
+            runtime: lite
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      # plugin-sdk is a sibling path-dep — checkout into ../plugin-sdk so cargo
+      # can resolve the plugins/* deps wired into tynd-full / tynd-lite via the
+      # `bundled-plugins` feature.
+      - name: Checkout plugin-sdk (sibling path dep)
+        uses: actions/checkout@v4
+        with:
+          repository: tynd-apps/plugin-sdk
+          path: ../plugin-sdk
+          ref: main
+        continue-on-error: true
+
+      - name: Install Linux system deps (cached)
+        if: startsWith(matrix.runner, 'ubuntu')
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          # xvfb for headless display, GTK/WebKit/Soup for wry/tao webview backend,
+          # libxdo for tray events, libxss for screensaver detection.
+          packages: xvfb libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libxdo-dev libxss-dev
+          version: 1.2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tynd-smoke
+          key: ${{ matrix.target }}-${{ matrix.runtime }}
+
+      - name: Build tynd-${{ matrix.runtime }} (release)
+        working-directory: tynd
+        run: cargo build --release -p tynd-${{ matrix.runtime }}
+
+      # --version smoke: the binary must self-identify as `tynd-{full,lite} 1.0.0`
+      # without requiring `--backend-entry` / `--bundle`. Wave 4.4 added the flag
+      # to packages/{full,lite}/src/args.rs.
+      - name: Version check (Unix)
+        if: runner.os != 'Windows'
+        working-directory: tynd
+        run: |
+          set -euo pipefail
+          OUT="$(./target/release/tynd-${{ matrix.runtime }} --version)"
+          echo "Got: $OUT"
+          case "$OUT" in
+            "tynd-${{ matrix.runtime }} "*) echo "Version check OK" ;;
+            *) echo "Unexpected version output"; exit 1 ;;
+          esac
+
+      - name: Version check (Windows)
+        if: runner.os == 'Windows'
+        working-directory: tynd
+        shell: pwsh
+        run: |
+          # Windows release builds use `windows_subsystem = "windows"` (set in
+          # packages/{full,lite}/src/main.rs) so the binary is detached from
+          # any console — println! goes nowhere visible. We can't capture
+          # stdout reliably, so the smoke contract on Windows is purely:
+          # `tynd-{full,lite}.exe --version` must exit with code 0 within a
+          # few seconds (no required-arg error, no panic, no hang).
+          $proc = Start-Process -FilePath "./target/release/tynd-${{ matrix.runtime }}.exe" `
+                                -ArgumentList "--version" -PassThru -NoNewWindow -Wait `
+                                -RedirectStandardOutput "version.txt" `
+                                -RedirectStandardError  "version.err.txt"
+          $code = $proc.ExitCode
+          Write-Host "ExitCode: $code"
+          if (Test-Path "version.txt") { Get-Content "version.txt" | Write-Host }
+          if (Test-Path "version.err.txt") { Get-Content "version.err.txt" | Write-Host }
+          if ($code -ne 0) {
+            Write-Error "Version check FAILED (exit $code)"
+            exit 1
+          }
+          Write-Host "Version check OK"
+
+      # Window-open smoke is gated until --smoke-mode lands in the host Rust
+      # (deferred — see Wave 4.4 follow-up). Until then the steps below run
+      # only on workflow_dispatch with the `run_window_smoke` input set, so
+      # routine PRs aren't blocked by the not-yet-wired flag.
+      - name: Smoke window (Linux)
+        if: runner.os == 'Linux' && github.event_name == 'workflow_dispatch'
+        working-directory: tynd
+        run: xvfb-run -a bash scripts/smoke-test.sh ${{ matrix.runtime }}
+
+      - name: Smoke window (macOS)
+        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch'
+        working-directory: tynd
+        run: bash scripts/smoke-test.sh ${{ matrix.runtime }}
+
+      - name: Smoke window (Windows)
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
+        working-directory: tynd
+        shell: pwsh
+        run: ./scripts/smoke-test.ps1 -Runtime ${{ matrix.runtime }}

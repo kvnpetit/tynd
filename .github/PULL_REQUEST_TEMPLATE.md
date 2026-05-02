@@ -32,6 +32,6 @@ require touching the relevant doc in the same commit.
 
 - [ ] `bun run check:all` passes locally (biome + typecheck + rustfmt + clippy + tests)
 - [ ] Tests added or updated for the change
-- [ ] Docs updated in the same commit (see [CONTRIBUTING.md doc table](../blob/main/CONTRIBUTING.md))
+- [ ] Docs updated in the same commit (see [CONTRIBUTING.md doc table](./CONTRIBUTING.md))
 - [ ] Conventional Commit subject (e.g. `feat(core):`, `fix(cli):`)
 - [ ] No banned characters (smart quotes, Unicode arrows beyond prose dashes)

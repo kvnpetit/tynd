@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
-        OnceLock,
+        Arc, OnceLock,
     },
 };
 
@@ -26,7 +26,11 @@ fn dev_mode() -> bool {
 }
 
 struct Asset {
-    bytes: &'static [u8],
+    /// Refcounted bytes — replaces the previous `Box::leak(&'static [u8])`
+    /// which permanently leaked every cached file. With `Arc<[u8]>`, a
+    /// future hot-reload that swaps `CACHE` can drop the old assets when
+    /// no in-flight response still holds a clone.
+    bytes: Arc<[u8]>,
     /// MIME stored as a heap string so `mime_guess` can return arbitrary
     /// content types — we used to keep this `&'static str` against a
     /// hand-rolled match, but `mime_guess::Mime::essence_str` borrows from
@@ -105,7 +109,12 @@ fn walk(base: &PathBuf, cur: &PathBuf, map: &mut HashMap<String, Asset>) {
             "public, max-age=31536000, immutable"
         };
 
-        let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
+        // SAFETY: previously this was `Box::leak(...)` which made every
+        // dev hot-reload permanently leak the asset bytes. `Arc<[u8]>`
+        // keeps the same shared-ownership semantics for the cache while
+        // letting the allocation be freed when the cache is dropped or
+        // replaced.
+        let bytes: Arc<[u8]> = Arc::from(bytes.into_boxed_slice());
         map.insert(
             key,
             Asset {
@@ -181,7 +190,11 @@ pub fn handle(static_dir: &str, request: &Request<Vec<u8>>) -> Response<Cow<'sta
                     .header("Content-Security-Policy", default_csp());
             }
 
-            rsp.body(Cow::Borrowed(a.bytes)).unwrap()
+            // wry's custom-protocol response body is `Cow<'static, [u8]>`,
+            // so we materialize the `Arc<[u8]>` into an owned `Vec` here.
+            // The Arc keeps the cache copy alive for any concurrent
+            // responses; this Vec is just the per-response payload.
+            rsp.body(Cow::Owned(a.bytes.to_vec())).unwrap()
         },
         None => Response::builder()
             .status(StatusCode::NOT_FOUND)
@@ -250,6 +263,132 @@ fn default_csp() -> &'static str {
      'self' tynd: tynd-bin: data: blob:; script-src 'self' tynd:; style-src 'self' tynd: \
      'unsafe-inline'; font-src 'self' tynd: data:; connect-src 'self' tynd: tynd-bin: ipc: https: \
      wss:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+}
+
+// -----------------------------------------------------------------------
+// W4.3 — scheme tests
+//
+// `CACHE` is a process-global `OnceLock<AssetCache>` that the production
+// `handle()` populates from the static-dir argument. Unit tests can't
+// cleanly init/replace it across cases, so the tests here focus on the
+// pieces we *can* exercise without poisoning shared state:
+//   * `AssetCache::load` building a map from disk + serving lookups.
+//   * `mime_for` covering the bundler-artefact + `.zst` strip cases that
+//     the cache feeds into `handle`.
+//   * `set_dev_mode(true)` round-trip + dev `serve_from_disk` reading
+//     fresh bytes (this is the cache-bypass branch — no `OnceLock`
+//     interaction).
+// -----------------------------------------------------------------------
+
+#[cfg(test)]
+mod scheme_tests {
+    use super::*;
+    use wry::http::Method;
+
+    fn make_request(uri: &str) -> Request<Vec<u8>> {
+        Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .body(Vec::new())
+            .unwrap()
+    }
+
+    #[test]
+    fn asset_cache_loads_files_and_serves_them() {
+        // AssetCache::load walks a directory once and stores
+        // Arc<[u8]> per file. Smoke-test the load + serve path
+        // without going through the global CACHE so this test stays
+        // independent of test ordering.
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("sub");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(dir.path().join("index.html"), b"<!doctype html>").unwrap();
+        std::fs::write(nested.join("app.js"), b"console.log(1)").unwrap();
+
+        let cache = AssetCache::load(&dir.path().to_string_lossy());
+
+        let html = cache.get("index.html").expect("index.html in cache");
+        assert_eq!(html.bytes.as_ref(), b"<!doctype html>");
+        assert!(
+            html.mime.starts_with("text/html"),
+            "expected text/html mime, got {}", html.mime,
+        );
+        // index.html gets `no-cache` so editor saves land after a reload.
+        assert_eq!(html.cache_control, "no-cache");
+
+        let js = cache.get("sub/app.js").expect("sub/app.js in cache");
+        assert_eq!(js.bytes.as_ref(), b"console.log(1)");
+        assert!(
+            js.mime.starts_with("application/javascript"),
+            "expected JS mime, got {}", js.mime,
+        );
+        // Hashed assets get the long immutable cache.
+        assert!(js.cache_control.contains("immutable"));
+    }
+
+    #[test]
+    fn asset_cache_decompresses_zst_suffix() {
+        // CLI-side zstd compression: assets land on disk as `<name>.zst`
+        // and load() must decompress them in memory under the
+        // un-suffixed key. A regression here would serve raw zstd bytes
+        // to the webview (binary garbage).
+        let dir = tempfile::tempdir().unwrap();
+        let original = b"const greeting = 'hi';";
+        let compressed = zstd::encode_all(&original[..], 3).unwrap();
+        std::fs::write(dir.path().join("hashed.js.zst"), compressed).unwrap();
+
+        let cache = AssetCache::load(&dir.path().to_string_lossy());
+
+        // Key is the un-suffixed name; bytes are the original payload.
+        let asset = cache.get("hashed.js").expect("decompressed under .js key");
+        assert_eq!(asset.bytes.as_ref(), original);
+        // `.zst` key MUST NOT appear — that would mean we cached the
+        // compressed form and the decompression branch never ran.
+        assert!(cache.get("hashed.js.zst").is_none());
+    }
+
+    #[test]
+    fn dev_mode_serves_fresh_bytes_from_disk() {
+        // `set_dev_mode(true)` flips a process-global atomic that
+        // `handle()` reads to decide whether to consult the cache or
+        // re-read from disk. Editor-save workflow expects the second
+        // request to see the new contents — exercise the bypass.
+        // We hit the explicit file path (not "/") because the dev-mode
+        // serve path canonicalizes against `static_dir` and treats `""`
+        // as "the dir itself" (which fails to read as a file). The
+        // production webview always requests a concrete asset URL once
+        // the SPA boots, so the explicit path is a faithful proxy.
+        let dir = tempfile::tempdir().unwrap();
+        let asset_name = "main.js";
+        std::fs::write(dir.path().join(asset_name), b"console.log('v1')").unwrap();
+        let static_dir = dir.path().to_string_lossy().to_string();
+
+        // Save current dev-mode flag and restore on exit so we don't
+        // contaminate other tests in the same binary.
+        struct DevModeGuard(bool);
+        impl Drop for DevModeGuard {
+            fn drop(&mut self) {
+                set_dev_mode(self.0);
+            }
+        }
+        let _restore = DevModeGuard(dev_mode());
+        set_dev_mode(true);
+
+        let url = format!("tynd://localhost/{asset_name}");
+        let r1 = handle(&static_dir, &make_request(&url));
+        assert_eq!(r1.status(), StatusCode::OK);
+        assert_eq!(r1.body().as_ref(), b"console.log('v1')");
+
+        // Editor save → write a new payload.
+        std::fs::write(dir.path().join(asset_name), b"console.log('v2')").unwrap();
+        let r2 = handle(&static_dir, &make_request(&url));
+        assert_eq!(r2.status(), StatusCode::OK);
+        assert_eq!(
+            r2.body().as_ref(),
+            b"console.log('v2')",
+            "dev mode must bypass cache on every request",
+        );
+    }
 }
 
 /// Resolve the response Content-Type for a static asset.

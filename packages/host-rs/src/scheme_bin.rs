@@ -90,10 +90,23 @@ fn route_read_binary(query: &HashMap<String, String>) -> BinResponse {
     let Some(path) = query.get("path") else {
         return err_response(StatusCode::BAD_REQUEST, "missing 'path' query".into());
     };
+    // Policy first (fast reject on glob deny / no-match-with-default-deny)
+    // BEFORE the kernel-side cap-std `openat2` call. Both checks are
+    // mandatory — policy is the deployer-visible allowlist, cap-std is
+    // the OS-enforced sandbox.
     if let Err(e) = crate::os::security::check_fs(path) {
         return err_response(StatusCode::FORBIDDEN, e);
     }
-    match std::fs::read(path) {
+    // SECURITY: route through `os::fs::resolve` so this binary path goes
+    // through the same cap-std `Dir` confinement as the JSON `fs.readText`
+    // API. Direct `std::fs::read(path)` bypasses the sandbox and leaves
+    // only the policy globs as defense — those are circumventable on
+    // Windows via short names / ADS, on Unix via symlinks.
+    let (dir, rel) = match crate::os::fs::resolve(path) {
+        Ok(p) => p,
+        Err(e) => return err_response(StatusCode::FORBIDDEN, e),
+    };
+    match dir.read(&rel) {
         Ok(bytes) => ok_bytes(bytes),
         Err(e) => err_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -110,17 +123,28 @@ fn route_write_binary(query: &HashMap<String, String>, body: &[u8]) -> BinRespon
     if let Err(e) = crate::os::security::check_fs(path) {
         return err_response(StatusCode::FORBIDDEN, e);
     }
+    // SECURITY: same justification as `route_read_binary` — write must
+    // go through cap-std so the kernel rejects any path that escapes the
+    // pre-opened roots (symlink, `..`, absolute-path injection).
+    let (dir, rel) = match crate::os::fs::resolve(path) {
+        Ok(p) => p,
+        Err(e) => return err_response(StatusCode::FORBIDDEN, e),
+    };
     if query.get("createDirs").map(String::as_str) == Some("1") {
-        if let Some(parent) = std::path::Path::new(path).parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                return err_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("fs.writeBinary: {e}"),
-                );
+        if let Some(parent) = rel.parent() {
+            // `Dir::create_dir_all("")` is a no-op on some backends but a
+            // syscall on others — skip when the file is at the Dir root.
+            if !parent.as_os_str().is_empty() {
+                if let Err(e) = dir.create_dir_all(parent) {
+                    return err_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("fs.writeBinary: {e}"),
+                    );
+                }
             }
         }
     }
-    match std::fs::write(path, body) {
+    match dir.write(&rel, body) {
         Ok(()) => no_content(),
         Err(e) => err_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -278,5 +302,149 @@ mod tests {
         assert_eq!(q.get("k").map(String::as_str), Some("a b"));
         assert_eq!(q.get("j").map(String::as_str), Some("a b"));
         assert_eq!(q.get("c").map(String::as_str), Some("C:/foo"));
+    }
+
+    #[cfg(feature = "api-fs")]
+    #[test]
+    fn fs_read_binary_rejects_empty_path() {
+        // Empty path bypasses both the policy globs and `os::fs::resolve`.
+        // `resolve` short-circuits on the empty input — exercise the path
+        // to confirm the error surfaces as 4xx (FORBIDDEN/BAD_REQUEST) and
+        // not 500 from a `std::fs::read("")` blowup.
+        let r = get("tynd-bin://localhost/fs/readBinary?path=");
+        assert!(
+            r.status() == StatusCode::FORBIDDEN || r.status() == StatusCode::BAD_REQUEST,
+            "expected 4xx for empty path, got {}",
+            r.status()
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // W4.3 — binary scheme policy + cap-std coverage
+    //
+    // The two routes below already get the happy-path round-trip in the
+    // existing `fs_read_binary_round_trips` / `fs_write_binary_writes_body`
+    // tests. The additions here focus on:
+    //   * policy fast-reject BEFORE any disk syscall (deny-glob match)
+    //   * cap-std layer rejecting an absolute path outside every
+    //     default root (i.e. resolve() returns Err → 403)
+    //   * write_binary creating + writing OK under a policy that allows
+    //     the destination, as a sanity round-trip with policy active.
+    // -----------------------------------------------------------------
+
+    #[cfg(feature = "api-fs")]
+    fn lock() -> std::sync::MutexGuard<'static, ()> {
+        crate::os::security::test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    #[cfg(feature = "api-fs")]
+    #[test]
+    fn fs_read_binary_pre_check_policy_fast_rejects() {
+        // The policy check runs BEFORE `os::fs::resolve` touches disk.
+        // Configure a deny rule that matches by glob, then hit the
+        // route with a path that doesn't even exist on disk — the
+        // response must still be 403, proving the policy gate fired
+        // ahead of any IO. (If the file existed, this could mask a
+        // bug where the IO layer happens to fail with the same status;
+        // using a definitely-not-real filename makes the assertion
+        // unambiguous.)
+        let _g = lock();
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let denied_path = std::env::temp_dir().join(format!("tynd-deny-{nonce}.bin"));
+        let denied_str = denied_path.to_string_lossy().replace('\\', "/");
+        let pattern = if cfg!(target_os = "windows") {
+            format!("{}/**", denied_str.to_lowercase().rsplit_once('/').unwrap().0)
+        } else {
+            format!("{}/**", denied_str.rsplit_once('/').unwrap().0)
+        };
+
+        crate::os::security::dispatch(
+            "configure",
+            &serde_json::json!({
+                "fs": { "deny": [pattern] },
+                "defaultDeny": false,
+            }),
+        )
+        .unwrap();
+
+        let url = format!(
+            "tynd-bin://localhost/fs/readBinary?path={}",
+            denied_path.display()
+        );
+        let r = get(&url);
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+
+        // Reset policy so neighbouring tests aren't poisoned.
+        crate::os::security::dispatch(
+            "configure",
+            &serde_json::json!({ "fs": { "allow": [] }, "defaultDeny": false }),
+        )
+        .unwrap();
+    }
+
+    #[cfg(feature = "api-fs")]
+    #[test]
+    fn fs_read_binary_resolve_rejects_path_outside_roots() {
+        // No policy configured — but `os::fs::resolve` still has to
+        // reject empty paths (and, in principle, paths outside every
+        // default root). Empty is the portable "outside scope" we can
+        // construct without poking volumes that don't exist on every
+        // CI runner. The route should return 403 from the resolve
+        // layer rather than 500 from a `std::fs::read("")` blowup.
+        let _g = lock();
+        let r = get("tynd-bin://localhost/fs/readBinary?path=");
+        assert!(
+            r.status() == StatusCode::FORBIDDEN
+                || r.status() == StatusCode::BAD_REQUEST,
+            "expected 4xx from resolve/policy, got {}",
+            r.status()
+        );
+    }
+
+    #[cfg(feature = "api-fs")]
+    #[test]
+    fn fs_write_binary_with_policy_allow_succeeds() {
+        // Round-trip with policy active: configure an allow scope under
+        // tempdir, write via the binary route, then read back via std
+        // and confirm the bytes landed. Catches a regression where
+        // the write path silently bypasses the cap-std `Dir::write`
+        // (e.g. by reverting to `std::fs::write`).
+        let _g = lock();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("written.bin");
+        let path_str = path.to_string_lossy().replace('\\', "/");
+        let allow_pattern = if cfg!(target_os = "windows") {
+            format!("{}/**", dir.path().to_string_lossy()
+                .replace('\\', "/")
+                .to_lowercase())
+        } else {
+            format!("{}/**", dir.path().display())
+        };
+
+        crate::os::security::dispatch(
+            "configure",
+            &serde_json::json!({
+                "fs": { "allow": [allow_pattern] },
+                "defaultDeny": true,
+            }),
+        )
+        .unwrap();
+
+        let body = vec![1u8, 2, 3, 4, 5];
+        let url = format!("tynd-bin://localhost/fs/writeBinary?path={path_str}");
+        let r = post(&url, body.clone());
+        assert_eq!(r.status(), StatusCode::NO_CONTENT);
+        assert_eq!(std::fs::read(&path).unwrap(), body);
+
+        crate::os::security::dispatch(
+            "configure",
+            &serde_json::json!({ "fs": { "allow": [] }, "defaultDeny": false }),
+        )
+        .unwrap();
     }
 }

@@ -53,6 +53,15 @@ enum UserEvent {
         method: String,
         args: Value,
     },
+    /// Menu-bar mutations (`menu.update`, `menu.setItemEnabled`, …). Routed
+    /// through the event loop because muda's items are `!Send` on
+    /// Windows / macOS and live on the main thread alongside the menu bar.
+    MenuCmd {
+        label: String,
+        id: String,
+        method: String,
+        args: Value,
+    },
     /// Sent by a timeout thread when on_close takes too long
     ForceExit,
     /// Sent 500ms after CloseRequested if `cancelClose()` wasn't called.
@@ -352,7 +361,13 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             },
 
             Event::UserEvent(UserEvent::FlushYields) => {
-                flush_scheduled.store(false, Ordering::SeqCst);
+                // SAFETY: store(false) BEFORE flush ensures yields arriving
+                // during flush will see `flush_scheduled=false` and
+                // re-spawn a new FlushYields. Doing it after creates a
+                // lost-wakeup race where yields land between flush and
+                // store and stay buffered until the next yield bumps the
+                // bucket past `YIELD_BATCH_MAX`.
+                flush_scheduled.store(false, Ordering::Release);
                 flush_yields(&mut yield_buffer, &webview, &secondaries);
             },
 
@@ -662,6 +677,27 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                 let _ = webview_for(&label, &webview, &secondaries).evaluate_script(&script);
             },
 
+            Event::UserEvent(UserEvent::MenuCmd {
+                label,
+                id,
+                method,
+                args,
+            }) => {
+                // Menu mutations don't need the bar handle — `menu::dispatch`
+                // looks items up in the thread-local registry that
+                // `build_bar` populates. If no bar was built (empty config)
+                // the registry is empty and every `update` rejects with
+                // "item id 'X' not found", which is the right shape — apps
+                // that didn't configure a menu bar shouldn't be calling
+                // `menu.update` in the first place.
+                let (ok, value) = match menu::dispatch(&method, &args) {
+                    Ok(v) => (true, v),
+                    Err(e) => (false, Value::String(e)),
+                };
+                let script = ipc::eval_os_result(&id, ok, &value);
+                let _ = webview_for(&label, &webview, &secondaries).evaluate_script(&script);
+            },
+
             Event::UserEvent(UserEvent::OsEventScript(script)) => {
                 let _ = webview.evaluate_script(&script);
                 for entry in secondaries.values() {
@@ -833,23 +869,67 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     })
 }
 
-/// Cheap deep-link detector: `<scheme>://...` where scheme begins with a
-/// letter and contains only RFC-3986 scheme characters. We don't restrict
-/// to configured protocols — app authors filter by scheme in their handler
-/// if they want to narrow.
+/// Strict deep-link detector. Parses `s` with `url::Url::parse` and only
+/// accepts an allowlisted scheme:
+///
+/// - `http` / `https` — standard web URLs
+/// - `file` — bare `file://host/path` only; relative `file://./…` and
+///   host-less drive paths are rejected
+/// - the optional custom scheme registered via [`set_deep_link_scheme`]
+///   (W3.1 deep-linking wires this up; defaults to none until then)
+///
+/// Explicitly rejected even if syntactically valid: `javascript`, `data`,
+/// `vbscript`, `about`, `chrome`, `chrome-extension`, `blob`, `view-source`.
+/// Without this guard a user double-clicking `myapp javascript:alert(1)`
+/// (or a single-instance handover with a hostile argv) would dispatch the
+/// payload string to the `app:open-url` handler verbatim.
 fn looks_like_url(s: &str) -> bool {
-    let Some((scheme, rest)) = s.split_once("://") else {
+    let Ok(parsed) = url::Url::parse(s) else {
         return false;
     };
-    if scheme.is_empty() || rest.is_empty() {
-        return false;
+    let scheme = parsed.scheme();
+
+    // Hard deny — these schemes are dangerous as deep-link payloads even
+    // when they parse, and no legitimate caller should emit them.
+    match scheme {
+        "javascript" | "data" | "vbscript" | "about" | "chrome" | "chrome-extension"
+        | "blob" | "view-source" => return false,
+        _ => {},
     }
-    let mut chars = scheme.chars();
-    let first = chars.next();
-    if !first.is_some_and(|c| c.is_ascii_alphabetic()) {
-        return false;
+
+    if matches!(scheme, "http" | "https") {
+        return true;
     }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+    if scheme == "file" {
+        // Reject `file://./relative` / `file://../escape` and any URL
+        // whose host segment contains traversal markers. `Url::parse`
+        // accepts these as opaque hosts; we don't.
+        let host = parsed.host_str().unwrap_or("");
+        if host == "." || host == ".." || host.contains("./") || host.contains("../") {
+            return false;
+        }
+        return true;
+    }
+    if let Some(custom) = deep_link_scheme() {
+        if scheme.eq_ignore_ascii_case(custom) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Custom scheme allowed by [`looks_like_url`]. Populated by the (future)
+/// deep-link plugin once W3.1 lands; until then this stays `None` and
+/// only `http` / `https` / `file` are accepted.
+static DEEP_LINK_SCHEME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+#[allow(dead_code)]
+pub(crate) fn set_deep_link_scheme(scheme: &str) {
+    let _ = DEEP_LINK_SCHEME.set(scheme.to_ascii_lowercase());
+}
+
+fn deep_link_scheme() -> Option<&'static str> {
+    DEEP_LINK_SCHEME.get().map(String::as_str)
 }
 
 /// Cancel every active streaming call whose origin window just closed. Looks
@@ -1000,13 +1080,27 @@ fn page_load_handler(label: &str) -> impl Fn(PageLoadEvent, String) + 'static {
 /// Init script injected into every webview so frontend code knows which window
 /// it's running in (for filtering broadcast `window:*` events by label).
 ///
-/// The label is JSON-encoded via `serde_json` so embedded newlines, U+2028 /
-/// U+2029, quotes, backslashes, and other JS-string-terminating characters
-/// can't break the script — same defence in depth pattern used for all the
-/// other webview eval strings in `ipc.rs`.
+/// Uses `serialize_to_javascript` so embedded U+2028 / U+2029, `</script>`,
+/// quotes, and other JS-string-terminating characters are escaped at the
+/// serialization layer — safer than the previous `serde_json::to_string` +
+/// `format!` approach which could still produce literal line terminators in
+/// some edge cases.
 fn inject_window_label(label: &str) -> String {
-    let label_js = serde_json::to_string(label).unwrap_or_else(|_| "\"\"".into());
-    format!("window.__TYND_WINDOW_LABEL__ = {label_js};")
+    use serialize_to_javascript::{Options, Template};
+
+    #[derive(Template)]
+    struct WindowLabelScript<'a> {
+        label: &'a str,
+    }
+
+    let script = WindowLabelScript { label };
+    match script.render(
+        "window.__TYND_WINDOW_LABEL__ = __TEMPLATE_label__;",
+        &Options::default(),
+    ) {
+        Ok(s) => s.into_string(),
+        Err(_) => r#"window.__TYND_WINDOW_LABEL__ = "";"#.to_owned(),
+    }
 }
 
 /// Create a secondary window + webview + state tracker. Called on the main
@@ -1194,5 +1288,140 @@ impl WindowState {
             );
         }
         *self = next;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    use super::*;
+
+    #[test]
+    fn looks_like_url_accepts_http_https() {
+        assert!(looks_like_url("https://example.com"));
+        assert!(looks_like_url("http://example.com/path?q=1"));
+        assert!(looks_like_url("https://example.com/path#frag"));
+    }
+
+    #[test]
+    fn looks_like_url_accepts_file_with_host() {
+        assert!(looks_like_url("file:///etc/hosts"));
+        assert!(looks_like_url("file://localhost/etc/hosts"));
+    }
+
+    #[test]
+    fn looks_like_url_rejects_dangerous_schemes() {
+        // The whole point of S6 — these used to pass the cheap detector
+        // and reach `app:open-url` handlers.
+        assert!(!looks_like_url("javascript:alert(1)"));
+        assert!(!looks_like_url("JAVASCRIPT:alert(1)"));
+        assert!(!looks_like_url("data:text/html,<script>alert(1)</script>"));
+        assert!(!looks_like_url("vbscript:msgbox"));
+        assert!(!looks_like_url("about:blank"));
+        assert!(!looks_like_url("chrome://settings"));
+        assert!(!looks_like_url("chrome-extension://abc/foo"));
+        assert!(!looks_like_url("blob:https://example.com/uuid"));
+        assert!(!looks_like_url("view-source:https://example.com"));
+    }
+
+    #[test]
+    fn looks_like_url_rejects_unknown_scheme_without_registration() {
+        // Custom schemes are off until W3.1 wires `set_deep_link_scheme`.
+        assert!(!looks_like_url("myapp://oauth/callback"));
+    }
+
+    #[test]
+    fn looks_like_url_rejects_garbage() {
+        assert!(!looks_like_url(""));
+        assert!(!looks_like_url("not a url"));
+        assert!(!looks_like_url("://no-scheme"));
+        assert!(!looks_like_url("1http://numeric-prefix"));
+    }
+
+    /// B9 regression: when `flush_scheduled.store(false)` happens BEFORE
+    /// the flush, a yield arriving DURING the flush observes
+    /// `flush_scheduled == false`, so it re-arms a new FlushYields and
+    /// gets seen on the next pass instead of being stranded in the
+    /// buffer until something else bumps it past `YIELD_BATCH_MAX`.
+    ///
+    /// We model the race directly: a producer thread spams "yield" + try
+    /// to schedule a flush, while a consumer thread plays the
+    /// FlushYields handler on a small busy window. The check is that
+    /// every produced yield is eventually flushed.
+    #[test]
+    fn flush_scheduled_release_before_flush_avoids_lost_wakeup() {
+        const PRODUCED: usize = 5_000;
+
+        let flush_scheduled = Arc::new(AtomicBool::new(false));
+        let pending = Arc::new(AtomicUsize::new(0));
+        let flushed = Arc::new(AtomicUsize::new(0));
+        let producer_done = Arc::new(AtomicBool::new(false));
+
+        // Consumer mirrors `Event::UserEvent(UserEvent::FlushYields)`:
+        // store(false) BEFORE the flush so that yields arriving in the
+        // flush window can re-schedule us before we exit.
+        let scheduled = flush_scheduled.clone();
+        let pending_c = pending.clone();
+        let flushed_c = flushed.clone();
+        let done = producer_done.clone();
+        let consumer = std::thread::spawn(move || loop {
+            if !scheduled.load(Ordering::Acquire) {
+                if done.load(Ordering::Acquire) && pending_c.load(Ordering::Acquire) == 0 {
+                    return;
+                }
+                std::thread::yield_now();
+                continue;
+            }
+            // ─── B9 fix: clear BEFORE the flush ───
+            scheduled.store(false, Ordering::Release);
+            // Drain pending yields ("flush"). In the buggy ordering the
+            // store(false) below this line would let a yield arrive
+            // mid-drain, see `scheduled == true`, decline to reschedule,
+            // and be stranded.
+            let drained = pending_c.swap(0, Ordering::AcqRel);
+            flushed_c.fetch_add(drained, Ordering::Relaxed);
+        });
+
+        // Producer mirrors the `BackendEvent::Yield` arm: bump pending,
+        // then try to flip `scheduled` to true if it was false. The
+        // consumer's race window is between its swap(0) and the next
+        // load(scheduled).
+        let scheduled = flush_scheduled.clone();
+        let pending_p = pending.clone();
+        let producer = std::thread::spawn(move || {
+            for _ in 0..PRODUCED {
+                pending_p.fetch_add(1, Ordering::AcqRel);
+                let _ = scheduled.swap(true, Ordering::AcqRel);
+                // Tiny pause — without it the producer monopolizes the
+                // CPU on a single-core scheduler and the race never
+                // surfaces.
+                std::thread::yield_now();
+            }
+            // Final wake in case the last yield landed while the
+            // consumer was mid-flush.
+            scheduled.store(true, Ordering::Release);
+        });
+
+        producer.join().unwrap();
+        producer_done.store(true, Ordering::Release);
+        // Final wake so the consumer doesn't sleep forever waiting on a
+        // schedule that already happened.
+        flush_scheduled.store(true, Ordering::Release);
+        consumer.join().unwrap();
+
+        let flushed = flushed.load(Ordering::Acquire);
+        let pending = pending.load(Ordering::Acquire);
+        assert_eq!(
+            pending, 0,
+            "{pending} yields stranded in buffer (lost wakeup)"
+        );
+        assert_eq!(
+            flushed, PRODUCED,
+            "expected {PRODUCED} yields flushed, got {flushed}"
+        );
     }
 }

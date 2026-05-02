@@ -1,11 +1,13 @@
 import { match } from "ts-pattern";
 import * as v from "valibot";
+import { encodeIpcError, type TyndIpcErrorCode } from "../errors";
 import { dispatchFrontendEmit, FRONTEND_EMIT_FN } from "../frontend-events";
 import { fireClose, fireReady, setEmitFn } from "../lifecycle";
 import { tynd } from "../logger";
 import { getPluginMethod, parsePluginCall } from "../plugin";
 import type { AppConfig } from "../types";
 import { redirectConsoleToStderr } from "./console";
+import { sanitizedMessage } from "./error";
 import { decodeArgs, encode as encodeWire } from "./wire";
 
 const CallMsgSchema = v.object({
@@ -46,6 +48,23 @@ const _activeStreams = new Map<string, StreamState>();
 
 /** Cap single stdin chunk buffer; larger implies malformed framing since binary goes via bin scheme. */
 const MAX_STDIN_BUFFER = 8 * 1024 * 1024;
+
+/**
+ * Marker thrown by handler bodies / encode helpers so the outer `catch`
+ * knows to surface a non-default `code` (e.g. PROTOCOL_ERROR for an
+ * unencodable return). User handlers' own throws stay the default
+ * HANDLER_THREW path.
+ */
+class IpcDispatchError extends Error {
+  constructor(
+    readonly ipcCode: TyndIpcErrorCode,
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message, cause !== undefined ? { cause } : undefined);
+    this.name = "IpcDispatchError";
+  }
+}
 
 function _isAsyncIterable(x: unknown): x is AsyncIterable<unknown> {
   return (
@@ -97,9 +116,7 @@ export function startFull(config: AppConfig): void {
     try {
       p = encodeWire(payload);
     } catch (e) {
-      tynd.error(
-        `emit: payload for '${name}' is not encodable (${e instanceof Error ? e.message : String(e)}) — dropped`,
-      );
+      tynd.error(`emit: payload for '${name}' is not encodable (${sanitizedMessage(e)}) — dropped`);
       return;
     }
     // Frame is JSON; the user payload rides as a devalue string in `p`.
@@ -228,9 +245,9 @@ async function handleCall(
   try {
     args = decodeArgs(msg.a);
   } catch (e) {
-    process.stdout.write(
-      `${JSON.stringify({ type: "return", id, ok: false, error: `invalid args for '${fn}': ${e instanceof Error ? e.message : String(e)}` })}\n`,
-    );
+    // SECURITY: errors crossing the IPC boundary are stringified to
+    // {name, message} only — see runtime/error.ts.
+    writeIpcError(id, "INVALID_ARGS", `invalid args for '${fn}': ${sanitizedMessage(e)}`, fn);
     return;
   }
   try {
@@ -241,7 +258,8 @@ async function handleCall(
     if (fn === FRONTEND_EMIT_FN) {
       const eventName = args[0];
       if (typeof eventName !== "string") {
-        throw new Error(
+        throw new IpcDispatchError(
+          "INVALID_ARGS",
           `${FRONTEND_EMIT_FN}: expected args[0] to be an event name string, got ${typeof eventName}`,
         );
       }
@@ -259,7 +277,8 @@ async function handleCall(
     if (pluginCall) {
       const handler = getPluginMethod(pluginCall.plugin, pluginCall.method);
       if (!handler) {
-        throw new Error(
+        throw new IpcDispatchError(
+          "UNKNOWN_FN",
           `plugin "${pluginCall.plugin}" has no method "${pluginCall.method}" (missing from tynd.config.ts::plugins?)`,
         );
       }
@@ -268,40 +287,53 @@ async function handleCall(
       const mod = await getModule(entryPath);
       const handler = mod[fn];
       if (typeof handler !== "function") {
-        throw new Error(`"${fn}" is not an exported function`);
+        throw new IpcDispatchError("UNKNOWN_FN", `"${fn}" is not an exported function`);
       }
       resolved = await (handler as (...a: unknown[]) => unknown)(...args);
     }
 
     if (_isAsyncIterable(resolved)) {
-      await streamIterable(id, resolved);
+      await streamIterable(id, resolved, fn);
     } else {
       let v: string;
       try {
         v = encodeWire(resolved);
       } catch (e) {
-        throw new Error(
-          `return value for '${fn}' is not encodable: ${e instanceof Error ? e.message : String(e)}`,
+        throw new IpcDispatchError(
+          "PROTOCOL_ERROR",
+          `return value for '${fn}' is not encodable: ${sanitizedMessage(e)}`,
         );
       }
       process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, v })}\n`);
     }
   } catch (e) {
     _activeStreams.delete(id);
-    process.stdout.write(
-      // errorMessage() returns a plain string, so stringify cannot fail here.
-      `${JSON.stringify({ type: "return", id, ok: false, error: errorMessage(e) })}\n`,
-    );
+    // SECURITY: errors crossing the IPC boundary are stringified to
+    // {name, message} only — sanitizedMessage() drops e.stack so we
+    // never leak host filesystem paths, env values, or secrets baked
+    // into an Error by accident. See runtime/error.ts for the contract.
+    const code: TyndIpcErrorCode = e instanceof IpcDispatchError ? e.ipcCode : "HANDLER_THREW";
+    writeIpcError(id, code, sanitizedMessage(e), fn);
   }
 }
 
-/** Keep error surfaces short — stack traces can leak file paths, env
- * values, or embedded secrets if the caller crafted them into an Error. */
-function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+/** Single emitter for IPC error-return frames — keeps the wire envelope (sentinel + JSON payload) DRY. */
+function writeIpcError(id: string, code: TyndIpcErrorCode, message: string, fn?: string): void {
+  process.stdout.write(
+    `${JSON.stringify({
+      type: "return",
+      id,
+      ok: false,
+      error: encodeIpcError({ code, message, fn }),
+    })}\n`,
+  );
 }
 
-async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Promise<void> {
+async function streamIterable(
+  id: string,
+  iterable: AsyncIterable<unknown>,
+  fn: string,
+): Promise<void> {
   const iter = iterable[Symbol.asyncIterator]();
   const state: StreamState = { iter, credit: STREAM_CREDIT, waiter: null };
   _activeStreams.set(id, state);
@@ -329,8 +361,9 @@ async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Pro
       try {
         v = encodeWire(step.value);
       } catch (e) {
-        throw new Error(
-          `yielded value is not encodable on stream ${id}: ${e instanceof Error ? e.message : String(e)}`,
+        throw new IpcDispatchError(
+          "PROTOCOL_ERROR",
+          `yielded value is not encodable on stream ${id}: ${sanitizedMessage(e)}`,
         );
       }
       process.stdout.write(`${JSON.stringify({ type: "yield", id, v })}\n`);
@@ -358,9 +391,7 @@ async function streamIterable(id: string, iterable: AsyncIterable<unknown>): Pro
   try {
     v = encodeWire(final);
   } catch (e) {
-    process.stdout.write(
-      `${JSON.stringify({ type: "return", id, ok: false, error: `final value is not encodable: ${e instanceof Error ? e.message : String(e)}` })}\n`,
-    );
+    writeIpcError(id, "PROTOCOL_ERROR", `final value is not encodable: ${sanitizedMessage(e)}`, fn);
     return;
   }
   process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, v })}\n`);

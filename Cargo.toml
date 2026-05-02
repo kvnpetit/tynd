@@ -20,15 +20,22 @@ resolver = "2"
 ignored = [
     "anyhow",
     "bidiff",
+    "bipatch",
     "cap-tempfile",
     "fastrand",
     "portable-pty",
     "rusqlite",
     "thiserror",
+    # Staged for future code — declared at the workspace level so consumers
+    # (host-rs feature flags, future plugins) can opt in via `workspace = true`
+    # without re-pinning versions. Shear them when wired:
+    "base64-simd",   # SIMD base64 fallback for binary IPC string transit
+    "swift-rs",      # Swift↔Rust bridge for niche macOS-native APIs
 ]
 
 [workspace.package]
 version       = "1.0.0"
+publish       = false
 edition       = "2021"
 rust-version  = "1.83"
 license       = "Apache-2.0"
@@ -156,7 +163,9 @@ tynd_plugin_sdk = { path = "../plugin-sdk/native" }
 # `anyhow` for app code with `.context()`, `thiserror` for typed public
 # error enums in libraries (plugin-sdk).
 tracing            = "0.1"
-tracing-subscriber = { version = "0.3", features = [ "env-filter", "fmt" ] }
+# Ajout `json` pour logs structurés en prod (ingestion centralisée
+# style Loki/Datadog côté apps Tynd qui veulent observer leur backend).
+tracing-subscriber = { version = "0.3", features = [ "env-filter", "fmt", "json" ] }
 anyhow             = "1.0"
 thiserror          = "2.0"
 
@@ -169,7 +178,13 @@ ctrlc = { version = "3.5", features = [ "termination" ] }
 # Binary diff for delta updates (replaces full-binary downloads in the
 # updater). `bidiff` over `bsdiff` — parallel scanning, divsufsort,
 # lower memory footprint. Pair with zstd for compressed patches.
-bidiff = "1.0"
+# `bidiff` is the diff side (used by the bundler to *produce* patches);
+# `bipatch` is the patch side (used by the updater to *apply* them on
+# the end-user machine). They share an on-disk format (`MAGIC = 0xB1DF`
+# + version + varint-encoded controls) so a patch produced by one
+# always round-trips through the other at the same major version.
+bidiff  = "1.0"
+bipatch = "1.0"
 
 # MIME detection from path extension — replaces a hand-rolled match arm
 # that drifted whenever a new asset extension showed up.
@@ -187,6 +202,18 @@ dunce = "1.0"
 # Cargo-safe slug for app-name → on-disk directory. Replaces an inline
 # sanitizer in `webview_data_dir`.
 slug = "0.1"
+
+# Strict URL parser — replaces a hand-rolled `looks_like_url` that
+# happily accepted `javascript:` / `data:` strings the host then
+# forwarded to the `app:open-url` handler. `url::Url::parse` enforces
+# RFC 3986 scheme + structure so we can scheme-allowlist on parsed
+# input.
+url = "2.5"
+
+# Semver version parsing and requirement matching — used by the updater to
+# compare `currentVersion` against the manifest version with full SemVer
+# semantics (pre-release ordering, build-metadata stripping, req ranges).
+semver = { version = "1.0", features = [ "serde" ] }
 
 # Pattern matching for the security policy globs. Drops a hand-rolled
 # recursive matcher and fixes a `\\` → `/` asymmetry on Windows.
@@ -219,6 +246,13 @@ notify-debouncer-full = "0.7"
 # and the typed JS proxy.
 specta = { version = "2.0.0-rc.22", features = [ "derive" ] }
 specta-typescript = "0.0.9"
+# Alias for the underscore-named crate that sibling plugin path-deps
+# (`plugins/*/native`) declare as `specta_typescript = { workspace = true }`.
+# Cargo treats `specta_typescript` and `specta-typescript` as distinct names;
+# this entry resolves the underscore lookup to the same upstream crate via
+# the explicit `package = "..."` rename so the plugin workspace and the
+# tynd workspace stay coherent.
+specta_typescript = { package = "specta-typescript", version = "0.0.9" }
 
 # UTF-8-guaranteed paths. Used at the IPC boundary to eliminate
 # `.to_string_lossy()` data loss and OsStr footguns on Windows.
@@ -246,10 +280,6 @@ embed_plist = "1.2"
 # `iconutil` shell-out, so Linux/Windows runners can cross-build.
 tauri-icns = "0.1"
 
-# Templating for installer artefacts (WiX `.wxs`, NSIS `.nsi`, AppImage
-# scripts, .desktop entries, Info.plist scaffolding).
-handlebars = "6"
-
 # Recursive directory traversal — bundler asset staging, plugin
 # discovery, dev-server file scans. Faster + cleaner than ad-hoc
 # `read_dir` recursion.
@@ -272,6 +302,128 @@ data-url = "0.3"
 # RAII cleanup that survives panic unwind — webview spawn/teardown,
 # single-instance lock release, build temp-dir cleanup.
 scopeguard = "1.2"
+
+# === Tauri ecosystem standalone (réutilisables hors `tauri` runtime) ===
+
+# Helpers config / HTML / assets / platform / ACL / resources / patterns
+# / MIME. Pas de dep `tauri`/`tauri-runtime`. Donne accès à un système
+# ACL/capabilities mature, l'injection CSP+nonce dans les HTML servis
+# par le custom-scheme, parsing config TOML/JSON5, et helpers
+# platform_target_triple cross-platform.
+tauri-utils = { version = "2.9", features = [
+    "config-toml",         # parse tynd.config.toml si introduit
+    "config-json5",        # autorise commentaires/trailing commas dans config
+    "resources",           # ResourcePaths + glob pour staging assets
+    "schema",              # JSON Schema généré pour ACL manifests
+    "compression",         # brotli pour assets précompressés
+] }
+
+# === Hot path IPC perf ===
+
+# Refcounted zero-copy byte buffers. Remplace `Vec<u8>` partout dans
+# l'IPC binaire — fan-out vers multi-webview = clone Arc gratuit au
+# lieu de copier le payload.
+bytes = "1.7"
+
+# Sérialisation zero-copy binaire avec validation. 10-100× plus rapide
+# que serde_json pour structures Rust↔Rust (host ↔ plugins natifs,
+# host ↔ Bun process). serde_json reste sur l'edge JS où le runtime
+# parle JSON nativement.
+rkyv = { version = "0.8", features = ["bytecheck"] }
+
+# Stack-allocated petits vecs. Args RPC font typiquement <8 items —
+# évite l'alloc heap sur le hot path dispatch.
+smallvec = { version = "1.13", features = ["serde", "union"] }
+
+# === OS surface étendue (parité Tauri + différenciants) ===
+
+# CPU/RAM/disque/processus cross-platform. Exposé via `os.systemStats()`
+# côté JS — load avg, free mem, mounted disks, process tree.
+sysinfo = { version = "0.32", default-features = false, features = [
+    "system",   # CPU + memory
+    "disk",     # mounted disks
+    "network",  # network counters (hors interfaces — voir if-addrs)
+] }
+
+# Interfaces réseau (IPs locales, MAC, up/down). `os.network()`.
+# `getifaddrs` (Unix) / `GetAdaptersAddresses` (Win).
+if-addrs = "0.13"
+
+# Screenshot écran/window — Tauri n'a PAS ça nativement, gain feature
+# différenciant pour les apps de capture / annotation / partage écran.
+xcap = "0.0.13"
+
+# Battery info pour `power.battery()` — niveau, statut, temps restant.
+battery = "0.7"
+
+# === Sécu / UX prod ===
+
+# Vault chiffré fichier (AES-GCM-SIV + scrypt). Plus léger qu'IOTA
+# Stronghold, maintenance saine. Pour `keyring` étendu : storage
+# secrets gros (clés API, tokens longs) hors limite size keychain.
+cocoon = "0.4"
+
+# Memory wiping for secrets (passwords, keys). `Zeroizing<T>` zeros the
+# heap on drop — `Vec::drop` releases the allocation but doesn't scrub
+# the bytes, so a future allocator can hand the same page out and a
+# memory dump still finds the cleartext.
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
+
+# Crash log lisible utilisateur final — installe un `panic_hook` qui
+# génère un rapport markdown avec stack trace + path, message lisible
+# au lieu du `thread 'main' panicked at ...` brut.
+human-panic = "2"
+
+# Touch ID (macOS) / Face ID (iOS) / Windows Hello / fingerprint
+# (Linux fprintd) cross-platform. Pour `auth.requestBiometric()`.
+robius-authentication = "0.1"
+
+# === Plugins manquants vs Tauri v2 ===
+
+# Multipart uploads chunked avec progress — backing pour
+# `http.upload(file, { onProgress })` côté API publique.
+multer = "3"
+
+# === Optionnel ===
+
+# SIMD base64 pour fallback du binary IPC quand un payload doit
+# transiter en string (rare, mais hot quand ça arrive). Marked
+# `optional = true` côté consommateur (host-rs) si gardé derrière
+# une feature ; ici en workspace dep on ne peut pas le marquer.
+base64-simd = "0.8"
+
+# Bridge Swift↔Rust avec build.rs auto. Pour features macOS-natives
+# (FSEvents avancés, NSAppleScript, AVFoundation) qui n'ont pas de
+# bindings Rust idiomatiques. À tirer derrière une feature côté
+# consommateur uniquement si un besoin spécifique macOS apparaît.
+swift-rs = "1.0"
+
+# Property-based testing (dev-only) — used by host-rs to fuzz path
+# canonicalization invariants and updater semver ordering against the
+# `semver` crate. Workspace-pinned so future test-only consumers stay
+# on a coherent version.
+proptest = "1"
+
+# === Observability — production export pipelines (opt-in) ===
+#
+# OpenTelemetry traces export via OTLP (gRPC). Pulled only when the
+# consumer enables the `obs-otel` feature on `tynd-host`. Pinned to the
+# 0.27 line so the API surface (`new_exporter().tonic()` /
+# `new_pipeline().tracing().install_batch(...)`) stays stable across
+# bumps; `tracing-opentelemetry` tracks `opentelemetry` by one minor.
+opentelemetry         = { version = "0.27", default-features = false, features = [ "trace" ] }
+opentelemetry_sdk     = { version = "0.27", default-features = false, features = [ "trace", "rt-tokio" ] }
+opentelemetry-otlp    = { version = "0.27", default-features = false, features = [ "trace", "grpc-tonic" ] }
+tracing-opentelemetry = { version = "0.28", default-features = false, features = [ "tracing-log" ] }
+
+# Sentry crash reporter — paired with the tracing panic hook so user
+# crashes ship with structured spans + breadcrumbs. `default-features
+# = false` strips the platform-specific `debug-images` crate (we ship
+# stripped release binaries anyway). The `transport` feature bundles
+# the reqwest+tokio HTTPS sender along with `native-tls`, matching the
+# rest of the workspace's networking layers; gated under the
+# `obs-sentry` feature on `tynd-host`.
+sentry = { version = "0.34", default-features = false, features = [ "backtrace", "contexts", "panic", "transport" ] }
 
 [workspace.lints.rust]
 unused_must_use               = "deny"

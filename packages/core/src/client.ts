@@ -86,7 +86,6 @@ export {
   type UpdaterProgress,
   updater,
 } from "./client/updater";
-
 // Web-platform globals re-exported so `import * as tynd from "@tynd/core/client"`
 // gives you `tynd.fetch`, `tynd.WebSocket`, `tynd.crypto`, etc. without
 // touching the globals.
@@ -120,4 +119,5 @@ export {
 } from "./client/websocket";
 export { tyndWindow, type WindowPreset } from "./client/window";
 export { type WorkerHandle, workers } from "./client/workers";
+export { TyndIpcError, type TyndIpcErrorCode } from "./errors";
 export type { Emitter, EmitterMap } from "./types";

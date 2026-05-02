@@ -1,4 +1,54 @@
+import { TYND_IPC_ERR_SENTINEL, TyndIpcError, type TyndIpcErrorCode } from "../errors";
 import { tynd } from "../logger";
+
+const KNOWN_IPC_ERROR_CODES: ReadonlySet<TyndIpcErrorCode> = new Set([
+  "UNKNOWN_FN",
+  "INVALID_ARGS",
+  "HANDLER_THREW",
+  "CANCELLED",
+  "TIMEOUT",
+  "PERMISSION_DENIED",
+  "BACKEND_DEAD",
+  "PROTOCOL_ERROR",
+]);
+
+/**
+ * Decode an IPC error payload from the host shim. The shim wraps every
+ * rejected call in `new Error(String(valueStr))`, so we receive an `Error`
+ * whose `.message` MAY start with the `__TYND_IPC_ERR__:` sentinel produced
+ * by the full runtime (`runtime/full.ts::encodeIpcError`).
+ *
+ * - Sentinel match: parse the JSON tail and reconstruct a `TyndIpcError`
+ *   with the original `code` + `fn`. Falls back to HANDLER_THREW if the
+ *   payload is malformed (defensive — shouldn't happen with our own runtime).
+ * - No sentinel: return the original error untouched. Plain `Error` from
+ *   the lite runtime, OS calls (`os_call`), or pre-W7.1 backends.
+ */
+export function decodeIpcError(err: unknown, fnHint?: string): unknown {
+  if (!(err instanceof Error) || typeof err.message !== "string") return err;
+  if (!err.message.startsWith(TYND_IPC_ERR_SENTINEL)) return err;
+  const tail = err.message.slice(TYND_IPC_ERR_SENTINEL.length);
+  let payload: { name?: unknown; code?: unknown; message?: unknown; fn?: unknown };
+  try {
+    payload = JSON.parse(tail) as typeof payload;
+  } catch {
+    // Malformed sentinel — surface as PROTOCOL_ERROR rather than swallowing
+    // info; this is a runtime/transport bug, not a user error.
+    return new TyndIpcError({
+      code: "PROTOCOL_ERROR",
+      message: `malformed IPC error envelope: ${tail.slice(0, 200)}`,
+      fn: fnHint,
+      cause: err,
+    });
+  }
+  const code =
+    typeof payload.code === "string" && KNOWN_IPC_ERROR_CODES.has(payload.code as TyndIpcErrorCode)
+      ? (payload.code as TyndIpcErrorCode)
+      : "HANDLER_THREW";
+  const message = typeof payload.message === "string" ? payload.message : err.message;
+  const fn = typeof payload.fn === "string" ? payload.fn : fnHint;
+  return new TyndIpcError({ code, message, fn, cause: err.cause });
+}
 
 /**
  * Handle returned by `window.__tynd__.call`. Awaiting it resolves with the
@@ -91,9 +141,54 @@ export function createCallProxy<T extends object>(
       const extra = extraTraps?.(prop);
       if (extra !== undefined) return extra;
 
-      return (...args: unknown[]) => window.__tynd__.call(routeFn(prop), args);
+      return (...args: unknown[]) => {
+        const wireFn = routeFn(prop);
+        const handle = window.__tynd__.call(wireFn, args);
+        // Return a new handle that intercepts both the awaited final value
+        // and the async-iterable yields, transparently rethrowing host
+        // errors as `TyndIpcError` when the wire envelope is present.
+        return wrapCallHandleErrors(handle, wireFn);
+      };
     },
   });
+}
+
+/**
+ * Wrap a `CallHandle` so any rejection (final await OR per-chunk iteration)
+ * surfaces as `TyndIpcError` when the host's error message carries the
+ * sentinel envelope. Plain rejections (lite runtime, OS calls, legacy)
+ * pass through untouched — `decodeIpcError` is a no-op for those.
+ *
+ * The wrapper preserves `cancel()` and the awaitable + async-iterable
+ * shape; consumers can't tell the difference from a raw handle.
+ */
+function wrapCallHandleErrors(handle: CallHandle, fn: string): CallHandle {
+  // Iteration is delegated 1:1 to the underlying handle's iterator —
+  // wrapping `next()` would insert an extra microtask hop between the
+  // consumer's `await` and the shim's chunk delivery, which is enough
+  // to let the host pre-buffer chunks past a `cancel()` point. Iterator
+  // errors therefore surface as plain `Error` (the sentinel still
+  // travels in `.message`); the awaited final-value path below is the
+  // primary `TyndIpcError` reconstruction site.
+  const decodeReject = (reason: unknown): never => {
+    throw decodeIpcError(reason, fn);
+  };
+
+  const wrapped: CallHandle = {
+    // biome-ignore lint/suspicious/noThenProperty: mirrors CallHandle's intentional PromiseLike shape
+    then<TResult1 = unknown, TResult2 = never>(
+      onfulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null | undefined,
+      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null | undefined,
+    ): PromiseLike<TResult1 | TResult2> {
+      const rejector: (r: unknown) => TResult2 | PromiseLike<TResult2> = onrejected
+        ? (reason) => onrejected(decodeIpcError(reason, fn))
+        : (decodeReject as unknown as (r: unknown) => TResult2);
+      return Promise.resolve(handle).then(onfulfilled ?? undefined, rejector);
+    },
+    cancel: () => handle.cancel(),
+    [Symbol.asyncIterator]: () => handle[Symbol.asyncIterator](),
+  };
+  return wrapped;
 }
 
 const BIN_ORIGIN = "tynd-bin://localhost";

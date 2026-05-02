@@ -9,7 +9,6 @@ use tao::{
 /// Window configuration provided by the TypeScript backend via `app.start()`.
 #[derive(Debug, Deserialize, Default, Clone, Type)]
 #[serde(rename_all = "camelCase")]
-#[specta(rename_all = "camelCase")]
 pub struct WindowConfig {
     pub title: Option<String>,
     pub width: Option<u32>,
@@ -27,6 +26,19 @@ pub struct WindowConfig {
     pub maximized: Option<bool>,
     /// Custom User-Agent string set on every webview request.
     pub user_agent: Option<String>,
+    /// Native blur/material effect applied to the window chrome.
+    ///
+    /// Accepted values and their platform coverage:
+    /// - `"blur"` — Windows 10 acrylic-blur fallback (calls `apply_blur`)
+    /// - `"acrylic"` — Windows 10/11 acrylic (frosted glass)
+    /// - `"mica"` — Windows 11 Mica (desktop-wallpaper tint)
+    /// - `"tabbed"` — Windows 11 Mica-Tabbed variant
+    /// - `"vibrancy"` / `"sidebar"` / `"hud"` — macOS `NSVisualEffectView`
+    ///
+    /// Silently ignored (and logged) on platforms or OS versions that do not
+    /// support the requested effect — vibrancy is optional polish, never a
+    /// hard requirement.
+    pub vibrancy: Option<String>,
 }
 
 /// Build a native window from a `WindowConfig`.
@@ -78,6 +90,40 @@ pub fn build_window<T>(
     }
     if cfg.fullscreen.unwrap_or(false) {
         window.set_fullscreen(Some(tao::window::Fullscreen::Borderless(None)));
+    }
+
+    // Apply native blur/material effect when requested.
+    // Errors are logged and swallowed — vibrancy is cosmetic, never fatal.
+    #[cfg(target_os = "macos")]
+    if let Some(ref v) = cfg.vibrancy {
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+        let material = match v.as_str() {
+            "sidebar" => NSVisualEffectMaterial::Sidebar,
+            "hud"     => NSVisualEffectMaterial::HudWindow,
+            _         => NSVisualEffectMaterial::UnderWindowBackground,
+        };
+        if let Err(e) = apply_vibrancy(&window, material, None, None) {
+            crate::tynd_log!("window-vibrancy: {e}");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    if let Some(ref v) = cfg.vibrancy {
+        match v.as_str() {
+            "mica" | "tabbed" => {
+                if let Err(e) = window_vibrancy::apply_mica(&window, None) {
+                    crate::tynd_log!("window-vibrancy mica: {e}");
+                }
+            },
+            _ => {
+                // "acrylic", "blur", or any unknown value → acrylic frosted glass.
+                if let Err(e) =
+                    window_vibrancy::apply_acrylic(&window, Some((18, 18, 18, 125)))
+                {
+                    crate::tynd_log!("window-vibrancy acrylic: {e}");
+                }
+            },
+        }
     }
 
     window

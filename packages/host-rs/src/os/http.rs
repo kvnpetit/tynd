@@ -13,6 +13,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "request" => request(args),
         "download" => download(args),
+        "upload" => upload(args),
         _ => Err(format!("http.{method}: unknown method")),
     }
 }
@@ -274,4 +275,159 @@ fn download(args: &Value) -> Result<Value, String> {
         .map_err(|e| format!("http.download: persist -> {dest}: {e}"))?;
 
     Ok(json!({ "path": dest, "bytes": written }))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multipart upload
+//
+// `ureq` doesn't ship a multipart builder; `multer` is a *parser* (server
+// side). For the client side we hand-roll the framing — a few preamble
+// bytes per part, a CRLF-delimited boundary, no nesting. This stays well
+// inside RFC 7578 ("multipart/form-data") and lets us stream the file
+// payload through a `Read` impl that pumps progress events as it goes,
+// matching the request/download semantics above.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Boundary that's vanishingly unlikely to appear in payload data:
+/// 26 random hex chars after a fixed prefix. Generated per-call so
+/// concurrent uploads don't share state.
+fn make_boundary() -> String {
+    use std::fmt::Write as _;
+    let mut s = String::from("----TyndFormBoundary");
+    let mut rng_bytes = [0u8; 13];
+    // `getrandom` would be ideal but `rand` is already in the workspace.
+    use rand::RngCore as _;
+    rand::thread_rng().fill_bytes(&mut rng_bytes);
+    for b in rng_bytes {
+        let _ = write!(&mut s, "{b:02x}");
+    }
+    s
+}
+
+/// Streaming multipart body: emits the preamble, the file contents
+/// (read in 64 KB chunks), and the trailing boundary as one continuous
+/// `Read`. Tracks bytes pumped so the progress emitter can report them
+/// per `read()` call without doing its own bookkeeping.
+struct MultipartBody {
+    preamble: std::io::Cursor<Vec<u8>>,
+    file: Option<fs::File>,
+    epilogue: std::io::Cursor<Vec<u8>>,
+    emitter: ProgressEmitter,
+}
+
+impl Read for MultipartBody {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        // Phase 1: preamble (Content-Disposition headers + CRLF separator).
+        let n = self.preamble.read(buf)?;
+        if n > 0 {
+            self.emitter.advance(n, false);
+            return Ok(n);
+        }
+        // Phase 2: file contents, drained in caller-sized chunks.
+        if let Some(f) = self.file.as_mut() {
+            let n = f.read(buf)?;
+            if n > 0 {
+                self.emitter.advance(n, false);
+                return Ok(n);
+            }
+            // EOF on the file — drop it so the next read serves the trailer.
+            self.file = None;
+        }
+        // Phase 3: trailing boundary line.
+        let n = self.epilogue.read(buf)?;
+        if n > 0 {
+            self.emitter.advance(n, false);
+        } else {
+            // True EOF — flush a final progress tick so listeners see 100%.
+            self.emitter.advance(0, true);
+        }
+        Ok(n)
+    }
+}
+
+fn upload(args: &Value) -> Result<Value, String> {
+    let url = args
+        .get("url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "http.upload: missing 'url'".to_string())?;
+    super::security::check_http(url)?;
+    let file_path = args
+        .get("file_path")
+        .or_else(|| args.get("filePath"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "http.upload: missing 'file_path'".to_string())?;
+    super::security::check_fs(file_path)?;
+    let field_name = args
+        .get("field_name")
+        .or_else(|| args.get("fieldName"))
+        .and_then(Value::as_str)
+        .unwrap_or("file");
+    let timeout_ms = args.get("timeoutMs").and_then(Value::as_u64);
+    let progress_id = args
+        .get("progressId")
+        .and_then(Value::as_str)
+        .map(String::from);
+
+    // File metadata first — total length is needed for the progress
+    // emitter and (more importantly) the Content-Length header so the
+    // server can pre-allocate buffers / reject oversize uploads early.
+    let file = fs::File::open(file_path)
+        .map_err(|e| format!("http.upload: open {file_path}: {e}"))?;
+    let file_len = file
+        .metadata()
+        .map_err(|e| format!("http.upload: stat {file_path}: {e}"))?
+        .len();
+
+    let filename = std::path::Path::new(file_path)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".to_string());
+    let content_type = mime_guess::from_path(file_path)
+        .first_or_octet_stream()
+        .to_string();
+
+    let boundary = make_boundary();
+    let preamble = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"{field_name}\"; \
+         filename=\"{filename}\"\r\nContent-Type: {content_type}\r\n\r\n"
+    );
+    let epilogue = format!("\r\n--{boundary}--\r\n");
+    let total_len = preamble.len() as u64 + file_len + epilogue.len() as u64;
+
+    let agent = build_agent(timeout_ms);
+    let mut req = agent.post(url);
+    req = apply_headers(req, args.get("headers"));
+    // Content-Type wins over any caller-supplied value — multipart needs
+    // the boundary parameter to match the body bytes exactly. Same for
+    // Content-Length: ureq will otherwise switch to chunked encoding,
+    // which some upload endpoints (S3 PUT, signed URLs) reject.
+    req = req
+        .set(
+            "content-type",
+            &format!("multipart/form-data; boundary={boundary}"),
+        )
+        .set("content-length", &total_len.to_string());
+
+    let body = MultipartBody {
+        preamble: std::io::Cursor::new(preamble.into_bytes()),
+        file: Some(file),
+        epilogue: std::io::Cursor::new(epilogue.into_bytes()),
+        emitter: ProgressEmitter::new(progress_id, "upload", Some(total_len)),
+    };
+
+    let resp = req
+        .send(body)
+        .map_err(|e| format!("http.upload({url}): {e}"))?;
+
+    let status = resp.status();
+    let mut buf = Vec::new();
+    resp.into_reader()
+        .take(100 * 1024 * 1024)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("http.upload: read response: {e}"))?;
+
+    Ok(json!({
+        "status": status,
+        "body": STANDARD.encode(&buf),
+    }))
 }

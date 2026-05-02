@@ -42,7 +42,7 @@ export interface OpenOptions {
 
 export type SeekFrom = "start" | "current" | "end";
 
-export interface FileHandle {
+export interface FileHandle extends AsyncDisposable {
   id: number;
   /** Move the cursor; returns the new absolute position. */
   seek(offset: number, from?: SeekFrom): Promise<number>;
@@ -50,8 +50,25 @@ export interface FileHandle {
   read(length: number): Promise<{ bytes: Uint8Array; read: number }>;
   /** Write `content` at the current position; returns bytes written. */
   write(content: Uint8Array | ArrayBuffer): Promise<number>;
-  /** Release the OS handle. Calling again is a no-op. */
+  /**
+   * Release the OS handle. Idempotent — calling again is a no-op.
+   * Prefer the TC39 `await using` syntax (see `[Symbol.asyncDispose]`)
+   * for automatic cleanup at scope exit.
+   */
   close(): Promise<boolean>;
+  /**
+   * Auto-close hook for the TC39 `await using` syntax. Idempotent — safe
+   * to call after an explicit `close()`. Pairs with `Symbol.asyncDispose`
+   * (Node 22+, Bun 1.2+, TS 5.2+).
+   *
+   * @example
+   *   {
+   *     await using h = await fs.open("/tmp/log.txt", { write: true });
+   *     await h.write(new TextEncoder().encode("hello\n"));
+   *     // h.close() runs automatically when the block exits — even on throw.
+   *   }
+   */
+  [Symbol.asyncDispose](): Promise<void>;
 }
 
 export const fs = {
@@ -106,12 +123,23 @@ export const fs = {
 
   /**
    * Open a file handle for stateful seek / read / write. Returns a
-   * `FileHandle` that must be `close()`d. Binary payloads travel base64
-   * over JSON — for multi-MB I/O prefer `readBinary` / `writeBinary`.
+   * `FileHandle` that must be `close()`d (or, preferably, scoped with the
+   * TC39 `await using` syntax — see `FileHandle[Symbol.asyncDispose]`).
+   * Binary payloads travel base64 over JSON — for multi-MB I/O prefer
+   * `readBinary` / `writeBinary`.
+   *
+   * @example
+   *   await using h = await fs.open("/tmp/log.txt", { write: true });
+   *   await h.write(new TextEncoder().encode("hello\n"));
    */
   async open(path: string, options?: OpenOptions): Promise<FileHandle> {
     const { id } = await osCall<{ id: number }>("fs", "open", { path, ...options });
-    return {
+    // `closed` flag makes both `close()` and the asyncDispose hook
+    // idempotent — host already returns false on a stale id, but
+    // short-circuiting here saves a round-trip and silences the
+    // misleading `false` return on the second call.
+    let closed = false;
+    const handle: FileHandle = {
       id,
       async seek(offset, from = "start") {
         const { position } = await osCall<{ position: number }>("fs", "seek", {
@@ -133,10 +161,18 @@ export const fs = {
         });
         return written;
       },
-      close() {
-        return osCall("fs", "close", { id });
+      async close() {
+        if (closed) return false;
+        closed = true;
+        return osCall<boolean>("fs", "close", { id });
+      },
+      async [Symbol.asyncDispose]() {
+        if (closed) return;
+        closed = true;
+        await osCall("fs", "close", { id });
       },
     };
+    return handle;
   },
   readBinary(path: string): Promise<Uint8Array> {
     return binFetch("fs/readBinary", { path });

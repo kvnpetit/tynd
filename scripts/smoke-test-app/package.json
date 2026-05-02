@@ -1,0 +1,10 @@
+{
+  "name": "tynd-smoke-test",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Minimal Tynd app exercised by the Wave 4.4 smoke E2E workflow.",
+  "dependencies": {
+    "@tynd/core": "workspace:*"
+  }
+}

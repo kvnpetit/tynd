@@ -1,12 +1,20 @@
 import { fireClose, fireReady, setEmitFn } from "../lifecycle";
 import { tynd } from "../logger";
 import type { AppConfig } from "../types";
+import { sanitizedMessage } from "./error";
 import { safeStringify } from "./stringify";
 import { encode as encodeWire } from "./wire";
 
 /**
  * Lite boot: config via `globalThis.__tynd_config__`, events via injected
  * `__tynd_emit__`, plugins pre-registered by the CLI-prepended bundle header.
+ *
+ * Note on `TyndIpcError`: the lite RPC dispatcher lives in
+ * `tynd/packages/lite/src/quickjs/globals.js` (Rust-injected before the
+ * user bundle). It still emits raw error messages — the client `_internal.ts`
+ * decode helper falls back to plain `Error` when the sentinel is absent.
+ * Migration to the structured envelope is tracked separately because it
+ * touches the Rust-vendored globals.js.
  */
 export function startLite(config: AppConfig): void {
   const g = globalThis as Record<string, unknown>;
@@ -50,9 +58,9 @@ export function startLite(config: AppConfig): void {
     try {
       encoded = encodeWire(payload);
     } catch (e) {
-      tynd.error(
-        `emit("${name}"): payload is not encodable (${e instanceof Error ? e.message : String(e)}) — dropped`,
-      );
+      // SECURITY: error crossing the IPC boundary is sanitized via
+      // runtime/error.ts so stack frames / paths never leak to the host.
+      tynd.error(`emit("${name}"): payload is not encodable (${sanitizedMessage(e)}) — dropped`);
       return;
     }
     nativeEmit(name, encoded, to);

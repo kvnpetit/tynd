@@ -121,6 +121,15 @@ pub(super) fn handle_ipc_body(
                 method,
                 args,
             });
+        } else if api == "menu" {
+            // Menu-bar mutations: muda items aren't Send on Windows/macOS,
+            // so route through the event loop instead of the worker pool.
+            let _ = proxy.send_event(UserEvent::MenuCmd {
+                label: label.into(),
+                id,
+                method,
+                args,
+            });
         } else {
             // Bounded pool absorbs bursts; overflow falls back to a
             // one-shot thread so urgent calls don't queue behind

@@ -1,6 +1,7 @@
 [package]
 name                    = "tynd-lite"
 description             = "Tynd runtime (lite) — embedded QuickJS backend + launcher"
+publish                 = false
 version.workspace       = true
 edition.workspace       = true
 rust-version.workspace  = true
@@ -42,6 +43,9 @@ hmac.workspace        = true
 sha2.workspace        = true
 parking_lot.workspace = true
 crossbeam-channel.workspace = true
+# Pretty-prints panics for the end user (markdown crash report path,
+# friendly message). Setup in main.rs via `human_panic::setup_panic!()`.
+human-panic.workspace = true
 
 # Every official plugin — same list as tynd-full. `bundled-plugins` flips
 # them all on for the preset. Custom builds skip the feature entirely.

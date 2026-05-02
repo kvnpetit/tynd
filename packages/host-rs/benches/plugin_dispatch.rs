@@ -8,8 +8,16 @@
 //! measure the registry lookup + cx wiring + serde_json::Value clone,
 //! not whatever a real plugin does on top.
 //!
-//! Baseline (fill in after first `cargo bench` run):
-//!   plugin_dispatch/echo  ~ ?? ns
+//! Baseline (recorded 2026-05-02 on Windows 11, AMD x86_64, target
+//! `release`, criterion sample-size=10 measurement-time=2):
+//!   plugin_dispatch/echo  ~ 255 ns   [239 ns ; 286 ns]
+//!
+//! That number is dominated by the `serde_json::Value` clone (the mock
+//! plugin returns a tiny `{ "echoed": method }` object). Real plugins
+//! will pay more on top of this — what we're guarding here is that
+//! the registry lookup + cx wiring stays sub-µs. CI fails if this bench
+//! regresses by > 5 % vs the baseline measured on the same runner —
+//! see `.github/workflows/bench.yml`.
 //!
 //! Run with:
 //!   cargo bench -p tynd-host --bench plugin_dispatch

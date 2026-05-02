@@ -12,8 +12,12 @@ pub mod window_cmd;
 // Gatable user-facing OS APIs. Each feature flag flips both the module
 // and its `dispatch` arm. Preset builds enable `api-all` (default);
 // custom builds pick a subset.
+#[cfg(feature = "api-acl")]
+pub mod acl;
 #[cfg(feature = "api-autolaunch")]
 pub mod autolaunch;
+#[cfg(feature = "api-biometric")]
+pub mod biometric;
 #[cfg(feature = "api-clipboard")]
 pub mod clipboard;
 #[cfg(feature = "api-compute")]
@@ -28,12 +32,16 @@ pub mod http;
 pub mod keyring;
 #[cfg(feature = "api-log")]
 pub mod log;
+#[cfg(feature = "api-network")]
+pub mod network;
 #[cfg(feature = "api-notification")]
 pub mod notification;
 #[cfg(feature = "api-power")]
 pub mod power;
 #[cfg(feature = "api-process")]
 pub mod process;
+#[cfg(feature = "api-screenshot")]
+pub mod screenshot;
 #[cfg(feature = "api-shell")]
 pub mod shell;
 #[cfg(feature = "api-shortcuts")]
@@ -44,10 +52,14 @@ pub mod sidecar;
 pub mod single_instance;
 #[cfg(feature = "api-store")]
 pub mod store;
+#[cfg(feature = "api-system-stats")]
+pub mod system_stats;
 #[cfg(feature = "api-theme")]
 pub mod theme;
 #[cfg(feature = "api-updater")]
 pub mod updater;
+#[cfg(feature = "api-vault")]
+pub mod vault;
 #[cfg(feature = "api-websocket")]
 pub mod websocket;
 
@@ -80,6 +92,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         // populated at process startup from the CLI-generated main.rs).
         "plugin" => crate::plugins::dispatch(method, args),
 
+        "acl" => {
+            #[cfg(feature = "api-acl")]
+            {
+                acl::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-acl"))]
+            {
+                Err(api_disabled("acl"))
+            }
+        },
         "autolaunch" => {
             #[cfg(feature = "api-autolaunch")]
             {
@@ -88,6 +110,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-autolaunch"))]
             {
                 Err(api_disabled("autolaunch"))
+            }
+        },
+        "biometric" => {
+            #[cfg(feature = "api-biometric")]
+            {
+                biometric::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-biometric"))]
+            {
+                Err(api_disabled("biometric"))
             }
         },
         "clipboard" => {
@@ -160,6 +192,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
                 Err(api_disabled("log"))
             }
         },
+        "network" => {
+            #[cfg(feature = "api-network")]
+            {
+                network::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-network"))]
+            {
+                Err(api_disabled("network"))
+            }
+        },
         "notification" => {
             #[cfg(feature = "api-notification")]
             {
@@ -188,6 +230,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-process"))]
             {
                 Err(api_disabled("process"))
+            }
+        },
+        "screenshot" => {
+            #[cfg(feature = "api-screenshot")]
+            {
+                screenshot::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-screenshot"))]
+            {
+                Err(api_disabled("screenshot"))
             }
         },
         "shell" => {
@@ -240,6 +292,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
                 Err(api_disabled("store"))
             }
         },
+        "systemStats" => {
+            #[cfg(feature = "api-system-stats")]
+            {
+                system_stats::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-system-stats"))]
+            {
+                Err(api_disabled("system-stats"))
+            }
+        },
         "theme" => {
             #[cfg(feature = "api-theme")]
             {
@@ -258,6 +320,16 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
             #[cfg(not(feature = "api-updater"))]
             {
                 Err(api_disabled("updater"))
+            }
+        },
+        "vault" => {
+            #[cfg(feature = "api-vault")]
+            {
+                vault::dispatch(method, args)
+            }
+            #[cfg(not(feature = "api-vault"))]
+            {
+                Err(api_disabled("vault"))
             }
         },
         "websocket" => {

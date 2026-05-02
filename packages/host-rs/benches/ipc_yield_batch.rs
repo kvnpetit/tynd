@@ -8,8 +8,16 @@
 //! batch string itself costs more than the round trips it saves we lose
 //! the win.
 //!
-//! Baseline (fill in after first `cargo bench` run):
-//!   eval_yield_batch/100x256B  ~ ?? µs
+//! Baseline (recorded 2026-05-02 on Windows 11, AMD x86_64, target
+//! `release`, criterion sample-size=10 measurement-time=2):
+//!   eval_yield_batch/100x256B  ~ 41 µs   [39.4 µs ; 42.4 µs]
+//!
+//! That's ~410 ns per (id, payload) pair amortized — well under the
+//! `evaluate_script` round-trip cost the batch is replacing
+//! (~30 µs per call on wry/JS bridge), so the coalescer keeps paying
+//! its keep at this size. CI fails if the batch builder regresses by
+//! > 5 % vs the baseline measured on the same runner — see
+//! `.github/workflows/bench.yml`.
 //!
 //! Run with:
 //!   cargo bench -p tynd-host --bench ipc_yield_batch

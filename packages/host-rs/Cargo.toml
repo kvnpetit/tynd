@@ -1,6 +1,7 @@
 [package]
 name                    = "tynd-host"
 description             = "Native WebView host for the Tynd framework (wry + tao + OS integration)"
+publish                 = false
 version.workspace       = true
 edition.workspace       = true
 rust-version.workspace  = true
@@ -51,6 +52,23 @@ mime_guess.workspace      = true
 form_urlencoded.workspace = true
 dunce.workspace           = true
 slug.workspace            = true
+# Strict URL parser used by `looks_like_url` to scheme-allowlist
+# deep-link argv (rejects `javascript:` / `data:` / `file://./...`
+# before they reach the `app:open-url` handler).
+url.workspace             = true
+semver.workspace          = true
+# XSS-safe JS init-script serialization (replaces format!-based serde_json injection).
+serialize-to-javascript.workspace = true
+# Native blur/material effects — macOS vibrancy + Windows 11 Mica/Acrylic/Tabbed.
+window-vibrancy.workspace         = true
+# Embed Info.plist into the binary's __TEXT,__info_plist section on macOS.
+embed_plist.workspace             = true
+# UTF-8-guaranteed paths at the IPC boundary — eliminates OsStr footguns.
+camino.workspace                  = true
+# RAII cleanup that survives panic unwind — webview spawn/teardown temp resources.
+scopeguard.workspace              = true
+# RFC-compliant data: URL parser for custom-scheme and drag-drop handlers.
+data-url.workspace                = true
 # Always-on OS detection helpers. The `os::os_info` + `os::security`
 # modules sit outside the `api-*` feature gates (they're consumed by
 # every dispatch path), so their backing crates are too.
@@ -59,6 +77,17 @@ hostname.workspace   = true
 os_info.workspace    = true
 dark-light.workspace = true
 sys-locale.workspace = true
+
+# Always-on perf primitives + tauri ecosystem standalone.
+# `bytes` / `smallvec` are used throughout the IPC + scheme handlers
+# (zero-copy buffers, stack-allocated arg vecs). `rkyv` powers the
+# binary IPC format on the host↔plugin and host↔Bun edges. `tauri-utils`
+# gives us platform helpers, CSP injection, and the ACL/capabilities
+# manifest format without pulling the `tauri` runtime.
+bytes.workspace       = true
+smallvec.workspace    = true
+rkyv.workspace        = true
+tauri-utils.workspace = true
 
 # Optional — pulled only when their matching `api-*` feature is enabled.
 rfd                   = { workspace = true, optional = true }
@@ -73,12 +102,39 @@ trash                 = { workspace = true, optional = true }
 tungstenite           = { workspace = true, optional = true }
 ed25519-dalek         = { workspace = true, optional = true }
 self-replace          = { workspace = true, optional = true }
+# Binary patch applier — the inverse of `bidiff`. Reconstructs the new
+# binary by reading a `bidiff::enc::Writer` patch over the currently
+# running executable. Only pulled with `api-updater`; the diff side
+# (`bidiff`) lives in the bundler crate.
+bipatch               = { workspace = true, optional = true }
 auto-launch           = { workspace = true, optional = true }
 keyring               = { workspace = true, optional = true }
 global-hotkey         = { workspace = true, optional = true }
 user-idle             = { workspace = true, optional = true }
 
+# New optional OS surface — gated behind matching `api-*` features so
+# slim custom builds don't drag them in.
+sysinfo               = { workspace = true, optional = true }
+if-addrs              = { workspace = true, optional = true }
+xcap                  = { workspace = true, optional = true }
+battery               = { workspace = true, optional = true }
+cocoon                = { workspace = true, optional = true }
+robius-authentication = { workspace = true, optional = true }
+multer                = { workspace = true, optional = true }
+# Memory wiping for vault password buffers. Tied to api-vault below.
+zeroize               = { workspace = true, optional = true }
+
 rquickjs = { workspace = true, optional = true }
+
+# Production observability — opt-in via the `obs-otel` / `obs-sentry`
+# feature gates below. Bringing OpenTelemetry pulls a tokio runtime
+# transitively (via `opentelemetry_sdk` rt-tokio + `opentelemetry-otlp`
+# grpc-tonic), so default builds stay free of it.
+opentelemetry         = { workspace = true, optional = true }
+opentelemetry_sdk     = { workspace = true, optional = true }
+opentelemetry-otlp    = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
+sentry                = { workspace = true, optional = true }
 
 # Native plugin contract. Pulled unconditionally — the trait + registry are
 # tiny and the host always needs them to dispatch plugin calls when one
@@ -101,7 +157,9 @@ embedded-js = [ "dep:rquickjs", "api-compute", "api-websocket" ]
 # how `runtime: "full-custom"` / `"lite-custom"` narrow the attack surface
 # and binary size.
 api-all = [
+    "api-acl",
     "api-autolaunch",
+    "api-biometric",
     "api-clipboard",
     "api-compute",
     "api-dialog",
@@ -109,40 +167,72 @@ api-all = [
     "api-http",
     "api-keyring",
     "api-log",
+    "api-network",
     "api-notification",
     "api-power",
     "api-process",
+    "api-screenshot",
     "api-shell",
     "api-shortcuts",
     "api-sidecar",
     "api-single-instance",
     "api-store",
+    "api-system-stats",
     "api-theme",
     "api-updater",
+    "api-vault",
     "api-websocket",
 ]
 
 # Per-API gates. Each feature enables its module + dispatch arm + pulls the
 # crate dependencies it needs. APIs with no external dep list nothing here.
+# `api-acl` rides on the always-on `tauri-utils` dep — no extra crate.
+api-acl             = [  ]
 api-autolaunch      = [ "dep:auto-launch" ]
+api-biometric       = [ "dep:robius-authentication" ]
 api-clipboard       = [ "dep:arboard" ]
 api-compute         = [  ]
 api-dialog          = [ "dep:rfd" ]
 api-fs              = [ "dep:notify-debouncer-full", "dep:trash" ]
-api-http            = [ "dep:ureq" ]
+# api-http now bundles multipart upload — `multer` parses streamed bodies
+# with progress callbacks for the `http.upload()` JS API.
+api-http            = [ "dep:ureq", "dep:multer" ]
 api-keyring         = [ "dep:keyring" ]
 api-log             = [  ]
+api-network         = [ "dep:if-addrs" ]
 api-notification    = [ "dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys" ]
-api-power           = [ "dep:user-idle" ]
+api-power           = [ "dep:user-idle", "dep:battery" ]
 api-process         = [  ]
+api-screenshot      = [ "dep:xcap" ]
 api-shell           = [ "dep:open" ]
 api-shortcuts       = [ "dep:global-hotkey" ]
 api-sidecar         = [  ]
 api-single-instance = [ "dep:fslock", "dep:interprocess" ]
 api-store           = [  ]
+api-system-stats    = [ "dep:sysinfo" ]
 api-theme           = [  ]
-api-updater         = [ "dep:ureq", "dep:ed25519-dalek", "dep:self-replace" ]
+api-updater         = [ "dep:ureq", "dep:ed25519-dalek", "dep:self-replace", "dep:bipatch" ]
+# `cocoon` provides AES-GCM-SIV file vault — bigger-than-keychain
+# secrets (long tokens, bundled credentials, encrypted plugin state).
+# `zeroize` wipes password buffers on drop so a freed allocation can't
+# leak the cleartext to a future allocator request.
+api-vault           = [ "dep:cocoon", "dep:zeroize" ]
 api-websocket       = [ "dep:tungstenite" ]
+
+# Production observability — strictly opt-in. Both gates are off by
+# default (including in `api-all`) because the OTel + Sentry pipelines
+# pull tokio + reqwest + tonic which would inflate every preset build.
+# Apps that want either pipeline rebuild with `--features obs-otel` or
+# `--features obs-sentry` (or both); at runtime they still need to
+# initialize via `observability::init({ otel, sentry })` so a feature
+# being compiled in doesn't auto-export anything.
+obs-otel = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:tracing-opentelemetry",
+]
+obs-sentry = [ "dep:sentry" ]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Linux needs the wayland-data-control feature on arboard; re-declared here
@@ -166,6 +256,15 @@ mac-notification-sys = { workspace = true, optional = true }
 # License: Apache-2.0 OR MIT (matches our workspace policy).
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = [ "cargo_bench_support" ] }
+# Property-based testing — fuzz path canonicalization invariants
+# (`os/fs.rs`) and updater semver ordering (`os/updater.rs`) against
+# the `semver` crate. Test-only; never linked into release builds.
+proptest = { workspace = true }
+# Diff side of the BSDIFF format — only needed in tests so the
+# `os::updater` patch round-trip can construct a synthetic patch and
+# feed it through the same `bipatch::Reader` the production code uses.
+# `enc` feature pulls the `simple_diff` writer.
+bidiff = { workspace = true, features = [ "enc" ] }
 
 # `harness = false` lets criterion's own runner take over from libtest,
 # which is what gives us the criterion HTML reports + per-bench
@@ -185,4 +284,12 @@ harness = false
 
 [[bench]]
 name    = "plugin_dispatch"
+harness = false
+
+[[bench]]
+name    = "ipc_rkyv_vs_serde"
+harness = false
+
+[[bench]]
+name    = "fs_acl"
 harness = false

@@ -1,6 +1,7 @@
 [package]
 name                    = "tynd-full"
 description             = "Tynd runtime (full) — Bun subprocess backend + embedded launcher"
+publish                 = false
 version.workspace       = true
 edition.workspace       = true
 rust-version.workspace  = true
@@ -37,6 +38,10 @@ mimalloc.workspace   = true
 zstd.workspace       = true
 dirs.workspace       = true
 crossbeam-channel.workspace = true
+# Pretty-prints panics for the end user (markdown crash report path,
+# friendly message instead of `thread 'main' panicked at ...`). Setup
+# in main.rs via `human_panic::setup_panic!()` before any other code.
+human-panic.workspace = true
 
 # Every official plugin, pulled as an optional path dep. The `bundled-plugins`
 # feature flips them all on so the preset binary ships with every plugin

@@ -1,8 +1,16 @@
+// Embed Info.plist into the binary's `__TEXT,__info_plist` section on macOS
+// so that direct invocations (e.g. from a terminal or a CI runner) receive
+// the correct entitlements — camera, microphone, accessibility prompts fire
+// at the OS level instead of being silently denied.
+#[cfg(target_os = "macos")]
+embed_plist::embed_plist!("Info.plist");
+
 pub mod app;
 pub mod cleanup;
 pub mod embed;
 pub mod ipc;
 pub(crate) mod menu;
+pub mod observability;
 pub mod os;
 pub mod plugins;
 pub mod runtime;

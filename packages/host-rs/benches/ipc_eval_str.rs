@@ -5,11 +5,17 @@
 //! one of them on its way to `webview.evaluate_script(...)`. A few hundred
 //! nanoseconds of regression here multiplies fast on bursty streams.
 //!
-//! Baseline (run on `cargo bench --bench ipc_eval_str` — fill in once
-//! recorded; we keep them here so reviewers see drift at a glance):
-//!   eval_resolve/1KB      ~  ?? ns
-//!   eval_yield/1KB        ~  ?? ns
-//!   eval_dispatch/1KB     ~  ?? ns
+//! Baseline (recorded 2026-05-02 on Windows 11, AMD x86_64, target
+//! `release`, criterion sample-size=10 measurement-time=2 — same flags
+//! the CI workflow uses, see `.github/workflows/bench.yml`):
+//!   eval_resolve/1KB      ~ 1.48 µs   [1.39  µs ;  1.70  µs]
+//!   eval_yield/1KB        ~ 1.48 µs   [1.35  µs ;  1.63  µs]
+//!   eval_dispatch/1KB     ~ 1.45 µs   [1.29  µs ;  1.65  µs]
+//!
+//! Numbers will differ on CI hardware (GitHub `ubuntu-latest`); the
+//! workflow re-runs on `main` and the PR HEAD then computes the delta
+//! with `critcmp`. CI fails if any bench regresses by > 5 % vs the
+//! baseline measured on the same runner.
 //!
 //! Run with:
 //!   cargo bench -p tynd-host --bench ipc_eval_str

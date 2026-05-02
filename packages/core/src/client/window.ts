@@ -1,5 +1,29 @@
+import { tynd } from "../logger";
 import { osCall } from "./_internal";
 import type { Monitor } from "./monitor";
+
+/**
+ * Heuristic taskbar / menu-bar thickness used when the host's `Monitor` API
+ * does not report a usable `workArea`. Values are in *logical* pixels.
+ *
+ * Real workarea sizes vary by OS theme + DPI; these are conservative defaults
+ * that keep the window from clipping under the bar in the common case. Apps
+ * that need pixel-accurate tray placement should track the cursor in their
+ * own `tray:click` handler instead.
+ */
+const TASKBAR_HEURISTIC_PX = {
+  win: 40,
+  macos: 25,
+  linux: 32,
+} as const;
+
+function detectTaskbarHeight(): number {
+  if (typeof navigator === "undefined") return TASKBAR_HEURISTIC_PX.win;
+  const ua = navigator.userAgent || "";
+  if (ua.includes("Mac")) return TASKBAR_HEURISTIC_PX.macos;
+  if (ua.includes("Linux")) return TASKBAR_HEURISTIC_PX.linux;
+  return TASKBAR_HEURISTIC_PX.win;
+}
 
 export type WindowPreset =
   | "topLeft"
@@ -365,6 +389,16 @@ export const tyndWindow = {
    * Move + resize to one of 13 presets, anchored on the current monitor.
    * Matches Tauri's WindowPositioner — useful for HUDs, quick pickers, or
    * panels that want consistent placement on every display.
+   *
+   * All coordinates are in LOGICAL pixels (CSS pixels, divided by
+   * devicePixelRatio). The host's `Monitor.size` / `Monitor.position` are
+   * in physical pixels and we divide by `Monitor.scale` here.
+   *
+   * The four `tray*` presets are *approximations* of the OS tray icon
+   * area — there is no cross-OS API that reports the real tray bounds, so
+   * we anchor to the nearest monitor corner with a heuristic taskbar
+   * inset. Apps that need exact tray-icon placement should track the
+   * cursor inside their own `tray:click` handler.
    */
   async positionAt(preset: WindowPreset, padding = 20): Promise<void> {
     const [current, self] = await Promise.all([
@@ -373,10 +407,26 @@ export const tyndWindow = {
     ]);
     if (!current) return;
     const scale = current.scale || 1;
+    // High-DPI multi-monitor: physical pixel rounding can shift tray
+    // placement by a few pixels — flag once so devs know not to depend
+    // on pixel-perfect alignment when scale != 1.
+    if (
+      scale !== 1 &&
+      (preset === "trayLeft" ||
+        preset === "trayRight" ||
+        preset === "trayCenter" ||
+        preset === "trayBottomCenter")
+    ) {
+      tynd.warn(
+        `window.positionAt("${preset}"): scale=${scale} — tray placement is approximate on multi-DPI setups`,
+      );
+    }
+
     const monitorW = current.size.width / scale;
     const monitorH = current.size.height / scale;
     const mx = current.position.x / scale;
     const my = current.position.y / scale;
+    const taskbar = detectTaskbarHeight();
 
     const { width: w, height: h } = self;
     let x = mx;
@@ -418,16 +468,24 @@ export const tyndWindow = {
         x = mx + (monitorW - w) / 2;
         y = my + (monitorH - h) / 2;
         break;
+      // Tray presets — approximate, no cross-OS tray bounds API.
+      // We anchor to monitor edges and inset by a heuristic taskbar
+      // height to stay clear of the system bar.
       case "trayLeft":
+        x = mx;
+        y = my + taskbar;
+        break;
       case "trayRight":
+        x = mx + monitorW - w;
+        y = my + taskbar;
+        break;
       case "trayCenter":
+        x = mx + (monitorW - w) / 2;
+        y = my + taskbar;
+        break;
       case "trayBottomCenter":
-        // Tray-relative presets: without a cross-OS tray bounds API (each
-        // platform reports it differently) we approximate with the nearest
-        // monitor corner — apps that need exact tray placement should track
-        // cursor position in their own `tray:click` handler.
-        x = mx + monitorW - w - padding;
-        y = my + padding;
+        x = mx + (monitorW - w) / 2;
+        y = my + monitorH - h - taskbar;
         break;
     }
     await osCall("window", "setPosition", { x, y });

@@ -77,3 +77,81 @@ describe("fs binary (tynd-bin scheme)", () => {
     await expect(fs.readBinary("/tmp/x")).rejects.toThrow(/disk full/);
   });
 });
+
+describe("FileHandle async dispose (TC39 `await using`)", () => {
+  function mountOsShim(): { calls: Array<{ method: string; args: unknown }> } {
+    const calls: Array<{ method: string; args: unknown }> = [];
+    let nextId = 1;
+    (globalThis as unknown as { window: unknown }).window = {
+      __tynd__: {
+        os_call(_api: string, method: string, args: unknown) {
+          calls.push({ method, args });
+          if (method === "open") return Promise.resolve({ id: nextId++ });
+          if (method === "close") return Promise.resolve(true);
+          return Promise.resolve(null);
+        },
+        os_on() {
+          return () => undefined;
+        },
+        call() {
+          return Promise.resolve(null);
+        },
+        on() {
+          return () => undefined;
+        },
+        off() {
+          return undefined;
+        },
+      },
+    };
+    return { calls };
+  }
+
+  test("`await using` triggers fs.close on scope exit", async () => {
+    const { calls } = mountOsShim();
+    {
+      // biome-ignore lint/correctness/noUnusedVariables: handle is consumed by `using`
+      await using h = await fs.open("/tmp/x.txt");
+      expect(calls.find((c) => c.method === "open")).toBeDefined();
+      expect(calls.find((c) => c.method === "close")).toBeUndefined();
+    }
+    // After the block exits, the dispose hook fires.
+    expect(calls.find((c) => c.method === "close")).toBeDefined();
+  });
+
+  test("explicit close() then dispose is a no-op (idempotent)", async () => {
+    const { calls } = mountOsShim();
+    const h = await fs.open("/tmp/x.txt");
+    await h.close();
+    const closeCallsAfterClose = calls.filter((c) => c.method === "close").length;
+    expect(closeCallsAfterClose).toBe(1);
+    // Manually invoke dispose; should NOT issue a second close.
+    await h[Symbol.asyncDispose]();
+    const closeCallsAfterDispose = calls.filter((c) => c.method === "close").length;
+    expect(closeCallsAfterDispose).toBe(1);
+  });
+
+  test("double close() returns false and skips the host call", async () => {
+    const { calls } = mountOsShim();
+    const h = await fs.open("/tmp/x.txt");
+    expect(await h.close()).toBe(true);
+    // Second close — host already dropped the id, we short-circuit.
+    expect(await h.close()).toBe(false);
+    const closeCalls = calls.filter((c) => c.method === "close").length;
+    expect(closeCalls).toBe(1);
+  });
+
+  test("dispose runs even when an error is thrown inside the using block", async () => {
+    const { calls } = mountOsShim();
+    let threw = false;
+    try {
+      await using h = await fs.open("/tmp/x.txt");
+      void h.id;
+      throw new Error("boom");
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
+    expect(calls.find((c) => c.method === "close")).toBeDefined();
+  });
+});

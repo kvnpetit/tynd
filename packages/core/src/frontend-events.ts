@@ -14,6 +14,7 @@
 
 import mitt, { type Handler } from "mitt";
 import { tynd } from "./logger";
+import { sanitizeError } from "./runtime/error";
 
 export const FRONTEND_EMIT_FN = "__tynd_fe_emit__";
 
@@ -60,11 +61,14 @@ export function dispatchFrontendEmit(name: string, payload: unknown): void {
     try {
       h(payload);
     } catch (e) {
-      // Prefer the stack (when we have one) so the source-map-enhanced
-      // Bun stderr points right at the user's handler. Falls back to the
-      // message / String cast for non-Error throws.
-      const detail = e instanceof Error ? (e.stack ?? e.message) : String(e);
-      tynd.error(`onFrontendEmit(${name}): ${detail}`);
+      // Errors thrown from frontend-emit handlers stay LOCAL — they're
+      // logged to stderr via the tynd logger and not propagated back to
+      // the frontend, since the dispatcher has no IPC return channel.
+      // We sanitize on the way out anyway so any future change that DOES
+      // surface this to the host (or a network-attached log sink) can't
+      // accidentally start leaking stack frames / filesystem paths.
+      const { name: errName, message } = sanitizeError(e);
+      tynd.error(`onFrontendEmit(${name}): ${errName}: ${message}`);
     }
   }
 }

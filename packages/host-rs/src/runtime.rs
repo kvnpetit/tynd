@@ -124,7 +124,6 @@ pub struct MenuItemDef {
     /// "separator" | "submenu" | "checkbox" | "radio" | "item"
     /// (omitted -> action item)
     #[serde(rename = "type")]
-    #[specta(rename = "type")]
     pub kind: Option<String>,
     /// User-defined ID — emitted as `{ id }` on click
     pub id: Option<String>,

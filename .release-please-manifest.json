@@ -1,0 +1,7 @@
+{
+  "packages/host-rs": "1.0.0",
+  "packages/full": "1.0.0",
+  "packages/lite": "1.0.0",
+  "packages/core": "1.0.0",
+  "packages/host": "1.0.0"
+}

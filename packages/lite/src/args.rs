@@ -43,6 +43,25 @@ impl Args {
                     }
                 },
                 "--debug" | "-d" => debug = true,
+                "--version" | "-V" => {
+                    // Wave 4.4: smoke-test E2E entry point — `tynd-lite --version`
+                    // must succeed without `--bundle` so CI can sanity-check every
+                    // release binary across the 6 OS×arch matrix.
+                    println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+                    std::process::exit(0);
+                },
+                "--help" | "-h" => {
+                    println!(
+                        "Usage: tynd-lite --bundle <path> [--frontend-dir <dir>] [--dev-url \
+                         <url>] [--debug]\n\nFlags:\n  -b, --bundle <path>         Path to \
+                         pre-built JS bundle\n  -f, --frontend-dir <dir>    Static assets \
+                         directory\n      --dev-url <url>         Dev server URL (overrides \
+                         frontend-dir)\n  -d, --debug                 Enable WebView devtools + \
+                         dev scheme\n  -V, --version               Print version and exit\n  -h, \
+                         --help                  Print this help"
+                    );
+                    std::process::exit(0);
+                },
                 _ => {},
             }
             i += 1;
