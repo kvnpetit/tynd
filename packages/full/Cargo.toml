@@ -27,10 +27,15 @@ workspace = true
 
 [dependencies]
 # Host is wired with `default-features = false` so `tynd-full` can flip the
-# preset (all APIs + bundled plugins) on via its own `default = ["preset"]`
-# feature, or be built as a slim custom variant via
+# preset (all OS APIs) on via its own `default = ["preset"]` feature, or
+# be built as a slim custom variant via
 # `cargo build -p tynd-full --no-default-features --features "tynd-host/api-fs"`
 # the way the CLI does for `runtime: "full-custom"`.
+#
+# NOTE: `tynd-full` ships with NO bundled plugins by default — keeps the base
+# binary lightweight. Apps that need plugins (sql, terminal, audio, llm, etc.)
+# declare them in `tynd.config.ts`; the CLI generates a custom Cargo.toml
+# under `.tynd/build/` that pulls only the plugins the app actually uses.
 tynd-host            = { path = "../host-rs", default-features = false }
 serde.workspace      = true
 serde_json.workspace = true
@@ -43,27 +48,14 @@ crossbeam-channel.workspace = true
 # in main.rs via `human_panic::setup_panic!()` before any other code.
 human-panic.workspace = true
 
-# Every official plugin, pulled as an optional path dep. The `bundled-plugins`
-# feature flips them all on so the preset binary ships with every plugin
-# linked and auto-registered — matches the pre-extraction "everything
-# included" UX. Custom builds skip this feature entirely.
-tynd_plugin_sql               = { path = "../../../plugins/sql/native", optional = true }
-tynd_plugin_terminal          = { path = "../../../plugins/terminal/native", optional = true }
-tynd_plugin_clipboard_history = { path = "../../../plugins/clipboard-history/native", optional = true }
-
 [features]
 default = ["preset"]
-# The shipped `full` preset: every OS API + every official plugin.
-preset  = ["tynd-host/api-all", "bundled-plugins", "deep-link"]
-
-# Link every official plugin and auto-register them in `run()`. Turning
-# this off (via `--no-default-features`) is how the CLI trims the binary
-# for `runtime: "full-custom"`.
-bundled-plugins = [
-    "dep:tynd_plugin_sql",
-    "dep:tynd_plugin_terminal",
-    "dep:tynd_plugin_clipboard_history",
-]
+# The shipped `full` preset: every OS API. Plugins are NOT bundled — apps
+# pick exactly what they need via the CLI custom-build pipeline.
+# `deep-link` is listed alongside `api-all` because it is a *local* feature
+# mirror of `tynd-host/api-deep-link` (see the `deep-link` entry below for
+# the rationale), not a separate API surface.
+preset  = ["tynd-host/api-all", "deep-link"]
 
 # Local mirror of `tynd-host/api-deep-link`. Calling
 # `tynd_host::os::deep_link::init()` early in `run()` (before the event

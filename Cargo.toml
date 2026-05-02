@@ -252,14 +252,14 @@ notify-debouncer-full = "0.7"
 # `@tynd/core/client` — no manual `.d.ts` drift between Rust IPC commands
 # and the typed JS proxy.
 specta = { version = "2.0.0-rc.22", features = [ "derive" ] }
-specta-typescript = "0.0.9"
+specta-typescript = "0.0.11"
 # Alias for the underscore-named crate that sibling plugin path-deps
 # (`plugins/*/native`) declare as `specta_typescript = { workspace = true }`.
 # Cargo treats `specta_typescript` and `specta-typescript` as distinct names;
 # this entry resolves the underscore lookup to the same upstream crate via
 # the explicit `package = "..."` rename so the plugin workspace and the
 # tynd workspace stay coherent.
-specta_typescript = { package = "specta-typescript", version = "0.0.9" }
+specta_typescript = { package = "specta-typescript", version = "0.0.11" }
 
 # UTF-8-guaranteed paths. Used at the IPC boundary to eliminate
 # `.to_string_lossy()` data loss and OsStr footguns on Windows.
@@ -355,6 +355,12 @@ sysinfo = { version = "0.32", default-features = false, features = [
 # Interfaces réseau (IPs locales, MAC, up/down). `os.network()`.
 # `getifaddrs` (Unix) / `GetAdaptersAddresses` (Win).
 if-addrs = "0.13"
+
+# Unix syscalls (POSIX `kill(2)`, signals). Used by `os::process` to
+# send `SIGTERM` / `SIGINT` / `SIGHUP` etc. — `Child::kill()` only
+# exposes the SIGKILL escalator. Workspace-pinned so the version stays
+# coherent if any future `cfg(unix)` consumer wants the same crate.
+nix = { version = "0.29", default-features = false, features = [ "signal" ] }
 
 # Screenshot écran/window — Tauri n'a PAS ça nativement, gain feature
 # différenciant pour les apps de capture / annotation / partage écran.

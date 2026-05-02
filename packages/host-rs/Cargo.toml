@@ -260,6 +260,14 @@ obs-otel = [
 ]
 obs-sentry = [ "dep:sentry" ]
 
+[target.'cfg(unix)'.dependencies]
+# POSIX `kill(2)` for `os::process::kill` — `Child::kill()` always sends
+# SIGKILL, so we go through `nix::sys::signal::kill` to honour the
+# requested signal name (SIGTERM / SIGINT / SIGHUP …). Pulled
+# unconditionally on Unix targets — `os::process` is part of every
+# preset and the dep is small (no transitive deps with `default-features = false`).
+nix = { workspace = true }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # Linux needs the wayland-data-control feature on arboard; re-declared here
 # as optional so it's only pulled with api-clipboard.

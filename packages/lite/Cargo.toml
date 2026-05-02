@@ -28,8 +28,13 @@ workspace = true
 [dependencies]
 # `embedded-js` is mandatory for the lite runtime; `default-features = false`
 # lets the CLI pick an `api-*` subset for `runtime: "lite-custom"`. The
-# default `preset` feature below restores the full API surface + bundled
-# plugins for the shipped `tynd-lite` preset.
+# default `preset` feature below restores the full API surface for the
+# shipped `tynd-lite` preset.
+#
+# NOTE: `tynd-lite` ships with NO bundled plugins by default — keeps the base
+# binary lightweight (the lite runtime philosophy). Apps that need plugins
+# declare them in `tynd.config.ts`; the CLI generates a custom Cargo.toml
+# under `.tynd/build/` that pulls only what the app actually uses.
 tynd-host            = { path = "../host-rs", default-features = false, features = ["embedded-js"] }
 rquickjs.workspace   = true
 serde.workspace      = true
@@ -47,21 +52,9 @@ crossbeam-channel.workspace = true
 # friendly message). Setup in main.rs via `human_panic::setup_panic!()`.
 human-panic.workspace = true
 
-# Every official plugin — same list as tynd-full. `bundled-plugins` flips
-# them all on for the preset. Custom builds skip the feature entirely.
-tynd_plugin_sql               = { path = "../../../plugins/sql/native", optional = true }
-tynd_plugin_terminal          = { path = "../../../plugins/terminal/native", optional = true }
-tynd_plugin_clipboard_history = { path = "../../../plugins/clipboard-history/native", optional = true }
-
 [features]
 default = ["preset"]
-preset  = ["tynd-host/api-all", "bundled-plugins", "deep-link"]
-
-bundled-plugins = [
-    "dep:tynd_plugin_sql",
-    "dep:tynd_plugin_terminal",
-    "dep:tynd_plugin_clipboard_history",
-]
+preset  = ["tynd-host/api-all", "deep-link"]
 
 # Local mirror of `tynd-host/api-deep-link`. Calling
 # `tynd_host::os::deep_link::init()` early in `run()` (before the event

@@ -6,6 +6,61 @@ use tao::{
     window::{Window, WindowBuilder},
 };
 
+/// GPU vendor pin for [`GpuPreference::Vendor`]. Free-form strings are tolerated
+/// at the JSON layer — unknown vendors degrade to `auto`.
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuVendor {
+    /// `"nvidia"` | `"amd"` | `"intel"` (lowercase, matched case-insensitively).
+    pub vendor: String,
+}
+
+/// Multi-GPU adapter selection. Maps to env vars set BEFORE the WebView spawns
+/// so Chromium / WebKitGTK pick the right device on multi-GPU workstations.
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Type)]
+#[serde(rename_all = "camelCase", untagged)]
+pub enum GpuPreference {
+    /// `"auto" | "primary" | "discrete"` — string literals.
+    Named(String),
+    /// `{ vendor: "nvidia" | "amd" | "intel" }`
+    Vendor(GpuVendor),
+}
+
+/// Color-space hint applied to the OS swap chain / NSWindow / GTK widget.
+/// Mostly a render-target tag — Chromium picks the matching color space when
+/// the page sets `color-gamut: p3` etc. Linux currently has no portable
+/// surface-level color-space API; we still emit the env var so future
+/// WebKitGTK builds with HDR support honour it.
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ColorSpace {
+    Srgb,
+    P3,
+    Rec2020,
+    Linear,
+}
+
+/// Refresh-rate hint. `"monitor"` (default) adopts the monitor's native
+/// refresh rate; an integer caps the compositor target.
+#[derive(Debug, Deserialize, Clone, PartialEq, Type)]
+#[serde(untagged)]
+pub enum PreferredFps {
+    /// `"monitor"` literal — adopt the monitor's native rate.
+    Auto(String),
+    /// Explicit cap (Hz). Silently capped to the monitor's max if higher.
+    Hz(u32),
+}
+
+/// Hardware-acceleration tier. Hints the compositor / driver about which GPU
+/// to wake up (relevant on hybrid laptops + multi-GPU workstations).
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum HardwareAcceleration {
+    Default,
+    HighPerformance,
+    LowPower,
+}
+
 /// Window configuration provided by the TypeScript backend via `app.start()`.
 #[derive(Debug, Deserialize, Default, Clone, Type)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +94,38 @@ pub struct WindowConfig {
     /// support the requested effect — vibrancy is optional polish, never a
     /// hard requirement.
     pub vibrancy: Option<String>,
+
+    // ─────────────── GPU acceleration knobs ───────────────
+    //
+    // Every field below is `Option<…>` with sane defaults. Apps that do not
+    // touch them keep the legacy behaviour (WebGPU on where the OS supports
+    // it, no FPS hint, no HDR/VRR/multi-GPU tweaks).
+    /// Enable WebGPU. Defaults to `true` on every platform — disable per-app
+    /// only if the workload is incompatible with the GPU process being woken
+    /// up at all (e.g. battery-sensitive utility apps).
+    pub webgpu: Option<bool>,
+    /// `"default" | "high-performance" | "low-power"`. Wired to Chromium's
+    /// `--force_high_performance_gpu` / `--force_low_power_gpu` flags on
+    /// Windows + matching DRI / NV-PRIME env vars on Linux.
+    pub hardware_acceleration: Option<HardwareAcceleration>,
+    /// Refresh-rate hint. `"monitor"` (default) keeps the OS compositor in
+    /// charge; an integer caps the target FPS.
+    pub preferred_fps: Option<PreferredFps>,
+    /// Auto-reload the webview when the GPU process dies (Chromium
+    /// `webview-gone`-equivalent on macOS / iOS, Windows recovers on its
+    /// own). Defaults to `true` — apps that own the recovery flow can opt
+    /// out by setting `false`.
+    pub context_lost_recovery: Option<bool>,
+    /// Wide-gamut / HDR opt-in. `colorSpace` tags the swap chain;
+    /// `hdr: true` requests an HDR10 surface on Windows + extended-range
+    /// NSColorSpace on macOS. Linux logs a degraded-fallback warning.
+    pub color_space: Option<ColorSpace>,
+    pub hdr: Option<bool>,
+    /// Variable-refresh-rate (G-Sync / FreeSync / ProMotion). Off by default
+    /// — only wakes the VRR path when the app explicitly requests it.
+    pub vrr: Option<bool>,
+    /// Multi-GPU adapter pin for workstations with hybrid graphics.
+    pub gpu: Option<GpuPreference>,
 }
 
 /// Build a native window from a `WindowConfig`.

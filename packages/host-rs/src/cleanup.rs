@@ -57,7 +57,24 @@ pub fn run() {
     defer! {
         tracing::debug!(target: "tynd::cleanup", "cleanup::run complete");
     }
-    for path in DIRS.lock().iter() {
+    // Snapshot under the lock, then drop it before the (potentially
+    // slow) recursive deletes. Holding the mutex across `remove_dir_all`
+    // would block any concurrent `register_dir` call from a late
+    // shutdown path or signal-handler-spawned thread for the entire I/O
+    // window — and `register_dir` is meant to be cheap. Cloning the
+    // `Vec<PathBuf>` is a few-byte allocation per entry; trivial vs the
+    // I/O cost.
+    let dirs: Vec<PathBuf> = {
+        let mut guard = DIRS.lock();
+        let snapshot = guard.clone();
+        // Drain in place too — `cleanup::run` is the terminal handler
+        // for these paths, so leaving them in the global registry
+        // would cause a re-entrant shutdown (rare, tests do it) to try
+        // to delete already-deleted paths and inflate the trace log.
+        guard.clear();
+        snapshot
+    };
+    for path in dirs {
         let _ = std::fs::remove_dir_all(path);
     }
 }

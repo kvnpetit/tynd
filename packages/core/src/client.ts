@@ -1,9 +1,8 @@
 // @tynd/core/client — frontend API. Backend imports from "@tynd/core".
 //
-// Plugin clients are **never** re-exported here. Official plugins
-// (`@tynd/plugin-*`) are installed transitively when you depend on
-// `@tynd/core` so the packages resolve without a second `bun add`,
-// but you still import from the plugin's own package so the plugin
+// Plugin clients are **never** re-exported here. Plugin packages
+// (`@tynd/plugin-*`) are separate npm dependencies — install only what
+// you need, then import from the plugin's own package so the plugin
 // stays the single source of truth for its types and client shape:
 //
 //     import { sql } from "@tynd/plugin-sql/client"
@@ -45,11 +44,13 @@ export {
   type HttpResponse,
   http,
 } from "./client/http";
+export { biometric } from "./client/biometric";
 export { keys } from "./client/keys";
 export { type KeyringEntry, keyring } from "./client/keyring";
 export { type LogConfigureOptions, type LogLevel, log } from "./client/log";
 export { type ContextMenuItem, menu } from "./client/menu";
 export { type Monitor, monitors } from "./client/monitor";
+export { type NetworkInterface, network } from "./client/network";
 export { type NotificationOptions, notification } from "./client/notification";
 export { type OsInfo, os } from "./client/os";
 export { path } from "./client/path";
@@ -63,12 +64,26 @@ export {
   RpcTimeoutError,
   withTimeout,
 } from "./client/rpc-helpers";
+export {
+  type CapturedImage,
+  type MonitorInfo,
+  screenshot,
+  type WindowInfo,
+} from "./client/screenshot";
 export { type SecurityPolicy, type SecurityScope, security } from "./client/security";
 export { shell } from "./client/shell";
 export { type ShortcutHandle, shortcuts } from "./client/shortcuts";
 export { sidecar } from "./client/sidecar";
 export { type SingleInstanceResult, singleInstance } from "./client/single-instance";
 export { createStore } from "./client/store";
+export {
+  type CpuStats,
+  type DiskInfo,
+  type MemoryStats,
+  type ProcessInfo,
+  systemStats,
+  type UptimeStats,
+} from "./client/systemStats";
 export {
   type ConfigureOptions as ThemeConfigureOptions,
   type EffectiveTheme,
@@ -89,6 +104,11 @@ export {
   type UpdaterProgress,
   updater,
 } from "./client/updater";
+export {
+  vault,
+  type VaultReadResult,
+  type VaultWriteData,
+} from "./client/vault";
 // Web-platform globals re-exported so `import * as tynd from "@tynd/core/client"`
 // gives you `tynd.fetch`, `tynd.WebSocket`, `tynd.crypto`, etc. without
 // touching the globals.

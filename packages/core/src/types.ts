@@ -1,5 +1,23 @@
 import * as v from "valibot";
 
+/**
+ * Multi-GPU adapter pin. Workstations with hybrid graphics (NVIDIA Optimus,
+ * AMD switchable, Intel + dGPU) can ask the host to wake the right device
+ * before WebView2 / WKWebView / WebKitGTK initialise.
+ *
+ * - `"auto" | "primary"` — defer to the OS power-management heuristic.
+ * - `"discrete"` — wake the discrete GPU (Linux: `__NV_PRIME_RENDER_OFFLOAD=1`
+ *   + `DRI_PRIME=1`; Windows / macOS: handled via Chromium's
+ *   `--force_high_performance_gpu` flag).
+ * - `{ vendor: "nvidia"|"amd"|"intel" }` — vendor-specific env hints
+ *   (Linux only; Win/macOS ignore the vendor and fall back to OS defaults).
+ */
+const GpuPreferenceSchema = v.union([
+  v.picklist(["auto", "primary", "discrete"]),
+  v.object({ vendor: v.picklist(["nvidia", "amd", "intel"]) }),
+]);
+export type GpuPreference = v.InferOutput<typeof GpuPreferenceSchema>;
+
 const WindowConfigSchema = v.object({
   title: v.optional(v.string()),
   width: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
@@ -16,6 +34,63 @@ const WindowConfigSchema = v.object({
   fullscreen: v.optional(v.boolean()),
   maximized: v.optional(v.boolean()),
   userAgent: v.optional(v.pipe(v.string(), v.minLength(1))),
+
+  // ─────────── GPU acceleration knobs (all optional, sane defaults) ───────────
+  /** Native vibrancy / blur material — see host-rs docs for per-OS coverage. */
+  vibrancy: v.optional(v.string()),
+  /**
+   * Enable WebGPU. Defaults to `true`. Disable per-app only when the
+   * workload is incompatible with waking the GPU process at all
+   * (e.g. battery-sensitive utility apps). Three.js, Babylon, and any
+   * WebGL-only stack keep working when `webgpu: false`.
+   *
+   * On macOS, this flag is ignored — WebKit does not expose a runtime
+   * toggle. WebGPU availability is determined by macOS version (15+)
+   * and the user's Safari Technology Preview settings.
+   */
+  webgpu: v.optional(v.boolean()),
+  /**
+   * Hardware-acceleration tier hint. Wakes the matching GPU on hybrid
+   * laptops:
+   * - `"high-performance"` → Chromium `--force_high_performance_gpu` +
+   *   ANGLE D3D11 + GPU rasterization (Win) / discrete GPU pin (Linux).
+   * - `"low-power"` → Chromium `--force_low_power_gpu`.
+   * - `"default"` → defer to the OS heuristic.
+   */
+  hardwareAcceleration: v.optional(
+    v.picklist(["default", "high-performance", "low-power"]),
+  ),
+  /**
+   * Refresh-rate hint. `"monitor"` (default) adopts the monitor's native
+   * rate; an integer caps the Chromium frame-budget timer (clamped to
+   * 15..=480 Hz). Above the monitor's native rate the OS compositor
+   * silently caps and the host emits a warn log.
+   */
+  preferredFps: v.optional(
+    v.union([v.literal("monitor"), v.pipe(v.number(), v.integer(), v.minValue(1))]),
+  ),
+  /**
+   * Auto-reload the WebView when the GPU / web-content process dies
+   * (macOS / iOS only — Win/Linux compositors recover transparently).
+   * Defaults to `true`. Apps that own the recovery flow can opt out and
+   * listen to `webview:context-lost` directly.
+   */
+  contextLostRecovery: v.optional(v.boolean()),
+  /**
+   * Wide-gamut color-space tag for the swap chain / NSWindow / GTK widget.
+   * Combine with `hdr: true` for HDR10 surfaces on Windows.
+   */
+  colorSpace: v.optional(v.picklist(["srgb", "p3", "rec2020", "linear"])),
+  /** Request an HDR10 surface (Win / macOS). Linux logs a degraded fallback. */
+  hdr: v.optional(v.boolean()),
+  /**
+   * Variable-refresh-rate (G-Sync / FreeSync / ProMotion). Off by default
+   * — only enable for animation / gaming workloads that benefit from
+   * tear-free dynamic frame pacing.
+   */
+  vrr: v.optional(v.boolean()),
+  /** Multi-GPU adapter pin for workstations. See {@link GpuPreference}. */
+  gpu: v.optional(GpuPreferenceSchema),
 });
 export type WindowConfig = v.InferOutput<typeof WindowConfigSchema>;
 

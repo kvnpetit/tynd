@@ -78,7 +78,7 @@ jobs:
         working-directory: tynd
         run: |
           set -euo pipefail
-          for bench in ipc_eval_str ipc_yield_batch scheme_bin plugin_dispatch fs_acl; do
+          for bench in ipc_eval_str ipc_yield_batch ipc_rkyv_vs_serde scheme_bin plugin_dispatch fs_acl; do
             echo "::group::bench $bench (pr)"
             cargo bench -p tynd-host --bench "$bench" -- \
               --sample-size 10 --measurement-time 2 --warm-up-time 1 \
@@ -113,7 +113,7 @@ jobs:
         working-directory: tynd
         run: |
           set -euo pipefail
-          for bench in ipc_eval_str ipc_yield_batch scheme_bin plugin_dispatch fs_acl; do
+          for bench in ipc_eval_str ipc_yield_batch ipc_rkyv_vs_serde scheme_bin plugin_dispatch fs_acl; do
             echo "::group::bench $bench (main)"
             # Some benches may not exist on the merge base yet (e.g. fs_acl
             # was added in this wave). Skip-on-error keeps the comparison

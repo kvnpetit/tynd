@@ -19,6 +19,7 @@ use crate::{
 };
 
 mod dispatch;
+mod gpu;
 mod util;
 
 use util::webview_data_dir;
@@ -74,6 +75,15 @@ enum UserEvent {
     /// buffer exceeds `YIELD_BATCH_MAX`) to flush pending chunks to every
     /// webview in one `evaluate_script` per window.
     FlushYields,
+    /// Web content process / GPU process crashed. Triggers a reload of the
+    /// affected webview when `window.contextLostRecovery` is enabled, plus
+    /// emits `webview:context-lost` so the frontend can react. macOS / iOS
+    /// fire this via `WKWebView`'s
+    /// `webViewWebContentProcessDidTerminate:`; on Windows + Linux the
+    /// underlying compositor recovers transparently and the host stays
+    /// silent — hence the platform-conditional `dead_code` allow.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    ContextLost { label: String },
 }
 
 /// Maximum yields buffered per window before we flush synchronously.
@@ -96,6 +106,13 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         call_tx,
         event_rx,
     } = bridge;
+
+    // Phase 1 of the GPU pipeline — set process-wide env vars (NVIDIA PRIME
+    // / DRI_PRIME / WEBKIT_USE_WEBGPU) BEFORE WebView2 / WKWebView /
+    // WebKitGTK initialise. Chromium snapshots most of these at first GPU
+    // process spawn, so retro-active changes after the WebViewBuilder runs
+    // are no-ops.
+    gpu::apply_pre_webview_env(&config.window);
 
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
@@ -267,6 +284,29 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         .with_navigation_handler(navigation_handler(PRIMARY_LABEL))
         .with_on_page_load_handler(page_load_handler(PRIMARY_LABEL));
 
+    // Phase 2 of the GPU pipeline — Chromium browser-args injection on
+    // Windows (WebView2). macOS / Linux configure their hints through env
+    // vars + builder configs already applied above.
+    #[cfg(target_os = "windows")]
+    if let Some(args) = gpu::assemble_browser_args(&config.window) {
+        use wry::WebViewBuilderExtWindows;
+        wb = wb.with_additional_browser_args(args);
+    }
+
+    // macOS / iOS — observe web content process termination so the host
+    // can auto-recover the WebView when the GPU process dies. Defaults to
+    // on; opt-out via `window.contextLostRecovery: false`.
+    #[cfg(target_os = "macos")]
+    if config.window.context_lost_recovery.unwrap_or(true) {
+        use wry::WebViewBuilderExtDarwin;
+        let proxy_ctx = proxy.clone();
+        wb = wb.with_on_web_content_process_terminate_handler(move || {
+            let _ = proxy_ctx.send_event(UserEvent::ContextLost {
+                label: PRIMARY_LABEL.into(),
+            });
+        });
+    }
+
     if let Some(ref ua) = config.window.user_agent {
         wb = wb.with_user_agent(ua);
     }
@@ -314,6 +354,11 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         window::center_window(&native_window);
     }
 
+    // Soft FPS-cap diagnostic. Compositor enforces the actual frame budget;
+    // this just surfaces operator misconfig (e.g. preferredFps=144 on a
+    // 60 Hz monitor → silently capped to 60).
+    gpu::warn_if_fps_above_monitor(&config.window, &native_window);
+
     let exit_started = std::sync::Arc::new(AtomicBool::new(false));
     // tao lacks minimize/maximize/fullscreen events; diff against this snapshot on Resized.
     let mut last_state = WindowState::capture(&native_window);
@@ -358,6 +403,21 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
             {
                 crate::cleanup::run();
                 std::process::exit(0);
+            },
+
+            Event::UserEvent(UserEvent::ContextLost { label }) => {
+                // Notify the frontend so it can clear in-flight WebGPU /
+                // WebGL state, then reload the affected webview to
+                // re-create the GPU contexts. Same recovery path as a
+                // dev-mode `BackendEvent::Reload` for that one window.
+                let payload = json!({ "label": &label });
+                let emit_script = ipc::eval_dispatch("webview:context-lost", &payload.to_string());
+                let wv = webview_for(&label, &webview, &secondaries);
+                let _ = wv.evaluate_script(&emit_script);
+                let _ = wv.evaluate_script("window.location.reload();");
+                crate::tynd_warn!(
+                    "webview '{label}' context lost — reloading to recover GPU state"
+                );
             },
 
             Event::UserEvent(UserEvent::FlushYields) => {
@@ -1202,6 +1262,24 @@ fn create_secondary(
         wvb = wvb.with_devtools(true);
         wvb = wvb.with_initialization_script(ipc::JS_DEV_FLAG);
     }
+
+    // Secondary windows inherit the primary's WebGPU / FPS / HDR knobs by
+    // default — the GPU process is shared, so per-window divergence
+    // wouldn't actually take effect. We still wire the context-lost
+    // handler per-window so a recovery reload only touches the affected
+    // surface.
+    #[cfg(target_os = "macos")]
+    {
+        use wry::WebViewBuilderExtDarwin;
+        let proxy_ctx = proxy.clone();
+        let label_ctx = label.clone();
+        wvb = wvb.with_on_web_content_process_terminate_handler(move || {
+            let _ = proxy_ctx.send_event(UserEvent::ContextLost {
+                label: label_ctx.clone(),
+            });
+        });
+    }
+
     wvb = wvb.with_asynchronous_custom_protocol(
         "tynd-bin".into(),
         |_id, req: Request<Vec<u8>>, responder| scheme_bin::handle_async(req, responder),

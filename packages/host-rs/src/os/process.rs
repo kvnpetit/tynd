@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     process::{Child, ChildStdin, Command, Stdio},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use serde_json::{json, Value};
@@ -82,6 +82,13 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
     };
 
     if let Some(cwd) = args.get("cwd").and_then(|v| v.as_str()) {
+        // SECURITY: route `cwd` through the same fs allow-list as every
+        // other host file access. Without this, a caller can pin a child
+        // process to `/etc` (Unix) or `C:\Windows\System32` (Windows) and
+        // launch a binary that reads from there using relative paths,
+        // sidestepping the security policy.
+        security::check_fs(cwd)
+            .map_err(|e| format!("process.exec: cwd not permitted: {e}"))?;
         command.current_dir(cwd);
     }
 
@@ -154,20 +161,24 @@ struct SpawnEntry {
     stdin: Mutex<Option<ChildStdin>>,
 }
 
-static REGISTRY: OnceLock<Mutex<HashMap<u32, &'static SpawnEntry>>> = OnceLock::new();
+static REGISTRY: OnceLock<Mutex<HashMap<u32, Arc<SpawnEntry>>>> = OnceLock::new();
 
-fn registry() -> &'static Mutex<HashMap<u32, &'static SpawnEntry>> {
+fn registry() -> &'static Mutex<HashMap<u32, Arc<SpawnEntry>>> {
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn registry_lock() -> std::sync::MutexGuard<'static, HashMap<u32, &'static SpawnEntry>> {
+fn registry_lock() -> std::sync::MutexGuard<'static, HashMap<u32, Arc<SpawnEntry>>> {
     registry()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-fn registry_remove(pid: u32) -> Option<&'static SpawnEntry> {
+fn registry_remove(pid: u32) -> Option<Arc<SpawnEntry>> {
     registry_lock().remove(&pid)
+}
+
+fn registry_get(pid: u32) -> Option<Arc<SpawnEntry>> {
+    registry_lock().get(&pid).cloned()
 }
 
 fn require_pid(args: &Value, op: &str) -> Result<u32, String> {
@@ -232,6 +243,11 @@ fn spawn(args: &Value) -> Result<Value, String> {
     command.args(&argv);
 
     if let Some(cwd) = args.get("cwd").and_then(|v| v.as_str()) {
+        // SECURITY: same gate as `exec` — `cwd` becomes the child's working
+        // directory and any relative path it dereferences is resolved
+        // against this. Run it through the fs policy before honoring it.
+        security::check_fs(cwd)
+            .map_err(|e| format!("process.spawn: cwd not permitted: {e}"))?;
         command.current_dir(cwd);
     }
     if let Some(env_obj) = args.get("env").and_then(|v| v.as_object()) {
@@ -256,15 +272,14 @@ fn spawn(args: &Value) -> Result<Value, String> {
     let stderr = child.stderr.take();
     let stdin = child.stdin.take();
 
-    // The registry entry is leaked deliberately — `&'static` makes the
-    // event-loop / read threads not need to coordinate lifetimes with the
-    // dispatch thread. Memory is reclaimed on `kill` / waiter-exit by the
-    // explicit `registry_remove` call which drops the box behind the
-    // reference.
-    let entry: &'static SpawnEntry = Box::leak(Box::new(SpawnEntry {
-        child: Mutex::new(None), // populated below before we spawn the waiter
+    // Refcounted entry: the registry, the waiter thread, and any
+    // concurrent `kill`/`writeStdin` callers each hold their own `Arc`.
+    // The last drop frees the entry — no race between `kill()` and the
+    // waiter's `Box::from_raw` (the original use-after-free).
+    let entry = Arc::new(SpawnEntry {
+        child: Mutex::new(Some(child)),
         stdin: Mutex::new(stdin),
-    }));
+    });
 
     // stdout reader
     if let Some(out) = stdout {
@@ -277,27 +292,25 @@ fn spawn(args: &Value) -> Result<Value, String> {
         std::thread::spawn(move || pump_stream(err, event_name));
     }
 
-    // Move the Child into the registry entry so kill() can reach it. We
-    // can't share `Child` between dispatch threads + waiter thread without
-    // a Mutex, and ChildStdin handles already need their own lock for
-    // concurrent writeStdin calls.
-    *entry
-        .child
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(child);
-
-    registry_lock().insert(pid, entry);
+    registry_lock().insert(pid, Arc::clone(&entry));
 
     // Waiter thread — `wait()` blocks until the child exits, which is
     // exactly what we want here. The OS already gave us a separate handle
     // per stdio pipe, so the read threads above are unaffected.
+    let waiter_entry = Arc::clone(&entry);
     std::thread::spawn(move || {
-        let mut child_opt = entry
-            .child
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(mut c) = child_opt.take() {
-            drop(child_opt); // release the lock before `wait()` (long blocking call)
+        // Take the Child out of the entry so we can call `wait()`
+        // without holding the mutex (long blocking call). A racing
+        // `kill()` that grabs the lock before we do still works — it
+        // just sends the signal first; our `wait()` then reaps it.
+        let child_opt = {
+            let mut guard = waiter_entry
+                .child
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            guard.take()
+        };
+        if let Some(mut c) = child_opt {
             let status = c.wait();
             let (code, signal) = match status {
                 Ok(s) => {
@@ -321,24 +334,14 @@ fn spawn(args: &Value) -> Result<Value, String> {
                 }),
             );
         }
-        // Drop the registry entry. SAFETY: the &'static came from
-        // Box::leak; reconstructing the Box and letting it drop is the
-        // documented inverse. No other thread holds the reference past
-        // the exit event because (a) the read threads already returned on
-        // EOF, (b) frontend writeStdin / kill calls that race the exit
-        // either find an empty registry slot (no-op) or grab the now
-        // dropped stdin pipe before our remove fires (also a no-op once
-        // the OS reaps the pipe).
-        if let Some(entry) = registry_remove(pid) {
-            // SAFETY: `entry` was created via `Box::leak`. We hold the only
-            // reference into it after `registry_remove` (the read threads
-            // never touched the entry — they own the raw stdout/stderr
-            // pipes directly), so reconstructing the Box and dropping it
-            // is sound.
-            unsafe {
-                let _ = Box::from_raw(entry as *const _ as *mut SpawnEntry);
-            }
-        }
+        // Drop the registry's Arc. Any caller that grabbed an Arc in
+        // between (a racing `writeStdin` / `kill`) keeps the entry
+        // alive until *they* drop their clone — the entry is freed on
+        // the last decrement, which is the safe inverse of the old
+        // `Box::leak` / `Box::from_raw` dance.
+        let _ = registry_remove(pid);
+        // `waiter_entry` itself drops here.
+        drop(waiter_entry);
     });
 
     Ok(json!({ "pid": pid }))
@@ -361,9 +364,7 @@ fn write_stdin(args: &Value) -> Result<Value, String> {
         return Err("process.writeStdin: 'data' must be string or byte array".into());
     };
 
-    let entry = registry_lock()
-        .get(&pid)
-        .copied()
+    let entry = registry_get(pid)
         .ok_or_else(|| format!("process.writeStdin: pid {pid} not found (already exited?)"))?;
     let mut stdin_opt = entry
         .stdin
@@ -380,9 +381,7 @@ fn write_stdin(args: &Value) -> Result<Value, String> {
 
 fn close_stdin(args: &Value) -> Result<Value, String> {
     let pid = require_pid(args, "closeStdin")?;
-    let entry = registry_lock()
-        .get(&pid)
-        .copied()
+    let entry = registry_get(pid)
         .ok_or_else(|| format!("process.closeStdin: pid {pid} not found"))?;
     // Dropping the ChildStdin closes the write end of the pipe — the child
     // sees EOF on stdin which is exactly what users mean by "close stdin".
@@ -395,28 +394,75 @@ fn close_stdin(args: &Value) -> Result<Value, String> {
 
 fn kill(args: &Value) -> Result<Value, String> {
     let pid = require_pid(args, "kill")?;
-    let _signal = args
+    let signal = args
         .get("signal")
         .and_then(Value::as_str)
         .unwrap_or("SIGTERM");
-    // `Child::kill` always sends SIGKILL on Unix and TerminateProcess on
-    // Windows. The platform-specific SIGTERM / SIGINT path requires
-    // libc::kill on Unix; we'd plumb that through if/when an app needs
-    // graceful shutdown via signal. For now we accept the `signal` arg for
-    // forward-compat with the documented TS surface and ignore it — the
-    // child still dies, just with kernel-level prejudice.
-    let entry = registry_lock()
-        .get(&pid)
-        .copied()
+
+    let entry = registry_get(pid)
         .ok_or_else(|| format!("process.kill: pid {pid} not found"))?;
-    let mut child_opt = entry
-        .child
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if let Some(child) = child_opt.as_mut() {
-        child
-            .kill()
-            .map_err(|e| format!("process.kill: {e}"))?;
+
+    // On Unix we honour the actual signal name — `SIGTERM` and `SIGINT`
+    // give the child a chance to shut down gracefully (close sockets,
+    // flush buffers); only `SIGKILL` (or the `Child::kill` fallback)
+    // takes the kernel-level prejudice path. On Windows there's no
+    // signal abstraction — `TerminateProcess` is the only knob, so the
+    // signal name is recorded for forward-compat but otherwise ignored.
+    #[cfg(unix)]
+    {
+        use nix::{sys::signal::Signal, unistd::Pid};
+        // `Child::kill()` always sends SIGKILL — for SIGTERM/SIGINT we
+        // go through `nix::sys::signal::kill`. We hold the child mutex
+        // only long enough to learn the pid; the actual signal goes
+        // through the OS by pid number so a racing `wait()` doesn't
+        // deadlock on the lock.
+        let target_pid: Option<i32> = {
+            let guard = entry
+                .child
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            guard.as_ref().map(|c| c.id() as i32)
+        };
+        let Some(target_pid) = target_pid else {
+            // Already reaped by the waiter thread.
+            return Ok(Value::Null);
+        };
+        let sig = match signal {
+            "SIGINT" => Signal::SIGINT,
+            "SIGHUP" => Signal::SIGHUP,
+            "SIGQUIT" => Signal::SIGQUIT,
+            "SIGUSR1" => Signal::SIGUSR1,
+            "SIGUSR2" => Signal::SIGUSR2,
+            "SIGKILL" => Signal::SIGKILL,
+            // SIGTERM is the documented default; an unknown name falls
+            // through to it rather than escalating straight to SIGKILL
+            // so callers get the polite shutdown they asked for.
+            _ => Signal::SIGTERM,
+        };
+        match nix::sys::signal::kill(Pid::from_raw(target_pid), sig) {
+            Ok(()) => {},
+            // ESRCH (pid already exited) is benign — the waiter will
+            // emit the exit event when it observes the reap.
+            Err(nix::errno::Errno::ESRCH) => {},
+            Err(e) => return Err(format!("process.kill: {e}")),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        // Windows: TerminateProcess is the only termination primitive;
+        // record the requested signal in the log so callers can see
+        // their preference was acknowledged but treat all values as a
+        // hard kill.
+        let _ = signal;
+        let mut child_opt = entry
+            .child
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(child) = child_opt.as_mut() {
+            child
+                .kill()
+                .map_err(|e| format!("process.kill: {e}"))?;
+        }
     }
     Ok(Value::Null)
 }

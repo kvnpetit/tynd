@@ -35,9 +35,6 @@ pub fn run() -> ! {
         }
     }
 
-    #[cfg(feature = "bundled-plugins")]
-    register_bundled_plugins();
-
     if let Some(embedded) = embed::try_load_embedded() {
         let (bridge, _reload) = quickjs::start(
             &embedded.bundle_path,
@@ -71,13 +68,3 @@ pub fn run() -> ! {
     tynd_host::app::run_app(bridge, args.debug);
 }
 
-/// Register every official plugin linked through the `bundled-plugins`
-/// feature. Runs before the event loop so dispatch is ready the moment
-/// the frontend boots.
-#[cfg(feature = "bundled-plugins")]
-fn register_bundled_plugins() {
-    use tynd_host::plugins::register;
-    register(tynd_plugin_sql::__tynd_plugin());
-    register(tynd_plugin_terminal::__tynd_plugin());
-    register(tynd_plugin_clipboard_history::__tynd_plugin());
-}

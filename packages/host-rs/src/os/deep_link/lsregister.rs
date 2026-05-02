@@ -160,14 +160,23 @@ pub(super) fn register(scheme: &str) -> Result<(), String> {
 }
 
 pub(super) fn unregister(scheme: &str) -> Result<(), String> {
+    // Pass `NULL` (a null `CFStringRef`) as the bundle id — Launch
+    // Services treats that as "clear the handler" and falls back to
+    // whatever else has the scheme in its `CFBundleURLTypes`. The
+    // previous implementation set `com.tynd.unregistered` (a bundle id
+    // that doesn't exist) which polluted LaunchServices' database with
+    // a phantom entry per scheme — visible in `lsregister -dump` until
+    // the next `lsregister -kill -r`.
+    //
+    // If a future macOS release rejects NULL here (it currently
+    // doesn't — Apple's own apps use the same trick), we'd need to
+    // synthesize a "no-op" handler at install time and hand the scheme
+    // back to it. For now NULL is the cleanest unregister.
     let scheme_cf =
         cfstring_from_str(scheme).ok_or_else(|| "scheme contains a NUL byte".to_string())?;
-    let placeholder_cf = cfstring_from_str("com.tynd.unregistered")
-        .ok_or_else(|| "internal placeholder is invalid".to_string())?;
-    let status = unsafe { LSSetDefaultHandlerForURLScheme(scheme_cf, placeholder_cf) };
+    let status = unsafe { LSSetDefaultHandlerForURLScheme(scheme_cf, std::ptr::null()) };
     unsafe {
         CFRelease(scheme_cf);
-        CFRelease(placeholder_cf);
     }
     if status != 0 {
         return Err(format!("LSSetDefaultHandlerForURLScheme returned {status}"));

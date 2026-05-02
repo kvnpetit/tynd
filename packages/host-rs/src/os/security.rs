@@ -590,23 +590,33 @@ fn auto_restore_persisted() {
             g.http.iter().cloned().collect::<Vec<_>>(),
         )
     };
-    for entry in snapshot.0 {
-        let absolute = expand_tilde(&entry);
-        let pattern = format!("{}/**", absolute.trim_end_matches('/'));
-        // Direct policy mutation — `add_fs_allow` would recurse into
-        // `auto_restore_persisted()` and short-circuit, but we already
-        // hold the latch, so call the lock-touching code inline to keep
-        // the call graph obvious.
+    // One write-lock acquisition for the whole fs scope (every
+    // persisted entry), then a separate one for http. The previous
+    // shape took the lock once per entry, which on a cold start with
+    // a few dozen persisted grants degraded into a noticeable burst
+    // of write-lock contention on the first `add_*_allow` call from
+    // any thread.
+    if !snapshot.0.is_empty() {
         let mut p = policy().write();
-        if !p.fs.allow.iter().any(|existing| existing == &pattern) {
-            p.fs.allow.push(pattern);
+        for entry in snapshot.0 {
+            let absolute = expand_tilde(&entry);
+            let pattern = format!("{}/**", absolute.trim_end_matches('/'));
+            // Direct policy mutation — `add_fs_allow` would recurse
+            // into `auto_restore_persisted()` and short-circuit, but
+            // we already hold the latch, so call the lock-touching
+            // code inline to keep the call graph obvious.
+            if !p.fs.allow.iter().any(|existing| existing == &pattern) {
+                p.fs.allow.push(pattern);
+            }
         }
         p.configured = true;
     }
-    for entry in snapshot.1 {
+    if !snapshot.1.is_empty() {
         let mut p = policy().write();
-        if !p.http.allow.iter().any(|existing| existing == &entry) {
-            p.http.allow.push(entry);
+        for entry in snapshot.1 {
+            if !p.http.allow.iter().any(|existing| existing == &entry) {
+                p.http.allow.push(entry);
+            }
         }
         p.configured = true;
     }

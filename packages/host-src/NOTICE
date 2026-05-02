@@ -100,6 +100,13 @@ Plugins ship their own Rust native crates; each is statically linked into
 the app's host binary when the plugin is enabled. All are licensed under
 `Apache-2.0 OR MIT` and live at https://github.com/tynd-apps/plugins.
 
-- tynd_plugin_clipboard_history
+- tynd_plugin_audio
+- tynd_plugin_command_palette
+- tynd_plugin_gpu
+- tynd_plugin_llm
+- tynd_plugin_screen_rec
 - tynd_plugin_sql
 - tynd_plugin_terminal
+- tynd_plugin_tts
+- tynd_plugin_wgpu
+- tynd_plugin_whisper

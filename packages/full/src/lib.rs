@@ -1,9 +1,10 @@
 //! Library-style entry for the `tynd-full` runtime.
 //!
-//! Preset build (`default = ["preset"]`): links every official plugin via
-//! the `bundled-plugins` feature and auto-registers them before the
-//! event loop starts — user apps get the full framework surface with
-//! zero config.
+//! Preset build (`default = ["preset"]`): every OS API is linked but NO
+//! plugins are bundled — keeps the base binary lightweight. Apps that
+//! need plugins (sql, terminal, audio, llm, etc.) declare them in
+//! `tynd.config.ts` and the CLI generates a custom wrapper crate that
+//! pulls only the plugins the app actually uses.
 //!
 //! Custom build (`--no-default-features --features "tynd-host/api-*"`):
 //! the CLI generates a tiny wrapper crate that links `tynd_full` plus
@@ -50,9 +51,6 @@ pub fn run() -> ! {
         }
     }
 
-    #[cfg(feature = "bundled-plugins")]
-    register_bundled_plugins();
-
     if let Some(embedded) = embed::try_load_embedded() {
         std::env::set_var("TYND_BUN_PATH", &embedded.bun_path);
         std::env::set_var("TYND_FRONTEND_DIR", &embedded.frontend_dir);
@@ -85,14 +83,3 @@ pub fn run() -> ! {
     tynd_host::app::run_app(bridge, args.debug);
 }
 
-/// Register every official plugin that was linked in through the
-/// `bundled-plugins` feature. Runs before the plugin event bus is wired
-/// (safe — each plugin's `init()` gets called later when
-/// `install_default_emit()` fires in `run_app`).
-#[cfg(feature = "bundled-plugins")]
-fn register_bundled_plugins() {
-    use tynd_host::plugins::register;
-    register(tynd_plugin_sql::__tynd_plugin());
-    register(tynd_plugin_terminal::__tynd_plugin());
-    register(tynd_plugin_clipboard_history::__tynd_plugin());
-}

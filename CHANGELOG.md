@@ -11,10 +11,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Workspace deps for V1 hardening pass: `specta` + `specta-typescript` (Rust → TS type generation), `camino` (UTF-8-guaranteed paths at IPC boundary), `miette` (rustc-style diagnostic errors), `serialize-to-javascript` (XSS-safe webview init scripts), `window-vibrancy` (native blur — macOS vibrancy + Windows Mica/Acrylic/Tabbed), `embed_plist` (macOS entitlements for CLI helpers), `tauri-icns` (cross-platform `.icns` encode), `handlebars` (installer templating), `walkdir` (bundler asset staging), `zip` (modern archive read/write), `goblin` (PE/ELF/Mach-O parser for pre-flight signing checks), `data-url` (custom-scheme handler), `scopeguard` (panic-safe RAII).
 - `@tynd/core/config` — c12-backed config loader with layered overrides (base + env + local), `extends:` chains (GitHub/GitLab templates), and `watchTyndConfig` for HMR of `tynd.config.ts` in `tynd dev`.
+- **os/window_persistence:** persisted window geometry (size/pos/maximized/fullscreen) keyed by label, surfaced as the native equivalent of the former `@tynd/plugin-window-state`.
+- **os/keys:** native keyboard shortcut registry (register/unregister/list global accelerators) — folds the former `@tynd/plugin-shortcuts` surface into the host.
+- **os/cli:** parsed argv + matched subcommand exposed to the backend, replacing `@tynd/plugin-cli`.
+- **os/deep_link:** new module split into `mod`, `registry`, `lsregister`, `xdg_desktop`, `forwarding` — full URL-scheme registration on macOS (LSRegister), Linux (XDG `.desktop`), and Windows; runtime forwarding to active windows. Supersedes `@tynd/plugin-deeplink`.
+- **os/security extensions:** `persistGrant` / `revokeGrant` / `listGrants` plus persisted-scope helpers — folds `@tynd/plugin-persisted-scope` into the host ACL.
+- **os/acl:** capability allow-list enforced before every dispatch, with named policies and audit logs.
+- **os/observability:** structured spans + counters + the `webview:context-lost` event so apps can surface GPU recovery state.
+- **os/biometric:** Touch ID / Windows Hello / `polkit` authentication prompt.
+- **os/screenshot:** monitor + window capture (PNG bytes, monitor / window enumeration).
+- **os/system_stats:** CPU, memory, disks, processes, uptime sampling.
+- **os/network:** interface enumeration (name, MAC, IPv4/IPv6, MTU, status).
+- **os/vault:** encrypted file vault (read/write/exists/delete) keyed by user-supplied password.
+- **app/gpu:** 7 new `WindowConfig` knobs to opt-in / tune the WebView GPU pipeline (acceleration toggle, preferred adapter, force-dx12, force-vulkan, frame-pacing, present-mode, context-lost recovery).
+- **runtime:** `webview:context-lost` event so apps can react to GPU process crashes / driver resets.
 
 ### Changed
 
 - `@tynd/core` now declares `c12`, `hookable`, and `std-env` as runtime deps to back the V1 config + plugin-lifecycle surface.
+- **runtime:** `tynd-full` and `tynd-lite` no longer bundle plugins (was: shipped `@tynd/plugin-sql`, `@tynd/plugin-terminal`, and `@tynd/plugin-clipboard-history` baked into the binary). Apps declare plugins explicitly via `tynd.config.ts::plugins` and the CLI generates a custom `Cargo.toml` that pulls in only what's needed.
+
+### Removed
+
+- **runtime:** `bundled-plugins` Cargo feature on `tynd-full` / `tynd-lite` (replaced by per-app custom builds).
+- **plugins folded into the native host** (now part of the core OS surface): `@tynd/plugin-window-state` (→ `os/window_persistence`), `@tynd/plugin-persisted-scope` (→ `os/security` extensions), `@tynd/plugin-prevent-default` (→ `app/gpu` knobs + native event masks), `@tynd/plugin-cli` (→ `os/cli`), `@tynd/plugin-deeplink` (→ `os/deep_link`).
+- **plugins dropped entirely** (no replacement — community can re-publish from git history): `@tynd/plugin-qr`, `@tynd/plugin-i18n`, `@tynd/plugin-clipboard-history`.
 
 ### Roadmap
 

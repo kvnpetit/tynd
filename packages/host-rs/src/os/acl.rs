@@ -56,7 +56,10 @@
 use std::{
     collections::BTreeMap,
     path::Path,
-    sync::OnceLock,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    },
 };
 
 use parking_lot::RwLock;
@@ -88,6 +91,13 @@ pub struct Authority {
     /// without an active manifest, every call is allowed). Rebuilt on
     /// every mutation.
     resolved: RwLock<Option<Resolved>>,
+    /// Sticky latch — flips to `true` the first time `add_capability`
+    /// (or `load_file`) registers a real grant and **never** flips
+    /// back. Used by `is_allowed` to keep the deny-by-default posture
+    /// after an admin removes the last capability: without this an
+    /// attacker (or accidental cleanup) could revert a configured
+    /// process to the open-by-default mode of an unconfigured one.
+    ever_configured: AtomicBool,
 }
 
 impl Authority {
@@ -96,6 +106,7 @@ impl Authority {
             capabilities: RwLock::new(BTreeMap::new()),
             manifests: RwLock::new(BTreeMap::new()),
             resolved: RwLock::new(None),
+            ever_configured: AtomicBool::new(false),
         }
     }
 
@@ -110,11 +121,17 @@ impl Authority {
             CapabilityFile::Capability(c) => vec![c],
             CapabilityFile::List(list) | CapabilityFile::NamedList { capabilities: list } => list,
         };
+        let inserted_any = !caps.is_empty();
         {
             let mut write = self.capabilities.write();
             for c in caps {
                 write.insert(c.identifier.clone(), c);
             }
+        }
+        if inserted_any {
+            // Sticky — we now have at least one grant on file, so the
+            // process is in "configured" mode for the rest of its life.
+            self.ever_configured.store(true, Ordering::SeqCst);
         }
         self.rebuild_resolved()
     }
@@ -123,6 +140,9 @@ impl Authority {
     /// with the same identifier.
     pub fn add_capability(&self, cap: Capability) -> Result<(), String> {
         self.capabilities.write().insert(cap.identifier.clone(), cap);
+        // Sticky latch — see `Authority::ever_configured`. Stays true
+        // even after a subsequent `remove_capability` empties the map.
+        self.ever_configured.store(true, Ordering::SeqCst);
         self.rebuild_resolved()
     }
 
@@ -174,9 +194,16 @@ impl Authority {
     ) -> bool {
         let resolved_guard = self.resolved.read();
         let Some(resolved) = resolved_guard.as_ref() else {
-            // No manifest loaded → fail open, same as `security.rs`
-            // before `security.configure` is called.
-            return true;
+            // Nothing resolved. Two cases:
+            //  * Truly unconfigured (no `add_capability` / `load_file`
+            //    has ever run) → fail open, matching the `security.rs`
+            //    posture before `security.configure` is called.
+            //  * Was configured, all capabilities later removed → fail
+            //    closed. Once an admin has expressed intent to gate
+            //    this process, an empty list means "deny everything",
+            //    not "back to no policy". The sticky `ever_configured`
+            //    latch encodes that.
+            return !self.ever_configured.load(Ordering::SeqCst);
         };
 
         let lookup_keys = command_lookup_keys(command);
@@ -496,12 +523,16 @@ mod tests {
     }
 
     /// Wipe the singleton's state. Cheaper than rebuilding the whole
-    /// `OnceLock` (which we can't anyway).
+    /// `OnceLock` (which we can't anyway). Also clears the sticky
+    /// `ever_configured` latch so each test starts from a clean
+    /// "unconfigured" slate — production code never resets the latch
+    /// on purpose, but tests own the singleton across runs.
     fn reset() {
         let auth = authority();
         auth.capabilities.write().clear();
         auth.manifests.write().clear();
         *auth.resolved.write() = None;
+        auth.ever_configured.store(false, Ordering::SeqCst);
     }
 
     /// Build a minimal `Manifest` with one named permission whose
@@ -626,10 +657,32 @@ mod tests {
         assert!(authority().is_allowed("vault:read", None, None, None));
 
         authority().remove_capability("c1").expect("remove");
-        // Removing the last capability resets to "fail open" — the ACL
-        // is back to unconfigured state. Document that here so a
-        // future change doesn't silently regress the contract.
-        assert!(authority().is_allowed("vault:read", None, None, None));
+        // Removing the last capability does NOT reopen the gate — once
+        // the authority has ever been configured, an empty capability
+        // set means deny-by-default. Otherwise an admin clearing the
+        // policy by mistake (or an attacker via the runtime API) would
+        // hand the process back to the open-by-default mode of an
+        // unconfigured one. See `Authority::ever_configured`.
+        assert!(!authority().is_allowed("vault:read", None, None, None));
+    }
+
+    #[test]
+    fn ever_configured_latch_persists_across_full_clear() {
+        let _g = test_lock().lock().unwrap_or_else(|e| e.into_inner());
+        reset();
+        authority()
+            .register_manifest("vault", manifest_with("allow-all", "read"))
+            .expect("register");
+        authority()
+            .add_capability(capability("c1", "vault:allow-all", vec![]))
+            .expect("add");
+
+        // Drop every capability — production callers can't unset the
+        // latch, so we go through the public API and confirm the gate
+        // stays closed for both known and unknown commands.
+        authority().remove_capability("c1").expect("remove");
+        assert!(!authority().is_allowed("vault:read", None, None, None));
+        assert!(!authority().is_allowed("anything-else", None, None, None));
     }
 
     #[test]

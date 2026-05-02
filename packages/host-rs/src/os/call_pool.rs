@@ -45,7 +45,24 @@ fn pool() -> &'static Pool {
     })
 }
 
+/// RAII guard that decrements `alive_workers` when the worker thread
+/// exits — covers both the "loop returned normally" path (currently
+/// unreachable, but defended against future refactors) and the "thread
+/// hard-aborted" path (panic during the queue lock acquisition or a
+/// future change that lets the loop exit). Without this the counter
+/// only ever monotonically increases, so an aborted worker would
+/// permanently subtract one slot from the effective pool while the
+/// `alive < max_workers` check still believes everyone is alive.
+struct WorkerLifeTracker;
+
+impl Drop for WorkerLifeTracker {
+    fn drop(&mut self) {
+        pool().alive_workers.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 fn worker_loop() {
+    let _tracker = WorkerLifeTracker;
     let p = pool();
     loop {
         let job = {
