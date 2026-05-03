@@ -22,7 +22,7 @@
 //! Run with:
 //!   cargo bench -p tynd-host --bench plugin_dispatch
 
-use std::sync::Once;
+use std::sync::{Arc, Once};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use serde_json::{json, Value};
@@ -52,7 +52,7 @@ fn ensure_registered() {
         // `install_default_emit` wires the shared emit + dispatch
         // closures so the registered plugin's `init` hook runs.
         plugins::install_default_emit();
-        plugins::register(Box::new(BenchPlugin));
+        plugins::register(Arc::new(BenchPlugin));
     });
 }
 
@@ -61,7 +61,12 @@ fn bench_dispatch(c: &mut Criterion) {
     let args = json!({ "k": "v" });
     c.bench_function("plugin_dispatch/echo", |b| {
         b.iter(|| {
-            let r = plugins::dispatch(black_box("bench-plugin:ping"), black_box(&args)).unwrap();
+            // V1 (B24): dispatch takes args by value — clone the
+            // template per iteration so we measure the post-clone
+            // dispatch cost (matches the host's runtime path where the
+            // IPC frame produced a fresh `Value`).
+            let r = plugins::dispatch(black_box("bench-plugin:ping"), black_box(args.clone()))
+                .unwrap();
             black_box(r);
         });
     });

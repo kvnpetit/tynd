@@ -6,6 +6,10 @@
 //!
 //! Events are normalised to the polyfill's `ws:*` shape (with the JS-side
 //! session id merged in) and delivered via `JsMsg::PolyfillEvent`.
+//!
+//! V1 (B27): the per-session command channel migrated from
+//! `std::sync::mpsc` to `crossbeam_channel` to match the host's session
+//! runner signature.
 
 use std::sync::{mpsc, OnceLock};
 
@@ -20,7 +24,7 @@ use crate::quickjs::JsMsg;
 /// Process-global session table. The polyfill bridges all hand work
 /// off to background threads keyed by JS-side session id, so a single
 /// `Sessions<Cmd>` (defined in `_session.rs`) replaces what used to
-/// be a `Mutex<HashMap<String, mpsc::Sender<Cmd>>>` declared inline.
+/// be a `Mutex<HashMap<String, Sender<Cmd>>>` declared inline.
 fn sessions() -> &'static Sessions<Cmd> {
     static REG: OnceLock<Sessions<Cmd>> = OnceLock::new();
     REG.get_or_init(Sessions::new)
@@ -38,7 +42,7 @@ pub(crate) fn register<'js>(
             Function::new(
                 ctx.clone(),
                 move |id: String, url: String, _protocols_json: String| {
-                    let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
+                    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded::<Cmd>();
                     sessions().insert(id.clone(), cmd_tx);
                     let tx = tx.clone();
                     std::thread::spawn(move || {

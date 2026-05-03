@@ -1,6 +1,13 @@
 //! WebSocket client. Each `connect` spawns a thread that polls the socket
 //! in non-blocking mode, emits `websocket:open|message|close|error` events,
-//! and drains an outbound mpsc queue. Blocking `tungstenite` under the hood.
+//! and drains an outbound `crossbeam_channel` queue. Blocking `tungstenite`
+//! under the hood.
+//!
+//! V1 (B27): the per-session command channel migrated from `std::sync::mpsc`
+//! to `crossbeam_channel`. The crossbeam variant gives faster `try_recv`
+//! micros on the read loop, supports `select!` for the future async
+//! backend wiring, and aligns with the rest of the workspace (audio
+//! plugin, lite polyfills) which already use crossbeam.
 //!
 //! The `ws-async` feature stages an alternative backend on top of
 //! `tokio-tungstenite` that removes the 25 ms read-timeout busy-poll
@@ -13,13 +20,10 @@
 #[path = "websocket_async.rs"]
 mod async_backend;
 
-use std::{
-    io::ErrorKind,
-    sync::{mpsc, LazyLock},
-    time::Duration,
-};
+use std::{io::ErrorKind, sync::LazyLock, time::Duration};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+use crossbeam_channel::{Receiver, Sender};
 use serde_json::{json, Value};
 use tungstenite::{protocol::CloseFrame, Message};
 
@@ -41,7 +45,11 @@ pub enum Cmd {
 /// `DashMap` on first reach (DashMap::new is non-const). Drops the
 /// `NEXT_ID` atomic + `Sessions` type alias + `OnceLock`/`get_or_init`
 /// dance the previous shape needed.
-static SESSIONS: LazyLock<Registry<mpsc::Sender<Cmd>>> = LazyLock::new(Registry::new);
+///
+/// V1 (B27): senders are `crossbeam_channel::Sender<Cmd>` — same
+/// owned-clone semantics as `mpsc::Sender`, with faster `send` micros
+/// and matching `try_recv` on the consumer side.
+static SESSIONS: LazyLock<Registry<Sender<Cmd>>> = LazyLock::new(Registry::new);
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -60,14 +68,14 @@ fn connect(args: &Value) -> Result<Value, String> {
         .ok_or_else(|| String::from(IpcError::missing_arg("websocket", "connect", "url")))?
         .to_string();
 
-    let (tx, rx) = mpsc::channel::<Cmd>();
+    let (tx, rx) = crossbeam_channel::unbounded::<Cmd>();
     let id = SESSIONS.insert(tx);
 
     std::thread::spawn(move || run_session(id, &url, &rx));
     Ok(json!({ "id": id }))
 }
 
-fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
+fn run_session(id: u64, url: &str, rx: &Receiver<Cmd>) {
     run_session_with(url, rx, |name, mut data| {
         // Merge the session id into the shared payload shape.
         if let Some(obj) = data.as_object_mut() {
@@ -82,7 +90,12 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
 /// receives normalised events: "websocket:open" | ":message" | ":close" |
 /// ":error" with `serde_json` payloads. Used by both the frontend-dispatch
 /// OS API (`run_session` above) and the lite runtime `WebSocket` polyfill.
-pub fn run_session_with<F>(url: &str, rx: &mpsc::Receiver<Cmd>, mut sink: F)
+///
+/// V1 (B27): `rx` is now a `crossbeam_channel::Receiver<Cmd>` —
+/// caller-side breakage is intentional; producers must use
+/// `crossbeam_channel::unbounded()` (or `bounded`) rather than
+/// `std::sync::mpsc::channel`.
+pub fn run_session_with<F>(url: &str, rx: &Receiver<Cmd>, mut sink: F)
 where
     F: FnMut(&'static str, Value),
 {
@@ -171,7 +184,7 @@ where
     }
 }
 
-fn session_tx(args: &Value) -> Result<mpsc::Sender<Cmd>, String> {
+fn session_tx(args: &Value) -> Result<Sender<Cmd>, String> {
     let id = args
         .get("id")
         .and_then(Value::as_u64)

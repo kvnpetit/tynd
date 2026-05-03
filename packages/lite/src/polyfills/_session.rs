@@ -5,8 +5,8 @@
 //! command-sender that drives the worker thread. Without this helper
 //! both modules ended up duplicating:
 //!
-//! - the `parking_lot::Mutex<HashMap<String, mpsc::Sender<Cmd>>>` declaration (with the `OnceLock`
-//!   lazy-init dance),
+//! - the `parking_lot::Mutex<HashMap<String, Sender<Cmd>>>` declaration
+//!   (with the `OnceLock` lazy-init dance),
 //! - lookup+forward boilerplate inside every JS-callable function,
 //! - cleanup-on-disconnect semantics.
 //!
@@ -15,8 +15,13 @@
 //! locking. We keep a single declaration of `parking_lot::Mutex` per
 //! cell — `std::sync::Mutex` would crash every subsequent operation
 //! if a holder ever panicked while holding the lock.
+//!
+//! V1 (B27): the inner sender type is now `crossbeam_channel::Sender`
+//! to align with the host's WebSocket session runner — the lite WS
+//! polyfill calls into `tynd_host::os::websocket::run_session_with`
+//! whose `Receiver` parameter expects the same crossbeam variant.
 
-use std::{collections::HashMap, sync::mpsc};
+use std::collections::HashMap;
 
 use parking_lot::Mutex;
 
@@ -27,7 +32,7 @@ use parking_lot::Mutex;
 /// Methods are intentionally tiny: nothing here owns a worker thread,
 /// the polyfill bridge does. This struct is only the routing table.
 pub(crate) struct Sessions<C> {
-    map: Mutex<HashMap<String, mpsc::Sender<C>>>,
+    map: Mutex<HashMap<String, crossbeam_channel::Sender<C>>>,
 }
 
 impl<C> Sessions<C> {
@@ -44,7 +49,7 @@ impl<C> Sessions<C> {
     /// Register a session by id. Overwrites any existing entry — the
     /// bridges treat duplicate ids as "the JS side abandoned the old
     /// session and reused the slot".
-    pub(crate) fn insert(&self, id: String, tx: mpsc::Sender<C>) {
+    pub(crate) fn insert(&self, id: String, tx: crossbeam_channel::Sender<C>) {
         self.map.lock().insert(id, tx);
     }
 

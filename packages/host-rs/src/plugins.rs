@@ -20,20 +20,37 @@
 //! The registry is process-global and frozen after startup — simpler
 //! than carrying a handle everywhere. Re-registering the same plugin
 //! name twice is a programming error and panics.
+//!
+//! # V1 storage layout (B12 + U2 + B24)
+//!
+//! - Plugins are kept as `Arc<dyn TyndPlugin>` (U2). Multiple worker
+//!   threads can dispatch through the same plugin without paying for a
+//!   `Box` clone — the trait already requires `Send + Sync`.
+//! - The entry map sits behind `arc-swap::ArcSwap<EntryMap>` (B12) so
+//!   the read path on `dispatch` is a single atomic load: no
+//!   `RwLock::read()` acquire/release pair, no contention with
+//!   late-binding registrations during startup.
+//! - `dispatch` takes `args: Value` by value (B24) — the host hands
+//!   ownership to the plugin and the previous `args.clone()` at the
+//!   dispatch boundary is gone.
 
 use std::sync::{Arc, OnceLock};
 
-use parking_lot::RwLock;
+use arc_swap::ArcSwap;
+use parking_lot::Mutex;
 use serde_json::Value;
 use tynd_plugin_sdk::{EmitFn, OsDispatchFn, PluginCx, TyndPlugin};
 
-type PluginBox = Box<dyn TyndPlugin>;
-
+/// Per-plugin entry. The plugin handle is `Arc`-shared so dispatch can
+/// snapshot-and-swap without cloning the inner state, and the per-plugin
+/// `PluginCx` is wrapped in `Arc` for the same reason.
 struct Entry {
-    plugin: PluginBox,
+    plugin: Arc<dyn TyndPlugin>,
     /// `None` until [`install_emit`] has wired the shared emit + dispatch
-    /// closures; then built from the entry's `allowed_apis`.
-    cx: Option<PluginCx>,
+    /// closures; then built from the entry's `allowed_apis`. Wrapped in
+    /// `Arc` so a snapshot swap doesn't need to deep-clone the context
+    /// (which holds two `Arc<dyn Fn>` callbacks itself).
+    cx: Option<Arc<PluginCx>>,
     /// Capability allow-list supplied at registration time. Kept so we
     /// can rebuild the `cx` when `install_emit` fires after this entry
     /// was pushed.
@@ -48,17 +65,19 @@ struct Entry {
 /// per call). Names are `&'static str` returned by `TyndPlugin::name`,
 /// so the key type stays cheap.
 ///
-/// Note re B12 (arc-swap read path): rejected — `Entry` carries a
-/// `Box<dyn TyndPlugin>` and `PluginCx` which aren't `Clone`, so a
-/// snapshot-and-swap pattern would require unsafe pointer surgery to
-/// hand the same plugin to both the old and new map. The hot read path
-/// is `RwLock::read()` from `parking_lot`, which is a single CAS on the
-/// uncontended path — close enough to arc-swap's single-load-acq for
-/// the once-at-startup write workload here.
+/// V1 (B12): the map lives behind `ArcSwap<EntryMap>` so reads on the
+/// dispatch hot path compile down to a single atomic load. Writes
+/// (registrations + the retroactive init walk in `install_emit`) clone
+/// the current snapshot, mutate the clone, then `store` it — readers
+/// in flight keep their pointer and finish against the old snapshot.
 type EntryMap = ahash::HashMap<&'static str, Entry>;
 
 struct Registry {
-    entries: RwLock<EntryMap>,
+    entries: ArcSwap<EntryMap>,
+    /// Serializes writers so two concurrent `register_with_caps` calls
+    /// don't race on a clone-mutate-store sequence and lose one another.
+    /// Readers never touch this lock — they go through `entries.load()`.
+    write_lock: Mutex<()>,
     /// Shared emit closure — every per-plugin `PluginCx` reuses it.
     default_emit: OnceLock<EmitFn>,
     /// Shared OS dispatcher — routes `cx.os_call(...)` into the core
@@ -69,7 +88,8 @@ struct Registry {
 impl Registry {
     fn new() -> Self {
         Self {
-            entries: RwLock::new(EntryMap::default()),
+            entries: ArcSwap::new(Arc::new(EntryMap::default())),
+            write_lock: Mutex::new(()),
             default_emit: OnceLock::new(),
             default_dispatch: OnceLock::new(),
         }
@@ -77,6 +97,35 @@ impl Registry {
 }
 
 static REGISTRY: std::sync::LazyLock<Registry> = std::sync::LazyLock::new(Registry::new);
+
+/// Helper: clone the current snapshot, run `mutate` against it, and
+/// publish the result. The write lock ensures we don't lose concurrent
+/// updates from two registrations running on different threads.
+///
+/// Note: `EntryMap` itself isn't `Clone` because `Entry` carries
+/// `Arc<dyn TyndPlugin>` + `Arc<PluginCx>` — both are cheap-clone, so
+/// the snapshot copy is dominated by the hashmap reallocation, not the
+/// per-entry data.
+fn rcu(mutate: impl FnOnce(&mut EntryMap)) {
+    let _guard = REGISTRY.write_lock.lock();
+    let current = REGISTRY.entries.load();
+    let mut next = clone_entry_map(&current);
+    mutate(&mut next);
+    REGISTRY.entries.store(Arc::new(next));
+}
+
+fn clone_entry_map(src: &EntryMap) -> EntryMap {
+    let mut out = EntryMap::with_capacity_and_hasher(src.len(), ahash::RandomState::new());
+    for (k, v) in src.iter() {
+        out.insert(*k, Entry {
+            plugin: Arc::clone(&v.plugin),
+            cx: v.cx.as_ref().map(Arc::clone),
+            allowed_apis: v.allowed_apis.clone(),
+            initialized: v.initialized,
+        });
+    }
+    out
+}
 
 /// Install the shared emit callback + wire the default OS dispatcher.
 /// Must run before the IPC loop drains its first message, but it may
@@ -87,7 +136,7 @@ pub fn install_emit(emit: EmitFn) {
     // loop twice don't panic.
     let _ = REGISTRY.default_emit.set(emit);
     let dispatch: OsDispatchFn = Arc::new(|api: &str, method: &str, args: Value| {
-        crate::os::dispatch(api, method, &args).map_err(Into::into)
+        crate::os::dispatch(api, method, args).map_err(Into::into)
     });
     let _ = REGISTRY.default_dispatch.set(dispatch);
 
@@ -103,26 +152,45 @@ pub fn install_emit(emit: EmitFn) {
         .expect("default_dispatch just set")
         .clone();
 
-    let mut entries = REGISTRY.entries.write();
-    for entry in entries.values_mut() {
-        if entry.initialized {
-            continue;
-        }
+    // Collect the work to do without holding the write_lock for the
+    // duration of every `init()` — gather the not-yet-initialized
+    // entries from a snapshot, run their inits (potentially racing with
+    // sibling-plugin emits), then publish the resulting cx + flag in a
+    // second rcu pass.
+    let snapshot = REGISTRY.entries.load();
+    let pending: Vec<(&'static str, Option<Vec<String>>, Arc<dyn TyndPlugin>)> = snapshot
+        .iter()
+        .filter(|(_, e)| !e.initialized)
+        .map(|(name, e)| (*name, e.allowed_apis.clone(), Arc::clone(&e.plugin)))
+        .collect();
+
+    let mut initialized: Vec<(&'static str, Arc<PluginCx>)> = Vec::with_capacity(pending.len());
+    for (name, allowed, plugin) in pending {
         let mut cx = PluginCx::new(emit.clone()).with_dispatch(dispatch.clone());
-        if let Some(apis) = entry.allowed_apis.clone() {
+        if let Some(apis) = allowed {
             cx = cx.with_allowed_apis(apis);
         }
-        if let Err(e) = entry.plugin.init(&cx) {
-            panic!("plugin '{}' init failed: {e}", entry.plugin.name());
+        if let Err(e) = plugin.init(&cx) {
+            panic!("plugin '{}' init failed: {e}", name);
         }
-        entry.cx = Some(cx);
-        entry.initialized = true;
+        initialized.push((name, Arc::new(cx)));
+    }
+
+    if !initialized.is_empty() {
+        rcu(|map| {
+            for (name, cx) in initialized {
+                if let Some(entry) = map.get_mut(name) {
+                    entry.cx = Some(cx);
+                    entry.initialized = true;
+                }
+            }
+        });
     }
 }
 
 /// Add a plugin to the registry with no capability restrictions. Use
 /// [`register_with_caps`] to enforce a `plugins[].apis` allow-list.
-pub fn register(plugin: PluginBox) {
+pub fn register(plugin: Arc<dyn TyndPlugin>) {
     register_with_caps(plugin, None);
 }
 
@@ -135,16 +203,16 @@ pub fn register(plugin: PluginBox) {
 /// # Panics
 /// - Duplicate plugin name (collision in generated `main.rs`).
 /// - Plugin's `init` hook returns `Err`.
-pub fn register_with_caps(plugin: PluginBox, allowed_apis: Option<Vec<String>>) {
-    // Duplicate check under a short-lived read lock so we can release it
-    // before running `init`. Otherwise an `init` that does anything
-    // plugin-aware (e.g. emits an event a sibling plugin listens to)
-    // would self-deadlock on the write guard.
+pub fn register_with_caps(plugin: Arc<dyn TyndPlugin>, allowed_apis: Option<Vec<String>>) {
     let name = plugin.name();
+
+    // Duplicate guard. The arc-swap snapshot is a single atomic load so
+    // we don't pay a lock for the check and the write_lock below
+    // serializes the actual registration.
     {
-        let read = REGISTRY.entries.read();
+        let snapshot = REGISTRY.entries.load();
         assert!(
-            !read.contains_key(name),
+            !snapshot.contains_key(name),
             "duplicate plugin registration: {name}"
         );
     }
@@ -164,29 +232,37 @@ pub fn register_with_caps(plugin: PluginBox, allowed_apis: Option<Vec<String>>) 
             if let Err(e) = plugin.init(&cx) {
                 panic!("plugin '{}' init failed: {e}", plugin.name());
             }
-            (Some(cx), true)
+            (Some(Arc::new(cx)), true)
         },
         _ => (None, false),
     };
 
-    REGISTRY.entries.write().insert(name, Entry {
-        plugin,
-        cx,
-        allowed_apis,
-        initialized,
+    rcu(|map| {
+        map.insert(name, Entry {
+            plugin,
+            cx,
+            allowed_apis,
+            initialized,
+        });
     });
 }
 
 /// Dispatch a `{type: "os_call", api: "plugin", method: "<plugin>:<method>", args}`
 /// IPC message. Returns the plugin's return value on success or the error
 /// message shape every other OS API uses.
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
+///
+/// V1 (B24): `args` is taken by value — ownership transfers to the
+/// plugin and the previous deep `Value::clone` at the dispatch boundary
+/// is gone.
+pub fn dispatch(method: &str, args: Value) -> Result<Value, String> {
     let (plugin_name, method_name) = method
         .split_once(':')
         .ok_or_else(|| format!("plugin call missing ':' separator: '{method}'"))?;
 
-    let entries = REGISTRY.entries.read();
-    let entry = entries
+    // Single atomic load — no `RwLock::read()` acquire/release on the
+    // dispatch hot path (B12).
+    let snapshot = REGISTRY.entries.load();
+    let entry = snapshot
         .get(plugin_name)
         .ok_or_else(|| format!("unknown plugin: '{plugin_name}'"))?;
 
@@ -197,13 +273,29 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 
     entry
         .plugin
-        .dispatch(cx, method_name, args.clone())
+        .dispatch(cx, method_name, args)
         .map_err(|e| e.to_string())
 }
 
 /// How many plugins are registered — used by `info` commands and tests.
 pub fn count() -> usize {
-    REGISTRY.entries.read().len()
+    REGISTRY.entries.load().len()
+}
+
+/// Run every registered plugin's [`TyndPlugin::shutdown`] hook in
+/// registration order. Errors are logged via `eprintln!` (no `tracing`
+/// dep at this layer); a failing shutdown does not stop the others from
+/// running. Designed for the host's shutdown sequence — wire from the
+/// `cleanup` module so plugins can flush DBs / cancel watchers before
+/// the runtime exits.
+pub fn shutdown_all() {
+    let snapshot = REGISTRY.entries.load();
+    for (name, entry) in snapshot.iter() {
+        let Some(cx) = entry.cx.as_ref() else { continue };
+        if let Err(e) = entry.plugin.shutdown(cx) {
+            eprintln!("plugin '{name}' shutdown error: {e}");
+        }
+    }
 }
 
 /// Default emit callback — wired through `os::events::emit` so plugins
@@ -280,25 +372,25 @@ mod tests {
     fn dispatch_routes_by_name() {
         install_default_emit();
         let inited = Arc::new(AtomicBool::new(false));
-        register(Box::new(Probe {
+        register(Arc::new(Probe {
             inited: inited.clone(),
         }));
         assert!(inited.load(Ordering::SeqCst));
         assert!(count() >= 1);
 
-        let out = dispatch("probe:ping", &json!(null)).unwrap();
+        let out = dispatch("probe:ping", json!(null)).unwrap();
         assert_eq!(out, json!("echo:ping"));
     }
 
     #[test]
     fn dispatch_unknown_plugin_fails() {
-        let err = dispatch("nope:whatever", &json!(null)).unwrap_err();
+        let err = dispatch("nope:whatever", json!(null)).unwrap_err();
         assert!(err.contains("unknown plugin"));
     }
 
     #[test]
     fn dispatch_missing_separator_fails() {
-        let err = dispatch("bad-shape", &json!(null)).unwrap_err();
+        let err = dispatch("bad-shape", json!(null)).unwrap_err();
         assert!(err.contains("separator"));
     }
 
@@ -306,13 +398,13 @@ mod tests {
     fn capability_denies_api_outside_allow_list() {
         install_default_emit();
         register_with_caps(
-            Box::new(CapProbe {
+            Arc::new(CapProbe {
                 name: "cap-fs-only",
             }),
             Some(vec!["fs".into()]),
         );
 
-        let err = dispatch("cap-fs-only:http", &json!(null)).unwrap_err();
+        let err = dispatch("cap-fs-only:http", json!(null)).unwrap_err();
         assert!(err.contains("plugin capability"));
         assert!(err.contains("http.probe"));
     }
@@ -321,7 +413,7 @@ mod tests {
     fn capability_allows_api_in_allow_list() {
         install_default_emit();
         register_with_caps(
-            Box::new(CapProbe {
+            Arc::new(CapProbe {
                 name: "cap-store-only",
             }),
             Some(vec!["store".into()]),
@@ -330,7 +422,7 @@ mod tests {
         // `store.probe` doesn't exist, but the capability check passes
         // and we get the "unknown method" error from os::dispatch itself
         // — proving the gate let the call through.
-        let err = dispatch("cap-store-only:store", &json!(null)).unwrap_err();
+        let err = dispatch("cap-store-only:store", json!(null)).unwrap_err();
         assert!(!err.contains("plugin capability"));
         assert!(err.to_lowercase().contains("store"));
     }

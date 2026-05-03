@@ -7,6 +7,11 @@
 //! polyfill installs `globalThis.__tynd_polyfill_event__` to receive them.
 //!
 //! Abort: per-request `AtomicBool` checked between reads.
+//!
+//! V1 (B27): per-fetch command channel switched from `std::sync::mpsc`
+//! to `crossbeam_channel` to match the shared `Sessions<C>` helper —
+//! the HTTP-side `JsMsg` channel back to QuickJS stays on `mpsc` (the
+//! rquickjs runtime expects that exact type).
 
 use std::{
     collections::HashMap,
@@ -67,7 +72,7 @@ pub(crate) fn register<'js>(
             Function::new(
                 ctx.clone(),
                 move |id: String, url: String, opts_json: String| {
-                    let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
+                    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded::<Cmd>();
                     sessions().insert(id.clone(), cmd_tx);
                     let tx = tx.clone();
                     std::thread::spawn(move || {
@@ -93,7 +98,7 @@ fn run_fetch(
     id: &str,
     url: &str,
     opts_json: &str,
-    cmd_rx: &mpsc::Receiver<Cmd>,
+    cmd_rx: &crossbeam_channel::Receiver<Cmd>,
     js_tx: &mpsc::Sender<JsMsg>,
 ) {
     let opts: Opts = match serde_json::from_str(opts_json) {
@@ -138,7 +143,7 @@ fn deliver_response(
     id: &str,
     status: u16,
     response: ureq::Response,
-    cmd_rx: &mpsc::Receiver<Cmd>,
+    cmd_rx: &crossbeam_channel::Receiver<Cmd>,
     js_tx: &mpsc::Sender<JsMsg>,
 ) {
     let status_text = response.status_text().to_string();

@@ -145,7 +145,7 @@ pub(super) fn handle_ipc_body(
             let proxy = proxy.clone();
             let label_owned = label.to_string();
             os::call_pool::submit(move || {
-                let result = os::dispatch(&api, &method, &args);
+                let result = os::dispatch(&api, &method, args);
                 let (ok, value) = match result {
                     Ok(v) => (true, v),
                     Err(e) => (false, Value::String(e)),

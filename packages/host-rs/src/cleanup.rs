@@ -51,12 +51,21 @@ pub fn trigger_shutdown() -> bool {
 /// Delete all registered directories. Called by `run_app` before every exit
 /// and by the panic / signal hooks before `std::process::exit`.
 ///
+/// V1 (U2): also walks the plugin registry and runs each plugin's
+/// [`TyndPlugin::shutdown`](tynd_plugin_sdk::TyndPlugin::shutdown) hook
+/// before the temp-dir sweep — gives plugins a chance to flush state
+/// (DBs, sockets, watchers) while the host's data dir is still around.
+///
 /// `defer!` ensures the tracing span emitted here fires even if a future
 /// refactor introduces an early-return path — RAII logging at no cost.
 pub fn run() {
     defer! {
         tracing::debug!(target: "tynd::cleanup", "cleanup::run complete");
     }
+    // Plugin shutdown hooks first — they may want to write final state
+    // into a registered temp dir before we delete those dirs below.
+    crate::plugins::shutdown_all();
+
     // Snapshot under the lock, then drop it before the (potentially
     // slow) recursive deletes. Holding the mutex across `remove_dir_all`
     // would block any concurrent `register_dir` call from a late

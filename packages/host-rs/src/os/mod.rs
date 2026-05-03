@@ -114,6 +114,13 @@ fn api_disabled(api: &str) -> String {
 ///
 /// Replaces 28 hand-written `match` arms (~280 LOC) with a single
 /// declarative table.
+///
+/// V1 (B24): every `module::dispatch` arm receives `args: &Value` —
+/// the public [`dispatch`] entry point takes ownership for the plugin
+/// fast path (`crate::plugins::dispatch(method, args)`) but the OS
+/// dispatch surface remains by-reference because most modules read
+/// from `args` multiple times and the per-arm clone the previous
+/// `Value::clone` paid is moot once we've taken ownership higher up.
 macro_rules! dispatch_apis {
     (
         $api:ident, $method:ident, $args:ident,
@@ -137,22 +144,31 @@ macro_rules! dispatch_apis {
 
 /// Dispatch a non-window OS API call from a background thread.
 /// Returns `Ok(value)` or `Err(user-facing message)`.
-pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> {
+///
+/// V1 (B24): `args` is taken by value. The plugin path (`api == "plugin"`)
+/// hands ownership straight to the plugin's `dispatch` — eliminates the
+/// `args.clone()` the host used to pay before V1. OS modules see the
+/// arg tree through a borrow; their dispatch arms are read-mostly and
+/// rarely benefit from owning the value, so we hand them `&args` and
+/// keep the per-module signature unchanged.
+pub fn dispatch(api: &str, method: &str, args: Value) -> Result<Value, String> {
     // Always-on arms (no `api-*` feature gate — these crates are
     // structural). The `dispatch_apis!` macro then expands the rest.
     match api {
-        "app" => return app::dispatch(method, args),
-        "os" => return os_info::dispatch(method, args),
-        "security" => return security::dispatch(method, args),
+        "app" => return app::dispatch(method, &args),
+        "os" => return os_info::dispatch(method, &args),
+        "security" => return security::dispatch(method, &args),
         // Native plugins (api-* features irrelevant — plugin registry is
         // populated at process startup from the CLI-generated main.rs).
+        // Hand ownership of `args` to the plugin — B24 eliminates the
+        // historical `args.clone()` here.
         "plugin" => return crate::plugins::dispatch(method, args),
         // `workers` has bespoke semantics — present in `embedded-js`
         // builds, hard-error-with-hint everywhere else. Stays out of
         // the table because the disabled message isn't an
         // `api_disabled(...)` template.
         #[cfg(feature = "embedded-js")]
-        "workers" => return workers::dispatch(method, args),
+        "workers" => return workers::dispatch(method, &args),
         #[cfg(not(feature = "embedded-js"))]
         "workers" => {
             return Err(
@@ -162,6 +178,7 @@ pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> 
         _ => {},
     }
 
+    let args = &args;
     dispatch_apis!(
         api, method, args,
         [
