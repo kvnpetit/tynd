@@ -374,16 +374,19 @@ fn download(args: &Value) -> Result<Value, String> {
 /// Boundary that's vanishingly unlikely to appear in payload data:
 /// 26 random hex chars after a fixed prefix. Generated per-call so
 /// concurrent uploads don't share state.
+///
+/// Uses `faster-hex`'s SIMD-accelerated `hex_string` (same encoder
+/// the `os::compute::hex_encode` hot path uses) — drops a hand-rolled
+/// `for b in rng_bytes { write!("{b:02x}") }` loop in favour of the
+/// crate the workspace already depends on for hash digest hex output.
 fn make_boundary() -> String {
-    use std::fmt::Write as _;
-    let mut s = String::from("----TyndFormBoundary");
     let mut rng_bytes = [0u8; 13];
     // `getrandom` would be ideal but `rand` is already in the workspace.
     use rand::RngCore as _;
     rand::thread_rng().fill_bytes(&mut rng_bytes);
-    for b in rng_bytes {
-        let _ = write!(&mut s, "{b:02x}");
-    }
+    let mut s = String::with_capacity(20 + rng_bytes.len() * 2);
+    s.push_str("----TyndFormBoundary");
+    s.push_str(&faster_hex::hex_string(&rng_bytes));
     s
 }
 
