@@ -39,6 +39,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use bytes::{Bytes, BytesMut};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use parking_lot::Mutex;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 // SECURITY: BLAKE3 fingerprint of every downloaded + signature-verified
@@ -104,8 +105,145 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             stop_periodic_check();
             Ok(Value::Null)
         },
+        // Echo the user-preference block back to the JS layer. The CLI
+        // injects `globalThis.__TYND_UPDATER_CONFIG__` at bundle time so
+        // the JS wrapper already has the same data; this arm is kept as
+        // an optional round-trip for tests and for callers that want the
+        // host to be the single source of truth post-validation. Args
+        // are deserialised through `UpdaterConfig` so a malformed bundle
+        // surfaces a clean error here rather than the silent
+        // "preference ignored" failure mode it would otherwise hit.
+        "validateConfig" => validate_config(args),
         _ => Err(IpcError::unknown_method("updater", method).into_string()),
     }
+}
+
+// ---------------------------------------------------------------------------
+// User-preference config (mirrors `UpdaterSchema` in `cli/src/lib/config/schema.ts`).
+//
+// The CLI inlines this block as a compile-time global
+// (`globalThis.__TYND_UPDATER_CONFIG__`) so `@tynd/core/client/updater`
+// can read it without an IPC round-trip on every check / download /
+// apply. Keeping a typed Rust mirror here means:
+//
+//  1. The host can validate the inlined block on first use and reject
+//     a malformed bundle with a precise error rather than a silent
+//     "field defaulted to false" surprise.
+//  2. Future host-side preference enforcement (background checker, OS
+//     notification surface) has a single canonical struct to consume.
+//  3. Tests pin the schema contract — a CLI change that drops a field
+//     or swaps a default fails the deser test rather than slipping
+//     into prod and silently breaking the user's chosen UX.
+// ---------------------------------------------------------------------------
+
+const fn default_true() -> bool {
+    true
+}
+fn default_check_interval_secs() -> u64 {
+    12 * 60 * 60
+}
+fn default_prompt_style() -> PromptStyle {
+    PromptStyle::Modal
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptStyle {
+    Modal,
+    Tray,
+    Silent,
+    Manual,
+}
+
+impl Default for PromptStyle {
+    fn default() -> Self {
+        Self::Modal
+    }
+}
+
+/// User-tunable updater preferences. Mirrors the valibot
+/// `UpdaterSchema` exactly — fields stay lowerCamelCase to match the
+/// JSON the CLI emits via the `__TYND_UPDATER_CONFIG__` global.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdaterConfig {
+    pub endpoint: String,
+    pub public_key: String,
+
+    // === Patch strategy (client-side) ===
+    #[serde(default = "default_true")]
+    pub prefer_patch: bool,
+    #[serde(default = "default_true")]
+    pub allow_patch: bool,
+    /// `null` = no cap. Pre-parsed by the CLI side so the host never
+    /// needs to deal with `"5MB"` style strings.
+    #[serde(default)]
+    pub max_patch_size: Option<u64>,
+    #[serde(default = "default_true")]
+    pub fallback_to_full: bool,
+
+    // === Auto-update UX ===
+    #[serde(default = "default_true")]
+    pub auto_check: bool,
+    #[serde(default = "default_check_interval_secs")]
+    pub check_interval_secs: u64,
+    #[serde(default = "default_true")]
+    pub check_on_startup: bool,
+    #[serde(default = "default_true")]
+    pub auto_download: bool,
+    #[serde(default)]
+    pub auto_apply: bool,
+    #[serde(default = "default_prompt_style")]
+    pub prompt_style: PromptStyle,
+
+    // === Security ===
+    #[serde(default = "default_true")]
+    pub require_signature: bool,
+    #[serde(default = "default_true")]
+    pub require_major_prompt: bool,
+}
+
+impl UpdaterConfig {
+    /// Apply the host-side floors to a freshly-deserialised config.
+    /// `check_interval_secs` is clamped to ≥ 60s so a typo'd `"1s"` doesn't
+    /// burn a thread; `max_patch_size == Some(0)` collapses to `None`
+    /// (interpreted as "no cap" — explicit zero would always reject).
+    pub fn normalised(mut self) -> Self {
+        if self.check_interval_secs < 60 {
+            self.check_interval_secs = 60;
+        }
+        if matches!(self.max_patch_size, Some(0)) {
+            self.max_patch_size = None;
+        }
+        self
+    }
+}
+
+fn validate_config(args: &Value) -> Result<Value, String> {
+    let cfg: UpdaterConfig = serde_json::from_value(args.clone())
+        .map_err(|e| format!("updater.validateConfig: {e}"))?;
+    let cfg = cfg.normalised();
+    Ok(json!({
+        "ok": true,
+        "endpoint": cfg.endpoint,
+        "checkIntervalSecs": cfg.check_interval_secs,
+        "preferPatch": cfg.prefer_patch,
+        "allowPatch": cfg.allow_patch,
+        "maxPatchSize": cfg.max_patch_size,
+        "fallbackToFull": cfg.fallback_to_full,
+        "autoCheck": cfg.auto_check,
+        "checkOnStartup": cfg.check_on_startup,
+        "autoDownload": cfg.auto_download,
+        "autoApply": cfg.auto_apply,
+        "promptStyle": match cfg.prompt_style {
+            PromptStyle::Modal => "modal",
+            PromptStyle::Tray => "tray",
+            PromptStyle::Silent => "silent",
+            PromptStyle::Manual => "manual",
+        },
+        "requireSignature": cfg.require_signature,
+        "requireMajorPrompt": cfg.require_major_prompt,
+    }))
 }
 
 /// Running periodic check, if any. Replacing / clearing the slot signals
@@ -1358,6 +1496,129 @@ mod tests {
         // Pre-release ordering — two different pre-release tags don't
         // collapse to "equal" just because the numeric core matches.
         assert!(!version_eq("1.0.0-alpha.1", "1.0.0"));
+    }
+
+    // ---- W3.4 user-preference UpdaterConfig deser tests ----------------
+    //
+    // The CLI inlines the user's preferences as a JSON literal; the host
+    // mirrors them via the same field names so a schema drift between the
+    // two sides surfaces as a deser error (and a failing test) rather
+    // than a silent "preference defaulted to false" surprise. These tests
+    // pin the contract: required fields, default merge, and the floor on
+    // `check_interval_secs` that the host applies regardless of what the
+    // CLI wrote.
+
+    #[test]
+    fn updater_config_deser_minimal_applies_safe_defaults() {
+        // The minimum-required block — endpoint + publicKey only — must
+        // round-trip and fill in every other field with the documented
+        // default. Catches a regression where a future field is added
+        // without a `#[serde(default)]` shield.
+        let cfg: UpdaterConfig = serde_json::from_value(json!({
+            "endpoint": "https://updates.example.test/manifest.json",
+            "publicKey": "ed25519:BASE64",
+        }))
+        .unwrap();
+        assert_eq!(cfg.endpoint, "https://updates.example.test/manifest.json");
+        assert!(cfg.prefer_patch);
+        assert!(cfg.allow_patch);
+        assert!(cfg.fallback_to_full);
+        assert!(cfg.auto_check);
+        assert!(cfg.check_on_startup);
+        assert!(cfg.auto_download);
+        assert!(!cfg.auto_apply);
+        assert!(cfg.require_signature);
+        assert!(cfg.require_major_prompt);
+        assert_eq!(cfg.check_interval_secs, 12 * 60 * 60);
+        assert_eq!(cfg.prompt_style, PromptStyle::Modal);
+        assert!(cfg.max_patch_size.is_none());
+    }
+
+    #[test]
+    fn updater_config_deser_overrides_take_precedence() {
+        // Every overridable field, set to the non-default value. Pins
+        // the camelCase ↔ snake_case mapping for the whole struct.
+        let cfg: UpdaterConfig = serde_json::from_value(json!({
+            "endpoint": "https://updates.example.test/manifest.json",
+            "publicKey": "AA",
+            "preferPatch": false,
+            "allowPatch": false,
+            "maxPatchSize": 5_000_000,
+            "fallbackToFull": false,
+            "autoCheck": false,
+            "checkIntervalSecs": 30,
+            "checkOnStartup": false,
+            "autoDownload": false,
+            "autoApply": true,
+            "promptStyle": "silent",
+            "requireSignature": false,
+            "requireMajorPrompt": false,
+        }))
+        .unwrap();
+        assert!(!cfg.prefer_patch);
+        assert!(!cfg.allow_patch);
+        assert_eq!(cfg.max_patch_size, Some(5_000_000));
+        assert!(!cfg.fallback_to_full);
+        assert!(!cfg.auto_check);
+        assert_eq!(cfg.check_interval_secs, 30);
+        assert!(!cfg.check_on_startup);
+        assert!(!cfg.auto_download);
+        assert!(cfg.auto_apply);
+        assert_eq!(cfg.prompt_style, PromptStyle::Silent);
+        assert!(!cfg.require_signature);
+        assert!(!cfg.require_major_prompt);
+    }
+
+    #[test]
+    fn updater_config_normalised_floors_typo_intervals_and_zero_caps() {
+        // 1s would burn a thread; the host floor is 60s. A `Some(0)`
+        // size cap collapses to `None` (no cap) so an explicit zero
+        // doesn't accidentally reject every patch.
+        let cfg: UpdaterConfig = serde_json::from_value(json!({
+            "endpoint": "https://updates.example.test/manifest.json",
+            "publicKey": "AA",
+            "checkIntervalSecs": 1,
+            "maxPatchSize": 0,
+        }))
+        .unwrap();
+        let normalised = cfg.normalised();
+        assert_eq!(normalised.check_interval_secs, 60);
+        assert_eq!(normalised.max_patch_size, None);
+    }
+
+    #[test]
+    fn updater_config_deser_rejects_unknown_prompt_style() {
+        // Only the four documented variants — anything else is a typo
+        // (`"toast"` was a tempting one). Surface it loudly.
+        let err = serde_json::from_value::<UpdaterConfig>(json!({
+            "endpoint": "https://updates.example.test/manifest.json",
+            "publicKey": "AA",
+            "promptStyle": "toast",
+        }))
+        .unwrap_err();
+        assert!(err.to_string().contains("toast") || err.to_string().contains("variant"));
+    }
+
+    #[test]
+    fn updater_validate_config_dispatch_round_trips_normalised_payload() {
+        // The `validateConfig` dispatch arm is the canonical handshake
+        // between JS and Rust on the preference block. Pin the JSON
+        // shape so a frontend that depends on the field names doesn't
+        // silently break on a future struct refactor.
+        let out = dispatch(
+            "validateConfig",
+            &json!({
+                "endpoint": "https://updates.example.test/manifest.json",
+                "publicKey": "AA",
+                "checkIntervalSecs": 5,   // floored to 60 by normalised()
+                "promptStyle": "tray",
+            }),
+        )
+        .unwrap();
+        assert_eq!(out["ok"], true);
+        assert_eq!(out["checkIntervalSecs"], 60);
+        assert_eq!(out["promptStyle"], "tray");
+        assert_eq!(out["preferPatch"], true);
     }
 
     #[test]

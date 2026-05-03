@@ -93,16 +93,24 @@ export {
 } from "./client/theme";
 export { type TrayMenuItem, tray } from "./client/tray";
 export {
+  type DownloadProgress,
+  type PatchEntry,
+  type RawUpdateInfo,
   type UpdateInfo,
+  type Updater,
   type UpdaterCheckEvent,
   type UpdaterCheckOptions,
   type UpdaterDownloadOptions,
   type UpdaterDownloadResult,
+  type UpdaterEvent,
   type UpdaterInstallOptions,
   type UpdaterInstallResult,
+  updater,
+  updaterIpc,
+  type UpdaterPatchDownloadOptions,
   type UpdaterPeriodicOptions,
   type UpdaterProgress,
-  updater,
+  type UpdaterRuntimeConfig,
 } from "./client/updater";
 export {
   vault,
