@@ -1,10 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use dpi::{LogicalPosition, LogicalSize, PhysicalPosition};
 use serde_json::{json, Value};
-use tao::{
-    dpi::{LogicalPosition, LogicalSize, PhysicalPosition},
-    window::{CursorIcon, ResizeDirection, Window},
-};
+use tao::window::{CursorIcon, ResizeDirection, Window};
 
 use crate::window;
 

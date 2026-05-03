@@ -256,6 +256,42 @@ impl Authority {
     }
 }
 
+/// Test whether `url` matches a Chrome-style URL pattern such as
+/// `https://*.example.com/api/*`.
+///
+/// Wraps the [`urlpattern`](https://docs.rs/urlpattern) crate (a
+/// faithful port of the WHATWG `URLPattern` spec) so callers don't
+/// have to wrestle with the typed-init dance for every check. Returns
+/// `false` whenever either the pattern fails to compile or the URL
+/// fails to parse — the deny-by-default posture we already apply on
+/// every other ACL gate.
+///
+/// Currently used as a building block for capability authors who want
+/// per-URL grants on top of the existing `local` / `remote` execution
+/// context. The capability resolver itself still goes through
+/// `tauri_utils::acl::resolved`; this helper is exposed so future
+/// per-URL gates (e.g. `http.fetch` allowlists, plugin command scopes)
+/// can share a single pattern dialect.
+pub fn url_matches(pattern: &str, url: &str) -> bool {
+    use urlpattern::{UrlPattern, UrlPatternInit, UrlPatternMatchInput};
+
+    let init = match UrlPatternInit::parse_constructor_string::<regex::Regex>(pattern, None) {
+        Ok(init) => init,
+        Err(_) => return false,
+    };
+    let compiled = match <UrlPattern>::parse(init, Default::default()) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    let parsed = match url::Url::parse(url) {
+        Ok(u) => u,
+        Err(_) => return false,
+    };
+    compiled
+        .test(UrlPatternMatchInput::Url(parsed))
+        .unwrap_or(false)
+}
+
 /// Singleton accessor — same pattern as `os::security`.
 static AUTHORITY: OnceLock<Authority> = OnceLock::new();
 
@@ -795,5 +831,49 @@ mod tests {
         let parsed: Value = serde_json::from_str(&content).expect("parse");
         assert_eq!(parsed["title"], "Tynd Capability");
         assert!(parsed["definitions"]["Capability"].is_object());
+    }
+
+    /// `url_matches` should accept Chrome-style URL patterns and only
+    /// fire on URLs that fall inside the declared scope. The negative
+    /// cases (different host, different scheme, different path,
+    /// malformed inputs) all need to fail closed — same posture as
+    /// every other ACL gate.
+    #[test]
+    fn url_matches_handles_basic_patterns() {
+        // Wildcard subdomain + wildcard path tail — the canonical
+        // ACL use case.
+        assert!(url_matches(
+            "https://*.example.com/api/*",
+            "https://api.example.com/api/v1/users",
+        ));
+        assert!(url_matches(
+            "https://*.example.com/api/*",
+            "https://shard-3.example.com/api/v2/things",
+        ));
+
+        // Different host → no match.
+        assert!(!url_matches(
+            "https://*.example.com/api/*",
+            "https://api.other.com/api/v1/users",
+        ));
+
+        // Different path prefix → no match.
+        assert!(!url_matches(
+            "https://*.example.com/api/*",
+            "https://api.example.com/admin",
+        ));
+
+        // Different scheme → no match (HTTP vs HTTPS is a real
+        // exfiltration vector, must stay strict).
+        assert!(!url_matches(
+            "https://*.example.com/api/*",
+            "http://api.example.com/api/v1/users",
+        ));
+
+        // Malformed pattern → fail closed.
+        assert!(!url_matches("not a url pattern at all", "https://x.com/"));
+
+        // Malformed URL → fail closed.
+        assert!(!url_matches("https://*.example.com/*", "definitely not a url"));
     }
 }

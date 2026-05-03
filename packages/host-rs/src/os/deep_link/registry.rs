@@ -17,12 +17,22 @@
 //! launched URL into; the surrounding quotes are essential when the
 //! exe path contains spaces (which it always does on `Program Files`
 //! installs).
+//!
+//! Backed by [`windows-registry`] — the typed wrapper from the
+//! `microsoft/windows-rs` umbrella, which replaced the unmaintained
+//! `winreg` crate in this module. The error type carries an `HRESULT`
+//! we can match against `ERROR_FILE_NOT_FOUND` (`0x80070002`) for the
+//! "absent key" branches.
 
 #![cfg(target_os = "windows")]
 
-use std::io;
+use windows_registry::{Result, CURRENT_USER};
 
-use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+/// Win32 `ERROR_FILE_NOT_FOUND` mapped into HRESULT space
+/// (`HRESULT_FROM_WIN32(2)` = `0x8007_0002`). `windows-registry`
+/// surfaces missing keys / values through this code, mirroring what
+/// `winreg` used to translate into `io::ErrorKind::NotFound`.
+const HRESULT_NOT_FOUND: i32 = 0x8007_0002_u32 as i32;
 
 fn classes_path(scheme: &str) -> String {
     format!("Software\\Classes\\{scheme}")
@@ -32,36 +42,34 @@ fn open_command(exe: &str) -> String {
     format!("\"{exe}\" \"%1\"")
 }
 
-pub(super) fn register(scheme: &str, exe: &str) -> io::Result<()> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let (root, _) = hkcu.create_subkey(classes_path(scheme))?;
-    root.set_value("", &format!("URL:{scheme} Protocol"))?;
-    root.set_value("URL Protocol", &"")?;
+pub(super) fn register(scheme: &str, exe: &str) -> Result<()> {
+    let root = CURRENT_USER.create(classes_path(scheme))?;
+    root.set_string("", &format!("URL:{scheme} Protocol"))?;
+    root.set_string("URL Protocol", "")?;
 
-    let (cmd, _) = hkcu.create_subkey(format!("{}\\shell\\open\\command", classes_path(scheme)))?;
-    cmd.set_value("", &open_command(exe))?;
+    let cmd = CURRENT_USER.create(format!("{}\\shell\\open\\command", classes_path(scheme)))?;
+    cmd.set_string("", open_command(exe))?;
     Ok(())
 }
 
-pub(super) fn unregister(scheme: &str) -> io::Result<()> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    match hkcu.delete_subkey_all(classes_path(scheme)) {
+pub(super) fn unregister(scheme: &str) -> Result<()> {
+    match CURRENT_USER.remove_tree(classes_path(scheme)) {
         Ok(()) => Ok(()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) if e.code().0 == HRESULT_NOT_FOUND => Ok(()),
         Err(e) => Err(e),
     }
 }
 
-pub(super) fn is_registered(scheme: &str, exe: &str) -> io::Result<bool> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let cmd = match hkcu.open_subkey(format!("{}\\shell\\open\\command", classes_path(scheme))) {
+pub(super) fn is_registered(scheme: &str, exe: &str) -> Result<bool> {
+    let cmd_path = format!("{}\\shell\\open\\command", classes_path(scheme));
+    let cmd = match CURRENT_USER.open(&cmd_path) {
         Ok(k) => k,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(e) if e.code().0 == HRESULT_NOT_FOUND => return Ok(false),
         Err(e) => return Err(e),
     };
-    let cur: String = match cmd.get_value("") {
+    let cur: String = match cmd.get_string("") {
         Ok(v) => v,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(e) if e.code().0 == HRESULT_NOT_FOUND => return Ok(false),
         Err(e) => return Err(e),
     };
     let trimmed = cur.trim_start_matches('"');

@@ -21,6 +21,7 @@ workspace = true
 # Always-on — structural or used by more than one always-on module.
 wry.workspace                = true
 tao.workspace                = true
+dpi.workspace                = true
 serde.workspace              = true
 serde_json.workspace         = true
 specta.workspace             = true
@@ -40,6 +41,8 @@ ahash.workspace              = true
 tempfile.workspace           = true
 tracing.workspace            = true
 tracing-subscriber.workspace = true
+tracing-appender.workspace   = true
+byte-unit.workspace          = true
 ctrlc.workspace              = true
 anyhow.workspace             = true
 crossbeam-channel.workspace  = true
@@ -49,6 +52,7 @@ cap-std.workspace            = true
 cap-tempfile.workspace       = true
 # Always-on URL/path/mime helpers used across scheme handlers + util.
 mime_guess.workspace      = true
+infer.workspace           = true
 form_urlencoded.workspace = true
 dunce.workspace           = true
 slug.workspace            = true
@@ -73,6 +77,9 @@ data-url.workspace                = true
 # modules sit outside the `api-*` feature gates (they're consumed by
 # every dispatch path), so their backing crates are too.
 globset.workspace    = true
+urlpattern.workspace = true
+regex.workspace      = true
+phf.workspace        = true
 hostname.workspace   = true
 os_info.workspace    = true
 dark-light.workspace = true
@@ -234,10 +241,10 @@ api-window-state    = [  ]
 # LSSetDefaultHandlerForURLScheme on macOS, .desktop on Linux) plus
 # multi-instance URL forwarding (master file lock + local socket, same
 # `fslock`/`interprocess` building blocks as `api-single-instance`).
-# `winreg` is the only Windows-only dep — declared optional in the
-# `target.'cfg(target_os = "windows")'.dependencies` table below so it
-# only resolves on Windows builds.
-api-deep-link       = [ "dep:fslock", "dep:interprocess", "dep:winreg" ]
+# `windows-registry` is the only Windows-only dep — declared optional in
+# the `target.'cfg(target_os = "windows")'.dependencies` table below so
+# it only resolves on Windows builds.
+api-deep-link       = [ "dep:fslock", "dep:interprocess", "dep:windows-registry" ]
 # Browser key intercept (Ctrl+R, F5, …). Pure logic — no external dep.
 api-keys            = [  ]
 # Process argv parsing exposed to the frontend. Pure logic — no external dep.
@@ -282,8 +289,9 @@ tauri-winrt-notification = { workspace = true, optional = true }
 # Per-user `HKCU\Software\Classes\<scheme>` registry write/read for the
 # deep-link OS API. Only consumed in `os::deep_link::registry` (Windows
 # only); kept optional here so non-Windows builds and `api-deep-link`-off
-# builds skip the dep entirely.
-winreg = { workspace = true, optional = true }
+# builds skip the dep entirely. `windows-registry` replaces the
+# unmaintained `winreg` crate with the typed wrapper from microsoft/windows-rs.
+windows-registry = { workspace = true, optional = true }
 # Direct Win32 access for runtime-only features tao doesn't surface: DWM
 # system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
 # 0.61 introduces `windows-link` (raw-dylib resolution) which drops the

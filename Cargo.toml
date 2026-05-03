@@ -61,6 +61,11 @@ wry       = "0.55.0"
 tao       = "0.35.0"
 muda      = "0.17.2"
 tray-icon = "0.22"
+# Standalone DPI primitives (`LogicalPosition`, `PhysicalSize`, …) shared by
+# the wry/tao ecosystem. Re-exported from `tynd-host` so consumer crates
+# (presets, custom runtimes, plugins) can type their window commands against
+# the same canonical types without depending on tao directly.
+dpi       = "0.1"
 
 # OS integration
 rfd         = "0.17.2"
@@ -101,7 +106,12 @@ interprocess = "2.2"
 # `cfg(target_os = "windows")` block on the host crate, but declared
 # at the workspace level so the version stays coherent if other
 # Windows-only code paths ever need it.
-winreg = "0.52"
+#
+# `windows-registry` is the canonical typed wrapper from the
+# `microsoft/windows-rs` org — same import-lib resolution model as
+# `windows-sys` (which we already pull). Replaces the older `winreg`
+# crate, which is unmaintained.
+windows-registry = "0.5"
 
 # FS watcher: consumed exclusively through `notify_debouncer_full::notify::*`,
 # so the standalone `notify` crate is not declared here. Keep the global
@@ -173,6 +183,16 @@ tracing            = "0.1"
 # Ajout `json` pour logs structurés en prod (ingestion centralisée
 # style Loki/Datadog côté apps Tynd qui veulent observer leur backend).
 tracing-subscriber = { version = "0.3", features = [ "env-filter", "fmt", "json" ] }
+# Rolling-file writer + non-blocking sink for `tracing`. Picked over
+# `fern` because the host already speaks `tracing` natively (panic
+# hook, OTel layer, every `tynd_*!` macro) — `tracing-appender` is the
+# canonical companion crate from the same org, and adding `fern`
+# would force a `log → tracing` bridge we don't otherwise need.
+tracing-appender   = "0.2"
+# Human-readable byte-size parser (`"10 MiB" → 10_485_760`) for
+# config-driven rotation thresholds. Standalone — no `serde`-locked
+# dance with `humansize`/`bytesize`, just `Byte::parse_str`.
+byte-unit          = "5"
 anyhow             = "1.0"
 thiserror          = "2.0"
 
@@ -196,6 +216,15 @@ bipatch = "1.0"
 # MIME detection from path extension — replaces a hand-rolled match arm
 # that drifted whenever a new asset extension showed up.
 mime_guess = "2"
+
+# MIME detection from byte signatures — `mime_guess` only looks at the
+# extension, which lies whenever a frontend ships an asset with no
+# extension or one that doesn't match its actual contents (e.g. an
+# `.bin` file that's actually a PNG, a `.webp` produced by a converter
+# that kept `.png`). `infer` peeks at the magic bytes and is the
+# correct primary signal; we keep `mime_guess` as the extension-based
+# fallback for plain text formats `infer` deliberately doesn't sniff.
+infer = "0.19"
 
 # Strict UTF-8 query-string parser — dropping the in-house `parse_query`
 # + `url_decode` pair removed a silent UTF-8 fallthrough bug.
@@ -225,6 +254,26 @@ semver = { version = "1.0", features = [ "serde" ] }
 # Pattern matching for the security policy globs. Drops a hand-rolled
 # recursive matcher and fixes a `\\` → `/` asymmetry on Windows.
 globset = "0.4"
+
+# RFC 6570-ish URL-pattern matcher (Chrome's `URLPattern` API as a
+# crate). Used by the ACL layer for future per-URL grants — lets a
+# capability scope to e.g. `https://*.example.com/api/*` instead of
+# the cruder origin-only check we currently apply. Wired through the
+# `acl::url_matches` helper.
+urlpattern = "0.3"
+# `urlpattern` is generic over a `RegExp` provider — `regex::Regex`
+# already satisfies that trait and is the only practical choice on a
+# stable Rust toolchain (the alternative would be `fancy-regex`,
+# which doesn't add features urlpattern needs). Pulled here so
+# `acl::url_matches` can name the type explicitly.
+regex      = "1"
+
+# Compile-time perfect-hash collections. Used for the static
+# allowlists/denylists scattered across `os::*` (executable
+# extensions, scheme allowlists, …) — `phf_set!` builds the hash at
+# `cargo build` time so the runtime lookup is a single hash + slot
+# compare instead of an O(N) `iter().any(...)`.
+phf = { version = "0.11", features = ["macros"] }
 
 # `gethostname()` wrapper without shelling out to `hostname(1)`.
 hostname = "0.4"

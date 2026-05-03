@@ -30,15 +30,21 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             // extensions so a frontend bug or XSS can't turn this into RCE.
             // Frontend code that needs to launch a binary should use
             // `process.exec` (which goes through capability checks).
-            const EXEC_EXTS: &[&str] = &[
+            //
+            // Stored as a `phf::Set` so the lookup is a single perfect
+            // hash + slot comparison at runtime (built at `cargo build`
+            // time) instead of an O(N) `iter().any(...)`. All entries
+            // are lowercase; the input is folded to lowercase before
+            // the lookup to keep the previous case-insensitive contract.
+            static EXEC_EXTS: phf::Set<&'static str> = phf::phf_set! {
                 "exe", "bat", "cmd", "ps1", "psm1", "msi", "msp", "scr", "vbs", "vbe", "wsf",
                 "wsh", "com", "pif", "cpl", "jar",
-            ];
+            };
             if let Some(ext) = std::path::Path::new(path)
                 .extension()
                 .and_then(|e| e.to_str())
             {
-                if EXEC_EXTS.iter().any(|e| e.eq_ignore_ascii_case(ext)) {
+                if EXEC_EXTS.contains(ext.to_ascii_lowercase().as_str()) {
                     return Err(format!(
                         "shell.openPath: refusing to open executable '{path}' — use process.exec \
                          for binaries"

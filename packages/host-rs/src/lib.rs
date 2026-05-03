@@ -9,6 +9,7 @@ pub mod app;
 pub mod cleanup;
 pub mod embed;
 pub mod ipc;
+pub mod logging;
 pub(crate) mod menu;
 pub mod observability;
 pub mod os;
@@ -30,6 +31,14 @@ pub mod window;
 #[doc(hidden)]
 pub use tracing as __tracing;
 pub use tynd_plugin_sdk as plugin_sdk;
+
+// Re-export the standalone `dpi` crate so consumer crates can type their
+// window commands (positions / sizes) against the same canonical
+// `LogicalPosition`, `PhysicalSize`, … types the host already uses
+// internally — without taking a transitive dependency on `tao` just to
+// get them. Both `tao::dpi::*` and `dpi::*` are interchangeable: tao
+// re-exports this very crate.
+pub use dpi;
 
 /// Initialize the framework's structured logger (`tracing` + `tracing-subscriber`),
 /// the global panic hook, and the cross-platform SIGINT/SIGTERM handler.

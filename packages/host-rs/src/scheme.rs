@@ -102,7 +102,7 @@ fn walk(base: &PathBuf, cur: &PathBuf, map: &mut HashMap<String, Asset>) {
         };
 
         let mime_path = PathBuf::from(&key);
-        let mime = mime_for(&mime_path);
+        let mime = mime_for_bytes(&mime_path, &bytes);
         let cache = if key == "index.html" || mime.starts_with("text/html") {
             "no-cache"
         } else {
@@ -230,7 +230,7 @@ fn serve_from_disk(static_dir: &str, path: &str) -> Response<Cow<'static, [u8]>>
     let Ok(bytes) = std::fs::read(&target) else {
         return not_found();
     };
-    let mime = mime_for(&target);
+    let mime = mime_for_bytes(&target, &bytes);
     let mut rsp = Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", &mime)
@@ -391,7 +391,44 @@ mod scheme_tests {
     }
 }
 
-/// Resolve the response Content-Type for a static asset.
+/// Resolve the response Content-Type for a static asset, with optional
+/// content sniffing when the bytes are already in hand.
+///
+/// Resolution order:
+///   1. `infer` magic-byte sniff over the first 8 KiB — wins for binary
+///      formats (images, video, archives). Skipped for path extensions
+///      we always want to serve as a specific text MIME (HTML, CSS, JS
+///      and the bundler-artefact extensions).
+///   2. `mime_guess` extension lookup — covers text formats `infer`
+///      doesn't sniff.
+///   3. The bundler-artefact override (`.ts` / `.tsx` / `.mjs` / `.cjs`
+///      → `application/javascript`).
+///   4. `application/octet-stream` fallback.
+fn mime_for_bytes(path: &std::path::Path, bytes: &[u8]) -> String {
+    // Skip `infer` for known-text extensions where the magic-byte
+    // sniffer would either return None (and we'd fall through anyway)
+    // or, worse, mislabel the file as a generic binary.
+    let ext = path.extension().and_then(|e| e.to_str());
+    let always_text = matches!(
+        ext,
+        Some("html" | "htm" | "css" | "ts" | "tsx" | "mjs" | "cjs" | "js" | "json" | "txt" | "svg")
+    );
+    if !always_text {
+        // Sample only the prefix — the file-format magic bytes always
+        // sit at the start, so scanning the full payload of a 50 MB
+        // video would just burn cache lines. 8 KiB is comfortably above
+        // the largest signature `infer` checks (a few hundred bytes).
+        let sample = &bytes[..bytes.len().min(8192)];
+        if let Some(kind) = infer::get(sample) {
+            return kind.mime_type().to_string();
+        }
+    }
+    mime_for(path)
+}
+
+/// Path-only MIME resolution — used when bytes aren't loaded yet
+/// (currently nowhere on the hot path; kept as the fallback inside
+/// `mime_for_bytes` and as the canonical extension lookup).
 ///
 /// `mime_guess` carries the IANA registry, so we don't have to chase new
 /// extensions whenever the frontend pulls in another asset family. We
