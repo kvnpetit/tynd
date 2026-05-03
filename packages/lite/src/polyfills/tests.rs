@@ -549,3 +549,145 @@ fn url_filepath_roundtrip() {
         assert_eq!(out, "/etc/hosts");
     });
 }
+
+// ---- npm ecosystem smoke tests ------------------------------------------
+//
+// These exercise the API surface that popular pure-JS npm packages probe
+// at runtime. We don't bundle the actual packages (would explode test
+// build time), but each test mimics what the package's hot path needs.
+// If unenv breaks one of these, the package itself will too.
+
+#[test]
+fn npm_compat_dayjs_style() {
+    // dayjs uses Date.prototype + util-style format strings.
+    let (_rt, ctx) = boot_pure();
+    ctx.with(|ctx| {
+        let out: String = ctx
+            .eval(
+                r#"
+                var util = require("util");
+                util.format("today is %s, %d days in", "2026-05-03", 123)
+                "#,
+            )
+            .expect("eval failed");
+        assert_eq!(out, "today is 2026-05-03, 123 days in");
+    });
+}
+
+#[test]
+fn npm_compat_qs_style() {
+    // qs (Express's querystring lib) uses node:querystring underneath.
+    let (_rt, ctx) = boot_pure();
+    ctx.with(|ctx| {
+        let out: String = ctx
+            .eval(
+                r#"
+                var qs = require("querystring");
+                var obj = qs.parse("name=alice&tags=node&tags=lite");
+                obj.name + "|" + (Array.isArray(obj.tags) ? obj.tags.join(",") : obj.tags)
+                "#,
+            )
+            .expect("eval failed");
+        assert_eq!(out, "alice|node,lite");
+    });
+}
+
+#[test]
+fn npm_compat_debug_style() {
+    // The `debug` package reads process.env, util.format, and creates an
+    // EventEmitter on the side. Smoke-test the combo.
+    let (_rt, ctx) = boot_pure();
+    ctx.with(|ctx| {
+        let out: String = ctx
+            .eval(
+                r#"
+                var util = require("util");
+                var EE = require("events").EventEmitter;
+                var emitter = new EE();
+                var formatted = util.format("[%s] %s", "auth", "login attempt");
+                emitter.on("log", function (msg) { emitter._last = msg; });
+                emitter.emit("log", formatted);
+                emitter._last
+                "#,
+            )
+            .expect("eval failed");
+        assert_eq!(out, "[auth] login attempt");
+    });
+}
+
+#[test]
+fn npm_compat_picocolors_style() {
+    // picocolors / chalk slice strings + check process.env.NO_COLOR.
+    let (_rt, ctx) = boot_pure();
+    ctx.with(|ctx| {
+        let out: String = ctx
+            .eval(
+                r#"
+                var noColor = process.env.NO_COLOR;
+                var stdout = process.stdout || { isTTY: false };
+                "noColor=" + (noColor || "unset") + "|tty=" + (stdout.isTTY === true)
+                "#,
+            )
+            .expect("eval failed");
+        assert!(out.starts_with("noColor=unset|tty="));
+    });
+}
+
+#[test]
+fn npm_compat_stream_pipethrough() {
+    // ReadableStream + TransformStream (e.g. ofetch, undici clones).
+    let (_rt, ctx) = boot_pure();
+    ctx.with(|ctx| {
+        let out: String = ctx
+            .eval(
+                r#"
+                var rs = new ReadableStream({
+                  start: function (c) { c.enqueue("a"); c.enqueue("b"); c.close(); }
+                });
+                "ok:" + (typeof rs.getReader === "function")
+                  + "|tx:" + (typeof TransformStream === "function")
+                  + "|ws:" + (typeof WritableStream === "function")
+                "#,
+            )
+            .expect("eval failed");
+        assert_eq!(out, "ok:true|tx:true|ws:true");
+    });
+}
+
+#[test]
+fn npm_compat_buffer_concat_and_slice() {
+    // Most node-style libs (jsonwebtoken, cookie-signature) use these.
+    let (_rt, ctx) = boot_pure();
+    ctx.with(|ctx| {
+        let out: String = ctx
+            .eval(
+                r#"
+                var a = Buffer.from("hello ", "utf8");
+                var b = Buffer.from("world", "utf8");
+                var c = Buffer.concat([a, b]);
+                c.toString("utf8") + "|" + c.subarray(6).toString("utf8") + "|" + c.length
+                "#,
+            )
+            .expect("eval failed");
+        assert_eq!(out, "hello world|world|11");
+    });
+}
+
+#[test]
+fn npm_compat_crypto_random_uuid() {
+    // jsonwebtoken / nanoid / uuid pull from crypto.randomBytes/UUID.
+    let (_rt, ctx) = boot_pure();
+    ctx.with(|ctx| {
+        let out: String = ctx
+            .eval(
+                r#"
+                var crypto = require("crypto");
+                var b = crypto.randomBytes(8);
+                var u = crypto.randomUUID();
+                "len=" + b.length + "|uuid_dashes=" + (u.split("-").length === 5)
+                "#,
+            )
+            .expect("eval failed");
+        assert_eq!(out, "len=8|uuid_dashes=true");
+    });
+}

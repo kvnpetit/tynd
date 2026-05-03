@@ -1,0 +1,16 @@
+{
+  "name": "tynd-lite-polyfills",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run build-polyfills.ts"
+  },
+  "dependencies": {
+    "unenv": "^1.10.0",
+    "web-streams-polyfill": "^4.2.0",
+    "buffer": "^6.0.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

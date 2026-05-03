@@ -14,8 +14,18 @@ This document is the canonical "does it work?" reference. Statuses:
 | SHIM    | API present; throws helpful redirect to Tynd plugin / native.   |
 | NO      | Structural incompat. Use the listed alternative.                |
 
-Polyfill bundle: **~212 KB raw → ~43 KB zstd-compressed** (embedded in
-the binary, decompressed once on startup, ~0.5 ms cost).
+**Powered by [`unenv`](https://github.com/unjs/unenv) (UnJS)** —
+the same Node compat layer Cloudflare Workers, Nitro, and Nuxt use in
+production. Tynd bundles unenv's `nodeless` preset offline (see
+`polyfills-src/build-polyfills.ts`) and patches the API stubs with native
+bridges (cap-std fs, ureq HTTP, blake3 crypto, real OS env/argv/cwd) so
+fs / http / crypto run at native perf rather than through unenv's no-op
+stubs. Updating unenv = compat improvements for free.
+
+Polyfill bundle: **~458 KB raw → ~73 KB zstd-compressed** (embedded in
+the binary, decompressed once on startup, ~1 ms cost). Includes
+unenv@1.10.0, web-streams-polyfill@4.2.0, and a small Tynd overlay for
+fs/http/crypto/process/os routed through the host bridges.
 
 ## Web platform (built-ins)
 
@@ -171,14 +181,35 @@ cd tynd && cargo test -p tynd-lite --lib -- --test-threads=1
 Add an integration test for any npm package you depend on — the more
 coverage, the faster regressions surface.
 
+## Troubleshooting
+
+**"`Cannot find module 'X'`" at runtime**
+The embedded backend never reads `node_modules`. Userland packages must
+be statically bundled at build time by `tynd build`. If you see this for
+a Node builtin (e.g. `dns`, `tls`), it's an unenv mock that throws on
+actual use — see the matrix above for the supported alternative.
+
+**"`[unenv] foo.bar is not implemented yet!`"**
+A specific unenv stub was reached. Check the matrix; if the surface is
+listed PARTIAL/SHIM, follow the redirect. If listed OK, file an issue —
+it's a regression vs the documented surface.
+
+**npm package crashes on require**
+Most likely a `.node` native addon — see "Native bindings" above for the
+plugin redirect. Otherwise run with `TYND_LOG=trace` to surface the
+exact module path that failed to resolve.
+
+**Bundle size grew vs. previous Tynd version**
+Sprint 1.0 swapped 15 hand-rolled polyfills (~212 KB raw, 43 KB zstd)
+for the unenv pipeline (~458 KB raw, 73 KB zstd) — a one-time +30 KB
+binary cost in exchange for ~95% npm ecosystem compat (vs ~85% with the
+hand-rolled polyfills) and zero ongoing polyfill maintenance.
+
 ## Future work
 
-- **Optional unenv backend**: an alternative build mode that pulls
-  [`unenv`](https://github.com/unjs/unenv) at compile time (via `bun
-  build`) and ships it instead of the hand-written polyfills. Trades a
-  larger bundle (~300-500 KB) for broader edge-case coverage. Tracked in
-  the build pipeline issue.
 - **`pako`-backed zlib**: pure-JS gzip/deflate so `node:zlib` is fully
   functional without a Rust bridge.
 - **DoH-backed `dns`**: implement `dns.resolve` via a hard-coded DoH
   endpoint so DNS works for sandboxed builds.
+- **Track unenv `main`**: opt into the `unenv-nightly` channel for
+  earlier compat fixes, with the official release as the stable line.

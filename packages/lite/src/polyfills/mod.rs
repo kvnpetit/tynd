@@ -48,11 +48,13 @@ pub(crate) fn install<'js>(
 #[cfg(test)]
 mod tests;
 
-/// Compile-time zstd-compressed polyfill bundle (B50). Source order is
-/// identical to the previous `concat!(include_str!(...))` chain — see
-/// `lite/build.rs` for the file list. Trades ~30-40 KB binary size for
-/// one synchronous zstd decompress on first reach (a few ms during
-/// QuickJS startup, hidden behind `OnceLock`).
+/// Compile-time zstd-compressed polyfill bundle. The unenv Node compat
+/// pipeline contributes most of the bytes (see `polyfills-src/build-
+/// polyfills.ts`); custom Tynd files cover web-platform polyfills, the
+/// Tynd-specific overrides over unenv stubs, and the Bun.* shim. Order
+/// is documented in `lite/build.rs::POLYFILL_FILES`. Trades ~50 KB
+/// binary size for one synchronous zstd decompress on first reach
+/// (a few ms during QuickJS startup, hidden behind `OnceLock`).
 const POLYFILLS_ZST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/polyfills.zst"));
 
 /// Lazy-decompressed polyfill JS. The first reach pays the zstd
