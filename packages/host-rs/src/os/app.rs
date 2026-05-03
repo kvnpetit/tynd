@@ -76,8 +76,11 @@ impl AppApi {
 
     /// Exit the host process with `code` (default `0`). Runs the
     /// cleanup hook chain before terminating. Never returns.
+    ///
+    /// Calls `tynd_host_core::hooks::run_cleanup` so the OS layer
+    /// doesn't depend on the higher app crate (cycle break).
     pub fn exit(code: Option<i64>) {
-        crate::cleanup::run();
+        tynd_host_core::hooks::run_cleanup();
         std::process::exit(code.unwrap_or(0) as i32);
     }
 
@@ -94,7 +97,7 @@ impl AppApi {
         std::thread::spawn(|| {
             // Small delay so the child process is actually underway before we exit.
             std::thread::sleep(Duration::from_millis(100));
-            crate::cleanup::run();
+            tynd_host_core::hooks::run_cleanup();
             std::process::exit(0);
         });
         Ok(Value::Null)

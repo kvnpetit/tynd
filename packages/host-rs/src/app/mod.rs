@@ -137,6 +137,22 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
         }));
     }
 
+    // U12 phase 2 — register the cross-crate callback hooks so
+    // `tynd-host-os` can call into the higher-level cleanup, plugin
+    // dispatch, and window-helper modules without taking a direct
+    // dependency on this (`tynd-host-app`) crate. Each hook is a
+    // `OnceLock<Box<dyn Fn>>` in `tynd-host-core::hooks`; the OS layer
+    // reads it through the matching getter.
+    tynd_host_core::hooks::set_cleanup_hook(crate::cleanup::run);
+    tynd_host_core::hooks::set_plugin_dispatch_hook(|method, args| {
+        crate::plugins::dispatch(method, args)
+    });
+    tynd_host_core::hooks::set_window_center_hook(|w| {
+        if let Some(window) = w.downcast_ref::<tao::window::Window>() {
+            crate::window::center_window(window);
+        }
+    });
+
     // Wire the signal handler into the event loop. When SIGINT / SIGTERM
     // fires, `signals.rs` calls this closure on whichever OS thread
     // delivered the signal (Windows: the console-control thread; Unix:

@@ -539,6 +539,14 @@ harness = false
 name    = "plugin_dispatch"
 harness = false
 
+# U1 Layer 2 — measures rkyv plugin-args dispatch (`dispatch_rkyv`)
+# against the legacy JSON path on the same registry surface. Pinned in
+# its own bench file so the registry-singleton state stays isolated
+# from the JSON-side `plugin_dispatch` bench.
+[[bench]]
+name    = "plugin_dispatch_rkyv"
+harness = false
+
 [[bench]]
 name    = "ipc_rkyv_vs_serde"
 harness = false

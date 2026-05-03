@@ -184,7 +184,14 @@ pub fn dispatch(api: &str, method: &str, args: Value) -> Result<Value, String> {
         // populated at process startup from the CLI-generated main.rs).
         // Hand ownership of `args` to the plugin — B24 eliminates the
         // historical `args.clone()` here.
-        "plugin" => return crate::plugins::dispatch(method, args),
+        //
+        // Routed through `tynd_host_core::hooks::dispatch_plugin` so the
+        // OS dispatch table doesn't depend on the higher `plugins` module
+        // (the registry lives in the future `tynd-host-app` crate). The
+        // hook is registered by `tynd-host-app::runtime::run` before the
+        // event loop spins; lib-only OS tests get the structured
+        // "no plugin dispatcher registered" error.
+        "plugin" => return tynd_host_core::hooks::dispatch_plugin(method, args),
         // `workers` has bespoke semantics — present in `embedded-js`
         // builds, hard-error-with-hint everywhere else. Stays out of
         // the table because the disabled message isn't an

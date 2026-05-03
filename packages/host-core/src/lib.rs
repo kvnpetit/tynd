@@ -23,4 +23,5 @@
 
 pub mod args_ext;
 pub mod events;
+pub mod hooks;
 pub mod ipc_error;

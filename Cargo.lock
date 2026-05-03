@@ -8354,6 +8354,7 @@ dependencies = [
  "crossbeam-channel",
  "dashmap",
  "parking_lot",
+ "rkyv 0.8.16",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

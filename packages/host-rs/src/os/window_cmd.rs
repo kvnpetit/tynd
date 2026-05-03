@@ -4,7 +4,10 @@ use dpi::{LogicalPosition, LogicalSize, PhysicalPosition};
 use serde_json::{json, Value};
 use tao::window::{CursorIcon, ResizeDirection, Window};
 
-use crate::window;
+// `window::center_window` lives in the higher app crate
+// (`tynd-host-app::window`). Reached through the `hooks::center_window`
+// indirection registered at runtime startup so the OS layer doesn't
+// depend on the app crate (cycle break).
 
 /// Set by `tyndWindow.cancelClose()` during a `window:close-requested` handler.
 /// Polled 500ms later by the event loop before actually hiding / exiting.
@@ -136,7 +139,7 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
             Ok(Value::Null)
         },
         "center" => {
-            window::center_window(win);
+            tynd_host_core::hooks::center_window(win as &dyn std::any::Any);
             Ok(Value::Null)
         },
 
