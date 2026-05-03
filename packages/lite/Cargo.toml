@@ -48,6 +48,8 @@ hmac.workspace        = true
 sha2.workspace        = true
 parking_lot.workspace = true
 crossbeam-channel.workspace = true
+# Hand-rolled CLI replaced by pico-args — see `args.rs`.
+pico-args.workspace   = true
 # Pretty-prints panics for the end user (markdown crash report path,
 # friendly message). Setup in main.rs via `human_panic::setup_panic!()`.
 human-panic.workspace = true

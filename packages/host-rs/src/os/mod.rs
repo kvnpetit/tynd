@@ -6,6 +6,13 @@ pub mod call_pool;
 pub mod events;
 pub mod icon;
 pub mod os_info;
+// Internal handle registry — shared by the per-API session/handle
+// modules (websocket sessions, process children, fs watchers,
+// shortcuts) so they don't each re-roll the same `OnceLock<DashMap +
+// AtomicU64 NEXT_ID>` pattern. Crate-private; not exposed to plugins
+// (the plugin-sdk has its own `Registry<T>` for the
+// `Mutex<T>`-wrapped variant the SDK contract needs).
+pub(crate) mod registry;
 pub mod security;
 pub mod window_cmd;
 

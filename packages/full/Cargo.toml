@@ -43,10 +43,28 @@ mimalloc.workspace   = true
 zstd.workspace       = true
 dirs.workspace       = true
 crossbeam-channel.workspace = true
+# Hand-rolled CLI replaced by pico-args — see `args.rs`. Tiny enough
+# that the binary cost vs the 60-LOC loop is a wash, but the dev
+# ergonomics (free, finish_arguments_or_exit) are worth it.
+pico-args.workspace   = true
 # Pretty-prints panics for the end user (markdown crash report path,
 # friendly message instead of `thread 'main' panicked at ...`). Setup
 # in main.rs via `human_panic::setup_panic!()` before any other code.
 human-panic.workspace = true
+
+# === Hot-path JSON decoders (opt-in via `fast-json`) ===
+#
+# `serde_json` is the always-on baseline. The two SIMD libraries below
+# are wired conditionally per architecture — sonic-rs is x86_64 only
+# (SSE4.2/AVX2), simd-json carries an aarch64 NEON path. Default
+# builds stay on `serde_json::from_slice`; opt-in users flip
+# `--features fast-json` to pick the platform-appropriate decoder for
+# the Bun↔host IPC frame parse loop.
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+sonic-rs = { workspace = true, optional = true }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+simd-json = { workspace = true, optional = true }
 
 [features]
 default = ["preset"]
@@ -63,3 +81,12 @@ preset  = ["tynd-host/api-all", "deep-link"]
 # *this* crate; this gate is the bridge. Custom builds that drop deep-
 # link from `tynd-host/api-*` should also drop it here.
 deep-link = ["tynd-host/api-deep-link"]
+
+# Opt-in SIMD JSON decoder for the Bun↔host stdout IPC frame loop.
+# Off by default — sonic-rs requires SSE4.2/AVX2 (x86_64) and simd-json
+# carries its own runtime feature detection. Apps that ship to a known
+# CPU baseline can flip this on for 3-5× decode throughput on bursty
+# IPC bursts (large yield streams, multi-MB return values). The code
+# in `bun.rs` falls back to `serde_json::from_slice` when this feature
+# is off OR the target arch isn't covered.
+fast-json = [ "dep:sonic-rs", "dep:simd-json" ]

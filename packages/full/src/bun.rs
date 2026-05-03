@@ -13,12 +13,62 @@ use crossbeam_channel as mpsc;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tynd_host::{
     runtime::{BackendBridge, BackendCall, BackendConfig, BackendEvent, MenuItemDef, TrayConfig},
     tynd_log,
     window::WindowConfig,
 };
+
+/// Outbound wire frame to Bun's stdin. Single typed enum so all four
+/// shapes share the same builder + serializer call site instead of
+/// four near-identical `serde_json::json!()` blobs in the forwarder
+/// loop. `serde(tag = "type")` reproduces the exact wire contract the
+/// JS side expects (`{ "type": "...", ... }`).
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+enum WireMsg<'a> {
+    #[serde(rename = "tynd:ready")]
+    Ready,
+    #[serde(rename = "tynd:close")]
+    Close,
+    #[serde(rename = "call")]
+    Call {
+        id: &'a str,
+        #[serde(rename = "fn")]
+        fn_name: &'a str,
+        args: &'a [Value],
+    },
+    #[serde(rename = "cancel")]
+    Cancel { id: &'a str },
+    #[serde(rename = "ack")]
+    Ack { id: &'a str, n: u32 },
+}
+
+/// JSON decode helper for Bun stdout frames. Routes through the SIMD
+/// path under the `fast-json` feature on supported architectures and
+/// falls back to `serde_json::from_str` otherwise. Centralizing the
+/// `cfg` mess here keeps the reader loop readable.
+fn parse_bun_msg(s: &str) -> Result<BunMsg, String> {
+    #[cfg(all(feature = "fast-json", target_arch = "x86_64"))]
+    {
+        return sonic_rs::from_str::<BunMsg>(s).map_err(|e| e.to_string());
+    }
+    #[cfg(all(feature = "fast-json", target_arch = "aarch64"))]
+    {
+        // simd-json mutates the input buffer in-place; copy then parse.
+        let mut buf = s.as_bytes().to_vec();
+        return simd_json::serde::from_slice::<BunMsg>(&mut buf).map_err(|e| e.to_string());
+    }
+    #[cfg(any(
+        not(feature = "fast-json"),
+        not(any(target_arch = "x86_64", target_arch = "aarch64"))
+    ))]
+    {
+        serde_json::from_str::<BunMsg>(s).map_err(|e| e.to_string())
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -149,6 +199,9 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
         let stdin_slot = stdin_slot.clone();
         std::thread::spawn(move || {
             while let Ok(call) = call_rx.recv() {
+                // Build a typed `WireMsg` for every variant then serialize
+                // through one path. Drops 4 nearly-identical `json!()` +
+                // `to_string` blocks down to one match arm + one serializer.
                 let line = match call {
                     BackendCall::Raw(mut s) => {
                         s.push('\n');
@@ -156,14 +209,13 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
                     },
                     BackendCall::Typed { id, fn_name, args } => {
                         let msg = match fn_name.as_str() {
-                            "__tynd_on_ready__" => serde_json::json!({ "type": "tynd:ready" }),
-                            "__tynd_on_close__" => serde_json::json!({ "type": "tynd:close" }),
-                            _ => serde_json::json!({
-                                "type": "call",
-                                "id":   id,
-                                "fn":   fn_name,
-                                "args": args,
-                            }),
+                            "__tynd_on_ready__" => WireMsg::Ready,
+                            "__tynd_on_close__" => WireMsg::Close,
+                            _ => WireMsg::Call {
+                                id: &id,
+                                fn_name: &fn_name,
+                                args: &args,
+                            },
                         };
                         match serde_json::to_string(&msg) {
                             Ok(mut s) => {
@@ -177,8 +229,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
                         }
                     },
                     BackendCall::Cancel { id } => {
-                        let msg = serde_json::json!({ "type": "cancel", "id": id });
-                        match serde_json::to_string(&msg) {
+                        match serde_json::to_string(&WireMsg::Cancel { id: &id }) {
                             Ok(mut s) => {
                                 s.push('\n');
                                 s.into_bytes()
@@ -187,8 +238,7 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
                         }
                     },
                     BackendCall::Ack { id, n } => {
-                        let msg = serde_json::json!({ "type": "ack", "id": id, "n": n });
-                        match serde_json::to_string(&msg) {
+                        match serde_json::to_string(&WireMsg::Ack { id: &id, n }) {
                             Ok(mut s) => {
                                 s.push('\n');
                                 s.into_bytes()
@@ -271,7 +321,7 @@ fn spawn_bun(
                         eprintln!("[bun] {trimmed}");
                         continue;
                     }
-                    match serde_json::from_str::<BunMsg>(trimmed) {
+                    match parse_bun_msg(trimmed) {
                         Ok(BunMsg::Return { id, ok, v, error }) => {
                             // On success, `v` carries the devalue payload. On
                             // error, `error` is a plain string we surface as
@@ -346,7 +396,7 @@ fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> Result<Back
             continue;
         }
 
-        match serde_json::from_str::<BunMsg>(trimmed) {
+        match parse_bun_msg(trimmed) {
             Ok(BunMsg::Config {
                 window,
                 dev_url,

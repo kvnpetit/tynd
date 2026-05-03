@@ -31,6 +31,14 @@ ignored = [
     # without re-pinning versions. Shear them when wired:
     "base64-simd",   # SIMD base64 fallback for binary IPC string transit
     "swift-rs",      # Swift↔Rust bridge for niche macOS-native APIs
+    # Async WebSocket scaffolding — staged behind `tynd-host/ws-async`,
+    # not yet wired to the dispatcher (see `os::websocket` follow-up).
+    # Carrying the version pin here avoids cargo-shear flagging the
+    # workspace declaration as dead while the implementation lands
+    # incrementally.
+    "tokio",
+    "tokio-tungstenite",
+    "tokio-util",
 ]
 
 [workspace.package]
@@ -157,6 +165,18 @@ rand        = { version = "0.8", default-features = false, features = [ "std", "
 tungstenite = { version = "0.24", default-features = false, features = [ "rustls-tls-webpki-roots", "handshake" ] }
 rusqlite    = { version = "0.32", features = [ "bundled" ] }
 
+# Async WebSocket primitives (scaffold only — see `os::websocket`
+# `ws-async` feature). Tokio runtime is spawned on-demand inside the
+# `ws-async` impl so default sync-tungstenite builds stay fully
+# blocking-IO. Versions pinned here keep the workspace coherent when
+# the full migration lands. `tokio-tungstenite 0.29` collapses the
+# rustls 0.22 + 0.23 duplication (carries 0.23 only) and removes the
+# 25 ms read-timeout busy-poll latency floor inherent to the blocking
+# `set_read_timeout` polling pattern.
+tokio              = { version = "1", default-features = false, features = [ "rt-multi-thread", "macros", "sync", "net", "time", "io-util" ] }
+tokio-tungstenite  = { version = "0.29", default-features = false, features = [ "rustls-tls-webpki-roots", "handshake" ] }
+tokio-util         = { version = "0.7", default-features = false }
+
 # Performance primitives
 parking_lot = "0.12" # lock-free fast path + no poison handling (saves a branch per lock)
 # Lock-free `Arc<T>` swap for read-mostly state (security policy + ACL
@@ -173,6 +193,19 @@ crossbeam-channel = "0.5"
 # Tiny non-crypto RNG — single file, zero deps. Use for jitter / pool
 # slot picks / non-secure IDs. `rand` stays for CSPRNG (token gen, nonces).
 fastrand = "2"
+# SIMD JSON decoders — opt-in via `fast-json` on `tynd-full`. `sonic-rs`
+# requires SSE4.2/AVX2 (x86_64 only); aarch64 falls back to `simd-json`
+# which uses NEON. Default `serde_json` path stays everywhere these
+# don't apply or the feature is off — sonic-rs / simd-json show 3-5×
+# speedup on the IPC-frame decode hot path.
+sonic-rs  = { version = "0.5", default-features = false }
+simd-json = { version = "0.15", default-features = false, features = [ "serde_impl" ] }
+# Hand-rolled CLI argument parser — 1 KB binary cost, designed for
+# small flag sets. Replaces the 60-LOC `while i < raw.len()` loops in
+# the launcher binaries (`tynd-full`, `tynd-lite`). `clap` would be
+# overkill for these single-purpose entry points (which only take
+# 2–4 flags) and is already pulled by `tynd-cli` / `tynd-bundler`.
+pico-args = "0.5"
 # Time-ordered, sortable IDs (UUIDv7, RFC 9562). Replaces ad-hoc rand-based
 # IPC call IDs so traces sort temporally.
 uuid = { version = "1", features = [ "v7" ] }

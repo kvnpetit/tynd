@@ -1,16 +1,55 @@
 //! JSON key/value store at `config_dir()/<ns>/store.json`. Loaded once per
-//! namespace and cached; writes flush synchronously.
+//! namespace and cached. Writes are debounced — a background thread per
+//! namespace coalesces a burst of `set`/`delete`/`clear` calls into a
+//! single fsync+rename roughly every 100 ms. Use `flush` to force an
+//! immediate write (shutdown / explicit sync from JS).
 
-use std::{fs, io::Write as _, path::PathBuf, sync::LazyLock};
+use std::{
+    fs,
+    io::Write as _,
+    path::PathBuf,
+    sync::{Arc, LazyLock},
+    time::Duration,
+};
 
+use crossbeam_channel::{after, never, select, unbounded, Sender};
 use dashmap::DashMap;
 use serde_json::{Map, Value};
+
+/// Debounce window: a set/delete/clear that arrives within this delay
+/// of a previous one extends the timer instead of triggering a fresh
+/// fsync+rename. 100 ms is below "user-perceptible" so a UI-driven
+/// burst (e.g. tab close → `set` 8 keys) collapses to a single I/O.
+const PERSIST_DEBOUNCE: Duration = Duration::from_millis(100);
 
 /// Process-wide namespace → in-memory map cache. `LazyLock` (Rust
 /// 1.80+) builds the inner `DashMap` on first deref so callers reach
 /// the map via direct `STORES.get(...)` instead of a `stores()`
 /// accessor wrapping `OnceLock::get_or_init`.
-static STORES: LazyLock<DashMap<String, Map<String, Value>>> = LazyLock::new(DashMap::new);
+///
+/// Map is wrapped in `Arc` so the persister thread can take a cheap
+/// `Arc::clone` snapshot of the namespace state (one atomic inc) and
+/// serialize it without holding any DashMap shard lock — concurrent
+/// `set`/`get` proceed unblocked while the disk write happens.
+static STORES: LazyLock<DashMap<String, Arc<Map<String, Value>>>> = LazyLock::new(DashMap::new);
+
+/// Per-namespace persister handles. Each entry owns the channel that
+/// feeds the background thread and a flush ack channel for sync waits.
+static PERSISTERS: LazyLock<DashMap<String, Persister>> = LazyLock::new(DashMap::new);
+
+#[derive(Debug)]
+struct Persister {
+    tx: Sender<PersistCmd>,
+}
+
+/// Commands routed to a per-namespace background thread. `Touch`
+/// schedules a debounced flush; `Flush` forces an immediate write and
+/// waits for completion via the embedded ack channel.
+#[derive(Debug)]
+enum PersistCmd {
+    Touch,
+    Flush(Sender<()>),
+}
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     let namespace = args
@@ -32,20 +71,19 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             let key = key_arg(args)?;
             let value = args.get("value").cloned().unwrap_or(Value::Null);
             load_if_needed(&namespace)?;
-            STORES
-                .entry(namespace.clone())
-                .or_default()
-                .insert(key.to_string(), value);
-            persist(&namespace)?;
+            mutate(&namespace, |m| {
+                m.insert(key.to_string(), value);
+            });
+            schedule_persist(&namespace)?;
             Ok(Value::Null)
         },
         "delete" => {
             let key = key_arg(args)?;
             load_if_needed(&namespace)?;
-            if let Some(mut m) = STORES.get_mut(&namespace) {
+            mutate(&namespace, |m| {
                 m.remove(key);
-            }
-            persist(&namespace)?;
+            });
+            schedule_persist(&namespace)?;
             Ok(Value::Null)
         },
         "clear" => {
@@ -53,8 +91,8 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             // invalid namespace would clear the in-memory map and then fail
             // to persist, leaving on-disk + in-memory desynchronised.
             validate_namespace(&namespace)?;
-            STORES.insert(namespace.clone(), Map::new());
-            persist(&namespace)?;
+            STORES.insert(namespace.clone(), Arc::new(Map::new()));
+            schedule_persist(&namespace)?;
             Ok(Value::Null)
         },
         "keys" => {
@@ -102,15 +140,57 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             Ok(Value::Number(n.into()))
         },
         "reload" => {
-            // Drop the in-memory copy so the next read re-parses the disk
-            // file. Useful when an external process (another app instance,
-            // a manual edit) mutated `store.json` under our feet.
+            // Force any pending debounced write through before we drop
+            // the in-memory copy — otherwise a `set` followed immediately
+            // by `reload` would silently roll the value back to whatever
+            // is on disk.
+            flush_namespace(&namespace);
             STORES.remove(&namespace);
             load_if_needed(&namespace)?;
             Ok(Value::Null)
         },
+        "flush" => {
+            // Explicit sync — JS callers (and the host shutdown path)
+            // use this to force any debounced writes through before
+            // returning. No-op for namespaces with no pending state.
+            flush_namespace(&namespace);
+            Ok(Value::Null)
+        },
         _ => Err(format!("store.{method}: unknown method")),
     }
+}
+
+/// Apply a mutation to the namespace map under copy-on-write semantics:
+/// clone the current `Arc<Map>` (cheap inc), mutate the clone in place,
+/// publish via `DashMap::insert`. Concurrent readers keep their old
+/// snapshot until they drop it; the next `get` lands on the new one.
+fn mutate<F: FnOnce(&mut Map<String, Value>)>(namespace: &str, f: F) {
+    let mut entry = STORES
+        .entry(namespace.to_string())
+        .or_insert_with(|| Arc::new(Map::new()));
+    // `Arc::make_mut` clones the inner map iff there are other strong
+    // references (a persister-held snapshot, in our case). Free path
+    // is mutate-in-place when no one else is reading.
+    let m = Arc::make_mut(entry.value_mut());
+    f(m);
+}
+
+/// Force an immediate write for `namespace`, blocking until the
+/// background thread acks. Cheap when the persister has nothing
+/// pending (the thread serializes the current snapshot once, fsyncs,
+/// renames, and signals).
+fn flush_namespace(namespace: &str) {
+    let Some(p) = PERSISTERS.get(namespace) else {
+        return;
+    };
+    let (ack_tx, ack_rx) = unbounded::<()>();
+    if p.tx.send(PersistCmd::Flush(ack_tx)).is_err() {
+        return;
+    }
+    // 5 s upper bound — disk I/O on a sane filesystem completes in
+    // well under that; if it doesn't we'd rather return than wedge
+    // the IPC dispatch thread.
+    let _ = ack_rx.recv_timeout(Duration::from_secs(5));
 }
 
 fn key_arg(args: &Value) -> Result<&str, String> {
@@ -173,28 +253,104 @@ fn load_if_needed(namespace: &str) -> Result<(), String> {
     // concurrent threads can both miss `contains_key`, both read the file,
     // and the second `insert` would silently clobber the first (losing any
     // `set` that happened in between).
-    STORES.entry(namespace.to_string()).or_insert(map);
+    STORES
+        .entry(namespace.to_string())
+        .or_insert(Arc::new(map));
     Ok(())
 }
 
-fn persist(namespace: &str) -> Result<(), String> {
+/// Notify the per-namespace persister that the in-memory map changed.
+/// Spawns the background thread on first reach. Cheap unbounded send —
+/// the persister coalesces a burst of `Touch`es into one disk write
+/// after `PERSIST_DEBOUNCE`.
+fn schedule_persist(namespace: &str) -> Result<(), String> {
+    // Validate the path once up front so we don't spawn a thread for a
+    // namespace that would fail at write time anyway.
+    let _ = store_path(namespace)?;
+    let p = PERSISTERS
+        .entry(namespace.to_string())
+        .or_insert_with(|| spawn_persister(namespace.to_string()));
+    let _ = p.tx.send(PersistCmd::Touch);
+    Ok(())
+}
+
+/// Spawn the per-namespace persister thread. Holds an unbounded
+/// channel of `PersistCmd`; the loop coalesces `Touch` bursts via a
+/// `crossbeam_channel::after` timer and services `Flush(ack)` requests
+/// synchronously (drains the timer, writes, then sends the ack so the
+/// caller can know the write hit disk).
+fn spawn_persister(namespace: String) -> Persister {
+    let (tx, rx) = unbounded::<PersistCmd>();
+    std::thread::Builder::new()
+        .name(format!("tynd-store-{namespace}"))
+        .spawn(move || {
+            let mut pending = false;
+            loop {
+                // No pending write → block on the inbound channel.
+                // Pending → race the inbound channel against the
+                // debounce timer; whichever fires first wins.
+                let timer = if pending {
+                    after(PERSIST_DEBOUNCE)
+                } else {
+                    never()
+                };
+                select! {
+                    recv(rx) -> msg => match msg {
+                        Ok(PersistCmd::Touch) => {
+                            pending = true;
+                        }
+                        Ok(PersistCmd::Flush(ack)) => {
+                            // Synchronous flush — write now regardless of timer state.
+                            if pending {
+                                let _ = persist_now(&namespace);
+                                pending = false;
+                            }
+                            let _ = ack.send(());
+                        }
+                        Err(_) => {
+                            // Sender dropped (process shutdown). Best-effort
+                            // final flush so we don't lose pending writes.
+                            if pending {
+                                let _ = persist_now(&namespace);
+                            }
+                            return;
+                        }
+                    },
+                    recv(timer) -> _ => {
+                        if pending {
+                            let _ = persist_now(&namespace);
+                            pending = false;
+                        }
+                    }
+                }
+            }
+        })
+        .expect("store: spawn persister thread");
+    Persister { tx }
+}
+
+/// Serialize the current namespace snapshot and atomically rename it
+/// over `store.json`. Called from the persister thread; never blocks
+/// readers (`Arc::clone` is one atomic inc, the serializer iterates
+/// the snapshot independently).
+fn persist_now(namespace: &str) -> Result<(), String> {
     let path = store_path(namespace)?;
     let parent = path
         .parent()
         .ok_or_else(|| format!("store: path {} has no parent dir", path.display()))?;
     fs::create_dir_all(parent).map_err(|e| format!("store: mkdir {}: {e}", parent.display()))?;
-    let data = STORES
+    // Cheap snapshot — `Arc::clone` is one atomic increment. The map
+    // we serialize is the exact one published by the latest mutator;
+    // any `set` that lands after this clone will land on a new Arc and
+    // schedule a fresh `Touch` for the next debounce window.
+    let data: Arc<Map<String, Value>> = STORES
         .get(namespace)
-        .map(|r| r.value().clone())
-        .unwrap_or_default();
-    let serialized = serde_json::to_string(&data).map_err(|e| e.to_string())?;
+        .map(|r| Arc::clone(r.value()))
+        .unwrap_or_else(|| Arc::new(Map::new()));
+    let serialized = serde_json::to_string(&*data).map_err(|e| e.to_string())?;
 
     // Crash-safe persist: write to a sibling temp file in the same
     // directory, fsync, then atomically rename over the target.
-    // Replaces a `fs::write` that was vulnerable to leaving a
-    // truncated `store.json` if the process died mid-write. `persist`
-    // (not `persist_noclobber`) — the store overwrite is the desired
-    // semantic for `set` / `delete` / `clear`.
     let mut tmp = tempfile::NamedTempFile::new_in(parent)
         .map_err(|e| format!("store: tempfile in {}: {e}", parent.display()))?;
     tmp.write_all(serialized.as_bytes())
@@ -268,6 +424,10 @@ mod tests {
     fn persistence_survives_namespace_reload() {
         let n = ns("persist");
         dispatch("set", &json!({ "namespace": &n, "key": "k", "value": "v" })).unwrap();
+        // Force the debounced write through before evicting the
+        // in-memory copy — otherwise the next `get` would hit disk
+        // before the persister thread had a chance to fire.
+        dispatch("flush", &json!({ "namespace": &n })).unwrap();
         // Evict the in-memory copy so the next read has to hit disk.
         STORES.remove(&n);
         let v = dispatch("get", &json!({ "namespace": &n, "key": "k" })).unwrap();
@@ -334,6 +494,11 @@ mod tests {
             &json!({ "namespace": &n, "key": "k", "value": "v1" }),
         )
         .unwrap();
+        // Make sure v1 actually hits disk before we overwrite the file
+        // out-of-band — without this, the debounce timer might still
+        // be pending and our external write would race with the
+        // persister thread.
+        dispatch("flush", &json!({ "namespace": &n })).unwrap();
 
         // Simulate an out-of-process write: rewrite the JSON file directly.
         let path = store_path(&n).unwrap();

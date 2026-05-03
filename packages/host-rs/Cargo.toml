@@ -107,6 +107,15 @@ interprocess          = { workspace = true, optional = true }
 notify-debouncer-full = { workspace = true, optional = true }
 trash                 = { workspace = true, optional = true }
 tungstenite           = { workspace = true, optional = true }
+# Async WebSocket scaffolding — opt-in via `ws-async`. Default sync
+# path stays on the always-on `tungstenite` blocking client; flipping
+# `ws-async` on routes `os::websocket::run_session_with` through a
+# tiny on-demand Tokio runtime so the 25 ms read-timeout busy-poll
+# floor disappears. Skeleton only for now — full migration is staged
+# in a follow-up sprint.
+tokio                 = { workspace = true, optional = true }
+tokio-tungstenite     = { workspace = true, optional = true }
+tokio-util            = { workspace = true, optional = true }
 ed25519-dalek         = { workspace = true, optional = true }
 self-replace          = { workspace = true, optional = true }
 # Binary patch applier — the inverse of `bidiff`. Reconstructs the new
@@ -238,6 +247,13 @@ api-updater         = [ "dep:ureq", "dep:ed25519-dalek", "dep:self-replace", "de
 # leak the cleartext to a future allocator request.
 api-vault           = [ "dep:cocoon", "dep:zeroize" ]
 api-websocket       = [ "dep:tungstenite" ]
+# Async WebSocket scaffold — feature flag + on-demand Tokio runtime
+# infrastructure. When OFF (the default), `os::websocket` keeps the
+# blocking `tungstenite` poll-with-timeout loop. When ON, callers can
+# opt into the future async dispatcher (still WIP — full implementation
+# tracked separately). Pulling this also pulls a small Tokio runtime,
+# so opt-in is gated to deployments that actually want it.
+ws-async            = [ "dep:tokio", "dep:tokio-tungstenite", "dep:tokio-util" ]
 # Window-state persistence — promoted from `@tynd/plugin-window-state`.
 # No external dep: rides on always-on `dirs` + `serde_json` + `parking_lot`.
 api-window-state    = [  ]

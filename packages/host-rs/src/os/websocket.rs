@@ -1,24 +1,29 @@
 //! WebSocket client. Each `connect` spawns a thread that polls the socket
 //! in non-blocking mode, emits `websocket:open|message|close|error` events,
 //! and drains an outbound mpsc queue. Blocking `tungstenite` under the hood.
+//!
+//! The `ws-async` feature stages an alternative backend on top of
+//! `tokio-tungstenite` that removes the 25 ms read-timeout busy-poll
+//! latency floor inherent to the blocking `set_read_timeout` polling
+//! pattern below. Only the scaffolding is wired right now — see
+//! `async_backend` for the hook points; full migration is tracked in
+//! follow-up work.
+
+#[cfg(feature = "ws-async")]
+#[path = "websocket_async.rs"]
+mod async_backend;
 
 use std::{
     io::ErrorKind,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        mpsc, LazyLock,
-    },
+    sync::{mpsc, LazyLock},
     time::Duration,
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine};
-use dashmap::DashMap;
 use serde_json::{json, Value};
 use tungstenite::{protocol::CloseFrame, Message};
 
-use super::events;
-
-static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+use super::{events, registry::Registry};
 
 /// Commands posted to a running WebSocket session. Exposed (pub) so the
 /// lite runtime's `WebSocket` polyfill can reuse the same session runner
@@ -31,12 +36,11 @@ pub enum Cmd {
     Close(Option<(u16, String)>),
 }
 
-type Sessions = DashMap<u64, mpsc::Sender<Cmd>>;
-
-/// `LazyLock` (Rust 1.80+) builds the `DashMap` on first deref so
-/// callers reach it via direct `SESSIONS.get(...)` instead of a
-/// `sessions()` accessor wrapping `OnceLock::get_or_init`.
-static SESSIONS: LazyLock<Sessions> = LazyLock::new(DashMap::new);
+/// Shared id allocator + session map. `LazyLock` builds the underlying
+/// `DashMap` on first reach (DashMap::new is non-const). Drops the
+/// `NEXT_ID` atomic + `Sessions` type alias + `OnceLock`/`get_or_init`
+/// dance the previous shape needed.
+static SESSIONS: LazyLock<Registry<mpsc::Sender<Cmd>>> = LazyLock::new(Registry::new);
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -55,9 +59,8 @@ fn connect(args: &Value) -> Result<Value, String> {
         .ok_or_else(|| "websocket.connect: missing 'url'".to_string())?
         .to_string();
 
-    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let (tx, rx) = mpsc::channel::<Cmd>();
-    SESSIONS.insert(id, tx);
+    let id = SESSIONS.insert(tx);
 
     std::thread::spawn(move || run_session(id, &url, &rx));
     Ok(json!({ "id": id }))
@@ -71,7 +74,7 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
         }
         events::emit(name, &data);
     });
-    SESSIONS.remove(&id);
+    SESSIONS.remove(id);
 }
 
 /// Drive a WebSocket session until close. The caller supplies a sink that
@@ -173,8 +176,7 @@ fn session_tx(args: &Value) -> Result<mpsc::Sender<Cmd>, String> {
         .and_then(Value::as_u64)
         .ok_or_else(|| "websocket: missing 'id'".to_string())?;
     SESSIONS
-        .get(&id)
-        .map(|r| r.value().clone())
+        .get_cloned(id)
         .ok_or_else(|| format!("websocket: session {id} not found"))
 }
 
@@ -223,8 +225,9 @@ fn close(args: &Value) -> Result<Value, String> {
 #[allow(clippy::unnecessary_wraps)] // dispatch expects Result — uniform return shape
 fn list() -> Result<Value, String> {
     let ids: Vec<Value> = SESSIONS
-        .iter()
-        .map(|r| Value::Number((*r.key()).into()))
+        .ids()
+        .into_iter()
+        .map(|id| Value::Number(id.into()))
         .collect();
     Ok(Value::Array(ids))
 }

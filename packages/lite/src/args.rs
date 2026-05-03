@@ -13,68 +13,53 @@ pub(crate) struct Args {
     pub debug: bool,
 }
 
+const HELP: &str = "\
+Usage: tynd-lite --bundle <path> [--frontend-dir <dir>] [--dev-url <url>] [--debug]
+
+Flags:
+  -b, --bundle <path>         Path to pre-built JS bundle
+  -f, --frontend-dir <dir>    Static assets directory
+      --dev-url <url>         Dev server URL (overrides frontend-dir)
+  -d, --debug                 Enable WebView devtools + dev scheme
+  -V, --version               Print version and exit
+  -h, --help                  Print this help";
+
 impl Args {
     pub(crate) fn parse() -> Self {
-        let raw: Vec<String> = std::env::args().collect();
-        let mut bundle_path = String::new();
-        let mut frontend_dir = None;
-        let mut dev_url = None;
-        let mut debug = false;
+        // pico-args replaces a hand-rolled `while i < raw.len()` loop —
+        // same flag set, 1 KB binary cost, ergonomic API.
+        let mut pa = pico_args::Arguments::from_env();
 
-        let mut i = 1;
-        while i < raw.len() {
-            match raw[i].as_str() {
-                "--bundle" | "-b" => {
-                    i += 1;
-                    if i < raw.len() {
-                        bundle_path.clone_from(&raw[i]);
-                    }
-                },
-                "--frontend-dir" | "-f" => {
-                    i += 1;
-                    if i < raw.len() {
-                        frontend_dir = Some(raw[i].clone());
-                    }
-                },
-                "--dev-url" => {
-                    i += 1;
-                    if i < raw.len() {
-                        dev_url = Some(raw[i].clone());
-                    }
-                },
-                "--debug" | "-d" => debug = true,
-                "--version" | "-V" => {
-                    // Wave 4.4: smoke-test E2E entry point — `tynd-lite --version`
-                    // must succeed without `--bundle` so CI can sanity-check every
-                    // release binary across the 6 OS×arch matrix.
-                    println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-                    std::process::exit(0);
-                },
-                "--help" | "-h" => {
-                    println!(
-                        "Usage: tynd-lite --bundle <path> [--frontend-dir <dir>] [--dev-url \
-                         <url>] [--debug]\n\nFlags:\n  -b, --bundle <path>         Path to \
-                         pre-built JS bundle\n  -f, --frontend-dir <dir>    Static assets \
-                         directory\n      --dev-url <url>         Dev server URL (overrides \
-                         frontend-dir)\n  -d, --debug                 Enable WebView devtools + \
-                         dev scheme\n  -V, --version               Print version and exit\n  -h, \
-                         --help                  Print this help"
-                    );
-                    std::process::exit(0);
-                },
-                _ => {},
-            }
-            i += 1;
+        // Wave 4.4: smoke-test E2E entry point — `tynd-lite --version`
+        // must succeed without `--bundle` so CI can sanity-check every
+        // release binary across the 6 OS×arch matrix.
+        if pa.contains(["-V", "--version"]) {
+            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+            std::process::exit(0);
+        }
+        if pa.contains(["-h", "--help"]) {
+            println!("{HELP}");
+            std::process::exit(0);
         }
 
-        if bundle_path.is_empty() {
+        let debug = pa.contains(["-d", "--debug"]);
+        let bundle_path: Option<String> =
+            pa.opt_value_from_str(["-b", "--bundle"]).unwrap_or(None);
+        let frontend_dir: Option<String> = pa
+            .opt_value_from_str(["-f", "--frontend-dir"])
+            .unwrap_or(None);
+        // `--dev-url` has no short form — `pico_args::Keys` accepts a
+        // single `&str` for that case.
+        let dev_url: Option<String> = pa.opt_value_from_str("--dev-url").unwrap_or(None);
+
+        let Some(bundle_path) = bundle_path.filter(|s| !s.is_empty()) else {
             tynd_host::tynd_log!("Error: --bundle <path> is required");
             tynd_host::tynd_log!(
                 "Usage: tynd-lite --bundle /path/to/bundle.js [--frontend-dir /path/to/dist] \
                  [--debug]"
             );
             std::process::exit(1);
-        }
+        };
 
         Self {
             bundle_path,
