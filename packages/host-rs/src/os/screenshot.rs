@@ -14,6 +14,8 @@ use image::ImageFormat;
 use serde_json::{json, Value};
 use xcap::{Monitor, Window};
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     // W3.2 — ACL gate. The two `capture*` methods are the privacy-
     // sensitive surface (anything that returns a frame buffer of the
@@ -27,7 +29,9 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         if needs_gate {
             let cmd = format!("screenshot:{method}");
             if !crate::os::acl::authority().is_allowed(&cmd, None, None, None) {
-                return Err(format!("screenshot.{method}: permission denied by ACL"));
+                return Err(
+                    IpcError::new("screenshot", method, "permission denied by ACL").into_string(),
+                );
             }
         }
     }
@@ -36,12 +40,13 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "captureWindow" => capture_window(args),
         "listMonitors" => list_monitors(),
         "listWindows" => list_windows(),
-        _ => Err(format!("screenshot.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("screenshot", method).into_string()),
     }
 }
 
 fn list_monitors() -> Result<Value, String> {
-    let monitors = Monitor::all().map_err(|e| format!("screenshot.listMonitors: {e}"))?;
+    let monitors = Monitor::all()
+        .map_err(|e| IpcError::new("screenshot", "listMonitors", e).into_string())?;
     let arr: Vec<Value> = monitors
         .iter()
         .map(|m| {
@@ -59,7 +64,8 @@ fn list_monitors() -> Result<Value, String> {
 }
 
 fn list_windows() -> Result<Value, String> {
-    let windows = Window::all().map_err(|e| format!("screenshot.listWindows: {e}"))?;
+    let windows = Window::all()
+        .map_err(|e| IpcError::new("screenshot", "listWindows", e).into_string())?;
     let arr: Vec<Value> = windows
         .iter()
         .map(|w| {
@@ -76,22 +82,26 @@ fn list_windows() -> Result<Value, String> {
 }
 
 fn capture_screen(args: &Value) -> Result<Value, String> {
-    let monitors = Monitor::all().map_err(|e| format!("screenshot.captureScreen: {e}"))?;
+    let monitors = Monitor::all()
+        .map_err(|e| IpcError::new("screenshot", "captureScreen", e).into_string())?;
     if monitors.is_empty() {
-        return Err("screenshot.captureScreen: no monitors detected".into());
+        return Err(
+            IpcError::new("screenshot", "captureScreen", "no monitors detected").into_string(),
+        );
     }
     let idx = args
         .get("monitor_index")
         .or_else(|| args.get("monitorIndex"))
         .and_then(Value::as_u64)
         .unwrap_or(0) as usize;
-    let monitor = monitors
-        .get(idx)
-        .ok_or_else(|| format!("screenshot.captureScreen: monitor {idx} out of range"))?;
+    let monitor = monitors.get(idx).ok_or_else(|| {
+        IpcError::new("screenshot", "captureScreen", format!("monitor {idx} out of range"))
+            .into_string()
+    })?;
 
     let img = monitor
         .capture_image()
-        .map_err(|e| format!("screenshot.captureScreen: {e}"))?;
+        .map_err(|e| IpcError::new("screenshot", "captureScreen", e).into_string())?;
     encode_png(img.width(), img.height(), &img.into_raw())
 }
 
@@ -100,19 +110,27 @@ fn capture_window(args: &Value) -> Result<Value, String> {
         .get("window_id")
         .or_else(|| args.get("windowId"))
         .and_then(Value::as_u64)
-        .ok_or_else(|| "screenshot.captureWindow: missing 'window_id'".to_string())?;
+        .ok_or_else(|| {
+            String::from(IpcError::missing_arg("screenshot", "captureWindow", "window_id"))
+        })?;
 
-    let windows = Window::all().map_err(|e| format!("screenshot.captureWindow: {e}"))?;
-    let id_u32: u32 = u32::try_from(id)
-        .map_err(|_| format!("screenshot.captureWindow: window_id {id} out of u32 range"))?;
-    let window = windows
-        .into_iter()
-        .find(|w| w.id() == id_u32)
-        .ok_or_else(|| format!("screenshot.captureWindow: window {id} not found"))?;
+    let windows = Window::all()
+        .map_err(|e| IpcError::new("screenshot", "captureWindow", e).into_string())?;
+    let id_u32: u32 = u32::try_from(id).map_err(|_| {
+        IpcError::new(
+            "screenshot",
+            "captureWindow",
+            format!("window_id {id} out of u32 range"),
+        )
+        .into_string()
+    })?;
+    let window = windows.into_iter().find(|w| w.id() == id_u32).ok_or_else(|| {
+        IpcError::new("screenshot", "captureWindow", format!("window {id} not found")).into_string()
+    })?;
 
     let img = window
         .capture_image()
-        .map_err(|e| format!("screenshot.captureWindow: {e}"))?;
+        .map_err(|e| IpcError::new("screenshot", "captureWindow", e).into_string())?;
     encode_png(img.width(), img.height(), &img.into_raw())
 }
 
@@ -123,17 +141,21 @@ fn capture_window(args: &Value) -> Result<Value, String> {
 /// screenshots are typically <2 MB so the base64 cost is acceptable.
 fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Value, String> {
     if width == 0 || height == 0 {
-        return Err(format!(
-            "screenshot: invalid capture dimensions ({width}x{height})"
-        ));
+        return Err(IpcError::new(
+            "screenshot",
+            "encode_png",
+            format!("invalid capture dimensions ({width}x{height})"),
+        )
+        .into_string());
     }
-    let buffer = image::RgbaImage::from_raw(width, height, rgba.to_vec())
-        .ok_or_else(|| "screenshot: malformed RGBA buffer".to_string())?;
+    let buffer = image::RgbaImage::from_raw(width, height, rgba.to_vec()).ok_or_else(|| {
+        IpcError::new("screenshot", "encode_png", "malformed RGBA buffer").into_string()
+    })?;
     let mut png = Vec::with_capacity((width as usize) * (height as usize));
     let mut cursor = std::io::Cursor::new(&mut png);
     buffer
         .write_to(&mut cursor, ImageFormat::Png)
-        .map_err(|e| format!("screenshot: PNG encode: {e}"))?;
+        .map_err(|e| IpcError::new("screenshot", "encode_png", e).into_string())?;
     Ok(json!({
         "width": width,
         "height": height,

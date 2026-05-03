@@ -32,6 +32,7 @@ use parking_lot::RwLock;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 /// Cap on registered combos. Each entry is a short heap string in a
 /// `BTreeSet`; 256 covers any realistic UX (typical apps register
@@ -49,7 +50,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "enable" => enable(args),
         "list" => Ok(list()),
         "clear" => clear(),
-        _ => Err(format!("keys.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("keys", method).into_string()),
     }
 }
 
@@ -66,9 +67,14 @@ fn disable(args: &Value) -> Result<Value, String> {
         let mut state = DISABLED.write();
         for combo in combos.into_iter().map(normalise_combo) {
             if state.len() >= MAX_COMBOS && !state.contains(&combo) {
-                return Err(format!(
-                    "keys.disable: max {MAX_COMBOS} combos reached — call clear() or enable() first"
-                ));
+                return Err(IpcError::new(
+                    "keys",
+                    "disable",
+                    format!(
+                        "max {MAX_COMBOS} combos reached — call clear() or enable() first"
+                    ),
+                )
+                .into_string());
             }
             state.insert(combo);
         }
@@ -109,12 +115,14 @@ fn combos_arg(args: &Value) -> Result<Vec<String>, String> {
     let arr = args
         .get("combos")
         .and_then(Value::as_array)
-        .ok_or_else(|| "keys: missing 'combos' (string[])".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("keys", "*", "combos")))?;
     let mut out = Vec::with_capacity(arr.len());
     for v in arr {
         let s = v
             .as_str()
-            .ok_or_else(|| "keys: 'combos' must contain strings".to_string())?;
+            .ok_or_else(|| {
+                IpcError::new("keys", "*", "'combos' must contain strings").into_string()
+            })?;
         out.push(s.to_string());
     }
     Ok(out)

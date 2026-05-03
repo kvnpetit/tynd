@@ -10,6 +10,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -22,12 +23,12 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "clear" => clear(),
         "startMonitoring" => start_monitoring(args),
         "stopMonitoring" => stop_monitoring(),
-        _ => Err(format!("clipboard.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("clipboard", method).into_string()),
     }
 }
 
 fn new_cb() -> Result<Clipboard, String> {
-    Clipboard::new().map_err(|e| format!("clipboard: {e}"))
+    Clipboard::new().map_err(|e| IpcError::new("clipboard", "*", e).into_string())
 }
 
 fn read_text() -> Result<Value, String> {
@@ -38,7 +39,7 @@ fn read_text() -> Result<Value, String> {
     match cb.get_text() {
         Ok(t) => Ok(Value::String(t)),
         Err(arboard::Error::ContentNotAvailable) => Ok(Value::String(String::new())),
-        Err(e) => Err(format!("clipboard.readText: {e}")),
+        Err(e) => Err(IpcError::new("clipboard", "readText", e).into_string()),
     }
 }
 
@@ -49,7 +50,7 @@ fn write_text(args: &Value) -> Result<Value, String> {
         .unwrap_or("");
     let mut cb = new_cb()?;
     cb.set_text(text)
-        .map_err(|e| format!("clipboard.writeText: {e}"))?;
+        .map_err(|e| IpcError::new("clipboard", "writeText", e).into_string())?;
     Ok(Value::Null)
 }
 
@@ -66,12 +67,12 @@ fn write_html(args: &Value) -> Result<Value, String> {
     let html = args
         .get("html")
         .and_then(Value::as_str)
-        .ok_or_else(|| "clipboard.writeHtml: missing 'html'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("clipboard", "writeHtml", "html")))?;
     // Plain-text fallback for apps that don't understand text/html.
     let alt = args.get("alt").and_then(Value::as_str);
     let mut cb = new_cb()?;
     cb.set_html(html, alt)
-        .map_err(|e| format!("clipboard.writeHtml: {e}"))?;
+        .map_err(|e| IpcError::new("clipboard", "writeHtml", e).into_string())?;
     Ok(Value::Null)
 }
 
@@ -92,12 +93,14 @@ fn read_image() -> Result<Value, String> {
         return Ok(Value::Null);
     }
     let buffer: ImageBuffer<Rgba<u8>, _> = ImageBuffer::from_raw(w, h, img.bytes.into_owned())
-        .ok_or_else(|| "clipboard.readImage: bad RGBA buffer".to_string())?;
+        .ok_or_else(|| {
+            IpcError::new("clipboard", "readImage", "bad RGBA buffer").into_string()
+        })?;
     let mut png = Vec::with_capacity((w as usize) * (h as usize));
     let mut cursor = std::io::Cursor::new(&mut png);
     buffer
         .write_to(&mut cursor, ImageFormat::Png)
-        .map_err(|e| format!("clipboard.readImage: encode: {e}"))?;
+        .map_err(|e| IpcError::new("clipboard", "readImage", format!("encode: {e}")).into_string())?;
 
     Ok(json!({
         "png": STANDARD.encode(&png),
@@ -112,12 +115,13 @@ fn write_image(args: &Value) -> Result<Value, String> {
     let png_b64 = args
         .get("png")
         .and_then(Value::as_str)
-        .ok_or_else(|| "clipboard.writeImage: missing 'png'".to_string())?;
-    let png_bytes = STANDARD
-        .decode(png_b64)
-        .map_err(|e| format!("clipboard.writeImage: base64: {e}"))?;
-    let dynimg = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
-        .map_err(|e| format!("clipboard.writeImage: decode: {e}"))?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("clipboard", "writeImage", "png")))?;
+    let png_bytes = STANDARD.decode(png_b64).map_err(|e| {
+        IpcError::new("clipboard", "writeImage", format!("base64: {e}")).into_string()
+    })?;
+    let dynimg = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png).map_err(
+        |e| IpcError::new("clipboard", "writeImage", format!("decode: {e}")).into_string(),
+    )?;
     let rgba = dynimg.to_rgba8();
     let (w, h) = rgba.dimensions();
 
@@ -128,13 +132,14 @@ fn write_image(args: &Value) -> Result<Value, String> {
     };
     let mut cb = new_cb()?;
     cb.set_image(data)
-        .map_err(|e| format!("clipboard.writeImage: {e}"))?;
+        .map_err(|e| IpcError::new("clipboard", "writeImage", e).into_string())?;
     Ok(Value::Null)
 }
 
 fn clear() -> Result<Value, String> {
     let mut cb = new_cb()?;
-    cb.clear().map_err(|e| format!("clipboard.clear: {e}"))?;
+    cb.clear()
+        .map_err(|e| IpcError::new("clipboard", "clear", e).into_string())?;
     Ok(Value::Null)
 }
 

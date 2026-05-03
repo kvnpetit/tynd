@@ -3,13 +3,15 @@ use rand::RngCore;
 use serde_json::Value;
 use sha2::{Digest, Sha256, Sha384, Sha512};
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "randomBytes" => random_bytes(args),
         // hash / compress / decompress route through the `tynd-bin://`
         // custom protocol (see host-rs/src/scheme_bin.rs) — the raw-bytes
         // variants live below and avoid base64 for multi-MB payloads.
-        _ => Err(format!("compute.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("compute", method).into()),
     }
 }
 
@@ -17,7 +19,7 @@ fn random_bytes(args: &Value) -> Result<Value, String> {
     let n = args
         .get("n")
         .and_then(Value::as_u64)
-        .ok_or_else(|| "compute.randomBytes: missing 'n'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("compute", "randomBytes", "n")))?;
     let buf = random_bytes_raw(n as usize)?;
     Ok(Value::String(STANDARD.encode(&buf)))
 }
@@ -26,9 +28,12 @@ fn random_bytes(args: &Value) -> Result<Value, String> {
 /// path and the lite runtime's `crypto.getRandomValues` polyfill.
 pub fn random_bytes_raw(n: usize) -> Result<Vec<u8>, String> {
     if n == 0 || n > 1_048_576 {
-        return Err(format!(
-            "compute.randomBytes: 'n' must be 1..=1_048_576 (got {n})"
-        ));
+        return Err(IpcError::new(
+            "compute",
+            "randomBytes",
+            format!("'n' must be 1..=1_048_576 (got {n})"),
+        )
+        .into());
     }
     let mut buf = vec![0u8; n];
     rand::rngs::OsRng.fill_bytes(&mut buf);
@@ -53,12 +58,21 @@ pub fn hash_raw(data: &[u8], algo: &str, encoding: &str) -> Result<String, Strin
         "sha256" => Sha256::digest(data).to_vec(),
         "sha384" => Sha384::digest(data).to_vec(),
         "sha512" => Sha512::digest(data).to_vec(),
-        _ => return Err(format!("compute.hash: unsupported algo '{algo}'")),
+        _ => {
+            return Err(IpcError::new(
+                "compute",
+                "hash",
+                format!("unsupported algo '{algo}'"),
+            )
+            .into())
+        },
     };
     match encoding {
         "hex" => Ok(hex_encode(&digest)),
         "base64" => Ok(STANDARD.encode(&digest)),
-        _ => Err(format!("compute.hash: unsupported encoding '{encoding}'")),
+        _ => Err(
+            IpcError::new("compute", "hash", format!("unsupported encoding '{encoding}'")).into(),
+        ),
     }
 }
 

@@ -19,6 +19,8 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, _args: &Value) -> Result<Value, String> {
     match method {
         "getIdleTime" => Ok(json!({ "seconds": idle_seconds()? })),
@@ -32,7 +34,7 @@ pub fn dispatch(method: &str, _args: &Value) -> Result<Value, String> {
             ensure_power_monitor();
             Ok(Value::Null)
         },
-        _ => Err(format!("power.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("power", method).into_string()),
     }
 }
 
@@ -527,10 +529,11 @@ fn battery_info() -> Result<Value, String> {
         Manager, State,
     };
 
-    let manager = Manager::new().map_err(|e| format!("power.battery: manager: {e}"))?;
+    let manager = Manager::new()
+        .map_err(|e| IpcError::new("power", "battery", format!("manager: {e}")).into_string())?;
     let mut iter = manager
         .batteries()
-        .map_err(|e| format!("power.battery: enumerate: {e}"))?;
+        .map_err(|e| IpcError::new("power", "battery", format!("enumerate: {e}")).into_string())?;
 
     let Some(first) = iter.next() else {
         // No battery present (typical desktop). Return null shape rather
@@ -538,7 +541,8 @@ fn battery_info() -> Result<Value, String> {
         // to special-case desktops.
         return Ok(Value::Null);
     };
-    let bat = first.map_err(|e| format!("power.battery: read: {e}"))?;
+    let bat = first
+        .map_err(|e| IpcError::new("power", "battery", format!("read: {e}")).into_string())?;
 
     let state = bat.state();
     let status = match state {
@@ -572,7 +576,7 @@ fn battery_info() -> Result<Value, String> {
 fn idle_seconds() -> Result<u64, String> {
     user_idle::UserIdle::get_time()
         .map(|t| t.as_seconds())
-        .map_err(|e| format!("power.getIdleTime: {e}"))
+        .map_err(|e| IpcError::new("power", "getIdleTime", e).into_string())
 }
 
 /// Cross-platform battery + AC summary.

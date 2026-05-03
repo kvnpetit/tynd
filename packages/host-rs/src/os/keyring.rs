@@ -12,12 +12,14 @@
 use keyring::Entry;
 use serde_json::Value;
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "set" => set_secret(args),
         "get" => get_secret(args),
         "delete" => delete_secret(args),
-        _ => Err(format!("keyring.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("keyring", method).into_string()),
     }
 }
 
@@ -25,25 +27,30 @@ fn entry(args: &Value) -> Result<Entry, String> {
     let service = args
         .get("service")
         .and_then(Value::as_str)
-        .ok_or("keyring: missing 'service'")?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("keyring", "*", "service")))?;
     let account = args
         .get("account")
         .and_then(Value::as_str)
-        .ok_or("keyring: missing 'account'")?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("keyring", "*", "account")))?;
     if service.is_empty() || account.is_empty() {
-        return Err("keyring: 'service' and 'account' must not be empty".into());
+        return Err(IpcError::new(
+            "keyring",
+            "*",
+            "'service' and 'account' must not be empty",
+        )
+        .into_string());
     }
-    Entry::new(service, account).map_err(|e| format!("keyring: {e}"))
+    Entry::new(service, account).map_err(|e| IpcError::new("keyring", "*", e).into_string())
 }
 
 fn set_secret(args: &Value) -> Result<Value, String> {
     let password = args
         .get("password")
         .and_then(Value::as_str)
-        .ok_or("keyring.set: missing 'password'")?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("keyring", "set", "password")))?;
     entry(args)?
         .set_password(password)
-        .map_err(|e| format!("keyring.set: {e}"))?;
+        .map_err(|e| IpcError::new("keyring", "set", e).into_string())?;
     Ok(Value::Null)
 }
 
@@ -52,7 +59,7 @@ fn get_secret(args: &Value) -> Result<Value, String> {
         Ok(s) => Ok(Value::String(s)),
         // "not found" is a normal case — return null instead of erroring.
         Err(keyring::Error::NoEntry) => Ok(Value::Null),
-        Err(e) => Err(format!("keyring.get: {e}")),
+        Err(e) => Err(IpcError::new("keyring", "get", e).into_string()),
     }
 }
 
@@ -60,6 +67,6 @@ fn delete_secret(args: &Value) -> Result<Value, String> {
     match entry(args)?.delete_credential() {
         Ok(()) => Ok(Value::Bool(true)),
         Err(keyring::Error::NoEntry) => Ok(Value::Bool(false)),
-        Err(e) => Err(format!("keyring.delete: {e}")),
+        Err(e) => Err(IpcError::new("keyring", "delete", e).into_string()),
     }
 }

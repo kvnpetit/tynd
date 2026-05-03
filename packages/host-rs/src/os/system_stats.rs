@@ -16,6 +16,8 @@ use serde_json::{json, Value};
 use smallvec::SmallVec;
 use sysinfo::{Disks, ProcessRefreshKind, RefreshKind, System};
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "cpu" => Ok(cpu()),
@@ -23,7 +25,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "disks" => Ok(disks()),
         "processes" => Ok(processes(args)),
         "uptime" => Ok(json!({ "seconds": System::uptime() })),
-        _ => Err(format!("systemStats.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("systemStats", method).into_string()),
     }
 }
 

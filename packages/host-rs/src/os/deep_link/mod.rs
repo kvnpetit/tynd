@@ -52,6 +52,7 @@ use parking_lot::RwLock;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 #[cfg(target_os = "linux")]
 mod xdg_desktop;
@@ -168,7 +169,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "isRegistered" => is_registered(args),
         "getStartupUrl" => Ok(get_startup_url()),
         "wasForwardedToPrimary" => Ok(json!(was_forwarded_to_primary())),
-        _ => Err(format!("deepLink.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("deepLink", method).into_string()),
     }
 }
 

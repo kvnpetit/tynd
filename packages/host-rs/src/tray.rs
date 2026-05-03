@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap};
 
 use serde_json::Value;
 
-use crate::{menu, os, runtime::TrayConfig};
+use crate::{ipc_error::IpcError, menu, os, runtime::TrayConfig};
 
 /// Per-item handle stored in the tray menu registry. Wraps the muda items
 /// we may want to mutate at runtime — `setItemEnabled` works on the first
@@ -248,7 +248,7 @@ pub(crate) fn dispatch(
             })?;
             Ok(Value::Null)
         },
-        _ => Err(format!("tray.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("tray", method).into_string()),
     }
 }
 

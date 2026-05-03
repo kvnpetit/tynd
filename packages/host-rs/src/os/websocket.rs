@@ -24,6 +24,7 @@ use serde_json::{json, Value};
 use tungstenite::{protocol::CloseFrame, Message};
 
 use super::{events, registry::Registry};
+use crate::ipc_error::IpcError;
 
 /// Commands posted to a running WebSocket session. Exposed (pub) so the
 /// lite runtime's `WebSocket` polyfill can reuse the same session runner
@@ -48,7 +49,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "send" => send(args),
         "close" => close(args),
         "list" => list(),
-        _ => Err(format!("websocket.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("websocket", method).into_string()),
     }
 }
 
@@ -56,7 +57,7 @@ fn connect(args: &Value) -> Result<Value, String> {
     let url = args
         .get("url")
         .and_then(Value::as_str)
-        .ok_or_else(|| "websocket.connect: missing 'url'".to_string())?
+        .ok_or_else(|| String::from(IpcError::missing_arg("websocket", "connect", "url")))?
         .to_string();
 
     let (tx, rx) = mpsc::channel::<Cmd>();
@@ -174,10 +175,10 @@ fn session_tx(args: &Value) -> Result<mpsc::Sender<Cmd>, String> {
     let id = args
         .get("id")
         .and_then(Value::as_u64)
-        .ok_or_else(|| "websocket: missing 'id'".to_string())?;
-    SESSIONS
-        .get_cloned(id)
-        .ok_or_else(|| format!("websocket: session {id} not found"))
+        .ok_or_else(|| String::from(IpcError::missing_arg("websocket", "*", "id")))?;
+    SESSIONS.get_cloned(id).ok_or_else(|| {
+        IpcError::new("websocket", "*", format!("session {id} not found")).into_string()
+    })
 }
 
 fn send(args: &Value) -> Result<Value, String> {
@@ -187,25 +188,29 @@ fn send(args: &Value) -> Result<Value, String> {
         "text" => Cmd::SendText(
             args.get("data")
                 .and_then(Value::as_str)
-                .ok_or_else(|| "websocket.send: missing text 'data'".to_string())?
+                .ok_or_else(|| {
+                    IpcError::new("websocket", "send", "missing text 'data'").into_string()
+                })?
                 .to_string(),
         ),
         "binary" => {
-            let b64 = args
-                .get("data")
-                .and_then(Value::as_str)
-                .ok_or_else(|| "websocket.send: missing base64 'data'".to_string())?;
-            Cmd::SendBinary(
-                STANDARD
-                    .decode(b64)
-                    .map_err(|e| format!("websocket.send: invalid base64: {e}"))?,
-            )
+            let b64 = args.get("data").and_then(Value::as_str).ok_or_else(|| {
+                IpcError::new("websocket", "send", "missing base64 'data'").into_string()
+            })?;
+            Cmd::SendBinary(STANDARD.decode(b64).map_err(|e| {
+                IpcError::new("websocket", "send", format!("invalid base64: {e}")).into_string()
+            })?)
         },
         "ping" => Cmd::Ping(Vec::new()),
-        other => return Err(format!("websocket.send: unknown kind '{other}'")),
+        other => {
+            return Err(
+                IpcError::new("websocket", "send", format!("unknown kind '{other}'")).into_string(),
+            )
+        },
     };
-    tx.send(cmd)
-        .map_err(|e| format!("websocket.send: session gone: {e}"))?;
+    tx.send(cmd).map_err(|e| {
+        IpcError::new("websocket", "send", format!("session gone: {e}")).into_string()
+    })?;
     Ok(Value::Null)
 }
 

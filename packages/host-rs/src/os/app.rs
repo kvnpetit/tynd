@@ -9,6 +9,8 @@ use std::{sync::LazyLock, time::Duration};
 use parking_lot::Mutex;
 use serde_json::Value;
 
+use crate::ipc_error::IpcError;
+
 // `LazyLock` initializes the inner `Mutex<String>` to `String::new()`
 // on first access — empty string is the sentinel for "the backend
 // hasn't called `app.setInfo` yet" so the getters fall back to the
@@ -46,7 +48,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             std::process::exit(code);
         },
         "relaunch" => relaunch(),
-        _ => Err(format!("app.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("app", method).into_string()),
     }
 }
 
@@ -94,10 +96,11 @@ fn get_version() -> String {
 }
 
 fn relaunch() -> Result<Value, String> {
-    let exe = std::env::current_exe().map_err(|e| format!("app.relaunch: current_exe: {e}"))?;
+    let exe = std::env::current_exe()
+        .map_err(|e| String::from(IpcError::new("app", "relaunch", format!("current_exe: {e}"))))?;
     std::process::Command::new(&exe)
         .spawn()
-        .map_err(|e| format!("app.relaunch: spawn: {e}"))?;
+        .map_err(|e| String::from(IpcError::new("app", "relaunch", format!("spawn: {e}"))))?;
     std::thread::spawn(|| {
         // Small delay so the child process is actually underway before we exit.
         std::thread::sleep(Duration::from_millis(100));

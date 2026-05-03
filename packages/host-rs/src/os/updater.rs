@@ -55,6 +55,7 @@ use serde_json::{json, Value};
 use blake3::Hasher as Blake3Hasher;
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 // ---------------------------------------------------------------------------
 // Semver helpers (public API for tests + external callers in the host crate)
@@ -103,7 +104,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             stop_periodic_check();
             Ok(Value::Null)
         },
-        _ => Err(format!("updater.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("updater", method).into_string()),
     }
 }
 

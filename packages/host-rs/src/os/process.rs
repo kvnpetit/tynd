@@ -11,7 +11,10 @@ use shared_child::SharedChild;
 
 use serde_json::{json, Value};
 
-use crate::os::{events, security};
+use crate::{
+    ipc_error::IpcError,
+    os::{events, security},
+};
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -21,7 +24,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "writeStdin" => write_stdin(args),
         "closeStdin" => close_stdin(args),
         "kill" => kill(args),
-        _ => Err(format!("process.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("process", method).into_string()),
     }
 }
 
@@ -29,7 +32,7 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
     let cmd_str = args
         .get("cmd")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| "process.exec: missing 'cmd'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("process", "exec", "cmd")))?;
 
     let argv: Vec<String> = args
         .get("args")
@@ -91,8 +94,9 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
         // process to `/etc` (Unix) or `C:\Windows\System32` (Windows) and
         // launch a binary that reads from there using relative paths,
         // sidestepping the security policy.
-        security::check_fs(cwd)
-            .map_err(|e| format!("process.exec: cwd not permitted: {e}"))?;
+        security::check_fs(cwd).map_err(|e| {
+            IpcError::new("process", "exec", format!("cwd not permitted: {e}")).into_string()
+        })?;
         command.current_dir(cwd);
     }
 
@@ -192,10 +196,10 @@ fn registry_get(pid: u32) -> Option<Arc<SpawnEntry>> {
 fn require_pid(args: &Value, op: &str) -> Result<u32, String> {
     let v = args
         .get("pid")
-        .ok_or_else(|| format!("process.{op}: missing 'pid'"))?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("process", op, "pid")))?;
     v.as_u64()
         .map(|n| n as u32)
-        .ok_or_else(|| format!("process.{op}: 'pid' must be a number"))
+        .ok_or_else(|| IpcError::new("process", op, "'pid' must be a number").into_string())
 }
 
 /// Read one bytes chunk and emit it as `process:<stream>:<pid>`. Stops on
@@ -282,8 +286,9 @@ fn spawn(args: &Value) -> Result<Value, String> {
         // SECURITY: same gate as `exec` — `cwd` becomes the child's working
         // directory and any relative path it dereferences is resolved
         // against this. Run it through the fs policy before honoring it.
-        security::check_fs(cwd)
-            .map_err(|e| format!("process.spawn: cwd not permitted: {e}"))?;
+        security::check_fs(cwd).map_err(|e| {
+            IpcError::new("process", "spawn", format!("cwd not permitted: {e}")).into_string()
+        })?;
         command.current_dir(cwd);
     }
     if let Some(env_obj) = args.get("env").and_then(|v| v.as_object()) {
@@ -306,15 +311,16 @@ fn spawn(args: &Value) -> Result<Value, String> {
     // pipe handles, then wrap the headless remainder in SharedChild.
     let mut raw = command
         .spawn()
-        .map_err(|e| format!("process.spawn: {e}"))?;
+        .map_err(|e| IpcError::new("process", "spawn", e).into_string())?;
 
     let pid = raw.id();
     let stdout = raw.stdout.take();
     let stderr = raw.stderr.take();
     let stdin = raw.stdin.take();
 
-    let shared = SharedChild::new(raw)
-        .map_err(|e| format!("process.spawn: SharedChild::new: {e}"))?;
+    let shared = SharedChild::new(raw).map_err(|e| {
+        IpcError::new("process", "spawn", format!("SharedChild::new: {e}")).into_string()
+    })?;
     let child = Arc::new(shared);
 
     // Refcounted entry: the registry, the waiter thread, and any
@@ -392,33 +398,43 @@ fn write_stdin(args: &Value) -> Result<Value, String> {
     } else if let Some(arr) = args.get("data").and_then(Value::as_array) {
         arr.iter()
             .map(|v| {
-                v.as_u64()
-                    .and_then(|n| u8::try_from(n).ok())
-                    .ok_or_else(|| "process.writeStdin: 'data' bytes out of range".to_string())
+                v.as_u64().and_then(|n| u8::try_from(n).ok()).ok_or_else(|| {
+                    IpcError::new("process", "writeStdin", "'data' bytes out of range").into_string()
+                })
             })
             .collect::<Result<Vec<u8>, String>>()?
     } else {
-        return Err("process.writeStdin: 'data' must be string or byte array".into());
+        return Err(IpcError::new(
+            "process",
+            "writeStdin",
+            "'data' must be string or byte array",
+        )
+        .into_string());
     };
 
-    let entry = registry_get(pid)
-        .ok_or_else(|| format!("process.writeStdin: pid {pid} not found (already exited?)"))?;
-    let mut stdin_opt = entry
-        .stdin
-        .lock();
-    let stdin = stdin_opt
-        .as_mut()
-        .ok_or_else(|| format!("process.writeStdin: stdin closed for pid {pid}"))?;
+    let entry = registry_get(pid).ok_or_else(|| {
+        IpcError::new(
+            "process",
+            "writeStdin",
+            format!("pid {pid} not found (already exited?)"),
+        )
+        .into_string()
+    })?;
+    let mut stdin_opt = entry.stdin.lock();
+    let stdin = stdin_opt.as_mut().ok_or_else(|| {
+        IpcError::new("process", "writeStdin", format!("stdin closed for pid {pid}")).into_string()
+    })?;
     stdin
         .write_all(&bytes)
-        .map_err(|e| format!("process.writeStdin: {e}"))?;
+        .map_err(|e| IpcError::new("process", "writeStdin", e).into_string())?;
     Ok(Value::Null)
 }
 
 fn close_stdin(args: &Value) -> Result<Value, String> {
     let pid = require_pid(args, "closeStdin")?;
-    let entry = registry_get(pid)
-        .ok_or_else(|| format!("process.closeStdin: pid {pid} not found"))?;
+    let entry = registry_get(pid).ok_or_else(|| {
+        IpcError::new("process", "closeStdin", format!("pid {pid} not found")).into_string()
+    })?;
     // Dropping the ChildStdin closes the write end of the pipe — the child
     // sees EOF on stdin which is exactly what users mean by "close stdin".
     *entry
@@ -434,8 +450,9 @@ fn kill(args: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .unwrap_or("SIGTERM");
 
-    let entry = registry_get(pid)
-        .ok_or_else(|| format!("process.kill: pid {pid} not found"))?;
+    let entry = registry_get(pid).ok_or_else(|| {
+        IpcError::new("process", "kill", format!("pid {pid} not found")).into_string()
+    })?;
 
     // On Unix we honour the actual signal name — `SIGTERM` and `SIGINT`
     // give the child a chance to shut down gracefully (close sockets,
@@ -470,7 +487,7 @@ fn kill(args: &Value) -> Result<Value, String> {
             // ESRCH (pid already exited) is benign — the waiter will
             // emit the exit event when it observes the reap.
             Err(nix::errno::Errno::ESRCH) => {},
-            Err(e) => return Err(format!("process.kill: {e}")),
+            Err(e) => return Err(IpcError::new("process", "kill", e).into_string()),
         }
     }
     #[cfg(not(unix))]
@@ -485,7 +502,7 @@ fn kill(args: &Value) -> Result<Value, String> {
         entry
             .child
             .kill()
-            .map_err(|e| format!("process.kill: {e}"))?;
+            .map_err(|e| IpcError::new("process", "kill", e).into_string())?;
     }
     Ok(Value::Null)
 }

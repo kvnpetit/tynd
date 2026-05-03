@@ -1,21 +1,29 @@
 use serde_json::Value;
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "openExternal" => {
             let url = args
                 .as_str()
                 .or_else(|| args.get("url").and_then(|u| u.as_str()))
-                .ok_or_else(|| "shell.openExternal: missing url argument".to_string())?;
+                .ok_or_else(|| {
+                    IpcError::new("shell", "openExternal", "missing url argument").into_string()
+                })?;
             // Only allow safe URL schemes to prevent executing arbitrary handlers
             if !url.starts_with("http://")
                 && !url.starts_with("https://")
                 && !url.starts_with("mailto:")
             {
-                return Err(format!(
-                    "shell.openExternal: unsupported scheme in '{url}' — only http, https, mailto \
-                     allowed"
-                ));
+                return Err(IpcError::new(
+                    "shell",
+                    "openExternal",
+                    format!(
+                        "unsupported scheme in '{url}' — only http, https, mailto allowed"
+                    ),
+                )
+                .into_string());
             }
             open::that(url).map_err(|e| e.to_string())?;
             Ok(Value::Null)
@@ -24,7 +32,9 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             let path = args
                 .as_str()
                 .or_else(|| args.get("path").and_then(|p| p.as_str()))
-                .ok_or_else(|| "shell.openPath: missing path argument".to_string())?;
+                .ok_or_else(|| {
+                    IpcError::new("shell", "openPath", "missing path argument").into_string()
+                })?;
             // On Windows, `open::that` calls ShellExecuteW which will *execute*
             // .exe / .bat / .ps1 / .msi / .cmd files. Block executable
             // extensions so a frontend bug or XSS can't turn this into RCE.
@@ -45,10 +55,14 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 .and_then(|e| e.to_str())
             {
                 if EXEC_EXTS.contains(ext.to_ascii_lowercase().as_str()) {
-                    return Err(format!(
-                        "shell.openPath: refusing to open executable '{path}' — use process.exec \
-                         for binaries"
-                    ));
+                    return Err(IpcError::new(
+                        "shell",
+                        "openPath",
+                        format!(
+                            "refusing to open executable '{path}' — use process.exec for binaries"
+                        ),
+                    )
+                    .into_string());
                 }
             }
             open::that(path).map_err(|e| e.to_string())?;
@@ -58,11 +72,13 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             let path = args
                 .as_str()
                 .or_else(|| args.get("path").and_then(|p| p.as_str()))
-                .ok_or_else(|| "shell.revealInFolder: missing path argument".to_string())?;
+                .ok_or_else(|| {
+                    IpcError::new("shell", "revealInFolder", "missing path argument").into_string()
+                })?;
             reveal(path)?;
             Ok(Value::Null)
         },
-        _ => Err(format!("shell.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("shell", method).into_string()),
     }
 }
 
@@ -73,24 +89,34 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 fn reveal(path: &str) -> Result<(), String> {
     let p = std::path::Path::new(path);
     if !p.exists() {
-        return Err(format!("shell.revealInFolder({path}): path does not exist"));
+        return Err(IpcError::new(
+            "shell",
+            "revealInFolder",
+            format!("({path}): path does not exist"),
+        )
+        .into_string());
     }
     std::process::Command::new("explorer")
         .arg(format!("/select,{}", p.display()))
         .spawn()
-        .map_err(|e| format!("shell.revealInFolder: {e}"))?;
+        .map_err(|e| IpcError::new("shell", "revealInFolder", e).into_string())?;
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
 fn reveal(path: &str) -> Result<(), String> {
     if !std::path::Path::new(path).exists() {
-        return Err(format!("shell.revealInFolder({path}): path does not exist"));
+        return Err(IpcError::new(
+            "shell",
+            "revealInFolder",
+            format!("({path}): path does not exist"),
+        )
+        .into_string());
     }
     std::process::Command::new("open")
         .args(["-R", path])
         .spawn()
-        .map_err(|e| format!("shell.revealInFolder: {e}"))?;
+        .map_err(|e| IpcError::new("shell", "revealInFolder", e).into_string())?;
     Ok(())
 }
 
@@ -98,12 +124,17 @@ fn reveal(path: &str) -> Result<(), String> {
 fn reveal(path: &str) -> Result<(), String> {
     let p = std::path::Path::new(path);
     if !p.exists() {
-        return Err(format!("shell.revealInFolder({path}): path does not exist"));
+        return Err(IpcError::new(
+            "shell",
+            "revealInFolder",
+            format!("({path}): path does not exist"),
+        )
+        .into_string());
     }
     // No single Linux convention — open the parent dir, works on every
     // desktop that has `xdg-open` installed.
     let parent = p.parent().unwrap_or(p);
-    open::that(parent).map_err(|e| format!("shell.revealInFolder: {e}"))?;
+    open::that(parent).map_err(|e| IpcError::new("shell", "revealInFolder", e).into_string())?;
     Ok(())
 }
 

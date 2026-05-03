@@ -26,6 +26,8 @@ use std::{collections::BTreeMap, sync::OnceLock};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::ipc_error::IpcError;
+
 /// Wire-shape for a single flag value: either a string (`--name=value`,
 /// `--name value`) or a boolean (`--flag` with no companion value).
 /// Modeled as an untagged enum so the JSON form stays scalar — matches
@@ -70,9 +72,11 @@ fn matches() -> &'static CliMatches {
 
 pub fn dispatch(method: &str, _args: &Value) -> Result<Value, String> {
     match method {
-        "matches" => serde_json::to_value(matches()).map_err(|e| format!("cli.matches: {e}")),
-        "raw" => serde_json::to_value(&matches().raw).map_err(|e| format!("cli.raw: {e}")),
-        _ => Err(format!("cli.{method}: unknown method")),
+        "matches" => serde_json::to_value(matches())
+            .map_err(|e| IpcError::new("cli", "matches", e).into_string()),
+        "raw" => serde_json::to_value(&matches().raw)
+            .map_err(|e| IpcError::new("cli", "raw", e).into_string()),
+        _ => Err(IpcError::unknown_method("cli", method).into_string()),
     }
 }
 

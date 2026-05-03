@@ -27,6 +27,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 // File lock outlives the process; keep it in a static so the OS releases
 // only on real exit. `LazyLock` initializes the inner `Mutex<Option<LockFile>>`
@@ -48,16 +49,17 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "acquire" => acquire(args),
         "isAcquired" => Ok(Value::Bool(is_held())),
-        _ => Err(format!("singleInstance.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("singleInstance", method).into_string()),
     }
 }
 
 fn lock_path(id: &str) -> Result<PathBuf, String> {
-    let base = dirs::cache_dir()
-        .or_else(dirs::data_dir)
-        .ok_or_else(|| "singleInstance: no cache/data dir available".to_string())?;
+    let base = dirs::cache_dir().or_else(dirs::data_dir).ok_or_else(|| {
+        IpcError::new("singleInstance", "lock_path", "no cache/data dir available").into_string()
+    })?;
     let dir = base.join("tynd");
-    fs::create_dir_all(&dir).map_err(|e| format!("singleInstance: {e}"))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| IpcError::new("singleInstance", "lock_path", e).into_string())?;
     Ok(dir.join(format!("{id}.lock")))
 }
 
@@ -65,18 +67,20 @@ fn acquire(args: &Value) -> Result<Value, String> {
     let id = args
         .get("id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "singleInstance.acquire: missing 'id'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("singleInstance", "acquire", "id")))?;
 
     let mut guard = LOCK.lock();
     if guard.is_some() {
         return Ok(json!({ "acquired": true, "already": true }));
     }
     let path = lock_path(id)?;
-    let mut lock = LockFile::open(&path)
-        .map_err(|e| format!("singleInstance.acquire: open {}: {e}", path.display()))?;
-    let acquired = lock
-        .try_lock()
-        .map_err(|e| format!("singleInstance.acquire: try_lock: {e}"))?;
+    let mut lock = LockFile::open(&path).map_err(|e| {
+        IpcError::new("singleInstance", "acquire", format!("open {}: {e}", path.display()))
+            .into_string()
+    })?;
+    let acquired = lock.try_lock().map_err(|e| {
+        IpcError::new("singleInstance", "acquire", format!("try_lock: {e}")).into_string()
+    })?;
     if acquired {
         *guard = Some(lock);
         spawn_forward_listener(id);

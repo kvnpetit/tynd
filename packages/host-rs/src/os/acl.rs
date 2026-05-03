@@ -75,6 +75,8 @@ use tauri_utils::{
     platform::Target,
 };
 
+use crate::ipc_error::IpcError;
+
 /// Immutable snapshot of the authority state. Lives behind an `ArcSwap`
 /// so `is_allowed` reads are lock-free — single atomic load + Arc bump
 /// per call. The `Resolved` lookup table is the only field the hot path
@@ -180,7 +182,10 @@ impl Authority {
     /// capabilities with the same identifier are replaced.
     pub fn load_file(&self, path: &Path) -> Result<(), String> {
         let file = CapabilityFile::load(path)
-            .map_err(|e| format!("acl.load: failed to read '{}': {e}", path.display()))?;
+            .map_err(|e| {
+                IpcError::new("acl", "load", format!("failed to read '{}': {e}", path.display()))
+                    .into_string()
+            })?;
         let caps: Vec<Capability> = match file {
             CapabilityFile::Capability(c) => vec![c],
             CapabilityFile::List(list) | CapabilityFile::NamedList { capabilities: list } => list,
@@ -453,8 +458,11 @@ fn context_matches(
 pub fn generate_schema(out_path: &Path) -> Result<(), String> {
     let schema = capability_schema();
     let serialized = serde_json::to_string_pretty(&schema)
-        .map_err(|e| format!("acl.schema: serialize failed — {e}"))?;
-    fs_err::write(out_path, serialized).map_err(|e| format!("acl.schema: {e}"))
+        .map_err(|e| {
+            IpcError::new("acl", "schema", format!("serialize failed — {e}")).into_string()
+        })?;
+    fs_err::write(out_path, serialized)
+        .map_err(|e| IpcError::new("acl", "schema", e).into_string())
 }
 
 /// Build the JSON Schema document for a single capability file.
@@ -559,7 +567,9 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 .get("manifestPath")
                 .or_else(|| args.get("path"))
                 .and_then(Value::as_str)
-                .ok_or_else(|| "acl.load: missing 'manifestPath'".to_string())?;
+                .ok_or_else(|| {
+                    String::from(IpcError::missing_arg("acl", "load", "manifestPath"))
+                })?;
             authority().load_file(Path::new(path))?;
             Ok(Value::Null)
         },
@@ -568,8 +578,10 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 .get("capability")
                 .cloned()
                 .unwrap_or_else(|| args.clone());
-            let cap: Capability = serde_json::from_value(cap_value)
-                .map_err(|e| format!("acl.addCapability: invalid shape — {e}"))?;
+            let cap: Capability = serde_json::from_value(cap_value).map_err(|e| {
+                IpcError::new("acl", "addCapability", format!("invalid shape — {e}"))
+                    .into_string()
+            })?;
             authority().add_capability(cap)?;
             Ok(Value::Null)
         },
@@ -578,7 +590,9 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 .get("identifier")
                 .or_else(|| args.get("id"))
                 .and_then(Value::as_str)
-                .ok_or_else(|| "acl.removeCapability: missing 'identifier'".to_string())?;
+                .ok_or_else(|| {
+                    String::from(IpcError::missing_arg("acl", "removeCapability", "identifier"))
+                })?;
             authority().remove_capability(id)?;
             Ok(Value::Null)
         },
@@ -586,7 +600,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             let command = args
                 .get("command")
                 .and_then(Value::as_str)
-                .ok_or_else(|| "acl.isAllowed: missing 'command'".to_string())?;
+                .ok_or_else(|| String::from(IpcError::missing_arg("acl", "isAllowed", "command")))?;
             let window = args.get("window").and_then(Value::as_str);
             let webview = args.get("webview").and_then(Value::as_str);
             let origin = args.get("origin").and_then(Value::as_str);
@@ -594,17 +608,20 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 authority().is_allowed(command, window, webview, origin),
             ))
         },
-        "list" => serde_json::to_value(authority().list())
-            .map_err(|e| format!("acl.list: serialize failed — {e}")),
+        "list" => serde_json::to_value(authority().list()).map_err(|e| {
+            IpcError::new("acl", "list", format!("serialize failed — {e}")).into_string()
+        }),
         "generateSchema" => {
             let path = args
                 .get("path")
                 .and_then(Value::as_str)
-                .ok_or_else(|| "acl.generateSchema: missing 'path'".to_string())?;
+                .ok_or_else(|| {
+                    String::from(IpcError::missing_arg("acl", "generateSchema", "path"))
+                })?;
             generate_schema(Path::new(path))?;
             Ok(Value::Null)
         },
-        _ => Err(format!("acl.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("acl", method).into_string()),
     }
 }
 

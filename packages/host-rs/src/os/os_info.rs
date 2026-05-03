@@ -1,5 +1,7 @@
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "info" => Ok(info()),
@@ -32,10 +34,10 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             let key = args
                 .get("key")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| "os.env: missing 'key'".to_string())?;
+                .ok_or_else(|| String::from(IpcError::missing_arg("os", "env", "key")))?;
             Ok(std::env::var(key).map_or(Value::Null, Value::String))
         },
-        _ => Err(format!("os.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("os", method).into_string()),
     }
 }
 

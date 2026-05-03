@@ -24,8 +24,43 @@ use fs_err::{File, OpenOptions};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 const DEFAULT_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const DEFAULT_MAX_FILES: u32 = 3;
+
+/// File-rotation strategy. Today the only canonical strategy is
+/// `Size` (the default — preserves the original `os::log` semantics
+/// every shipping app already pins against). `Daily`/`Hourly` defer
+/// to `tracing-appender`'s `RollingFileAppender` for time-based
+/// rotation; `Both` cuts on whichever criterion fires first.
+///
+/// Wiring is mostly stub for V1.0: the JS-side config field is
+/// accepted (no error on unknown values) and `Daily`/`Hourly`
+/// degrade to `Size` if the appender wiring isn't reachable from the
+/// `os::log::write` hot path. Full tracing-appender adoption lands
+/// in a dedicated post-V1.0 pass — V1.0 only commits to the
+/// **shape**: an extra `rotation` field today buys forward-compat
+/// without a breaking config change later.
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Rotation {
+    Size,
+    Daily,
+    Hourly,
+    Both,
+}
+
+impl Rotation {
+    fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "size" => Self::Size,
+            "daily" => Self::Daily,
+            "hourly" => Self::Hourly,
+            "both" => Self::Both,
+            _ => return None,
+        })
+    }
+}
 
 struct LoggerState {
     file: Option<File>,
@@ -34,6 +69,13 @@ struct LoggerState {
     max_bytes: u64,
     max_files: u32,
     bytes_written: u64,
+    rotation: Rotation,
+    /// Stamp of the last rotated time-bucket (Unix epoch seconds /
+    /// 3600 for hourly, / 86400 for daily). Used by the
+    /// time-rotation branches to decide if the current write should
+    /// trigger a fresh rotation. `0` = unset; the next write will
+    /// seed it without rotating.
+    last_time_bucket: u64,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -77,6 +119,11 @@ static STATE: LazyLock<Mutex<LoggerState>> = LazyLock::new(|| {
         max_bytes: DEFAULT_MAX_BYTES,
         max_files: DEFAULT_MAX_FILES,
         bytes_written: 0,
+        // Size-based stays the default — every existing app pins
+        // against `app.log` + `app.log.1` etc., so flipping the
+        // default would break their rotation expectations.
+        rotation: Rotation::Size,
+        last_time_bucket: 0,
     })
 });
 
@@ -98,20 +145,23 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "path" => Ok(Value::String(
             STATE.lock().path.to_string_lossy().into_owned(),
         )),
-        _ => Err(format!("log.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("log", method).into_string()),
     }
 }
 
 fn configure(args: &Value) -> Result<Value, String> {
     let mut s = STATE.lock();
     if let Some(level) = args.get("level").and_then(Value::as_str) {
-        s.level =
-            Level::parse(level).ok_or_else(|| format!("log.configure: invalid level '{level}'"))?;
+        s.level = Level::parse(level).ok_or_else(|| {
+            IpcError::new("log", "configure", format!("invalid level '{level}'")).into_string()
+        })?;
     }
     if let Some(file) = args.get("file").and_then(Value::as_str) {
         let p = PathBuf::from(file);
         if !p.is_absolute() {
-            return Err("log.configure: 'file' must be an absolute path".into());
+            return Err(
+                IpcError::new("log", "configure", "'file' must be an absolute path").into_string(),
+            );
         }
         s.path = p;
         s.file = None;
@@ -123,16 +173,38 @@ fn configure(args: &Value) -> Result<Value, String> {
     if let Some(n) = args.get("maxFiles").and_then(Value::as_u64) {
         s.max_files = u32::try_from(n).unwrap_or(DEFAULT_MAX_FILES).max(1);
     }
+    if let Some(rot) = args.get("rotation").and_then(Value::as_str) {
+        s.rotation = Rotation::parse(rot).ok_or_else(|| {
+            IpcError::new("log", "configure", format!("invalid rotation '{rot}'")).into_string()
+        })?;
+        // Reset the time-bucket so the next write seeds it against
+        // the new rotation cadence.
+        s.last_time_bucket = 0;
+    }
     Ok(Value::Null)
+}
+
+/// Compute the current time-bucket index for the rotation strategy.
+/// `0` for `Size` (unused); seconds-since-epoch / `bucket_secs` otherwise.
+fn current_time_bucket(rotation: Rotation) -> u64 {
+    let bucket_secs: u64 = match rotation {
+        Rotation::Hourly | Rotation::Both => 3600,
+        Rotation::Daily => 86400,
+        Rotation::Size => return 0,
+    };
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() / bucket_secs)
 }
 
 fn write_entry(args: &Value) -> Result<Value, String> {
     let level_str = args
         .get("level")
         .and_then(Value::as_str)
-        .ok_or_else(|| "log.write: missing 'level'".to_string())?;
-    let level =
-        Level::parse(level_str).ok_or_else(|| format!("log.write: invalid level '{level_str}'"))?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("log", "write", "level")))?;
+    let level = Level::parse(level_str).ok_or_else(|| {
+        IpcError::new("log", "write", format!("invalid level '{level_str}'")).into_string()
+    })?;
 
     let message = args
         .get("message")
@@ -161,18 +233,43 @@ fn write_entry(args: &Value) -> Result<Value, String> {
         }
     }
 
-    let mut line = serde_json::to_string(&entry)
-        .map_err(|e| format!("log.write: serialize entry failed: {e}"))?;
+    let mut line = serde_json::to_string(&entry).map_err(|e| {
+        IpcError::new("log", "write", format!("serialize entry failed: {e}")).into_string()
+    })?;
     line.push('\n');
 
     ensure_open(&mut s)?;
     let bytes = line.as_bytes();
     if let Some(f) = s.file.as_mut() {
-        f.write_all(bytes).map_err(|e| format!("log.write: {e}"))?;
+        f.write_all(bytes)
+            .map_err(|e| IpcError::new("log", "write", e).into_string())?;
     }
     s.bytes_written += bytes.len() as u64;
 
-    if s.bytes_written >= s.max_bytes {
+    // Rotation triggers — Size and Time are evaluated independently so
+    // `Both` cuts on whichever fires first.
+    let size_trigger = matches!(s.rotation, Rotation::Size | Rotation::Both)
+        && s.bytes_written >= s.max_bytes;
+    let time_trigger = if matches!(s.rotation, Rotation::Daily | Rotation::Hourly | Rotation::Both)
+    {
+        let now_bucket = current_time_bucket(s.rotation);
+        if s.last_time_bucket == 0 {
+            // First write under a time strategy seeds the bucket
+            // without rotating — otherwise every fresh process would
+            // rotate on its first log line.
+            s.last_time_bucket = now_bucket;
+            false
+        } else if now_bucket != s.last_time_bucket {
+            s.last_time_bucket = now_bucket;
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if size_trigger || time_trigger {
         rotate(&mut s);
     }
     Ok(Value::Null)
@@ -183,13 +280,14 @@ fn ensure_open(s: &mut LoggerState) -> Result<(), String> {
         return Ok(());
     }
     if let Some(parent) = s.path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("log: {e}"))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| IpcError::new("log", "ensure_open", e).into_string())?;
     }
     let f = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&s.path)
-        .map_err(|e| format!("log: {e}"))?;
+        .map_err(|e| IpcError::new("log", "ensure_open", e).into_string())?;
     s.bytes_written = f.metadata().map_or(0, |m| m.len());
     s.file = Some(f);
     Ok(())
@@ -249,6 +347,8 @@ mod tests {
         s.max_bytes = DEFAULT_MAX_BYTES;
         s.max_files = DEFAULT_MAX_FILES;
         s.bytes_written = 0;
+        s.rotation = Rotation::Size;
+        s.last_time_bucket = 0;
     }
 
     fn tmpdir() -> PathBuf {
@@ -292,6 +392,20 @@ mod tests {
         let body = std::fs::read_to_string(dir.join("t.log")).unwrap();
         assert!(!body.contains("skip-lvl-filter"));
         assert!(body.contains("keep-lvl-filter"));
+    }
+
+    #[test]
+    fn configure_accepts_rotation_strategies() {
+        let _g = TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = tmpdir();
+        fresh(&dir);
+        for r in ["size", "daily", "hourly", "both"] {
+            configure(&json!({ "rotation": r })).expect(r);
+        }
+        let err = configure(&json!({ "rotation": "weekly" })).unwrap_err();
+        assert!(err.contains("invalid rotation"), "got: {err}");
     }
 
     #[test]

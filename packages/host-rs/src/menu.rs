@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, str::FromStr as _};
 use muda::{accelerator::Accelerator, ContextMenu as _};
 use serde_json::Value;
 
-use crate::runtime::MenuItemDef;
+use crate::{ipc_error::IpcError, runtime::MenuItemDef};
 
 /// Concrete muda handles produced by the registering builder. Mirrors
 /// `muda::MenuItemKind` but covers only the four variants the tray (and
@@ -549,7 +549,7 @@ pub(crate) fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             set_visible(&id, visible)?;
             Ok(Value::Null)
         },
-        _ => Err(format!("menu.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("menu", method).into_string()),
     }
 }
 

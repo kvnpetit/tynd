@@ -1,6 +1,8 @@
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult, MessageLevel};
 use serde_json::Value;
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "openFile" => Ok(open_file(args, false)),
@@ -9,7 +11,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "saveFile" => Ok(save_file(args)),
         "message" => Ok(message_box(args)),
         "confirm" => Ok(confirm(args)),
-        _ => Err(format!("dialog.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("dialog", method).into_string()),
     }
 }
 

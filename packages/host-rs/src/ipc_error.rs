@@ -73,6 +73,16 @@ impl IpcError {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Consume and return the inner `String`. Equivalent to
+    /// `String::from(err)` but reads as `err.into_string()` at call
+    /// sites that already have a typed `IpcError` in hand — avoids the
+    /// `Into::into` inference dance when the surrounding context is a
+    /// generic closure (`map_err(|e| ...)`) where multiple `From` impls
+    /// would otherwise need a turbofish.
+    pub fn into_string(self) -> String {
+        self.0
+    }
 }
 
 impl From<IpcError> for String {

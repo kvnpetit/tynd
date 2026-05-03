@@ -25,6 +25,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 pub fn dispatch(method: &str, _args: &Value) -> Result<Value, String> {
     match method {
@@ -34,7 +35,7 @@ pub fn dispatch(method: &str, _args: &Value) -> Result<Value, String> {
             stop_watch();
             Ok(Value::Null)
         },
-        _ => Err(format!("theme.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("theme", method).into_string()),
     }
 }
 
@@ -100,7 +101,7 @@ fn start_watch() -> Result<Value, String> {
                 }
             }
         })
-        .map_err(|e| format!("theme.startWatch: spawn: {e}"))?;
+        .map_err(|e| IpcError::new("theme", "startWatch", format!("spawn: {e}")).into_string())?;
 
     *slot = Some(Watcher {
         running,

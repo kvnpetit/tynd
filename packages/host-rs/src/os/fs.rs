@@ -25,6 +25,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -52,7 +53,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         // readBinary / writeBinary intentionally route through the
         // `tynd-bin://` custom protocol (see host-rs/src/scheme_bin.rs),
         // not JSON IPC — they're zero-copy on the wire.
-        _ => Err(format!("fs.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("fs", method).into_string()),
     }
 }
 

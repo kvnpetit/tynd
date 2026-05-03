@@ -7,16 +7,19 @@
 
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     let _ = args;
     match method {
         "interfaces" => interfaces(),
-        _ => Err(format!("network.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("network", method).into_string()),
     }
 }
 
 fn interfaces() -> Result<Value, String> {
-    let raw = if_addrs::get_if_addrs().map_err(|e| format!("network.interfaces: {e}"))?;
+    let raw = if_addrs::get_if_addrs()
+        .map_err(|e| IpcError::new("network", "interfaces", e).into_string())?;
 
     // Group by interface name. `if-addrs` 0.13 returns one entry per
     // (interface, IP) pair; the friendlier shape is one entry per

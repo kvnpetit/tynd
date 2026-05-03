@@ -21,6 +21,8 @@ use crossbeam_channel::{after, never, select, unbounded, Sender};
 use dashmap::DashMap;
 use serde_json::{Map, Value};
 
+use crate::ipc_error::IpcError;
+
 /// Debounce window: a set/delete/clear that arrives within this delay
 /// of a previous one extends the timer instead of triggering a fresh
 /// fsync+rename. 100 ms is below "user-perceptible" so a UI-driven
@@ -161,7 +163,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             flush_namespace(&namespace);
             Ok(Value::Null)
         },
-        _ => Err(format!("store.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("store", method).into_string()),
     }
 }
 
@@ -201,7 +203,7 @@ fn flush_namespace(namespace: &str) {
 fn key_arg(args: &Value) -> Result<&str, String> {
     args.get("key")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| "store: missing 'key' argument".to_string())
+        .ok_or_else(|| String::from(IpcError::missing_arg("store", "*", "key")))
 }
 
 /// Cache of namespaces already validated. Stores `()` so the lookup is
@@ -236,35 +238,46 @@ fn validate_namespace_uncached(namespace: &str) -> Result<(), String> {
     // sibling app's data: empty strings, leading dots, slashes, and any
     // component outside [A-Za-z0-9_-].
     if namespace.is_empty() {
-        return Err("store: namespace cannot be empty".into());
+        return Err(IpcError::new("store", "*", "namespace cannot be empty").into_string());
     }
     if namespace.starts_with('.') {
-        return Err(format!(
-            "store: namespace cannot start with '.' ('{namespace}')"
-        ));
+        return Err(IpcError::new(
+            "store",
+            "*",
+            format!("namespace cannot start with '.' ('{namespace}')"),
+        )
+        .into_string());
     }
     for ch in namespace.chars() {
         let ok = ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.';
         if !ok {
-            return Err(format!(
-                "store: invalid character '{ch}' in namespace '{namespace}' (allowed: A-Z, a-z, \
-                 0-9, '_', '-', '.')"
-            ));
+            return Err(IpcError::new(
+                "store",
+                "*",
+                format!(
+                    "invalid character '{ch}' in namespace '{namespace}' (allowed: A-Z, a-z, 0-9, \
+                     '_', '-', '.')"
+                ),
+            )
+            .into_string());
         }
     }
     if namespace.contains("..") {
-        return Err(format!(
-            "store: namespace cannot contain '..' ('{namespace}')"
-        ));
+        return Err(IpcError::new(
+            "store",
+            "*",
+            format!("namespace cannot contain '..' ('{namespace}')"),
+        )
+        .into_string());
     }
     Ok(())
 }
 
 fn store_path(namespace: &str) -> Result<PathBuf, String> {
     validate_namespace(namespace)?;
-    let base = dirs::config_dir()
-        .or_else(dirs::data_dir)
-        .ok_or_else(|| "store: no config/data directory available".to_string())?;
+    let base = dirs::config_dir().or_else(dirs::data_dir).ok_or_else(|| {
+        IpcError::new("store", "*", "no config/data directory available").into_string()
+    })?;
     Ok(base.join(namespace).join("store.json"))
 }
 
@@ -274,7 +287,8 @@ fn load_if_needed(namespace: &str) -> Result<(), String> {
     }
     let path = store_path(namespace)?;
     let map = if path.exists() {
-        let raw = fs::read_to_string(&path).map_err(|e| format!("store: {e}"))?;
+        let raw =
+            fs::read_to_string(&path).map_err(|e| IpcError::new("store", "*", e).into_string())?;
         serde_json::from_str::<Map<String, Value>>(&raw).unwrap_or_default()
     } else {
         Map::new()
@@ -365,10 +379,11 @@ fn spawn_persister(namespace: String) -> Persister {
 /// the snapshot independently).
 fn persist_now(namespace: &str) -> Result<(), String> {
     let path = store_path(namespace)?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("store: path {} has no parent dir", path.display()))?;
-    fs::create_dir_all(parent).map_err(|e| format!("store: {e}"))?;
+    let parent = path.parent().ok_or_else(|| {
+        IpcError::new("store", "*", format!("path {} has no parent dir", path.display()))
+            .into_string()
+    })?;
+    fs::create_dir_all(parent).map_err(|e| IpcError::new("store", "*", e).into_string())?;
     // Cheap snapshot — `Arc::clone` is one atomic increment. The map
     // we serialize is the exact one published by the latest mutator;
     // any `set` that lands after this clone will land on a new Arc and
@@ -381,15 +396,18 @@ fn persist_now(namespace: &str) -> Result<(), String> {
 
     // Crash-safe persist: write to a sibling temp file in the same
     // directory, fsync, then atomically rename over the target.
-    let mut tmp = tempfile::NamedTempFile::new_in(parent)
-        .map_err(|e| format!("store: tempfile in {}: {e}", parent.display()))?;
-    tmp.write_all(serialized.as_bytes())
-        .map_err(|e| format!("store: write {}: {e}", path.display()))?;
-    tmp.as_file_mut()
-        .sync_all()
-        .map_err(|e| format!("store: fsync {}: {e}", path.display()))?;
-    tmp.persist(&path)
-        .map_err(|e| format!("store: persist -> {}: {e}", path.display()))?;
+    let mut tmp = tempfile::NamedTempFile::new_in(parent).map_err(|e| {
+        IpcError::new("store", "*", format!("tempfile in {}: {e}", parent.display())).into_string()
+    })?;
+    tmp.write_all(serialized.as_bytes()).map_err(|e| {
+        IpcError::new("store", "*", format!("write {}: {e}", path.display())).into_string()
+    })?;
+    tmp.as_file_mut().sync_all().map_err(|e| {
+        IpcError::new("store", "*", format!("fsync {}: {e}", path.display())).into_string()
+    })?;
+    tmp.persist(&path).map_err(|e| {
+        IpcError::new("store", "*", format!("persist -> {}: {e}", path.display())).into_string()
+    })?;
     Ok(())
 }
 

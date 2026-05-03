@@ -20,6 +20,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 /// Outer `OnceLock` caches the init outcome — success or the error string —
 /// so the atomic `get_or_init` guarantees exactly one `GlobalHotKeyManager`
@@ -43,16 +44,17 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "unregister" => unregister(args),
         "unregisterAll" => unregister_all(),
         "isRegistered" => Ok(Value::Bool(is_registered(args))),
-        _ => Err(format!("shortcuts.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("shortcuts", method).into_string()),
     }
 }
 
 fn manager() -> Result<&'static Mutex<GlobalHotKeyManager>, String> {
     MANAGER
         .get_or_init(|| {
-            GlobalHotKeyManager::new()
-                .map(Mutex::new)
-                .map_err(|e| format!("shortcuts: GlobalHotKeyManager init failed: {e}"))
+            GlobalHotKeyManager::new().map(Mutex::new).map_err(|e| {
+                IpcError::new("shortcuts", "init", format!("GlobalHotKeyManager init failed: {e}"))
+                    .into_string()
+            })
         })
         .as_ref()
         .map_err(Clone::clone)
@@ -81,7 +83,9 @@ fn register(args: &Value) -> Result<Value, String> {
     let accel = args
         .get("accelerator")
         .and_then(Value::as_str)
-        .ok_or_else(|| "shortcuts.register: missing 'accelerator'".to_string())?
+        .ok_or_else(|| {
+            String::from(IpcError::missing_arg("shortcuts", "register", "accelerator"))
+        })?
         .to_string();
     let user_id = args
         .get("id")
@@ -89,19 +93,23 @@ fn register(args: &Value) -> Result<Value, String> {
         .map_or_else(|| accel.clone(), str::to_string);
 
     if HOTKEYS.contains_key(&user_id) {
-        return Err(format!(
-            "shortcuts.register: id '{user_id}' already registered"
-        ));
+        return Err(IpcError::new(
+            "shortcuts",
+            "register",
+            format!("id '{user_id}' already registered"),
+        )
+        .into_string());
     }
 
-    let hotkey = HotKey::from_str(&accel)
-        .map_err(|e| format!("shortcuts.register: bad accelerator {accel:?}: {e}"))?;
+    let hotkey = HotKey::from_str(&accel).map_err(|e| {
+        IpcError::new("shortcuts", "register", format!("bad accelerator {accel:?}: {e}"))
+            .into_string()
+    })?;
 
     ensure_handler();
-    manager()?
-        .lock()
-        .register(hotkey)
-        .map_err(|e| format!("shortcuts.register({accel}): {e}"))?;
+    manager()?.lock().register(hotkey).map_err(|e| {
+        IpcError::new("shortcuts", "register", format!("({accel}): {e}")).into_string()
+    })?;
 
     ID_MAP.insert(hotkey.id(), user_id.clone());
     HOTKEYS.insert(user_id.clone(), hotkey);
@@ -115,16 +123,15 @@ fn unregister(args: &Value) -> Result<Value, String> {
         .as_str()
         .map(str::to_string)
         .or_else(|| args.get("id").and_then(Value::as_str).map(str::to_string))
-        .ok_or_else(|| "shortcuts.unregister: missing 'id'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("shortcuts", "unregister", "id")))?;
 
     let Some((_, hotkey)) = HOTKEYS.remove(&user_id) else {
         return Ok(Value::Bool(false));
     };
     ID_MAP.remove(&hotkey.id());
-    manager()?
-        .lock()
-        .unregister(hotkey)
-        .map_err(|e| format!("shortcuts.unregister({user_id}): {e}"))?;
+    manager()?.lock().unregister(hotkey).map_err(|e| {
+        IpcError::new("shortcuts", "unregister", format!("({user_id}): {e}")).into_string()
+    })?;
     Ok(Value::Bool(true))
 }
 

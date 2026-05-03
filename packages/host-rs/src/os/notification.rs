@@ -7,6 +7,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -14,7 +15,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "schedule" => schedule(args),
         "cancel" => cancel(args),
         "checkPermission" | "requestPermission" => Ok(Value::String("granted".into())),
-        _ => Err(format!("notification.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("notification", method).into_string()),
     }
 }
 
@@ -29,10 +30,9 @@ fn scheduled() -> &'static Mutex<ahash::HashMap<u64, std::sync::Arc<std::sync::a
 }
 
 fn schedule(args: &Value) -> Result<Value, String> {
-    let delay_ms = args
-        .get("delayMs")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| "notification.schedule: missing 'delayMs'".to_string())?;
+    let delay_ms = args.get("delayMs").and_then(Value::as_u64).ok_or_else(|| {
+        String::from(IpcError::missing_arg("notification", "schedule", "delayMs"))
+    })?;
 
     // Counter: Relaxed is enough for monotonic uniqueness.
     let id = NEXT_SCHEDULE_ID.fetch_add(1, Ordering::Relaxed);
@@ -57,7 +57,7 @@ fn cancel(args: &Value) -> Result<Value, String> {
     let id = args
         .get("id")
         .and_then(Value::as_u64)
-        .ok_or_else(|| "notification.cancel: missing 'id'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("notification", "cancel", "id")))?;
     let removed = scheduled().lock().remove(&id);
     if let Some(flag) = removed {
         // Release so the scheduler thread sees the cancel on its Acquire.
@@ -177,7 +177,9 @@ fn send_platform(
         });
     }
 
-    toast.show().map_err(|e| format!("notification: {e:?}"))?;
+    toast
+        .show()
+        .map_err(|e| IpcError::new("notification", "send", format!("{e:?}")).into_string())?;
     Ok(Value::Null)
 }
 

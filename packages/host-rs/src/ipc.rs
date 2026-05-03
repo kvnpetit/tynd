@@ -293,6 +293,31 @@ pub const JS_SHIM: &str = r#"
 })();
 "#;
 
+/// JSON-encode a `&str` for use as a JS literal. Falls back to an empty
+/// string literal on the (impossible) serde failure so callers stay total.
+#[inline]
+fn js_str(s: &str) -> String {
+    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into())
+}
+
+/// JSON-encode a `serde_json::Value` for use as a JS literal. Falls back
+/// to `null` on the (impossible) serde failure so callers stay total.
+#[inline]
+fn js_val(v: &Value) -> String {
+    serde_json::to_string(v).unwrap_or_else(|_| "null".into())
+}
+
+/// Build a defensive `window.__tynd_<fn>__` invocation: guards the symbol
+/// with `&&` so the call is a noop when the shim hasn't loaded yet (race
+/// at startup), then forwards the formatted argument list. Every
+/// `eval_*` builder below threads through this single shape so adding a
+/// new wire entry-point is a one-liner.
+macro_rules! eval_call {
+    ($fn:literal, $args:expr) => {
+        format!(concat!("window.", $fn, "&&window.", $fn, "({})"), $args)
+    };
+}
+
 /// Build the JS eval string that resolves/rejects a pending frontend call.
 ///
 /// `value` is a wire-encoded payload string (devalue from full / JSON from
@@ -301,18 +326,20 @@ pub const JS_SHIM: &str = r#"
 #[inline]
 pub fn eval_resolve(id: &str, ok: bool, value: &str) -> String {
     let ok_js = if ok { "true" } else { "false" };
-    let val_js = serde_json::to_string(value).unwrap_or_else(|_| "\"\"".into());
-    let id_js = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
-    format!("window.__tynd_resolve__&&window.__tynd_resolve__({id_js},{ok_js},{val_js})")
+    eval_call!(
+        "__tynd_resolve__",
+        format_args!("{},{ok_js},{}", js_str(id), js_str(value))
+    )
 }
 
 /// Build the JS eval string that delivers one chunk from a streaming backend call.
 /// `value` is the wire-encoded payload string.
 #[inline]
 pub fn eval_yield(id: &str, value: &str) -> String {
-    let val_js = serde_json::to_string(value).unwrap_or_else(|_| "\"\"".into());
-    let id_js = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
-    format!("window.__tynd_yield__&&window.__tynd_yield__({id_js},{val_js})")
+    eval_call!(
+        "__tynd_yield__",
+        format_args!("{},{}", js_str(id), js_str(value))
+    )
 }
 
 /// Build the JS eval string that delivers a batched flush of streaming chunks.
@@ -362,43 +389,41 @@ pub fn eval_yield_batch(pairs: &[(String, String)]) -> String {
 /// `payload` is the wire-encoded payload string.
 #[inline]
 pub fn eval_dispatch(name: &str, payload: &str) -> String {
-    let name_js = serde_json::to_string(name).unwrap_or_else(|_| "\"\"".into());
-    let payload_js = serde_json::to_string(payload).unwrap_or_else(|_| "\"\"".into());
-    format!("window.__tynd_dispatch__&&window.__tynd_dispatch__({name_js},{payload_js})")
+    eval_call!(
+        "__tynd_dispatch__",
+        format_args!("{},{}", js_str(name), js_str(payload))
+    )
 }
 
 /// Build the JS eval string that resolves/rejects a pending OS API call.
 #[inline]
 pub fn eval_os_result(id: &str, ok: bool, value: &Value) -> String {
     let ok_js = if ok { "true" } else { "false" };
-    let val_js = serde_json::to_string(value).unwrap_or_else(|_| "null".into());
-    let id_js = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
-    format!("window.__tynd_os_result__&&window.__tynd_os_result__({id_js},{ok_js},{val_js})")
+    eval_call!(
+        "__tynd_os_result__",
+        format_args!("{},{ok_js},{}", js_str(id), js_val(value))
+    )
 }
 
 /// Build the JS eval string that fires a native OS event to subscribed handlers.
 #[inline]
 pub fn eval_os_event(name: &str, data: &Value) -> String {
-    let name_js = serde_json::to_string(name).unwrap_or_else(|_| "\"\"".into());
-    let data_js = serde_json::to_string(data).unwrap_or_else(|_| "null".into());
-    format!("window.__tynd_os_event__&&window.__tynd_os_event__({name_js},{data_js})")
+    eval_call!(
+        "__tynd_os_event__",
+        format_args!("{},{}", js_str(name), js_val(data))
+    )
 }
+
+/// Source of the dev-mode backend error overlay. The `__TYND_OVERLAY_MSG__`
+/// placeholder is substituted at call time with the JSON-encoded error
+/// message before the script ships to the webview.
+const JS_ERROR_OVERLAY: &str = include_str!("error_overlay.js");
 
 /// Build the JS eval string that mounts a full-screen backend error overlay.
 /// Dev-only — called when the backend throws during startup or reload.
 #[inline]
 pub fn eval_show_error_overlay(message: &str) -> String {
-    let msg_js = serde_json::to_string(message).unwrap_or_else(|_| "\"\"".into());
-    format!(
-        "(function(){{var id='__tynd_error_overlay__';var \
-         old=document.getElementById(id);if(old)old.remove();var \
-         d=document.createElement('div');d.id=id;d.style.cssText='position:fixed;inset:0;z-index:\
-         2147483647;background:rgba(20,20,20,0.92);color:#fce5e5;font:14px/1.5 \
-         ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:32px;overflow:auto;\
-         white-space:pre-wrap;';d.textContent='\u{26a0}  Backend \
-         error\\n\\n'+{msg_js};document.body?document.body.appendChild(d):document.\
-         documentElement.appendChild(d);}})();"
-    )
+    JS_ERROR_OVERLAY.replace("__TYND_OVERLAY_MSG__", &js_str(message))
 }
 
 /// Build the JS eval string that removes the backend error overlay (on successful reload).
@@ -406,4 +431,90 @@ pub fn eval_show_error_overlay(message: &str) -> String {
 pub fn eval_hide_error_overlay() -> String {
     "(function(){var o=document.getElementById('__tynd_error_overlay__');if(o)o.remove();})();"
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Property tests over the IPC wire-format builders.
+    //!
+    //! Every `eval_*` function below produces a string that the
+    //! webview shim re-parses as JS — the wire is fundamentally a
+    //! `String` round-trip, so the only invariant we can check
+    //! mechanically is that the embedded `id` / `name` / `value`
+    //! literals can be **recovered** by JSON-parsing the formatted
+    //! arguments. The shim itself does this on every call (`_decode`
+    //! tries devalue then JSON), so any input that round-trips here
+    //! is guaranteed to round-trip on the JS side too.
+    //!
+    //! `proptest` generates inputs containing the full Unicode space:
+    //! quotes, backslashes, NUL, embedded `</script>`, control chars,
+    //! 4-byte emoji, and so on — categorically the strings that have
+    //! tripped past JSON encoders in production bug reports.
+
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Pull the JSON-encoded argument list out of a generated
+    /// `window.__tynd_X__&&window.__tynd_X__(<args>)` script. Returns
+    /// the raw `<args>` text so the test can JSON-parse each comma-
+    /// separated piece individually.
+    ///
+    /// `(` and `)` chars can appear in JSON string literals embedded in
+    /// args, so the simple `find('(')..rfind(')')` doesn't survive
+    /// `value = "("` style inputs. The shape we know: the call-site
+    /// `(` is the FIRST one (no parens in the function name), and the
+    /// trailing `)` is the LAST byte (the encoded args end with `"` /
+    /// `null` / a number, never a paren that's ALSO the script
+    /// terminator). So `find('(')` + check `script.ends_with(')')`
+    /// works even when value contains either bracket.
+    fn extract_args(script: &str) -> &str {
+        let lparen = script.find('(').expect("eval script has '('");
+        assert!(script.ends_with(')'), "eval script ends with ')'");
+        &script[lparen + 1..script.len() - 1]
+    }
+
+    /// Parse the comma-separated `args` text into a stream of JSON
+    /// values. Wraps the args into a `[…]` so `serde_json` does the
+    /// per-token parsing — splitting on raw `','` is wrong because
+    /// commas can appear inside string literals.
+    fn parse_args(args: &str) -> Vec<Value> {
+        let wrapped = format!("[{args}]");
+        serde_json::from_str::<Vec<Value>>(&wrapped).unwrap_or_default()
+    }
+
+    proptest! {
+        // Tighter case count than the proptest default (256) — these
+        // tests are pure-Rust string ops, no I/O, and a few hundred
+        // is enough to hit the interesting Unicode corners without
+        // bloating CI walltime.
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn eval_resolve_id_and_value_roundtrip(id in ".*", value in ".*", ok: bool) {
+            let script = eval_resolve(&id, ok, &value);
+            let parts = parse_args(extract_args(&script));
+            prop_assert_eq!(parts.len(), 3);
+            prop_assert_eq!(parts[0].as_str().unwrap(), &id);
+            prop_assert_eq!(parts[1].as_bool().unwrap(), ok);
+            prop_assert_eq!(parts[2].as_str().unwrap(), &value);
+        }
+
+        #[test]
+        fn eval_yield_id_and_value_roundtrip(id in ".*", value in ".*") {
+            let script = eval_yield(&id, &value);
+            let parts = parse_args(extract_args(&script));
+            prop_assert_eq!(parts.len(), 2);
+            prop_assert_eq!(parts[0].as_str().unwrap(), &id);
+            prop_assert_eq!(parts[1].as_str().unwrap(), &value);
+        }
+
+        #[test]
+        fn eval_dispatch_name_and_payload_roundtrip(name in ".*", payload in ".*") {
+            let script = eval_dispatch(&name, &payload);
+            let parts = parse_args(extract_args(&script));
+            prop_assert_eq!(parts.len(), 2);
+            prop_assert_eq!(parts[0].as_str().unwrap(), &name);
+            prop_assert_eq!(parts[1].as_str().unwrap(), &payload);
+        }
+    }
 }

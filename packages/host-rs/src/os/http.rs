@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::ipc_error::IpcError;
 
 // ─── Typed argument shapes ──────────────────────────────────────────────
 //
@@ -90,7 +91,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "request" => request(args),
         "download" => download(args),
         "upload" => upload(args),
-        _ => Err(format!("http.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("http", method).into_string()),
     }
 }
 
@@ -174,8 +175,9 @@ impl Read for ProgressReader {
 }
 
 fn request(args: &Value) -> Result<Value, String> {
-    let a: RequestArgs = serde_json::from_value(args.clone())
-        .map_err(|e| format!("http.request: invalid arguments: {e}"))?;
+    let a: RequestArgs = serde_json::from_value(args.clone()).map_err(|e| {
+        IpcError::new("http", "request", format!("invalid arguments: {e}")).into_string()
+    })?;
     let url = a.url.as_str();
     super::security::check_http(url)?;
     let method = a.method.as_deref().unwrap_or("GET");
@@ -216,7 +218,8 @@ fn request(args: &Value) -> Result<Value, String> {
         req.call()
     };
 
-    let resp = response.map_err(|e| format!("http.request({url}): {e}"))?;
+    let resp = response
+        .map_err(|e| IpcError::new("http", "request", format!("({url}): {e}")).into_string())?;
     let status = resp.status();
     let status_text = resp.status_text().to_string();
     let total: Option<u64> = resp
@@ -246,7 +249,7 @@ fn request(args: &Value) -> Result<Value, String> {
     loop {
         let n = reader
             .read(&mut chunk)
-            .map_err(|e| format!("http.request: read body: {e}"))?;
+            .map_err(|e| IpcError::new("http", "request", format!("read body: {e}")).into_string())?;
         if n == 0 {
             emitter.advance(0, true);
             break;
@@ -271,8 +274,9 @@ fn request(args: &Value) -> Result<Value, String> {
 }
 
 fn download(args: &Value) -> Result<Value, String> {
-    let a: DownloadArgs = serde_json::from_value(args.clone())
-        .map_err(|e| format!("http.download: invalid arguments: {e}"))?;
+    let a: DownloadArgs = serde_json::from_value(args.clone()).map_err(|e| {
+        IpcError::new("http", "download", format!("invalid arguments: {e}")).into_string()
+    })?;
     let url = a.url.as_str();
     super::security::check_http(url)?;
     let dest = a.dest.as_str();
@@ -284,15 +288,17 @@ fn download(args: &Value) -> Result<Value, String> {
     let req = apply_headers(agent.get(url), a.headers.as_ref());
     let resp = req
         .call()
-        .map_err(|e| format!("http.download({url}): {e}"))?;
+        .map_err(|e| IpcError::new("http", "download", format!("({url}): {e}")).into_string())?;
 
     let total: Option<u64> = resp
         .header("content-length")
         .and_then(|s| s.parse::<u64>().ok());
 
     if let Some(parent) = std::path::Path::new(dest).parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("http.download: mkdir {}: {e}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|e| {
+            IpcError::new("http", "download", format!("mkdir {}: {e}", parent.display()))
+                .into_string()
+        })?;
     }
 
     // 10 GiB cap — large enough for any reasonable update binary while still
@@ -301,9 +307,12 @@ fn download(args: &Value) -> Result<Value, String> {
     const MAX_DOWNLOAD: u64 = 10 * 1024 * 1024 * 1024;
     if let Some(t) = total {
         if t > MAX_DOWNLOAD {
-            return Err(format!(
-                "http.download: response size {t} exceeds the {MAX_DOWNLOAD}-byte cap"
-            ));
+            return Err(IpcError::new(
+                "http",
+                "download",
+                format!("response size {t} exceeds the {MAX_DOWNLOAD}-byte cap"),
+            )
+            .into_string());
         }
     }
 
@@ -320,8 +329,10 @@ fn download(args: &Value) -> Result<Value, String> {
             || std::path::PathBuf::from("."),
             std::path::Path::to_path_buf,
         );
-    let mut tmp = tempfile::NamedTempFile::new_in(&parent)
-        .map_err(|e| format!("http.download: tempfile in {}: {e}", parent.display()))?;
+    let mut tmp = tempfile::NamedTempFile::new_in(&parent).map_err(|e| {
+        IpcError::new("http", "download", format!("tempfile in {}: {e}", parent.display()))
+            .into_string()
+    })?;
     let mut reader = resp.into_reader().take(MAX_DOWNLOAD);
     let mut buf = vec![0u8; 64 * 1024];
     let mut written: u64 = 0;
@@ -329,21 +340,22 @@ fn download(args: &Value) -> Result<Value, String> {
     loop {
         let n = reader
             .read(&mut buf)
-            .map_err(|e| format!("http.download: read: {e}"))?;
+            .map_err(|e| IpcError::new("http", "download", format!("read: {e}")).into_string())?;
         if n == 0 {
             emitter.advance(0, true);
             break;
         }
         tmp.write_all(&buf[..n])
-            .map_err(|e| format!("http.download: write: {e}"))?;
+            .map_err(|e| IpcError::new("http", "download", format!("write: {e}")).into_string())?;
         written += n as u64;
         emitter.advance(n, false);
     }
     tmp.as_file_mut()
         .flush()
-        .map_err(|e| format!("http.download: flush: {e}"))?;
-    tmp.persist(dest)
-        .map_err(|e| format!("http.download: persist -> {dest}: {e}"))?;
+        .map_err(|e| IpcError::new("http", "download", format!("flush: {e}")).into_string())?;
+    tmp.persist(dest).map_err(|e| {
+        IpcError::new("http", "download", format!("persist -> {dest}: {e}")).into_string()
+    })?;
 
     Ok(json!({ "path": dest, "bytes": written }))
 }
@@ -417,8 +429,9 @@ impl Read for MultipartBody {
 }
 
 fn upload(args: &Value) -> Result<Value, String> {
-    let a: UploadArgs = serde_json::from_value(args.clone())
-        .map_err(|e| format!("http.upload: invalid arguments: {e}"))?;
+    let a: UploadArgs = serde_json::from_value(args.clone()).map_err(|e| {
+        IpcError::new("http", "upload", format!("invalid arguments: {e}")).into_string()
+    })?;
     let url = a.url.as_str();
     super::security::check_http(url)?;
     let file_path = a.file_path.as_str();
@@ -430,11 +443,14 @@ fn upload(args: &Value) -> Result<Value, String> {
     // File metadata first — total length is needed for the progress
     // emitter and (more importantly) the Content-Length header so the
     // server can pre-allocate buffers / reject oversize uploads early.
-    let file = fs::File::open(file_path)
-        .map_err(|e| format!("http.upload: open {file_path}: {e}"))?;
+    let file = fs::File::open(file_path).map_err(|e| {
+        IpcError::new("http", "upload", format!("open {file_path}: {e}")).into_string()
+    })?;
     let file_len = file
         .metadata()
-        .map_err(|e| format!("http.upload: stat {file_path}: {e}"))?
+        .map_err(|e| {
+            IpcError::new("http", "upload", format!("stat {file_path}: {e}")).into_string()
+        })?
         .len();
 
     let filename = std::path::Path::new(file_path)
@@ -476,14 +492,13 @@ fn upload(args: &Value) -> Result<Value, String> {
 
     let resp = req
         .send(body)
-        .map_err(|e| format!("http.upload({url}): {e}"))?;
+        .map_err(|e| IpcError::new("http", "upload", format!("({url}): {e}")).into_string())?;
 
     let status = resp.status();
     let mut buf = Vec::new();
-    resp.into_reader()
-        .take(100 * 1024 * 1024)
-        .read_to_end(&mut buf)
-        .map_err(|e| format!("http.upload: read response: {e}"))?;
+    resp.into_reader().take(100 * 1024 * 1024).read_to_end(&mut buf).map_err(|e| {
+        IpcError::new("http", "upload", format!("read response: {e}")).into_string()
+    })?;
 
     Ok(json!({
         "status": status,

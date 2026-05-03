@@ -8172,6 +8172,7 @@ dependencies = [
 name = "tynd_plugin_sdk"
 version = "1.0.0"
 dependencies = [
+ "crossbeam-channel",
  "dashmap",
  "parking_lot",
  "serde",

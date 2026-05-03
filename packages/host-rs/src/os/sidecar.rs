@@ -10,6 +10,8 @@ use std::sync::LazyLock;
 use dashmap::DashMap;
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 /// `LazyLock` (Rust 1.80+) builds the `DashMap` on first deref so
 /// callers reach it via direct `SIDECARS.get(...)` instead of a
 /// `registry()` accessor wrapping `OnceLock::get_or_init`.
@@ -25,9 +27,16 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             let name = args
                 .get("name")
                 .and_then(Value::as_str)
-                .ok_or_else(|| "sidecar.path: missing 'name'".to_string())?;
+                .ok_or_else(|| String::from(IpcError::missing_arg("sidecar", "path", "name")))?;
             SIDECARS.get(name).map_or_else(
-                || Err(format!("sidecar '{name}' is not registered")),
+                || {
+                    Err(IpcError::new(
+                        "sidecar",
+                        "path",
+                        format!("sidecar '{name}' is not registered"),
+                    )
+                    .into_string())
+                },
                 |r| Ok(Value::String(r.value().clone())),
             )
         },
@@ -38,6 +47,6 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
                 .collect();
             Ok(Value::Array(items))
         },
-        _ => Err(format!("sidecar.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("sidecar", method).into_string()),
     }
 }

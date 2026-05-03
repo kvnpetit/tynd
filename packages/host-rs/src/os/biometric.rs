@@ -14,6 +14,8 @@ use robius_authentication::{
 };
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     // W3.2 — ACL gate. `isAvailable` is left ungated because it returns
     // a static `true` (no side-effects, no secret data) and admin
@@ -24,13 +26,16 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         if method == "authenticate"
             && !crate::os::acl::authority().is_allowed("biometric:authenticate", None, None, None)
         {
-            return Err("biometric.authenticate: permission denied by ACL".into());
+            return Err(
+                IpcError::new("biometric", "authenticate", "permission denied by ACL")
+                    .into_string(),
+            );
         }
     }
     match method {
         "isAvailable" => Ok(Value::Bool(true)),
         "authenticate" => authenticate(args),
-        _ => Err(format!("biometric.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("biometric", method).into_string()),
     }
 }
 
@@ -38,7 +43,7 @@ fn authenticate(args: &Value) -> Result<Value, String> {
     let reason = args
         .get("reason")
         .and_then(Value::as_str)
-        .ok_or_else(|| "biometric.authenticate: missing 'reason'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("biometric", "authenticate", "reason")))?;
     let fallback_title = args
         .get("fallback_title")
         .or_else(|| args.get("fallbackTitle"))
@@ -52,7 +57,11 @@ fn authenticate(args: &Value) -> Result<Value, String> {
         .password(true)
         .build()
         .ok_or_else(|| {
-            "biometric.authenticate: platform refused the requested policy".to_string()
+            String::from(IpcError::new(
+                "biometric",
+                "authenticate",
+                "platform refused the requested policy",
+            ))
         })?;
 
     let title_owned = fallback_title.to_string();

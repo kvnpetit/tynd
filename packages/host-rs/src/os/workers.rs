@@ -10,6 +10,8 @@ use dashmap::DashMap;
 use rquickjs::{Context, Function, Runtime};
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 enum Msg {
@@ -33,7 +35,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "run" => run(args),
         "terminate" => terminate(args),
         "list" => list(),
-        _ => Err(format!("workers.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("workers", method).into_string()),
     }
 }
 
@@ -41,7 +43,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
     let script = args
         .get("script")
         .and_then(Value::as_str)
-        .ok_or_else(|| "workers.spawn: missing 'script'".to_string())?
+        .ok_or_else(|| String::from(IpcError::missing_arg("workers", "spawn", "script")))?
         .to_string();
 
     let (tx, rx) = mpsc::channel::<Msg>();
@@ -106,9 +108,9 @@ fn spawn(args: &Value) -> Result<Value, String> {
         }
     });
 
-    ready_rx
-        .recv()
-        .map_err(|e| format!("workers.spawn: thread died: {e}"))??;
+    ready_rx.recv().map_err(|e| {
+        IpcError::new("workers", "spawn", format!("thread died: {e}")).into_string()
+    })??;
 
     workers().insert(id, tx);
     Ok(json!({ "id": id }))
@@ -118,14 +120,16 @@ fn run(args: &Value) -> Result<Value, String> {
     let id = args
         .get("id")
         .and_then(Value::as_u64)
-        .ok_or_else(|| "workers.run: missing 'id'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("workers", "run", "id")))?;
     let input = args.get("input").cloned().unwrap_or(Value::Null);
     let input_json = serde_json::to_string(&input).map_err(|e| e.to_string())?;
 
     let sender = workers()
         .get(&id)
         .map(|r| r.value().clone())
-        .ok_or_else(|| format!("workers.run: worker {id} not found"))?;
+        .ok_or_else(|| {
+            IpcError::new("workers", "run", format!("worker {id} not found")).into_string()
+        })?;
 
     let (reply_tx, reply_rx) = mpsc::channel();
     sender
@@ -133,11 +137,11 @@ fn run(args: &Value) -> Result<Value, String> {
             input: input_json,
             reply: reply_tx,
         })
-        .map_err(|e| format!("workers.run: send: {e}"))?;
+        .map_err(|e| IpcError::new("workers", "run", format!("send: {e}")).into_string())?;
 
     let result_json = reply_rx
         .recv()
-        .map_err(|e| format!("workers.run: worker died: {e}"))??;
+        .map_err(|e| IpcError::new("workers", "run", format!("worker died: {e}")).into_string())??;
     let parsed: Value = serde_json::from_str(&result_json).unwrap_or(Value::Null);
     Ok(parsed)
 }
@@ -146,7 +150,7 @@ fn terminate(args: &Value) -> Result<Value, String> {
     let id = args
         .get("id")
         .and_then(Value::as_u64)
-        .ok_or_else(|| "workers.terminate: missing 'id'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("workers", "terminate", "id")))?;
     if let Some((_, sender)) = workers().remove(&id) {
         let _ = sender.send(Msg::Stop);
     }

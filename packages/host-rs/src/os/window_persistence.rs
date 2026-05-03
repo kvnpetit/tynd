@@ -25,6 +25,8 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 /// One window's persisted state. Optional fields stay absent in the
 /// JSON file when unknown — that way a window restored before the host
 /// has reported its position doesn't get pinned to (0, 0).
@@ -139,7 +141,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "setStoragePath" => dispatch_set_storage_path(args),
         "loadFromDisk" => dispatch_load_from_disk(args),
         "saveToDisk" => dispatch_save_to_disk(),
-        _ => Err(format!("windowState.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("windowState", method).into_string()),
     }
 }
 
@@ -147,7 +149,7 @@ fn dispatch_get(args: &Value) -> Result<Value, String> {
     let label = args
         .get("label")
         .and_then(Value::as_str)
-        .ok_or_else(|| "windowState.get: missing 'label'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("windowState", "get", "label")))?;
     Ok(get(label).map_or(Value::Null, |s| {
         serde_json::to_value(s).unwrap_or(Value::Null)
     }))
@@ -169,27 +171,27 @@ fn dispatch_set(args: &Value) -> Result<Value, String> {
     let label = args
         .get("label")
         .and_then(Value::as_str)
-        .ok_or_else(|| "windowState.set: missing 'label'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("windowState", "set", "label")))?;
     let raw = args
         .get("state")
-        .ok_or_else(|| "windowState.set: missing 'state'".to_string())?;
-    let state: WindowState = serde_json::from_value(raw.clone())
-        .map_err(|e| format!("windowState.set: invalid 'state': {e}"))?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("windowState", "set", "state")))?;
+    let state: WindowState = serde_json::from_value(raw.clone()).map_err(|e| {
+        IpcError::new("windowState", "set", format!("invalid 'state': {e}")).into_string()
+    })?;
     set(label, state);
     Ok(Value::Null)
 }
 
 fn dispatch_clear(args: &Value) -> Result<Value, String> {
     let label = args.get("label").and_then(Value::as_str);
-    clear(label).map_err(|e| format!("windowState.clear: {e}"))?;
+    clear(label).map_err(|e| IpcError::new("windowState", "clear", e).into_string())?;
     Ok(Value::Null)
 }
 
 fn dispatch_set_storage_path(args: &Value) -> Result<Value, String> {
-    let path = args
-        .get("path")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "windowState.setStoragePath: missing 'path'".to_string())?;
+    let path = args.get("path").and_then(Value::as_str).ok_or_else(|| {
+        String::from(IpcError::missing_arg("windowState", "setStoragePath", "path"))
+    })?;
     set_storage_path(PathBuf::from(path));
     Ok(Value::Null)
 }
@@ -200,18 +202,22 @@ fn dispatch_load_from_disk(args: &Value) -> Result<Value, String> {
     let path = if let Some(p) = args.get("path").and_then(Value::as_str) {
         PathBuf::from(p)
     } else {
-        store()
-            .storage_path
-            .read()
-            .clone()
-            .ok_or_else(|| "windowState.loadFromDisk: no path provided and none configured".to_string())?
+        store().storage_path.read().clone().ok_or_else(|| {
+            IpcError::new(
+                "windowState",
+                "loadFromDisk",
+                "no path provided and none configured",
+            )
+            .into_string()
+        })?
     };
-    load_from_disk(path).map_err(|e| format!("windowState.loadFromDisk: {e}"))?;
+    load_from_disk(path)
+        .map_err(|e| IpcError::new("windowState", "loadFromDisk", e).into_string())?;
     Ok(Value::Null)
 }
 
 fn dispatch_save_to_disk() -> Result<Value, String> {
-    save_to_disk().map_err(|e| format!("windowState.saveToDisk: {e}"))?;
+    save_to_disk().map_err(|e| IpcError::new("windowState", "saveToDisk", e).into_string())?;
     Ok(json!(null))
 }
 

@@ -21,6 +21,8 @@ use cocoon::Cocoon;
 use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     // W3.2 — ACL gate (additive on top of `security::check_fs`).
     // The `acl::Authority` is "fail open" until an admin loads at least
@@ -32,7 +34,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     {
         let cmd = format!("vault:{method}");
         if !crate::os::acl::authority().is_allowed(&cmd, None, None, None) {
-            return Err(format!("vault.{method}: permission denied by ACL"));
+            return Err(IpcError::new("vault", method, "permission denied by ACL").into_string());
         }
     }
     match method {
@@ -40,7 +42,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "write" => write(args),
         "exists" => exists(args),
         "delete" => delete(args),
-        _ => Err(format!("vault.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("vault", method).into_string()),
     }
 }
 
@@ -48,7 +50,7 @@ fn path_arg(args: &Value) -> Result<PathBuf, String> {
     let s = args
         .get("path")
         .and_then(Value::as_str)
-        .ok_or_else(|| "vault: missing 'path'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("vault", "*", "path")))?;
     super::security::check_fs(s)?;
     Ok(PathBuf::from(s))
 }
@@ -65,9 +67,9 @@ fn take_password(args: &Value) -> Result<Zeroizing<Vec<u8>>, String> {
     let p = args
         .get("password")
         .and_then(Value::as_str)
-        .ok_or_else(|| "vault: missing 'password'".to_string())?;
+        .ok_or_else(|| String::from(IpcError::missing_arg("vault", "*", "password")))?;
     if p.is_empty() {
-        return Err("vault: 'password' must not be empty".into());
+        return Err(IpcError::new("vault", "*", "'password' must not be empty").into_string());
     }
     Ok(Zeroizing::new(p.as_bytes().to_vec()))
 }
@@ -76,11 +78,12 @@ fn read(args: &Value) -> Result<Value, String> {
     let path = path_arg(args)?;
     let password = take_password(args)?;
 
-    let mut file = File::open(&path).map_err(|e| format!("vault.read: {e}"))?;
+    let mut file =
+        File::open(&path).map_err(|e| IpcError::new("vault", "read", e).into_string())?;
     let cocoon = Cocoon::new(&password);
-    let plaintext = cocoon
-        .parse(file.file_mut())
-        .map_err(|e| format!("vault.read({}): parse: {e:?}", path.display()))?;
+    let plaintext = cocoon.parse(file.file_mut()).map_err(|e| {
+        IpcError::new("vault", "read", format!("({}): parse: {e:?}", path.display())).into_string()
+    })?;
 
     // Drop the key material as soon as the parse returns. The `Zeroizing`
     // wrapper scrubs the buffer before releasing the allocation; `cocoon`
@@ -101,23 +104,31 @@ fn write(args: &Value) -> Result<Value, String> {
     // small payloads. Base64 is the canonical form (matches `read()`'s
     // return shape and what the JS API gives us by default).
     let data_bytes: Vec<u8> = match args.get("data") {
-        Some(Value::String(b64)) => STANDARD
-            .decode(b64.as_bytes())
-            .map_err(|e| format!("vault.write: base64 decode: {e}"))?,
+        Some(Value::String(b64)) => STANDARD.decode(b64.as_bytes()).map_err(|e| {
+            IpcError::new("vault", "write", format!("base64 decode: {e}")).into_string()
+        })?,
         Some(Value::Array(arr)) => arr
             .iter()
             .map(|v| {
-                v.as_u64()
-                    .and_then(|n| u8::try_from(n).ok())
-                    .ok_or_else(|| "vault.write: non-byte element in 'data'".to_string())
+                v.as_u64().and_then(|n| u8::try_from(n).ok()).ok_or_else(|| {
+                    IpcError::new("vault", "write", "non-byte element in 'data'").into_string()
+                })
             })
             .collect::<Result<Vec<u8>, _>>()?,
-        _ => return Err("vault.write: missing 'data' (base64 string or byte array)".into()),
+        _ => {
+            return Err(IpcError::new(
+                "vault",
+                "write",
+                "missing 'data' (base64 string or byte array)",
+            )
+            .into_string())
+        },
     };
 
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent).map_err(|e| format!("vault.write: {e}"))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| IpcError::new("vault", "write", e).into_string())?;
         }
     }
 
@@ -128,18 +139,21 @@ fn write(args: &Value) -> Result<Value, String> {
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf);
-    let mut tmp = tempfile::NamedTempFile::new_in(&parent)
-        .map_err(|e| format!("vault.write: tempfile in {}: {e}", parent.display()))?;
+    let mut tmp = tempfile::NamedTempFile::new_in(&parent).map_err(|e| {
+        IpcError::new("vault", "write", format!("tempfile in {}: {e}", parent.display()))
+            .into_string()
+    })?;
 
     let mut cocoon = Cocoon::new(&password);
-    cocoon
-        .dump(data_bytes, tmp.as_file_mut())
-        .map_err(|e| format!("vault.write({}): dump: {e:?}", path.display()))?;
+    cocoon.dump(data_bytes, tmp.as_file_mut()).map_err(|e| {
+        IpcError::new("vault", "write", format!("({}): dump: {e:?}", path.display())).into_string()
+    })?;
     tmp.as_file_mut()
         .flush()
-        .map_err(|e| format!("vault.write: flush: {e}"))?;
-    tmp.persist(&path)
-        .map_err(|e| format!("vault.write: persist {}: {e}", path.display()))?;
+        .map_err(|e| IpcError::new("vault", "write", format!("flush: {e}")).into_string())?;
+    tmp.persist(&path).map_err(|e| {
+        IpcError::new("vault", "write", format!("persist {}: {e}", path.display())).into_string()
+    })?;
 
     drop(password);
     Ok(json!({}))
@@ -156,7 +170,7 @@ fn delete(args: &Value) -> Result<Value, String> {
         Ok(()) => Ok(json!({})),
         // ENOENT = idempotent success — caller asked for "gone" and it's gone.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
-        Err(e) => Err(format!("vault.delete: {e}")),
+        Err(e) => Err(IpcError::new("vault", "delete", e).into_string()),
     }
 }
 

@@ -9,12 +9,14 @@
 use auto_launch::AutoLaunchBuilder;
 use serde_json::{json, Value};
 
+use crate::ipc_error::IpcError;
+
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "enable" => enable(args),
         "disable" => disable(args),
         "isEnabled" => is_enabled(args),
-        _ => Err(format!("autolaunch.{method}: unknown method")),
+        _ => Err(IpcError::unknown_method("autolaunch", method).into_string()),
     }
 }
 
@@ -31,7 +33,9 @@ fn resolved_name(args: &Value) -> Result<String, String> {
 fn exe_path() -> Result<String, String> {
     std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
-        .map_err(|e| format!("autolaunch: current_exe: {e}"))
+        .map_err(|e| {
+            IpcError::new("autolaunch", "build", format!("current_exe: {e}")).into_string()
+        })
 }
 
 fn build(args: &Value) -> Result<auto_launch::AutoLaunch, String> {
@@ -54,19 +58,20 @@ fn build(args: &Value) -> Result<auto_launch::AutoLaunch, String> {
         .set_app_path(&path)
         .set_args(&extra_refs)
         .build()
-        .map_err(|e| format!("autolaunch.build: {e}"))
+        .map_err(|e| IpcError::new("autolaunch", "build", e).into_string())
 }
 
 fn enable(args: &Value) -> Result<Value, String> {
     let al = build(args)?;
-    al.enable().map_err(|e| format!("autolaunch.enable: {e}"))?;
+    al.enable()
+        .map_err(|e| IpcError::new("autolaunch", "enable", e).into_string())?;
     Ok(json!({ "enabled": true }))
 }
 
 fn disable(args: &Value) -> Result<Value, String> {
     let al = build(args)?;
     al.disable()
-        .map_err(|e| format!("autolaunch.disable: {e}"))?;
+        .map_err(|e| IpcError::new("autolaunch", "disable", e).into_string())?;
     Ok(json!({ "enabled": false }))
 }
 
@@ -74,6 +79,6 @@ fn is_enabled(args: &Value) -> Result<Value, String> {
     let al = build(args)?;
     let enabled = al
         .is_enabled()
-        .map_err(|e| format!("autolaunch.isEnabled: {e}"))?;
+        .map_err(|e| IpcError::new("autolaunch", "isEnabled", e).into_string())?;
     Ok(Value::Bool(enabled))
 }
