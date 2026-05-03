@@ -8,7 +8,13 @@
 //! same scopes every other FS API uses. Passwords are accepted as
 //! borrowed strings, never logged, and zeroized after use.
 
-use std::{fs::File, io::Write as _, path::PathBuf};
+use std::{io::Write as _, path::PathBuf};
+
+// `fs-err` shim — error already includes the offending path, dropping the
+// hand-stamped `format!("vault.write: mkdir {}: {e}", parent.display())`
+// pairs that surrounded every direct std::fs call here.
+use fs_err as fs;
+use fs_err::File;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use cocoon::Cocoon;
@@ -70,11 +76,10 @@ fn read(args: &Value) -> Result<Value, String> {
     let path = path_arg(args)?;
     let password = take_password(args)?;
 
-    let mut file = File::open(&path)
-        .map_err(|e| format!("vault.read({}): open: {e}", path.display()))?;
+    let mut file = File::open(&path).map_err(|e| format!("vault.read: {e}"))?;
     let cocoon = Cocoon::new(&password);
     let plaintext = cocoon
-        .parse(&mut file)
+        .parse(file.file_mut())
         .map_err(|e| format!("vault.read({}): parse: {e:?}", path.display()))?;
 
     // Drop the key material as soon as the parse returns. The `Zeroizing`
@@ -112,8 +117,7 @@ fn write(args: &Value) -> Result<Value, String> {
 
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("vault.write: mkdir {}: {e}", parent.display()))?;
+            fs::create_dir_all(parent).map_err(|e| format!("vault.write: {e}"))?;
         }
     }
 
@@ -148,11 +152,11 @@ fn exists(args: &Value) -> Result<Value, String> {
 
 fn delete(args: &Value) -> Result<Value, String> {
     let path = path_arg(args)?;
-    match std::fs::remove_file(&path) {
+    match fs::remove_file(&path) {
         Ok(()) => Ok(json!({})),
         // ENOENT = idempotent success — caller asked for "gone" and it's gone.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
-        Err(e) => Err(format!("vault.delete({}): {e}", path.display())),
+        Err(e) => Err(format!("vault.delete: {e}")),
     }
 }
 

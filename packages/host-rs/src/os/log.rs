@@ -8,12 +8,18 @@
 //! before the first `write`. The default level is `info`.
 
 use std::{
-    fs::{File, OpenOptions},
     io::Write as _,
     path::PathBuf,
     sync::LazyLock,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+// `fs-err` shim — the rotation helper deliberately uses `let _ =` for
+// best-effort cleanup, but `ensure_open` does propagate errors and
+// hand-stamps `format!("log: open {}: {e}", path.display())`. Routing
+// through `fs_err` collapses that to `format!("log: {e}")`.
+use fs_err as fs;
+use fs_err::{File, OpenOptions};
 
 use parking_lot::Mutex;
 use serde_json::{json, Value};
@@ -177,13 +183,13 @@ fn ensure_open(s: &mut LoggerState) -> Result<(), String> {
         return Ok(());
     }
     if let Some(parent) = s.path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("log: mkdir {e}"))?;
+        fs::create_dir_all(parent).map_err(|e| format!("log: {e}"))?;
     }
     let f = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&s.path)
-        .map_err(|e| format!("log: open {}: {e}", s.path.display()))?;
+        .map_err(|e| format!("log: {e}"))?;
     s.bytes_written = f.metadata().map_or(0, |m| m.len());
     s.file = Some(f);
     Ok(())

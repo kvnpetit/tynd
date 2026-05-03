@@ -1,11 +1,12 @@
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    process::{Child, ChildStdin, Command, Stdio},
+    process::{ChildStdin, Command, Stdio},
     sync::{Arc, LazyLock},
 };
 
 use parking_lot::Mutex;
+use shared_child::SharedChild;
 
 use serde_json::{json, Value};
 
@@ -153,10 +154,19 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
 // on every chunk. The `process` registry holds the `Child` until exit so
 // `kill` and `writeStdin` can reach it from the call-pool thread.
 
-/// Per-pid handles kept around for runtime mutations. `Child` lives until
-/// the waiter thread observes exit, then drops it from the registry.
+/// Per-pid handles kept around for runtime mutations. The child lives
+/// until the waiter thread observes exit, then drops it from the registry.
+///
+/// `SharedChild` (Tauri's pattern) wraps the OS handle so `wait()` and
+/// `kill()` can be called from different threads without coordination —
+/// the previous `Mutex<Option<Child>>` had to take the child out of the
+/// mutex before the long-blocking `wait()` so a racing `kill()` could
+/// still grab the handle, and that dance is gone now: both threads share
+/// the same `Arc<SharedChild>` and the OS layer makes the operations
+/// concurrent-safe (Linux `waitid(WNOWAIT)` + post-wait reap on Unix,
+/// signaled handle wait on Windows).
 struct SpawnEntry {
-    child: Mutex<Option<Child>>,
+    child: Arc<SharedChild>,
     /// Owned `ChildStdin` so `writeStdin` calls can reuse the pipe across
     /// multiple frames. `None` once the user calls `closeStdin` (or stdin
     /// was never piped).
@@ -289,21 +299,32 @@ fn spawn(args: &Value) -> Result<Value, String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = command
+    // `SharedChild::spawn` consumes the `Command` after taking the stdio
+    // handles internally — but we want to own stdout/stderr/stdin
+    // separately so the pump threads can read them without going through
+    // the SharedChild wrapper. Spawn the raw `Child` first, take the
+    // pipe handles, then wrap the headless remainder in SharedChild.
+    let mut raw = command
         .spawn()
         .map_err(|e| format!("process.spawn: {e}"))?;
 
-    let pid = child.id();
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    let stdin = child.stdin.take();
+    let pid = raw.id();
+    let stdout = raw.stdout.take();
+    let stderr = raw.stderr.take();
+    let stdin = raw.stdin.take();
+
+    let shared = SharedChild::new(raw)
+        .map_err(|e| format!("process.spawn: SharedChild::new: {e}"))?;
+    let child = Arc::new(shared);
 
     // Refcounted entry: the registry, the waiter thread, and any
     // concurrent `kill`/`writeStdin` callers each hold their own `Arc`.
-    // The last drop frees the entry — no race between `kill()` and the
-    // waiter's `Box::from_raw` (the original use-after-free).
+    // The last drop frees the entry — `SharedChild` makes
+    // `wait()`/`kill()` concurrent-safe so we no longer need the
+    // take-out-of-mutex dance the previous `Mutex<Option<Child>>` shape
+    // required.
     let entry = Arc::new(SpawnEntry {
-        child: Mutex::new(Some(child)),
+        child,
         stdin: Mutex::new(stdin),
     });
 
@@ -322,48 +343,39 @@ fn spawn(args: &Value) -> Result<Value, String> {
 
     // Waiter thread — `wait()` blocks until the child exits, which is
     // exactly what we want here. The OS already gave us a separate handle
-    // per stdio pipe, so the read threads above are unaffected.
+    // per stdio pipe, so the read threads above are unaffected. With
+    // `SharedChild` we no longer take the child out of a mutex first: a
+    // racing `kill()` calls `SharedChild::kill()` directly on the same
+    // `Arc<SharedChild>` and the OS layer arbitrates (Unix relies on
+    // signal-then-reap, Windows on the kernel-level termination handle).
     let waiter_entry = Arc::clone(&entry);
     std::thread::spawn(move || {
-        // Take the Child out of the entry so we can call `wait()`
-        // without holding the mutex (long blocking call). A racing
-        // `kill()` that grabs the lock before we do still works — it
-        // just sends the signal first; our `wait()` then reaps it.
-        let child_opt = {
-            let mut guard = waiter_entry
-                .child
-                .lock();
-            guard.take()
+        let status = waiter_entry.child.wait();
+        let (code, signal) = match status {
+            Ok(s) => {
+                let code = s.code();
+                #[cfg(unix)]
+                let signal = {
+                    use std::os::unix::process::ExitStatusExt as _;
+                    s.signal().map(|n| format!("SIG{n}"))
+                };
+                #[cfg(not(unix))]
+                let signal: Option<String> = None;
+                (code, signal)
+            },
+            Err(_) => (None, None),
         };
-        if let Some(mut c) = child_opt {
-            let status = c.wait();
-            let (code, signal) = match status {
-                Ok(s) => {
-                    let code = s.code();
-                    #[cfg(unix)]
-                    let signal = {
-                        use std::os::unix::process::ExitStatusExt as _;
-                        s.signal().map(|n| format!("SIG{n}"))
-                    };
-                    #[cfg(not(unix))]
-                    let signal: Option<String> = None;
-                    (code, signal)
-                },
-                Err(_) => (None, None),
-            };
-            events::emit(
-                &format!("process:exit:{pid}"),
-                &json!({
-                    "code": code,
-                    "signal": signal,
-                }),
-            );
-        }
+        events::emit(
+            &format!("process:exit:{pid}"),
+            &json!({
+                "code": code,
+                "signal": signal,
+            }),
+        );
         // Drop the registry's Arc. Any caller that grabbed an Arc in
         // between (a racing `writeStdin` / `kill`) keeps the entry
         // alive until *they* drop their clone — the entry is freed on
-        // the last decrement, which is the safe inverse of the old
-        // `Box::leak` / `Box::from_raw` dance.
+        // the last decrement.
         let _ = registry_remove(pid);
         // `waiter_entry` itself drops here.
         drop(waiter_entry);
@@ -427,28 +439,20 @@ fn kill(args: &Value) -> Result<Value, String> {
 
     // On Unix we honour the actual signal name — `SIGTERM` and `SIGINT`
     // give the child a chance to shut down gracefully (close sockets,
-    // flush buffers); only `SIGKILL` (or the `Child::kill` fallback)
-    // takes the kernel-level prejudice path. On Windows there's no
-    // signal abstraction — `TerminateProcess` is the only knob, so the
-    // signal name is recorded for forward-compat but otherwise ignored.
+    // flush buffers); only `SIGKILL` (or the `SharedChild::kill`
+    // fallback) takes the kernel-level prejudice path. On Windows
+    // there's no signal abstraction — `TerminateProcess` is the only
+    // knob, so the signal name is recorded for forward-compat but
+    // otherwise ignored.
     #[cfg(unix)]
     {
         use nix::{sys::signal::Signal, unistd::Pid};
-        // `Child::kill()` always sends SIGKILL — for SIGTERM/SIGINT we
-        // go through `nix::sys::signal::kill`. We hold the child mutex
-        // only long enough to learn the pid; the actual signal goes
-        // through the OS by pid number so a racing `wait()` doesn't
-        // deadlock on the lock.
-        let target_pid: Option<i32> = {
-            let guard = entry
-                .child
-                .lock();
-            guard.as_ref().map(|c| c.id() as i32)
-        };
-        let Some(target_pid) = target_pid else {
-            // Already reaped by the waiter thread.
-            return Ok(Value::Null);
-        };
+        // `SharedChild::kill()` always sends SIGKILL — for
+        // SIGTERM/SIGINT we go through `nix::sys::signal::kill`. The pid
+        // comes straight off the SharedChild handle (no lock needed)
+        // and the actual signal goes through the OS by pid number so a
+        // racing `wait()` from the waiter thread is fine.
+        let target_pid = entry.child.id() as i32;
         let sig = match signal {
             "SIGINT" => Signal::SIGINT,
             "SIGHUP" => Signal::SIGHUP,
@@ -474,16 +478,14 @@ fn kill(args: &Value) -> Result<Value, String> {
         // Windows: TerminateProcess is the only termination primitive;
         // record the requested signal in the log so callers can see
         // their preference was acknowledged but treat all values as a
-        // hard kill.
+        // hard kill. `SharedChild::kill` is concurrent-safe with the
+        // waiter's `wait()` — both share the same OS handle and the
+        // wait completes when termination signals it.
         let _ = signal;
-        let mut child_opt = entry
+        entry
             .child
-            .lock();
-        if let Some(child) = child_opt.as_mut() {
-            child
-                .kill()
-                .map_err(|e| format!("process.kill: {e}"))?;
-        }
+            .kill()
+            .map_err(|e| format!("process.kill: {e}"))?;
     }
     Ok(Value::Null)
 }

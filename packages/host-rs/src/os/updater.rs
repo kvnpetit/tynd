@@ -29,6 +29,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+// `fs-err` shim — every error already carries the offending path, so the
+// hand-stamped `format!("foo: read '{}': {e}", path.display())` patterns
+// scattered through the install/patch flows collapse to a single
+// `.map_err(|e| format!("updater.foo: {e}"))`.
+use fs_err as fs;
+
 use base64::{engine::general_purpose::STANDARD, Engine};
 use bytes::{Bytes, BytesMut};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
@@ -378,8 +384,8 @@ fn download_and_verify(args: &Value) -> Result<Value, String> {
     let verified_hash = blake3::hash(&bytes_accum);
 
     let tmp = std::env::temp_dir().join(format!("tynd-update-{}", simple_rand()));
-    std::fs::write(&tmp, &bytes_accum)
-        .map_err(|e| format!("updater.downloadAndVerify: write: {e}"))?;
+    fs::write(&tmp, &bytes_accum)
+        .map_err(|e| format!("updater.downloadAndVerify: {e}"))?;
 
     emitter.emit_phase("verified");
 
@@ -532,12 +538,8 @@ fn download_and_patch(args: &Value) -> Result<Value, String> {
     // ---- 4) Read current binary, apply patch -----------------------
     let current_exe =
         std::env::current_exe().map_err(|e| format!("updater.downloadAndPatch: current_exe: {e}"))?;
-    let old_bytes = std::fs::read(&current_exe).map_err(|e| {
-        format!(
-            "updater.downloadAndPatch: read current_exe '{}': {e}",
-            current_exe.display()
-        )
-    })?;
+    let old_bytes = fs::read(&current_exe)
+        .map_err(|e| format!("updater.downloadAndPatch: {e}"))?;
 
     emitter.emit_phase("applying");
 
@@ -572,8 +574,8 @@ fn download_and_patch(args: &Value) -> Result<Value, String> {
 
     // ---- 6) Stage to temp dir for the `install` step --------------
     let tmp = std::env::temp_dir().join(format!("tynd-update-{}", simple_rand()));
-    std::fs::write(&tmp, &reconstructed)
-        .map_err(|e| format!("updater.downloadAndPatch: write staged: {e}"))?;
+    fs::write(&tmp, &reconstructed)
+        .map_err(|e| format!("updater.downloadAndPatch: {e}"))?;
 
     emitter.emit_phase("verified");
 
@@ -594,7 +596,7 @@ fn download_and_patch(args: &Value) -> Result<Value, String> {
 /// updates.
 fn blake3_file(path: &std::path::Path) -> std::io::Result<String> {
     let mut hasher = Blake3Hasher::new();
-    let mut file = std::fs::File::open(path)?;
+    let mut file = fs::File::open(path)?;
     let mut buf = vec![0u8; 64 * 1024];
     loop {
         let n = file.read(&mut buf)?;

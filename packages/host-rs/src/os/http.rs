@@ -6,9 +6,84 @@ use std::{
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use bytes::{Bytes, BytesMut};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::events;
+
+// ─── Typed argument shapes ──────────────────────────────────────────────
+//
+// Each endpoint that takes 3+ arguments declares its own
+// `#[derive(Deserialize)]` struct here. `serde_json::from_value` does
+// the field-by-field extraction in one pass — replaces the
+// `args.get("foo").and_then(Value::as_str).ok_or_else(...)` quartet
+// repeated 4-7 times per endpoint with a single typed deserialization.
+//
+// Notes on the shape:
+//   * `#[serde(default)]` on optional fields keeps the legacy
+//     "missing == None / default" semantics so we don't break callers
+//     that omit fields.
+//   * `#[serde(alias = "...")]` covers the snake_case ↔ camelCase
+//     duality the old code papered over with `args.get("file_path")
+//     .or_else(|| args.get("filePath"))` chains.
+//   * Bodies / headers stay as `Value` because they're forwarded to
+//     `apply_headers` / the request-body branch as-is — typing them
+//     would force a clone with no payoff.
+//
+// This pattern is the recommended template for any new endpoint that
+// pulls 3+ fields out of the args bag — see commit message for the
+// migration recipe.
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestArgs {
+    url: String,
+    #[serde(default)]
+    method: Option<String>,
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+    #[serde(default)]
+    progress_id: Option<String>,
+    #[serde(default)]
+    headers: Option<Value>,
+    #[serde(default)]
+    body: Option<Value>,
+    #[serde(default)]
+    response_type: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadArgs {
+    url: String,
+    dest: String,
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+    #[serde(default)]
+    progress_id: Option<String>,
+    #[serde(default)]
+    headers: Option<Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadArgs {
+    url: String,
+    // Accept the legacy snake_case `file_path` too so the IPC contract
+    // stays byte-compatible during the rollout — JS callers send
+    // `filePath` (the camelCase rename), but Rust unit tests pass
+    // `file_path` directly.
+    #[serde(alias = "file_path")]
+    file_path: String,
+    #[serde(default, alias = "field_name")]
+    field_name: Option<String>,
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+    #[serde(default)]
+    progress_id: Option<String>,
+    #[serde(default)]
+    headers: Option<Value>,
+}
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -99,22 +174,18 @@ impl Read for ProgressReader {
 }
 
 fn request(args: &Value) -> Result<Value, String> {
-    let url = args
-        .get("url")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "http.request: missing 'url'".to_string())?;
+    let a: RequestArgs = serde_json::from_value(args.clone())
+        .map_err(|e| format!("http.request: invalid arguments: {e}"))?;
+    let url = a.url.as_str();
     super::security::check_http(url)?;
-    let method = args.get("method").and_then(Value::as_str).unwrap_or("GET");
-    let timeout_ms = args.get("timeoutMs").and_then(Value::as_u64);
-    let progress_id = args
-        .get("progressId")
-        .and_then(Value::as_str)
-        .map(String::from);
+    let method = a.method.as_deref().unwrap_or("GET");
+    let timeout_ms = a.timeout_ms;
+    let progress_id = a.progress_id.clone();
 
     let agent = build_agent(timeout_ms);
-    let req = apply_headers(agent.request(method, url), args.get("headers"));
+    let req = apply_headers(agent.request(method, url), a.headers.as_ref());
 
-    let response = if let Some(body) = args.get("body") {
+    let response = if let Some(body) = a.body.as_ref() {
         let (req, body_bytes) = match body {
             Value::String(s) => (req, s.as_bytes().to_vec()),
             other => {
@@ -158,10 +229,7 @@ fn request(args: &Value) -> Result<Value, String> {
         }
     }
 
-    let response_type = args
-        .get("responseType")
-        .and_then(Value::as_str)
-        .unwrap_or("text");
+    let response_type = a.response_type.as_deref().unwrap_or("text");
 
     // Accumulate the response body in a `BytesMut` so we get amortized
     // power-of-two growth backed by a single allocation, then `freeze()`
@@ -203,24 +271,17 @@ fn request(args: &Value) -> Result<Value, String> {
 }
 
 fn download(args: &Value) -> Result<Value, String> {
-    let url = args
-        .get("url")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "http.download: missing 'url'".to_string())?;
+    let a: DownloadArgs = serde_json::from_value(args.clone())
+        .map_err(|e| format!("http.download: invalid arguments: {e}"))?;
+    let url = a.url.as_str();
     super::security::check_http(url)?;
-    let dest = args
-        .get("dest")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "http.download: missing 'dest'".to_string())?;
+    let dest = a.dest.as_str();
     super::security::check_fs(dest)?;
-    let timeout_ms = args.get("timeoutMs").and_then(Value::as_u64);
-    let progress_id = args
-        .get("progressId")
-        .and_then(Value::as_str)
-        .map(String::from);
+    let timeout_ms = a.timeout_ms;
+    let progress_id = a.progress_id;
 
     let agent = build_agent(timeout_ms);
-    let req = apply_headers(agent.get(url), args.get("headers"));
+    let req = apply_headers(agent.get(url), a.headers.as_ref());
     let resp = req
         .call()
         .map_err(|e| format!("http.download({url}): {e}"))?;
@@ -356,27 +417,15 @@ impl Read for MultipartBody {
 }
 
 fn upload(args: &Value) -> Result<Value, String> {
-    let url = args
-        .get("url")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "http.upload: missing 'url'".to_string())?;
+    let a: UploadArgs = serde_json::from_value(args.clone())
+        .map_err(|e| format!("http.upload: invalid arguments: {e}"))?;
+    let url = a.url.as_str();
     super::security::check_http(url)?;
-    let file_path = args
-        .get("file_path")
-        .or_else(|| args.get("filePath"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| "http.upload: missing 'file_path'".to_string())?;
+    let file_path = a.file_path.as_str();
     super::security::check_fs(file_path)?;
-    let field_name = args
-        .get("field_name")
-        .or_else(|| args.get("fieldName"))
-        .and_then(Value::as_str)
-        .unwrap_or("file");
-    let timeout_ms = args.get("timeoutMs").and_then(Value::as_u64);
-    let progress_id = args
-        .get("progressId")
-        .and_then(Value::as_str)
-        .map(String::from);
+    let field_name = a.field_name.as_deref().unwrap_or("file");
+    let timeout_ms = a.timeout_ms;
+    let progress_id = a.progress_id;
 
     // File metadata first — total length is needed for the progress
     // emitter and (more importantly) the Content-Length header so the
@@ -406,7 +455,7 @@ fn upload(args: &Value) -> Result<Value, String> {
 
     let agent = build_agent(timeout_ms);
     let mut req = agent.post(url);
-    req = apply_headers(req, args.get("headers"));
+    req = apply_headers(req, a.headers.as_ref());
     // Content-Type wins over any caller-supplied value — multipart needs
     // the boundary parameter to match the body bytes exactly. Same for
     // Content-Length: ureq will otherwise switch to chunked encoding,

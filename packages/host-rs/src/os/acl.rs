@@ -446,8 +446,7 @@ pub fn generate_schema(out_path: &Path) -> Result<(), String> {
     let schema = capability_schema();
     let serialized = serde_json::to_string_pretty(&schema)
         .map_err(|e| format!("acl.schema: serialize failed — {e}"))?;
-    std::fs::write(out_path, serialized)
-        .map_err(|e| format!("acl.schema: write '{}': {e}", out_path.display()))
+    fs_err::write(out_path, serialized).map_err(|e| format!("acl.schema: {e}"))
 }
 
 /// Build the JSON Schema document for a single capability file.

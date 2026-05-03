@@ -36,6 +36,10 @@ sha2.workspace               = true
 blake3.workspace             = true
 rand.workspace               = true
 parking_lot.workspace        = true
+shared_child.workspace       = true
+fs-err.workspace             = true
+walkdir.workspace            = true
+rayon.workspace              = true
 arc-swap.workspace           = true
 dashmap.workspace            = true
 ahash.workspace              = true
@@ -210,6 +214,14 @@ api-all = [
 # crate dependencies it needs. APIs with no external dep list nothing here.
 # `api-acl` rides on the always-on `tauri-utils` dep — no extra crate.
 api-acl             = [  ]
+
+# Opt-in: re-enable tauri-utils' `schema` feature so derived JsonSchema
+# helpers become available. The default `os::acl::generate_schema`
+# function is hand-rolled JSON and does NOT need this — it ships in
+# every preset for IDE autocomplete on `*.tynd-capability.json` files.
+# This feature exists for future codegen tooling that wants the
+# tauri-utils-derived schema (~1 MB extra on the binary, off by default).
+acl-schema          = [ "tauri-utils/schema" ]
 api-autolaunch      = [ "dep:auto-launch" ]
 api-biometric       = [ "dep:robius-authentication" ]
 api-clipboard       = [ "dep:arboard" ]

@@ -11,11 +11,15 @@
 //! file-based, self-cleaning on process exit, no abstract socket trickery.
 
 use std::{
-    fs,
     io::{BufRead, BufReader, Write},
     path::PathBuf,
     sync::{LazyLock, OnceLock},
 };
+
+// `fs-err` shim — error already includes the offending path, dropping the
+// hand-stamped `format!("singleInstance: mkdir {}: {e}", dir.display())`
+// pair around `create_dir_all`.
+use fs_err as fs;
 
 use fslock::LockFile;
 use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions, Stream};
@@ -53,8 +57,7 @@ fn lock_path(id: &str) -> Result<PathBuf, String> {
         .or_else(dirs::data_dir)
         .ok_or_else(|| "singleInstance: no cache/data dir available".to_string())?;
     let dir = base.join("tynd");
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("singleInstance: mkdir {}: {e}", dir.display()))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("singleInstance: {e}"))?;
     Ok(dir.join(format!("{id}.lock")))
 }
 

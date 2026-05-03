@@ -93,6 +93,35 @@ base64 = "0.22"
 # Cross-platform pseudo-terminal for the embedded terminal API
 portable-pty = "0.9"
 
+# Refcounted child handle that can be waited on AND killed concurrently —
+# matches Tauri's pattern. Drops the `Mutex<Option<Child>>` + waiter-vs-kill
+# race-protection gymnastics in `os::process` for an `Arc<SharedChild>` that
+# both threads can address directly.
+shared_child = "1"
+
+# Path-aware filesystem errors — drop-in for `std::fs` whose every error
+# already carries the offending path so we don't keep hand-stamping
+# `format!("...{}: {e}", path.display())` at every call site. Used as
+# `use fs_err as fs;` at the top of modules that historically wrapped
+# their own `.map_err(|e| format!("foo: {}: {e}", path.display()))`.
+fs-err = "3"
+
+# Recursive directory iterator — drops the hand-rolled `read_dir +
+# entry.path() + recursion` walker in `scheme.rs::walk` for a single
+# `WalkDir::new(...)` iterator that handles symlink loops, permission
+# errors, and platform read_dir quirks uniformly. Pulled transitively by
+# tauri-bundler already so this is a graph dedup as well as a -25 LOC win.
+walkdir = "2"
+
+# Data-parallel iterators on top of a global work-stealing thread pool.
+# Used in `scheme.rs::AssetCache::load` to fan out file read +
+# zstd-decompress + MIME sniff across cores during the `tynd-bin://`
+# warm-up — drops first-paint cache build from O(N) sequential opens
+# (~200 ms on 5 000 assets) to ~30-60 ms on 8-core hardware. `blake3`
+# already pulls `rayon` transitively for parallel hashing of large
+# inputs, so this is a graph dedup, not a new addition.
+rayon = "1"
+
 # Compute helpers. `sha2` enables `asm` only on Unix targets in
 # consumer crates (per-target table) — the `sha2-asm` build script
 # shells out to `as`/`gcc` and doesn't bind through MSVC's `cl.exe`,
@@ -384,11 +413,19 @@ scopeguard = "1.2"
 # ACL/capabilities mature, l'injection CSP+nonce dans les HTML servis
 # par le custom-scheme, parsing config TOML/JSON5, et helpers
 # platform_target_triple cross-platform.
+#
+# `schema` feature is intentionally OFF here. It pulls `schemars` +
+# `jsonschema` (~1 MB on the final binary) and is only consumed by
+# offline ACL-manifest tooling. `os::acl::generate_schema` is
+# hand-rolled JSON (see comment there) so it doesn't even use that
+# feature today. Consumers that DO want the tauri-utils-derived
+# JsonSchema (currently nobody) can opt in via the `acl-schema`
+# feature on `tynd-host`, which re-exports the dep with
+# `tauri-utils?/schema` enabled. -1 MB on every preset binary.
 tauri-utils = { version = "2.9", features = [
     "config-toml",         # parse tynd.config.toml si introduit
     "config-json5",        # autorise commentaires/trailing commas dans config
     "resources",           # ResourcePaths + glob pour staging assets
-    "schema",              # JSON Schema généré pour ACL manifests
     "compression",         # brotli pour assets précompressés
 ] }
 

@@ -5,12 +5,17 @@
 //! immediate write (shutdown / explicit sync from JS).
 
 use std::{
-    fs,
     io::Write as _,
     path::PathBuf,
     sync::{Arc, LazyLock},
     time::Duration,
 };
+
+// `fs-err` shim — every error already carries the offending path, so the
+// hand-stamped `format!("store: read {}: {e}", path.display())` sites in
+// `load_if_needed` / `persist_namespace` collapse to a single
+// `.map_err(|e| format!("store: {e}"))`.
+use fs_err as fs;
 
 use crossbeam_channel::{after, never, select, unbounded, Sender};
 use dashmap::DashMap;
@@ -243,8 +248,7 @@ fn load_if_needed(namespace: &str) -> Result<(), String> {
     }
     let path = store_path(namespace)?;
     let map = if path.exists() {
-        let raw = fs::read_to_string(&path)
-            .map_err(|e| format!("store: read {}: {e}", path.display()))?;
+        let raw = fs::read_to_string(&path).map_err(|e| format!("store: {e}"))?;
         serde_json::from_str::<Map<String, Value>>(&raw).unwrap_or_default()
     } else {
         Map::new()
@@ -338,7 +342,7 @@ fn persist_now(namespace: &str) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("store: path {} has no parent dir", path.display()))?;
-    fs::create_dir_all(parent).map_err(|e| format!("store: mkdir {}: {e}", parent.display()))?;
+    fs::create_dir_all(parent).map_err(|e| format!("store: {e}"))?;
     // Cheap snapshot — `Arc::clone` is one atomic increment. The map
     // we serialize is the exact one published by the latest mutator;
     // any `set` that lands after this clone will land on a new Arc and
