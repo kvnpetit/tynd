@@ -6,7 +6,7 @@
     "packages/lite/src/quickjs/**",
     "packages/core/scripts/**"
   ],
-  "ignoreDependencies": ["@tynd/core", "@biomejs/biome", "hookable", "std-env"],
+  "ignoreDependencies": ["@tynd/core", "@biomejs/biome"],
   "rules": {
     "types": "off"
   }

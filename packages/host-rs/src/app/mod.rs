@@ -4,6 +4,7 @@ use std::{
 };
 
 use serde_json::{json, Value};
+use smallvec::SmallVec;
 use tao::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
@@ -92,6 +93,15 @@ const YIELD_BATCH_MAX: usize = 64;
 /// How long the first buffered yield waits for siblings before flushing.
 /// Invisible to users (<1 frame) but cuts per-chunk overhead on bursty streams.
 const YIELD_FLUSH_MS: u64 = 10;
+
+/// Per-window yield bucket. Inline capacity of 8 covers the typical
+/// streaming burst between two `YIELD_FLUSH_MS` (10 ms) timer ticks: an LLM
+/// streaming at 50 tok/s lands ~1 chunk per tick, a fast log tail lands a
+/// handful, and only pathological bursts exhaust the inline storage and
+/// spill into a heap allocation. The bucket still caps at `YIELD_BATCH_MAX`
+/// (64) via the synchronous-flush branch, so even worst-case memory is
+/// bounded — `SmallVec` just removes the heap alloc from the common case.
+type YieldBucket = SmallVec<[(String, String); 8]>;
 
 /// A secondary (non-primary) window with its own WebView and state tracker.
 struct SecondaryEntry {
@@ -373,7 +383,14 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     // Tuples are `(call_id, wire_value_string)` — the wire value is already
     // devalue/JSON-encoded by the runtime that produced it; the webview
     // shim decodes once on receipt.
-    let mut yield_buffer: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    //
+    // Per-label bucket is a `SmallVec<[_; 8]>`: a typical streaming call
+    // flushes 1-8 chunks before the 10 ms timer fires, so the inline
+    // capacity covers the common case without a heap allocation. Beyond
+    // 8 the spill into heap is transparent (same `Deref<Target = [T]>`
+    // surface as `Vec`, so `eval_yield_batch(&pairs[..])` still works
+    // unchanged).
+    let mut yield_buffer: HashMap<String, YieldBucket> = HashMap::new();
     // Cache setZoom writes; wry has no getter.
     let mut zoom_levels: HashMap<String, f64> = HashMap::new();
     let mut hide_on_focus_lost: HashMap<String, bool> = HashMap::new();
@@ -998,7 +1015,13 @@ fn deep_link_scheme() -> Option<&'static str> {
 /// generators running forever on the backend.
 fn cancel_streams_for_label(label: &str, call_tx: &crossbeam_channel::Sender<BackendCall>) {
     let labels = dispatch::call_labels();
-    let orphaned: Vec<String> = labels
+    // Closing a window typically leaves 0-2 in-flight streaming calls (a
+    // chat completion, maybe a log tail). Inline-4 covers that without a
+    // heap allocation; the rare app that fans out beyond 4 streams per
+    // window spills to the heap transparently. `SmallVec` exposes the
+    // same `IntoIterator` impl as `Vec`, so the loop below stays
+    // identical.
+    let orphaned: SmallVec<[String; 4]> = labels
         .iter()
         .filter_map(|e| (e.value() == label).then(|| e.key().clone()))
         .collect();
@@ -1011,8 +1034,12 @@ fn cancel_streams_for_label(label: &str, call_tx: &crossbeam_channel::Sender<Bac
 /// Drain the yield buffer into one `evaluate_script` call per webview. Keeps
 /// per-stream FIFO order (each id's yields arrive together via
 /// `__tynd_yield_batch__` on the frontend shim).
+///
+/// `YieldBucket` derefs to `&[(String, String)]` so `eval_yield_batch` (which
+/// already takes a slice) accepts it unchanged regardless of whether the
+/// `SmallVec` lives inline or has spilled to the heap.
 fn flush_yields(
-    buffer: &mut HashMap<String, Vec<(String, String)>>,
+    buffer: &mut HashMap<String, YieldBucket>,
     primary: &WebView,
     secondaries: &HashMap<String, SecondaryEntry>,
 ) {

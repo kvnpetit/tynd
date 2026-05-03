@@ -30,6 +30,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+use bytes::{Bytes, BytesMut};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
@@ -345,7 +346,10 @@ fn download_and_verify(args: &Value) -> Result<Value, String> {
     let mut emitter = Progress::new(progress_id, "download", total);
     let mut reader = resp.into_reader();
     let mut buf = vec![0u8; 64 * 1024];
-    let mut bytes_accum: Vec<u8> = Vec::with_capacity(total.unwrap_or(0) as usize);
+    // Cap the pre-allocation at 8 MiB so a hostile/incorrect Content-Length
+    // can't make us reserve gigabytes up-front. `BytesMut` grows
+    // amortized-O(1) past the initial capacity.
+    let mut accum = BytesMut::with_capacity(total.unwrap_or(0).min(8 * 1024 * 1024) as usize);
     loop {
         let n = reader
             .read(&mut buf)
@@ -354,9 +358,15 @@ fn download_and_verify(args: &Value) -> Result<Value, String> {
             emitter.advance(0, true);
             break;
         }
-        bytes_accum.extend_from_slice(&buf[..n]);
+        accum.extend_from_slice(&buf[..n]);
         emitter.advance(n, false);
     }
+    // Freeze the mutable accumulator into an immutable, refcounted
+    // `Bytes`. The buffer is read three times below (Ed25519 verify,
+    // BLAKE3 hash, on-disk write) — `Bytes::clone()` would be an Arc
+    // inc rather than a memcpy if any of those were moved off-thread,
+    // and the deref-to-`&[u8]` is free for the inline reads here.
+    let bytes_accum: Bytes = accum.freeze();
 
     verifying_key
         .verify(&bytes_accum, &signature)
@@ -461,7 +471,12 @@ fn download_and_patch(args: &Value) -> Result<Value, String> {
     // payload. The bidiff format itself doesn't carry a size prefix, so
     // the cap has to live here.
     const MAX_PATCH_BYTES: usize = 256 * 1024 * 1024;
-    let mut patch_bytes: Vec<u8> = Vec::with_capacity(total.unwrap_or(0) as usize);
+    // Same `BytesMut` → `freeze()` pattern as `download_and_verify`: the
+    // patch is read multiple times below (Ed25519 verify, optional
+    // BLAKE3, decompress) so the refcounted `Bytes` keeps any future
+    // off-thread fan-out cheap.
+    let mut patch_accum =
+        BytesMut::with_capacity(total.unwrap_or(0).min(8 * 1024 * 1024) as usize);
     loop {
         let n = reader
             .read(&mut buf)
@@ -470,14 +485,15 @@ fn download_and_patch(args: &Value) -> Result<Value, String> {
             emitter.advance(0, true);
             break;
         }
-        patch_bytes.extend_from_slice(&buf[..n]);
-        if patch_bytes.len() > MAX_PATCH_BYTES {
+        patch_accum.extend_from_slice(&buf[..n]);
+        if patch_accum.len() > MAX_PATCH_BYTES {
             return Err(format!(
                 "updater.downloadAndPatch: patch exceeds {MAX_PATCH_BYTES} byte safety cap; refusing"
             ));
         }
         emitter.advance(n, false);
     }
+    let patch_bytes: Bytes = patch_accum.freeze();
 
     // ---- 2) Verify patch signature + (optional) BLAKE3 --------------
     verifying_key
@@ -497,10 +513,16 @@ fn download_and_patch(args: &Value) -> Result<Value, String> {
     emitter.emit_phase("verified-patch");
 
     // ---- 3) Decompress (if needed) ---------------------------------
+    // `zstd::decode_all` and the no-compression branch both yield byte
+    // buffers consumed by the same `bipatch::Reader::new(Cursor::new(&...))`
+    // below. We materialize as `Vec<u8>` because `bipatch` reads via a
+    // `Cursor<&[u8]>` either way — for the `"none"` branch this is one
+    // memcpy out of `Bytes` to drop refcounted state before the
+    // long-running patch apply.
     let patch_payload: Vec<u8> = match compression {
         "zstd" => zstd::decode_all(&patch_bytes[..])
             .map_err(|e| format!("updater.downloadAndPatch: zstd decode: {e}"))?,
-        "none" => patch_bytes.clone(),
+        "none" => patch_bytes.to_vec(),
         other => {
             return Err(format!(
                 "updater.downloadAndPatch: unknown compression '{other}'; expected 'zstd' or 'none'"

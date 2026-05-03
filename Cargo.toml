@@ -103,9 +103,9 @@ interprocess = "2.2"
 # Windows-only code paths ever need it.
 winreg = "0.52"
 
-# FS watcher (ReadDirectoryChangesW on Windows, FSEvents on macOS, inotify
-# on Linux) + global hotkey manager for system-wide shortcuts.
-notify        = "6.1"
+# FS watcher: consumed exclusively through `notify_debouncer_full::notify::*`,
+# so the standalone `notify` crate is not declared here. Keep the global
+# hotkey manager for system-wide shortcuts.
 global-hotkey = "0.5"
 # Cross-platform recycle bin (IShellItem on Windows, NSFileManager trashItemAtURL
 # on macOS, freedesktop.org Trash Spec on Linux).
@@ -252,23 +252,10 @@ notify-debouncer-full = "0.7"
 # `@tynd/core/client` — no manual `.d.ts` drift between Rust IPC commands
 # and the typed JS proxy.
 specta = { version = "2.0.0-rc.22", features = [ "derive" ] }
-specta-typescript = "0.0.11"
-# Alias for the underscore-named crate that sibling plugin path-deps
-# (`plugins/*/native`) declare as `specta_typescript = { workspace = true }`.
-# Cargo treats `specta_typescript` and `specta-typescript` as distinct names;
-# this entry resolves the underscore lookup to the same upstream crate via
-# the explicit `package = "..."` rename so the plugin workspace and the
-# tynd workspace stay coherent.
-specta_typescript = { package = "specta-typescript", version = "0.0.11" }
 
 # UTF-8-guaranteed paths. Used at the IPC boundary to eliminate
 # `.to_string_lossy()` data loss and OsStr footguns on Windows.
 camino = { version = "1.1", features = [ "serde1" ] }
-
-# Diagnostic-grade error reporter (rustc-style source spans + labels +
-# help URLs) for user-facing CLI / bundler / config errors. Compatible
-# with `anyhow` via `.into_diagnostic()`. Internals stay on anyhow.
-miette = { version = "7", features = [ "fancy" ] }
 
 # Safely embed serde values into JS template literals — closes XSS
 # surface in webview init scripts. Drop-in for `format!`-based injection.
@@ -282,24 +269,6 @@ window-vibrancy = "0.5"
 # direct invocations get entitlements (microphone, accessibility, ...)
 # prompts on macOS. Build-time linker-section helper.
 embed_plist = "1.2"
-
-# Pure-Rust `.icns` encoder — generates macOS icon bundles without the
-# `iconutil` shell-out, so Linux/Windows runners can cross-build.
-tauri-icns = "0.1"
-
-# Recursive directory traversal — bundler asset staging, plugin
-# discovery, dev-server file scans. Faster + cleaner than ad-hoc
-# `read_dir` recursion.
-walkdir = "2"
-
-# Modern ZIP read/write — `.app` archives, MSIX assembly, plugin
-# packages. Replaces shell-outs to the `zip` CLI.
-zip = "2.2"
-
-# Pure-Rust PE / ELF / Mach-O parser. Pre-flight notarization
-# (LC_CODE_SIGNATURE), universal-binary inspection, dependency rewriting.
-# Replaces `otool` / `dumpbin` shell-outs.
-goblin = "0.8"
 
 # RFC-compliant `data:` URL parser — custom-scheme handler receives data
 # URLs from the WebView (image previews, paste, drag-drop). Replaces
@@ -360,7 +329,7 @@ if-addrs = "0.13"
 # send `SIGTERM` / `SIGINT` / `SIGHUP` etc. — `Child::kill()` only
 # exposes the SIGKILL escalator. Workspace-pinned so the version stays
 # coherent if any future `cfg(unix)` consumer wants the same crate.
-nix = { version = "0.29", default-features = false, features = [ "signal" ] }
+nix = { version = "0.30", default-features = false, features = [ "signal" ] }
 
 # Screenshot écran/window — Tauri n'a PAS ça nativement, gain feature
 # différenciant pour les apps de capture / annotation / partage écran.
@@ -391,12 +360,6 @@ human-panic = "2"
 # (Linux fprintd) cross-platform. Pour `auth.requestBiometric()`.
 robius-authentication = "0.1"
 
-# === Plugins manquants vs Tauri v2 ===
-
-# Multipart uploads chunked avec progress — backing pour
-# `http.upload(file, { onProgress })` côté API publique.
-multer = "3"
-
 # === Optionnel ===
 
 # SIMD base64 pour fallback du binary IPC quand un payload doit
@@ -421,12 +384,11 @@ proptest = "1"
 #
 # OpenTelemetry traces export via OTLP (gRPC). Pulled only when the
 # consumer enables the `obs-otel` feature on `tynd-host`. Pinned to the
-# 0.27 line so the API surface (`new_exporter().tonic()` /
-# `new_pipeline().tracing().install_batch(...)`) stays stable across
-# bumps; `tracing-opentelemetry` tracks `opentelemetry` by one minor.
-opentelemetry         = { version = "0.27", default-features = false, features = [ "trace" ] }
-opentelemetry_sdk     = { version = "0.27", default-features = false, features = [ "trace", "rt-tokio" ] }
-opentelemetry-otlp    = { version = "0.27", default-features = false, features = [ "trace", "grpc-tonic" ] }
+# 0.28 line so it tracks `tracing-opentelemetry` exactly (one-to-one
+# version coupling — `tracing-otel 0.28` requires `opentelemetry 0.28`).
+opentelemetry         = { version = "0.28", default-features = false, features = [ "trace" ] }
+opentelemetry_sdk     = { version = "0.28", default-features = false, features = [ "trace", "rt-tokio" ] }
+opentelemetry-otlp    = { version = "0.28", default-features = false, features = [ "trace", "grpc-tonic" ] }
 tracing-opentelemetry = { version = "0.28", default-features = false, features = [ "tracing-log" ] }
 
 # Sentry crash reporter — paired with the tracing panic hook so user

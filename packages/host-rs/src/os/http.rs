@@ -5,6 +5,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+use bytes::{Bytes, BytesMut};
 use serde_json::{json, Value};
 
 use super::events;
@@ -162,7 +163,15 @@ fn request(args: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .unwrap_or("text");
 
-    let mut buf = Vec::new();
+    // Accumulate the response body in a `BytesMut` so we get amortized
+    // power-of-two growth backed by a single allocation, then `freeze()`
+    // it into an immutable `Bytes`. The downstream encode/parse calls
+    // (base64 / JSON / UTF-8) all consume `&[u8]` which `Bytes` derefs
+    // to — no extra copy. If a future code path wants to fan the
+    // response out (e.g. emit it on the event bus *and* return it from
+    // the call), `Bytes::clone()` is an Arc inc instead of a memcpy of
+    // the whole body.
+    let mut buf = BytesMut::with_capacity(total.unwrap_or(0).min(8 * 1024 * 1024) as usize);
     let mut reader = resp.into_reader().take(100 * 1024 * 1024);
     let mut emitter = ProgressEmitter::new(progress_id, "download", total);
     let mut chunk = vec![0u8; 64 * 1024];
@@ -177,6 +186,7 @@ fn request(args: &Value) -> Result<Value, String> {
         buf.extend_from_slice(&chunk[..n]);
         emitter.advance(n, false);
     }
+    let buf: Bytes = buf.freeze();
 
     let body = match response_type {
         "binary" => Value::String(STANDARD.encode(&buf)),

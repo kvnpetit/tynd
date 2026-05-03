@@ -80,13 +80,12 @@ sys-locale.workspace = true
 
 # Always-on perf primitives + tauri ecosystem standalone.
 # `bytes` / `smallvec` are used throughout the IPC + scheme handlers
-# (zero-copy buffers, stack-allocated arg vecs). `rkyv` powers the
-# binary IPC format on the host↔plugin and host↔Bun edges. `tauri-utils`
-# gives us platform helpers, CSP injection, and the ACL/capabilities
-# manifest format without pulling the `tauri` runtime.
+# (zero-copy buffers, stack-allocated arg vecs). `tauri-utils` gives us
+# platform helpers, CSP injection, and the ACL/capabilities manifest
+# format without pulling the `tauri` runtime. `rkyv` is wired through
+# the rkyv-vs-serde benches only — moved to `[dev-dependencies]`.
 bytes.workspace       = true
 smallvec.workspace    = true
-rkyv.workspace        = true
 tauri-utils.workspace = true
 
 # Optional — pulled only when their matching `api-*` feature is enabled.
@@ -120,7 +119,6 @@ xcap                  = { workspace = true, optional = true }
 battery               = { workspace = true, optional = true }
 cocoon                = { workspace = true, optional = true }
 robius-authentication = { workspace = true, optional = true }
-multer                = { workspace = true, optional = true }
 # Memory wiping for vault password buffers. Tied to api-vault below.
 zeroize               = { workspace = true, optional = true }
 
@@ -198,9 +196,7 @@ api-clipboard       = [ "dep:arboard" ]
 api-compute         = [  ]
 api-dialog          = [ "dep:rfd" ]
 api-fs              = [ "dep:notify-debouncer-full", "dep:trash" ]
-# api-http now bundles multipart upload — `multer` parses streamed bodies
-# with progress callbacks for the `http.upload()` JS API.
-api-http            = [ "dep:ureq", "dep:multer" ]
+api-http            = [ "dep:ureq" ]
 api-keyring         = [ "dep:keyring" ]
 api-log             = [  ]
 api-network         = [ "dep:if-addrs" ]
@@ -209,9 +205,11 @@ api-power           = [ "dep:user-idle", "dep:battery", "power-events-mac", "pow
 # Internal helper sub-features — let the per-target dep tables flip the
 # matching crates on without leaking them on the wrong OS. `Cargo` skips
 # `target.'cfg(...)'.dependencies` entries automatically when their
-# `optional = true` deps aren't enabled, so `dep:objc2` / `dep:zbus`
-# resolve to no-ops on Windows / Linux respectively.
-power-events-mac    = [ "dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:block2" ]
+# `optional = true` deps aren't enabled, so `dep:zbus` resolves to a
+# no-op on Windows / Linux respectively. `objc2` itself is not pulled
+# directly — `objc2-app-kit` already re-exports the umbrella `objc2`
+# crate as `objc2_app_kit::objc2`, so we save one optional-dep entry.
+power-events-mac    = [ "dep:objc2-foundation", "dep:objc2-app-kit", "dep:block2" ]
 power-events-linux  = [ "dep:zbus" ]
 api-process         = [  ]
 api-screenshot      = [ "dep:xcap" ]
@@ -305,7 +303,8 @@ mac-notification-sys = { workspace = true, optional = true }
 # NSWorkspace.notificationCenter observers for the `os::power` watcher
 # (sleep/wake + session active/inactive). Only pulled with `api-power`
 # so non-power builds stay free of objc2-app-kit's generated bindings.
-objc2 = { version = "0.6", optional = true }
+# The umbrella `objc2` crate is reached via `objc2_app_kit::objc2` /
+# `objc2_foundation::objc2`, so we don't declare it directly.
 objc2-foundation = { version = "0.3", default-features = false, features = [ "std", "NSString", "NSNotification", "NSOperation", "block2" ], optional = true }
 objc2-app-kit = { version = "0.3", default-features = false, features = [ "std", "NSWorkspace" ], optional = true }
 block2 = { version = "0.6", optional = true }
@@ -324,6 +323,12 @@ proptest = { workspace = true }
 # feed it through the same `bipatch::Reader` the production code uses.
 # `enc` feature pulls the `simple_diff` writer.
 bidiff = { workspace = true, features = [ "enc" ] }
+# Zero-copy binary serialization — the rkyv-vs-serde benches under
+# `benches/ipc_rkyv_vs_serde.rs` are the only consumers right now.
+# Promoted out of the always-on graph so default builds don't pay the
+# bytecheck/munge cost; flip back to `[dependencies]` when wired into
+# host↔plugin or host↔Bun edges.
+rkyv = { workspace = true }
 
 # `harness = false` lets criterion's own runner take over from libtest,
 # which is what gives us the criterion HTML reports + per-bench

@@ -29,6 +29,7 @@
 
 use std::{borrow::Cow, collections::HashMap};
 
+use bytes::Bytes;
 use wry::{
     http::{Request, Response, StatusCode},
     RequestAsyncResponder,
@@ -39,6 +40,21 @@ use crate::os::call_pool;
 use crate::os::compute;
 
 type BinResponse = Response<Cow<'static, [u8]>>;
+
+/// Wrap `Bytes` into the `Cow<'static, [u8]>` shape wry currently demands at
+/// the custom-protocol boundary. Internally the bytes ride through the
+/// pipeline as a refcounted `Bytes` (so any future fan-out — multi-webview
+/// broadcast, post-process pipeline — clones an `Arc` inc instead of memcpy
+/// of the whole payload). The final `to_vec()` is the unavoidable conversion
+/// to wry's API; if/when wry accepts `Bytes` directly the win cascades to the
+/// frontier with no further changes here.
+#[cfg_attr(
+    not(any(feature = "api-fs", feature = "api-compute")),
+    allow(dead_code)
+)]
+fn body_from_bytes(b: Bytes) -> Cow<'static, [u8]> {
+    Cow::Owned(b.to_vec())
+}
 
 /// Async entry point invoked by wry's custom-protocol callback. Parses the
 /// route off the UI thread and hands the work to `call_pool` so we never
@@ -107,7 +123,12 @@ fn route_read_binary(query: &HashMap<String, String>) -> BinResponse {
         Err(e) => return err_response(StatusCode::FORBIDDEN, e),
     };
     match dir.read(&rel) {
-        Ok(bytes) => ok_bytes(bytes),
+        // Wrap the freshly-read Vec in `Bytes` so the response pipeline
+        // holds a refcounted handle. Today there's a single subscriber
+        // (the wry response), but the type is now ready for fan-out
+        // (multi-webview broadcast, future post-process tap) without a
+        // memcpy: `Bytes::clone()` is an Arc inc.
+        Ok(bytes) => ok_bytes(Bytes::from(bytes)),
         Err(e) => err_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("fs.readBinary({path}): {e}"),
@@ -159,24 +180,33 @@ fn route_compute_hash(query: &HashMap<String, String>, body: &[u8]) -> BinRespon
     let encoding = query.get("encoding").map_or("hex", String::as_str);
     match compute::hash_raw(body, algo, encoding) {
         Ok(s) => {
+            // Hex/base64 digest is small (<= 128 B) but we still go through
+            // `Bytes` so the response-building path stays uniform with the
+            // binary-payload routes above.
+            let payload = Bytes::from(s.into_bytes());
             let mut rsp = Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "text/plain; charset=utf-8");
             rsp = cache_headers(rsp);
-            rsp.body(Cow::Owned(s.into_bytes())).unwrap()
+            rsp.body(body_from_bytes(payload)).unwrap()
         },
         Err(e) => err_response(StatusCode::BAD_REQUEST, e),
     }
 }
 
 #[cfg(feature = "api-fs")]
-fn ok_bytes(bytes: Vec<u8>) -> BinResponse {
+fn ok_bytes(bytes: Bytes) -> BinResponse {
     let mut rsp = Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/octet-stream")
         .header("Content-Length", bytes.len().to_string());
     rsp = cache_headers(rsp);
-    rsp.body(Cow::Owned(bytes)).unwrap()
+    // `body_from_bytes` is the single conversion point to wry's
+    // `Cow<'static, [u8]>` API. Internal callers pass `Bytes` so the
+    // refcounted buffer flows through any future fan-out (multi-webview
+    // broadcast, post-process tap) without a memcpy — the `to_vec()` is
+    // the single, final, unavoidable conversion at the wry frontier.
+    rsp.body(body_from_bytes(bytes)).unwrap()
 }
 
 #[cfg(feature = "api-fs")]
