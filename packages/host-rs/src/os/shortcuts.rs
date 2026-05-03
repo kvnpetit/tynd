@@ -20,7 +20,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 use super::events;
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
 /// Outer `OnceLock` caches the init outcome — success or the error string —
 /// so the atomic `get_or_init` guarantees exactly one `GlobalHotKeyManager`
@@ -38,13 +38,36 @@ static ID_MAP: LazyLock<DashMap<u32, String>> = LazyLock::new(DashMap::new);
 static HOTKEYS: LazyLock<DashMap<String, HotKey>> = LazyLock::new(DashMap::new);
 static HANDLER_INSTALLED: AtomicBool = AtomicBool::new(false);
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "register" => register(args),
-        "unregister" => unregister(args),
-        "unregisterAll" => unregister_all(),
-        "isRegistered" => Ok(Value::Bool(is_registered(args))),
-        _ => Err(IpcError::unknown_method("shortcuts", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — hotkey state
+/// lives in the file-level `MANAGER` / `ID_MAP` / `HOTKEYS` statics.
+#[derive(Debug, Default)]
+pub struct ShortcutsApi;
+
+#[tynd::handler(api = "shortcuts")]
+impl ShortcutsApi {
+    /// Register `accelerator` (e.g. `"Ctrl+Shift+P"`) under `id`
+    /// (defaults to the accelerator string). Returns `{ id }` —
+    /// listeners on `shortcut:triggered` filter by it.
+    pub fn register(accelerator: String, id: Option<String>) -> Result<Value, String> {
+        register_impl(accelerator, id)
+    }
+
+    /// Unregister the hotkey with the given `id`. Returns `true`
+    /// when an entry was removed, `false` when no matching id was
+    /// registered.
+    pub fn unregister(id: String) -> Result<bool, String> {
+        unregister_impl(&id)
+    }
+
+    /// Unregister every hotkey currently held. Returns null on
+    /// success; surfaces the first per-id failure if any occurred.
+    pub fn unregister_all() -> Result<(), String> {
+        unregister_all_impl()
+    }
+
+    /// True when `id` is currently registered.
+    pub fn is_registered(id: String) -> bool {
+        HOTKEYS.contains_key(&id)
     }
 }
 
@@ -79,18 +102,8 @@ fn ensure_handler() {
     ));
 }
 
-fn register(args: &Value) -> Result<Value, String> {
-    let accel = args
-        .get("accelerator")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            String::from(IpcError::missing_arg("shortcuts", "register", "accelerator"))
-        })?
-        .to_string();
-    let user_id = args
-        .get("id")
-        .and_then(Value::as_str)
-        .map_or_else(|| accel.clone(), str::to_string);
+fn register_impl(accel: String, id: Option<String>) -> Result<Value, String> {
+    let user_id = id.unwrap_or_else(|| accel.clone());
 
     if HOTKEYS.contains_key(&user_id) {
         return Err(IpcError::new(
@@ -117,38 +130,24 @@ fn register(args: &Value) -> Result<Value, String> {
     Ok(json!({ "id": user_id }))
 }
 
-fn unregister(args: &Value) -> Result<Value, String> {
-    // The TS client passes the bare id string (not an object) on this path.
-    let user_id = args
-        .as_str()
-        .map(str::to_string)
-        .or_else(|| args.get("id").and_then(Value::as_str).map(str::to_string))
-        .ok_or_else(|| String::from(IpcError::missing_arg("shortcuts", "unregister", "id")))?;
-
-    let Some((_, hotkey)) = HOTKEYS.remove(&user_id) else {
-        return Ok(Value::Bool(false));
+fn unregister_impl(user_id: &str) -> Result<bool, String> {
+    let Some((_, hotkey)) = HOTKEYS.remove(user_id) else {
+        return Ok(false);
     };
     ID_MAP.remove(&hotkey.id());
     manager()?.lock().unregister(hotkey).map_err(|e| {
         IpcError::new("shortcuts", "unregister", format!("({user_id}): {e}")).into_string()
     })?;
-    Ok(Value::Bool(true))
+    Ok(true)
 }
 
-fn unregister_all() -> Result<Value, String> {
+fn unregister_all_impl() -> Result<(), String> {
     let ids: Vec<String> = HOTKEYS.iter().map(|e| e.key().clone()).collect();
     let mut err: Option<String> = None;
     for id in &ids {
-        if let Err(e) = unregister(&Value::String(id.clone())) {
+        if let Err(e) = unregister_impl(id) {
             err.get_or_insert(e);
         }
     }
-    err.map_or(Ok(Value::Null), Err)
-}
-
-fn is_registered(args: &Value) -> bool {
-    args.as_str()
-        .map(str::to_string)
-        .or_else(|| args.get("id").and_then(Value::as_str).map(str::to_string))
-        .is_some_and(|id| HOTKEYS.contains_key(&id))
+    err.map_or(Ok(()), Err)
 }

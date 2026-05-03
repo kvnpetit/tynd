@@ -12,6 +12,18 @@
 //! to `crossbeam_channel` to match the shared `Sessions<C>` helper —
 //! the HTTP-side `JsMsg` channel back to QuickJS stays on `mpsc` (the
 //! rquickjs runtime expects that exact type).
+//!
+//! M1 (ureq 3 migration):
+//!   * `AgentBuilder::new()` → `Agent::config_builder().build().new_agent()`
+//!   * `agent.request(method, url)` is gone; we hand-build an
+//!     `http::Request` and run it through `agent.run(...)` so the
+//!     verb (chosen at runtime by the JS caller) stays dynamic.
+//!   * Status-based error handling collapsed: ureq 3 has no
+//!     `Error::Status(code, response)` variant — instead we set
+//!     `http_status_as_error(false)` on the agent so 4xx/5xx flow
+//!     through the normal `Ok(response)` path, then forward to the
+//!     JS layer like before. The semantics match the 2.x code's
+//!     "error-status responses are still iterable" branch.
 
 use std::{
     collections::HashMap,
@@ -106,51 +118,76 @@ fn run_fetch(
         Err(e) => return end_error(id, format!("invalid fetch opts: {e}"), js_tx),
     };
 
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_millis(DEFAULT_TIMEOUT_MS))
-        .build();
+    // ureq 3: `http_status_as_error(false)` keeps 4xx/5xx out of the
+    // `Err` arm so the polyfill can forward an error status response
+    // body the same way it forwards a 2xx — `fetch()`'s contract is
+    // that non-2xx responses are still iterable.
+    let agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(Duration::from_millis(DEFAULT_TIMEOUT_MS)))
+        .build()
+        .new_agent();
 
-    let mut req = agent.request(&opts.method, url);
+    // Build the request through the `http` crate so the verb stays
+    // dynamic — ureq 3's typed `agent.get/post/...` shadow it at
+    // compile time.
+    let mut http_builder = ureq::http::Request::builder()
+        .method(opts.method.as_str())
+        .uri(url);
     for (k, v) in &opts.headers {
-        req = req.set(k, v);
+        http_builder = http_builder.header(k, v);
     }
 
-    let res = if opts.body_b64.is_empty() {
-        req.call()
+    let body_bytes = if opts.body_b64.is_empty() {
+        Vec::new()
     } else {
-        let body_bytes = match STANDARD.decode(opts.body_b64.as_bytes()) {
+        match STANDARD.decode(opts.body_b64.as_bytes()) {
             Ok(b) => b,
             Err(e) => return end_error(id, format!("invalid body base64: {e}"), js_tx),
-        };
-        req.send_bytes(&body_bytes)
+        }
     };
 
-    let response = match res {
+    let req_result = if body_bytes.is_empty() {
+        http_builder.body(ureq::SendBody::none())
+    } else {
+        http_builder.body(ureq::SendBody::from_owned_reader(std::io::Cursor::new(
+            body_bytes,
+        )))
+    };
+    let req = match req_result {
         Ok(r) => r,
-        Err(ureq::Error::Status(code, r)) => {
-            // Error-status responses are still iterable — forward like a normal response.
-            deliver_response(id, code, r, cmd_rx, js_tx);
-            return;
-        },
+        Err(e) => return end_error(id, format!("invalid request: {e}"), js_tx),
+    };
+
+    let response = match agent.run(req) {
+        Ok(r) => r,
+        // ureq 3 collapses the 2.x `Status(code, resp)` variant into
+        // the normal Ok path (because we set http_status_as_error =
+        // false above). Anything that lands here is a real network /
+        // protocol error.
         Err(e) => return end_error(id, format!("network: {e}"), js_tx),
     };
 
-    let status = response.status();
+    let status = response.status().as_u16();
     deliver_response(id, status, response, cmd_rx, js_tx);
 }
 
 fn deliver_response(
     id: &str,
     status: u16,
-    response: ureq::Response,
+    mut response: ureq::http::Response<ureq::Body>,
     cmd_rx: &crossbeam_channel::Receiver<Cmd>,
     js_tx: &mpsc::Sender<JsMsg>,
 ) {
-    let status_text = response.status_text().to_string();
+    let status_text = response
+        .status()
+        .canonical_reason()
+        .unwrap_or("")
+        .to_string();
     let mut headers = serde_json::Map::new();
-    for name in response.headers_names() {
-        if let Some(v) = response.header(&name) {
-            headers.insert(name.to_lowercase(), Value::String(v.to_string()));
+    for (name, value) in response.headers() {
+        if let Ok(v) = value.to_str() {
+            headers.insert(name.as_str().to_lowercase(), Value::String(v.to_string()));
         }
     }
 
@@ -165,7 +202,7 @@ fn deliver_response(
         }),
     );
 
-    let mut reader = response.into_reader();
+    let mut reader = response.body_mut().as_reader();
     let mut buf = [0u8; CHUNK];
     loop {
         // Abort is signalled via `Sessions::send(id, Cmd::Abort)` from

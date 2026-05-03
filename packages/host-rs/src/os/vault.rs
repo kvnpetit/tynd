@@ -23,6 +23,44 @@ use zeroize::Zeroizing;
 
 use crate::ipc_error::IpcError;
 
+mod inner {
+    use super::{delete_impl, exists_impl, read_impl, write_impl};
+    use crate::tynd;
+    use serde_json::Value;
+
+    /// Marker for the `#[tynd::handler]` dispatch table.
+    #[derive(Debug, Default)]
+    pub struct VaultApi;
+
+    #[tynd::handler(api = "vault")]
+    impl VaultApi {
+        /// Decrypt and read the vault file at `path` using `password`.
+        /// Returns `{ data: <base64> }`.
+        pub fn read(path: String, password: String) -> Result<Value, String> {
+            read_impl(&path, &password)
+        }
+
+        /// Encrypt `data` (base64) with `password` and atomically
+        /// write it to `path`. Creates parent directories as needed.
+        pub fn write(path: String, password: String, data: Value) -> Result<Value, String> {
+            write_impl(&path, &password, &data)
+        }
+
+        /// Check whether the vault file at `path` exists on disk.
+        pub fn exists(path: String) -> Result<bool, String> {
+            exists_impl(&path)
+        }
+
+        /// Delete the vault file at `path`. Idempotent — succeeds when
+        /// the file is already absent.
+        pub fn delete(path: String) -> Result<Value, String> {
+            delete_impl(&path)
+        }
+    }
+}
+
+/// Public dispatch wrapper — interposes the ACL gate before delegating
+/// to the macro-generated table inside [`inner`].
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     // W3.2 — ACL gate (additive on top of `security::check_fs`).
     // The `acl::Authority` is "fail open" until an admin loads at least
@@ -37,46 +75,44 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             return Err(IpcError::new("vault", method, "permission denied by ACL").into_string());
         }
     }
-    match method {
-        "read" => read(args),
-        "write" => write(args),
-        "exists" => exists(args),
-        "delete" => delete(args),
-        _ => Err(IpcError::unknown_method("vault", method).into_string()),
-    }
+    inner::dispatch(method, args)
 }
 
-fn path_arg(args: &Value) -> Result<PathBuf, String> {
-    let s = args
-        .get("path")
-        .and_then(Value::as_str)
-        .ok_or_else(|| String::from(IpcError::missing_arg("vault", "*", "path")))?;
+fn check_path(s: &str) -> Result<PathBuf, String> {
     super::security::check_fs(s)?;
     Ok(PathBuf::from(s))
 }
 
-/// Take a password string out of the JSON args and place it into a
-/// `Zeroizing` buffer so the bytes are wiped from memory the moment the
-/// buffer goes out of scope. `Vec::drop` only releases the heap
-/// allocation — it doesn't scrub the page, so a future allocator
-/// handing the same memory back can leak the cleartext. The original
-/// `serde_json::Value` still owns a copy until it's dropped at the
-/// dispatch layer (outside our control), but that bounds the residency
-/// window for our copy.
-fn take_password(args: &Value) -> Result<Zeroizing<Vec<u8>>, String> {
-    let p = args
-        .get("password")
-        .and_then(Value::as_str)
-        .ok_or_else(|| String::from(IpcError::missing_arg("vault", "*", "password")))?;
+/// Wrap a password string into a `Zeroizing` buffer so the bytes are
+/// wiped from memory the moment the buffer goes out of scope.
+/// `Vec::drop` only releases the heap allocation — it doesn't scrub
+/// the page, so a future allocator handing the same memory back can
+/// leak the cleartext. The original `serde_json::Value` still owns a
+/// copy until it's dropped at the dispatch layer (outside our
+/// control), but that bounds the residency window for our copy.
+fn take_password(p: &str) -> Result<Zeroizing<Vec<u8>>, String> {
     if p.is_empty() {
         return Err(IpcError::new("vault", "*", "'password' must not be empty").into_string());
     }
     Ok(Zeroizing::new(p.as_bytes().to_vec()))
 }
 
-fn read(args: &Value) -> Result<Value, String> {
-    let path = path_arg(args)?;
-    let password = take_password(args)?;
+// Back-compat shim retained for the test suite — the
+// `take_password_*` tests pass a raw `Value` to keep their assertions
+// readable. Pulls the field out, then forwards to the slice-taking
+// helper above.
+#[cfg(test)]
+fn take_password_from_value(args: &Value) -> Result<Zeroizing<Vec<u8>>, String> {
+    let p = args
+        .get("password")
+        .and_then(Value::as_str)
+        .ok_or_else(|| String::from(IpcError::missing_arg("vault", "*", "password")))?;
+    take_password(p)
+}
+
+fn read_impl(path_str: &str, password_str: &str) -> Result<Value, String> {
+    let path = check_path(path_str)?;
+    let password = take_password(password_str)?;
 
     let mut file =
         File::open(&path).map_err(|e| IpcError::new("vault", "read", e).into_string())?;
@@ -96,18 +132,18 @@ fn read(args: &Value) -> Result<Value, String> {
     }))
 }
 
-fn write(args: &Value) -> Result<Value, String> {
-    let path = path_arg(args)?;
-    let password = take_password(args)?;
+fn write_impl(path_str: &str, password_str: &str, data: &Value) -> Result<Value, String> {
+    let path = check_path(path_str)?;
+    let password = take_password(password_str)?;
 
     // Accept either a base64 string or a JSON array of byte values for
     // small payloads. Base64 is the canonical form (matches `read()`'s
     // return shape and what the JS API gives us by default).
-    let data_bytes: Vec<u8> = match args.get("data") {
-        Some(Value::String(b64)) => STANDARD.decode(b64.as_bytes()).map_err(|e| {
+    let data_bytes: Vec<u8> = match data {
+        Value::String(b64) => STANDARD.decode(b64.as_bytes()).map_err(|e| {
             IpcError::new("vault", "write", format!("base64 decode: {e}")).into_string()
         })?,
-        Some(Value::Array(arr)) => arr
+        Value::Array(arr) => arr
             .iter()
             .map(|v| {
                 v.as_u64().and_then(|n| u8::try_from(n).ok()).ok_or_else(|| {
@@ -159,13 +195,13 @@ fn write(args: &Value) -> Result<Value, String> {
     Ok(json!({}))
 }
 
-fn exists(args: &Value) -> Result<Value, String> {
-    let path = path_arg(args)?;
-    Ok(Value::Bool(path.exists()))
+fn exists_impl(path_str: &str) -> Result<bool, String> {
+    let path = check_path(path_str)?;
+    Ok(path.exists())
 }
 
-fn delete(args: &Value) -> Result<Value, String> {
-    let path = path_arg(args)?;
+fn delete_impl(path_str: &str) -> Result<Value, String> {
+    let path = check_path(path_str)?;
     match fs::remove_file(&path) {
         Ok(()) => Ok(json!({})),
         // ENOENT = idempotent success — caller asked for "gone" and it's gone.
@@ -185,14 +221,14 @@ mod tests {
     fn take_password_returns_zeroizing_buffer() {
         // Sanity: take_password must produce a Zeroizing buffer with the
         // exact bytes of the input password.
-        let pwd = take_password(&json!({ "password": "hunter2" })).unwrap();
+        let pwd = take_password_from_value(&json!({ "password": "hunter2" })).unwrap();
         assert_eq!(pwd.as_slice(), b"hunter2");
     }
 
     #[test]
     fn take_password_rejects_missing_and_empty() {
-        assert!(take_password(&json!({})).is_err());
-        assert!(take_password(&json!({ "password": "" })).is_err());
+        assert!(take_password_from_value(&json!({})).is_err());
+        assert!(take_password_from_value(&json!({ "password": "" })).is_err());
     }
 
     // -----------------------------------------------------------------

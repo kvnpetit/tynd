@@ -19,22 +19,43 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
-pub fn dispatch(method: &str, _args: &Value) -> Result<Value, String> {
-    match method {
-        "getIdleTime" => Ok(json!({ "seconds": idle_seconds()? })),
-        "getPowerStatus" => Ok(power_status()),
-        "battery" => battery_info(),
-        // Idempotent — repeat calls return success without re-installing the
-        // platform listener. Lets the TS client subscribe lazily on the first
-        // `onSuspend` / `onLock` call without coordinating with sibling
-        // subscriptions.
-        "subscribePowerEvents" => {
-            ensure_power_monitor();
-            Ok(Value::Null)
-        },
-        _ => Err(IpcError::unknown_method("power", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — power state lives
+/// in the file-level `MONITOR_INSTALLED` OnceLock plus the per-OS
+/// backend modules below.
+#[derive(Debug, Default)]
+pub struct PowerApi;
+
+#[tynd::handler(api = "power")]
+impl PowerApi {
+    /// Seconds since the user's last input event (mouse / keyboard).
+    /// Wrapped in `{ "seconds": u64 }` to leave room for adding fields
+    /// (e.g. per-input-source breakdown) without breaking the wire shape.
+    pub fn get_idle_time() -> Result<Value, String> {
+        Ok(json!({ "seconds": idle_seconds()? }))
+    }
+
+    /// Best-effort battery + AC summary. Fields default to `null`
+    /// when the OS doesn't expose them (notably macOS until the IOKit
+    /// path lands).
+    pub fn get_power_status() -> Value {
+        power_status()
+    }
+
+    /// Detailed battery info — capacity / health / time-remaining.
+    /// Errors when no battery is detected.
+    pub fn battery() -> Result<Value, String> {
+        battery_info()
+    }
+
+    /// Install the OS-specific power-event watcher. Idempotent —
+    /// repeat calls return immediately without spawning a second
+    /// thread. After this returns, listeners on `power:suspend`,
+    /// `power:resume`, `power:lock`, `power:unlock` start receiving
+    /// events.
+    pub fn subscribe_power_events() {
+        ensure_power_monitor();
     }
 }
 

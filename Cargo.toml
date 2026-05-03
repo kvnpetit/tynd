@@ -102,14 +102,22 @@ rquickjs = { version = "0.11.0", features = [ "full" ] }
 
 # HTTP + binary encoding. `json` dropped — we parse via serde_json directly.
 #
-# NOTE: ureq 3 migration is deferred — the typestate split
-# (`RequestBuilder<WithBody>` vs `RequestBuilder<WithoutBody>`) +
-# `Agent::config_builder()` + the `Body`/`SendBody` API churn touches
-# every call site in `os::http`, `os::updater`, and the lite-runtime
-# `polyfills::fetch` bridge. Concurrent edits in those files made the
-# in-place migration unsafe; the bump is staged for a follow-up sprint
-# with a single-author refactor pass. Kept on 2.x in the meantime.
-ureq   = { version = "2.12", default-features = false, features = [ "tls", "gzip", "brotli" ] }
+# ureq 3 — single-author migration sprint completed (M1):
+#   * `Agent::config_builder()` typestate replaces `AgentBuilder::new()`.
+#   * Response body access goes through `body_mut().as_reader()` /
+#     `read_to_string()` / `read_to_vec()` instead of the 2.x
+#     `into_string()` / `into_reader()`.
+#   * Errors collapse into a single `ureq::Error` enum; status-code
+#     branching keys off `Error::StatusCode(u16)` and we keep
+#     `http_status_as_error = false` so 4xx/5xx flow through the normal
+#     response path (matches the 2.x `Status(_)` arm semantics the lite
+#     fetch polyfill relies on).
+#   * Cookie jar is enabled via the `cookies` feature and persisted to
+#     `~/.tynd/cookies/<app-id>.json` when the `http.cookies` config block
+#     is set; behind the host's `http-cookies` feature flag (off by default).
+#   * `platform-verifier` feature wires `RootCerts::PlatformVerifier`
+#     when the `tls-platform-verifier` host feature is on (enterprise CA).
+ureq   = { version = "3", default-features = false, features = [ "rustls", "gzip", "brotli", "json", "cookies", "platform-verifier" ] }
 base64 = "0.22"
 
 # Cross-platform pseudo-terminal for the embedded terminal API
@@ -572,13 +580,13 @@ swift-rs = { version = "1.0", default-features = false }
 
 # === Tauri-parity additions (V1) ===
 
-# Standalone cookie store with serde + persistence — wired through
-# `os::http::cookies` behind the `http.cookies` config flag. ureq 3
-# ships its own `CookieJar` (via the `cookies` feature) which we use
-# for the in-process jar; `cookie_store` is kept here for forks /
-# plugins that want to share a cookie state outside the ureq agent
-# (e.g. a webview-side cookie sync).
-cookie_store = { version = "0.22", default-features = false }
+# Standalone cookie store with serde + persistence — kept here for forks
+# / plugins that want to share a cookie state outside the in-process
+# ureq agent (e.g. a webview-side cookie sync). The host itself uses
+# ureq 3's built-in `CookieJar` for the in-process jar; persistence to
+# disk reuses ureq's `save_json` / `load_json` API. Workspace pin shared
+# so plugin authors stay on a coherent version.
+cookie_store = { version = "0.22", default-features = false, features = [ "serde", "preserve_order" ] }
 
 # CPU-buffer windowing primitive — used for the splash-screen pre-window
 # to prevent the white-flash that browsers / wry exhibit during webview
@@ -603,14 +611,16 @@ raw-window-handle = "0.6"
 # expects an OSA host. Not pulled on Linux/Windows.
 osakit = "0.3"
 
-# Cargo-direct rustls platform verifier — same crate the ureq
-# `platform-verifier` feature pulls transitively. Declared here so
-# consumers (host-rs / plugins) can construct an
+# Cargo-direct rustls platform verifier — same crate the ureq 3
+# `platform-verifier` feature pulls transitively. Pinned to 0.6 so
+# the workspace + ureq's transitive dep collapse to one version on
+# the lockfile (saves the 0.4 ↔ 0.6 dup that doubles the verifier
+# code in the final binary). Enables enterprise / corp-CA root-cert
+# chains on macOS Keychain, Windows CryptoAPI, and Linux's NSS /
+# OpenSSL stores. Consumers (host-rs / plugins) can build an
 # `Agent::config_builder().tls_config(TlsConfig::builder().root_certs(
 # RootCerts::PlatformVerifier))` without re-pinning the version.
-# Enables enterprise / corp-CA root-cert chains on macOS Keychain,
-# Windows CryptoAPI, and Linux's NSS / OpenSSL stores.
-rustls-platform-verifier = "0.4"
+rustls-platform-verifier = "0.6"
 
 # Property-based testing (dev-only) — used by host-rs to fuzz path
 # canonicalization invariants and updater semver ordering against the

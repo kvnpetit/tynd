@@ -39,7 +39,7 @@ export const shortcuts = {
       async unregister() {
         disposers.get(result.id)?.();
         disposers.delete(result.id);
-        return osCall<boolean>("shortcuts", "unregister", result.id);
+        return osCall<boolean>("shortcuts", "unregister", { id: result.id });
       },
     };
   },
@@ -47,7 +47,7 @@ export const shortcuts = {
   unregister(id: string): Promise<boolean> {
     disposers.get(id)?.();
     disposers.delete(id);
-    return osCall("shortcuts", "unregister", id);
+    return osCall("shortcuts", "unregister", { id });
   },
 
   async unregisterAll(): Promise<void> {
@@ -57,6 +57,6 @@ export const shortcuts = {
   },
 
   isRegistered(id: string): Promise<boolean> {
-    return osCall("shortcuts", "isRegistered", id);
+    return osCall("shortcuts", "isRegistered", { id });
   },
 };

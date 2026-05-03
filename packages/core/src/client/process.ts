@@ -204,9 +204,18 @@ function makeSpawned(pid: number): SpawnedProcess {
   };
 }
 
+// Convert the TS-side `args` field (the user-visible option name) to the
+// host wire-name `argv` — `args` collides with the macro-generated
+// `dispatch(args)` parameter inside #[tynd::handler].
+function toWire<T extends { args?: string[] }>(opts?: T): Record<string, unknown> {
+  if (!opts) return {};
+  const { args, ...rest } = opts;
+  return args === undefined ? { ...rest } : { ...rest, argv: args };
+}
+
 export const process = {
   exec(cmd: string, opts?: ExecOptions): Promise<ExecResult> {
-    return osCall("process", "exec", { cmd, ...opts });
+    return osCall("process", "exec", { cmd, ...toWire(opts) });
   },
   execShell(cmd: string, opts?: Omit<ExecOptions, "args">): Promise<ExecResult> {
     return osCall("process", "execShell", { cmd, ...opts });
@@ -227,7 +236,7 @@ export const process = {
   async spawn(cmd: string, opts?: SpawnOptions): Promise<SpawnedProcess> {
     const { pid } = await osCall<{ pid: number }>("process", "spawn", {
       cmd,
-      ...opts,
+      ...toWire(opts),
     });
     return makeSpawned(pid);
   },

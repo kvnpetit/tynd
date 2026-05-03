@@ -95,21 +95,51 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     }
 }
 
+/// Build a ureq 3 `Agent` with our standard timeout + status-code policy.
+///
+/// `http_status_as_error = false` keeps 4xx/5xx responses flowing through
+/// the normal `Ok(response)` path so the IPC layer can surface the body
+/// to JS the same way as a 200 — matches the 2.x semantics our callers
+/// rely on (the lite `fetch` polyfill's "still iterable on error status"
+/// branch in particular).
+///
+/// When the `tls-platform-verifier` host feature is on we flip the root
+/// certs over to `RootCerts::PlatformVerifier` so corp / enterprise CA
+/// chains resolve through the OS trust store (Keychain / Win-crypto /
+/// NSS). The default rustls webpki root set stays in place otherwise.
 fn build_agent(timeout_ms: Option<u64>) -> ureq::Agent {
-    let mut builder = ureq::AgentBuilder::new();
-    builder = if let Some(ms) = timeout_ms {
-        builder.timeout(Duration::from_millis(ms))
-    } else {
-        builder.timeout(Duration::from_secs(60))
-    };
-    builder.build()
+    let timeout = timeout_ms.map_or(Duration::from_secs(60), Duration::from_millis);
+    #[allow(unused_mut)]
+    let mut config = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(timeout));
+
+    #[cfg(feature = "tls-platform-verifier")]
+    {
+        use ureq::tls::{RootCerts, TlsConfig};
+        config = config.tls_config(
+            TlsConfig::builder()
+                .root_certs(RootCerts::PlatformVerifier)
+                .build(),
+        );
+    }
+
+    config.build().new_agent()
 }
 
-fn apply_headers(mut req: ureq::Request, headers: Option<&Value>) -> ureq::Request {
+/// Apply caller-supplied headers to an `http::request::Builder`. Used by
+/// the `request()` path which assembles an `http::Request` and hands it
+/// to `Agent::run` for the arbitrary-method dispatch ureq 3's typed
+/// helpers don't cover (`agent.get/post/put/...` shadow the verb but
+/// the runtime caller chooses the verb dynamically).
+fn apply_headers_http(
+    mut req: ureq::http::request::Builder,
+    headers: Option<&Value>,
+) -> ureq::http::request::Builder {
     if let Some(obj) = headers.and_then(Value::as_object) {
         for (k, v) in obj {
             if let Some(s) = v.as_str() {
-                req = req.set(k, s);
+                req = req.header(k, s);
             }
         }
     }
@@ -174,6 +204,14 @@ impl Read for ProgressReader {
     }
 }
 
+/// Read a header value as a UTF-8 string. ureq 3's `headers().get()`
+/// returns a `&HeaderValue` whose `to_str()` errors on non-ASCII —
+/// match 2.x behaviour by silently dropping non-UTF8 headers (we only
+/// surface them to JS as JSON strings anyway).
+fn header_str<'a>(resp: &'a ureq::http::Response<ureq::Body>, name: &str) -> Option<&'a str> {
+    resp.headers().get(name).and_then(|v| v.to_str().ok())
+}
+
 fn request(args: &Value) -> Result<Value, String> {
     let a: RequestArgs = serde_json::from_value(args.clone()).map_err(|e| {
         IpcError::new("http", "request", format!("invalid arguments: {e}")).into_string()
@@ -185,50 +223,84 @@ fn request(args: &Value) -> Result<Value, String> {
     let progress_id = a.progress_id.clone();
 
     let agent = build_agent(timeout_ms);
-    let req = apply_headers(agent.request(method, url), a.headers.as_ref());
+
+    // ureq 3 doesn't expose a generic `agent.request(method, url)` —
+    // the typed `agent.get/post/put/...` helpers shadow the verb at
+    // compile time. For our case the verb is runtime-driven (chosen
+    // by the JS caller), so we hand-build an `http::Request` and run
+    // it through `agent.run(...)`. Same agent, same middleware, just
+    // bypassing the typestate sugar.
+    let mut http_builder = ureq::http::Request::builder()
+        .method(method)
+        .uri(url);
+    http_builder = apply_headers_http(http_builder, a.headers.as_ref());
 
     let response = if let Some(body) = a.body.as_ref() {
-        let (req, body_bytes) = match body {
-            Value::String(s) => (req, s.as_bytes().to_vec()),
+        let (body_bytes, content_type_set) = match body {
+            Value::String(s) => (s.as_bytes().to_vec(), true),
             other => {
                 let json_body = serde_json::to_vec(other).map_err(|e| e.to_string())?;
-                let r = if req
-                    .header_names()
-                    .iter()
-                    .any(|h| h.eq_ignore_ascii_case("content-type"))
-                {
-                    req
-                } else {
-                    req.set("content-type", "application/json")
-                };
-                (r, json_body)
+                let has_ct = http_builder
+                    .headers_ref()
+                    .map(|h| h.keys().any(|k| k.as_str().eq_ignore_ascii_case("content-type")))
+                    .unwrap_or(false);
+                (json_body, has_ct)
             },
         };
+        if !content_type_set {
+            http_builder = http_builder.header("content-type", "application/json");
+        }
         if progress_id.is_some() {
+            // Streaming-with-progress path: wrap the body bytes in a
+            // `ProgressReader` and route through `Agent::run` after
+            // turning the builder into a `Request<SendBody>`. The
+            // emitter ticks happen as ureq pumps the reader.
             let total = Some(body_bytes.len() as u64);
-            let reader = ProgressReader {
+            let mut reader = ProgressReader {
                 inner: std::io::Cursor::new(body_bytes),
                 emitter: ProgressEmitter::new(progress_id.clone(), "upload", total),
             };
-            req.send(reader)
+            let req = http_builder
+                .body(ureq::SendBody::from_reader(&mut reader))
+                .map_err(|e| {
+                    IpcError::new("http", "request", format!("build request: {e}"))
+                        .into_string()
+                })?;
+            agent.run(req)
         } else {
-            req.send_bytes(&body_bytes)
+            // Wrap in `Cursor<Vec<u8>>` and use `from_owned_reader` so
+            // the body owns its bytes for the duration of the call —
+            // ureq 3 doesn't have a direct `from_owned_vec`. The cursor
+            // is `Read` over the vec; same wire effect as `send_bytes`.
+            let req = http_builder
+                .body(ureq::SendBody::from_owned_reader(std::io::Cursor::new(body_bytes)))
+                .map_err(|e| {
+                    IpcError::new("http", "request", format!("build request: {e}"))
+                        .into_string()
+                })?;
+            agent.run(req)
         }
     } else {
-        req.call()
+        let req = http_builder.body(ureq::SendBody::none()).map_err(|e| {
+            IpcError::new("http", "request", format!("build request: {e}")).into_string()
+        })?;
+        agent.run(req)
     };
 
-    let resp = response
+    let mut resp = response
         .map_err(|e| IpcError::new("http", "request", format!("({url}): {e}")).into_string())?;
-    let status = resp.status();
-    let status_text = resp.status_text().to_string();
-    let total: Option<u64> = resp
-        .header("content-length")
+    let status = resp.status().as_u16();
+    let status_text = resp
+        .status()
+        .canonical_reason()
+        .unwrap_or("")
+        .to_string();
+    let total: Option<u64> = header_str(&resp, "content-length")
         .and_then(|s| s.parse::<u64>().ok());
     let mut headers_map = serde_json::Map::new();
-    for name in resp.headers_names() {
-        if let Some(v) = resp.header(&name) {
-            headers_map.insert(name.to_lowercase(), Value::String(v.to_string()));
+    for (name, value) in resp.headers() {
+        if let Ok(v) = value.to_str() {
+            headers_map.insert(name.as_str().to_lowercase(), Value::String(v.to_string()));
         }
     }
 
@@ -243,7 +315,9 @@ fn request(args: &Value) -> Result<Value, String> {
     // the call), `Bytes::clone()` is an Arc inc instead of a memcpy of
     // the whole body.
     let mut buf = BytesMut::with_capacity(total.unwrap_or(0).min(8 * 1024 * 1024) as usize);
-    let mut reader = resp.into_reader().take(100 * 1024 * 1024);
+    // ureq 3's `body_mut().as_reader()` is unbounded by default — bring
+    // the same 100 MiB cap the 2.x `take(...)` chain enforced.
+    let mut reader = resp.body_mut().as_reader().take(100 * 1024 * 1024);
     let mut emitter = ProgressEmitter::new(progress_id, "download", total);
     let mut chunk = vec![0u8; 64 * 1024];
     loop {
@@ -285,13 +359,19 @@ fn download(args: &Value) -> Result<Value, String> {
     let progress_id = a.progress_id;
 
     let agent = build_agent(timeout_ms);
-    let req = apply_headers(agent.get(url), a.headers.as_ref());
-    let resp = req
+    let mut req_builder = agent.get(url);
+    if let Some(obj) = a.headers.as_ref().and_then(Value::as_object) {
+        for (k, v) in obj {
+            if let Some(s) = v.as_str() {
+                req_builder = req_builder.header(k, s);
+            }
+        }
+    }
+    let mut resp = req_builder
         .call()
         .map_err(|e| IpcError::new("http", "download", format!("({url}): {e}")).into_string())?;
 
-    let total: Option<u64> = resp
-        .header("content-length")
+    let total: Option<u64> = header_str(&resp, "content-length")
         .and_then(|s| s.parse::<u64>().ok());
 
     if let Some(parent) = std::path::Path::new(dest).parent() {
@@ -333,7 +413,7 @@ fn download(args: &Value) -> Result<Value, String> {
         IpcError::new("http", "download", format!("tempfile in {}: {e}", parent.display()))
             .into_string()
     })?;
-    let mut reader = resp.into_reader().take(MAX_DOWNLOAD);
+    let mut reader = resp.body_mut().as_reader().take(MAX_DOWNLOAD);
     let mut buf = vec![0u8; 64 * 1024];
     let mut written: u64 = 0;
     let mut emitter = ProgressEmitter::new(progress_id, "download", total);
@@ -473,38 +553,158 @@ fn upload(args: &Value) -> Result<Value, String> {
     let total_len = preamble.len() as u64 + file_len + epilogue.len() as u64;
 
     let agent = build_agent(timeout_ms);
-    let mut req = agent.post(url);
-    req = apply_headers(req, a.headers.as_ref());
+    let mut req_builder = agent.post(url);
+    if let Some(obj) = a.headers.as_ref().and_then(Value::as_object) {
+        for (k, v) in obj {
+            if let Some(s) = v.as_str() {
+                req_builder = req_builder.header(k, s);
+            }
+        }
+    }
     // Content-Type wins over any caller-supplied value — multipart needs
     // the boundary parameter to match the body bytes exactly. Same for
     // Content-Length: ureq will otherwise switch to chunked encoding,
     // which some upload endpoints (S3 PUT, signed URLs) reject.
-    req = req
-        .set(
+    req_builder = req_builder
+        .header(
             "content-type",
             &format!("multipart/form-data; boundary={boundary}"),
         )
-        .set("content-length", &total_len.to_string());
+        .header("content-length", &total_len.to_string());
 
-    let body = MultipartBody {
+    let mut body = MultipartBody {
         preamble: std::io::Cursor::new(preamble.into_bytes()),
         file: Some(file),
         epilogue: std::io::Cursor::new(epilogue.into_bytes()),
         emitter: ProgressEmitter::new(progress_id, "upload", Some(total_len)),
     };
 
-    let resp = req
-        .send(body)
+    let mut resp = req_builder
+        .send(ureq::SendBody::from_reader(&mut body))
         .map_err(|e| IpcError::new("http", "upload", format!("({url}): {e}")).into_string())?;
 
-    let status = resp.status();
+    let status = resp.status().as_u16();
     let mut buf = Vec::new();
-    resp.into_reader().take(100 * 1024 * 1024).read_to_end(&mut buf).map_err(|e| {
-        IpcError::new("http", "upload", format!("read response: {e}")).into_string()
-    })?;
+    resp.body_mut()
+        .as_reader()
+        .take(100 * 1024 * 1024)
+        .read_to_end(&mut buf)
+        .map_err(|e| IpcError::new("http", "upload", format!("read response: {e}")).into_string())?;
 
     Ok(json!({
         "status": status,
         "body": STANDARD.encode(&buf),
     }))
+}
+
+// ─── Cookie persistence — `http-cookies` feature ──────────────────────────
+//
+// ureq 3 exposes the in-process cookie jar via `Agent::cookie_jar_lock()`
+// + `CookieJar::save_json` / `load_json`. We persist to
+// `~/.tynd/cookies/<app-id>.json` (relative to `dirs::data_dir()`) so a
+// cookie set on one process startup survives the next.
+//
+// The wire-up is opt-in: callers must (1) compile with
+// `--features http-cookies` and (2) set `http.cookies = { persist:
+// true, jar?: "<custom-name>" }` in `tynd.config.ts`. Default is OFF
+// for back-compat — the previous build silently dropped cookies and we
+// don't want to surprise apps that rely on that.
+
+#[cfg(feature = "http-cookies")]
+pub mod cookies {
+    use std::path::PathBuf;
+
+    /// Resolve the on-disk cookie jar path for `app_id`. Falls back to
+    /// the system temp dir if `dirs::data_dir()` is unavailable (rare —
+    /// only on environments with no `$HOME` / `%APPDATA%`).
+    pub fn jar_path(app_id: &str) -> PathBuf {
+        let base = dirs::data_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("tynd")
+            .join("cookies");
+        let _ = std::fs::create_dir_all(&base);
+        base.join(format!("{app_id}.json"))
+    }
+
+    /// Load cookies from `path` into `agent`'s jar. No-op if the file
+    /// doesn't exist (first startup). Errors are surfaced so callers
+    /// can log them — a corrupt jar shouldn't crash the app, but
+    /// silently swallowing the load is the wrong default.
+    ///
+    /// ureq 3's `CookieJar::load_json` requires `BufRead`, so the file
+    /// goes through a `BufReader` rather than directly.
+    pub fn load_into_agent(
+        agent: &ureq::Agent,
+        path: &std::path::Path,
+    ) -> std::io::Result<()> {
+        if !path.exists() {
+            return Ok(());
+        }
+        let file = std::fs::File::open(path)?;
+        let mut reader = std::io::BufReader::new(file);
+        let mut jar = agent.cookie_jar_lock();
+        jar.load_json(&mut reader)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+        Ok(())
+    }
+
+    /// Persist `agent`'s current jar to `path`. Atomically writes via
+    /// a sibling temp file + rename so a crash mid-write can't truncate
+    /// the saved cookies.
+    pub fn save_from_agent(
+        agent: &ureq::Agent,
+        path: &std::path::Path,
+    ) -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut tmp = tempfile::NamedTempFile::new_in(
+            path.parent().unwrap_or_else(|| std::path::Path::new(".")),
+        )?;
+        {
+            let mut jar = agent.cookie_jar_lock();
+            jar.save_json(tmp.as_file_mut())
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        }
+        tmp.persist(path)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `build_agent` should produce an agent without panicking and
+    /// honour the supplied timeout. We can't exercise the network here,
+    /// but the construction path is the load-bearing part of the ureq3
+    /// migration — a misuse of the typestate would surface as a build
+    /// error here regardless of network availability.
+    #[test]
+    fn build_agent_with_timeout() {
+        let _agent = build_agent(Some(5_000));
+    }
+
+    #[test]
+    fn build_agent_default_timeout() {
+        let _agent = build_agent(None);
+    }
+
+    /// The dispatch surface should reject unknown methods cleanly.
+    #[test]
+    fn dispatch_rejects_unknown_method() {
+        let err = dispatch("nope", &json!({})).unwrap_err();
+        assert!(err.contains("unknown") || err.contains("nope"));
+    }
+
+    #[cfg(feature = "http-cookies")]
+    #[test]
+    fn cookie_jar_path_layout_is_predictable() {
+        let p = cookies::jar_path("test-app");
+        let s = p.to_string_lossy();
+        assert!(s.ends_with("test-app.json"));
+        assert!(s.contains("tynd"));
+        assert!(s.contains("cookies"));
+    }
 }

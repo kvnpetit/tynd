@@ -28,7 +28,7 @@ use serde_json::{json, Value};
 use tungstenite::{protocol::CloseFrame, Message};
 
 use super::{events, registry::Registry};
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
 /// Commands posted to a running WebSocket session. Exposed (pub) so the
 /// lite runtime's `WebSocket` polyfill can reuse the same session runner
@@ -51,28 +51,53 @@ pub enum Cmd {
 /// and matching `try_recv` on the consumer side.
 static SESSIONS: LazyLock<Registry<Sender<Cmd>>> = LazyLock::new(Registry::new);
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "connect" => connect(args),
-        "send" => send(args),
-        "close" => close(args),
-        "list" => list(),
-        _ => Err(IpcError::unknown_method("websocket", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — session state
+/// lives in the file-level `SESSIONS` registry.
+#[derive(Debug, Default)]
+pub struct WebsocketApi;
+
+#[tynd::handler(api = "websocket")]
+impl WebsocketApi {
+    /// Open a WebSocket connection to `url`. Returns `{ id }` —
+    /// pass it back to `send` / `close` / matched-id event filtering.
+    pub fn connect(url: String) -> Value {
+        let (tx, rx) = crossbeam_channel::unbounded::<Cmd>();
+        let id = SESSIONS.insert(tx);
+
+        std::thread::spawn(move || run_session(id, &url, &rx));
+        json!({ "id": id })
     }
-}
 
-fn connect(args: &Value) -> Result<Value, String> {
-    let url = args
-        .get("url")
-        .and_then(Value::as_str)
-        .ok_or_else(|| String::from(IpcError::missing_arg("websocket", "connect", "url")))?
-        .to_string();
+    /// Send a frame on the session identified by `id`. `kind` is
+    /// `"text"` (default), `"binary"` (`data` is base64), or
+    /// `"ping"` (no payload). Errors when the session has gone away.
+    pub fn send(
+        id: u64,
+        kind: Option<String>,
+        data: Option<String>,
+    ) -> Result<(), String> {
+        send_impl(id, kind.as_deref().unwrap_or("text"), data.as_deref())
+    }
 
-    let (tx, rx) = crossbeam_channel::unbounded::<Cmd>();
-    let id = SESSIONS.insert(tx);
+    /// Initiate a graceful close on the session identified by `id`.
+    /// `code` and `reason` are forwarded as the WebSocket close
+    /// frame; both default to "no reason".
+    pub fn close(
+        id: u64,
+        code: Option<u64>,
+        reason: Option<String>,
+    ) -> Result<(), String> {
+        close_impl(id, code.map(|c| c as u16), reason)
+    }
 
-    std::thread::spawn(move || run_session(id, &url, &rx));
-    Ok(json!({ "id": id }))
+    /// List every session id currently held by the host.
+    pub fn list() -> Vec<Value> {
+        SESSIONS
+            .ids()
+            .into_iter()
+            .map(|id| Value::Number(id.into()))
+            .collect()
+    }
 }
 
 fn run_session(id: u64, url: &str, rx: &Receiver<Cmd>) {
@@ -184,30 +209,23 @@ where
     }
 }
 
-fn session_tx(args: &Value) -> Result<Sender<Cmd>, String> {
-    let id = args
-        .get("id")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| String::from(IpcError::missing_arg("websocket", "*", "id")))?;
+fn session_tx_for(id: u64) -> Result<Sender<Cmd>, String> {
     SESSIONS.get_cloned(id).ok_or_else(|| {
         IpcError::new("websocket", "*", format!("session {id} not found")).into_string()
     })
 }
 
-fn send(args: &Value) -> Result<Value, String> {
-    let tx = session_tx(args)?;
-    let kind = args.get("kind").and_then(Value::as_str).unwrap_or("text");
+fn send_impl(id: u64, kind: &str, data: Option<&str>) -> Result<(), String> {
+    let tx = session_tx_for(id)?;
     let cmd = match kind {
         "text" => Cmd::SendText(
-            args.get("data")
-                .and_then(Value::as_str)
-                .ok_or_else(|| {
-                    IpcError::new("websocket", "send", "missing text 'data'").into_string()
-                })?
-                .to_string(),
+            data.ok_or_else(|| {
+                IpcError::new("websocket", "send", "missing text 'data'").into_string()
+            })?
+            .to_string(),
         ),
         "binary" => {
-            let b64 = args.get("data").and_then(Value::as_str).ok_or_else(|| {
+            let b64 = data.ok_or_else(|| {
                 IpcError::new("websocket", "send", "missing base64 'data'").into_string()
             })?;
             Cmd::SendBinary(STANDARD.decode(b64).map_err(|e| {
@@ -224,30 +242,18 @@ fn send(args: &Value) -> Result<Value, String> {
     tx.send(cmd).map_err(|e| {
         IpcError::new("websocket", "send", format!("session gone: {e}")).into_string()
     })?;
-    Ok(Value::Null)
+    Ok(())
 }
 
-fn close(args: &Value) -> Result<Value, String> {
-    let tx = session_tx(args)?;
-    let code = args.get("code").and_then(Value::as_u64).map(|c| c as u16);
-    let reason = args.get("reason").and_then(Value::as_str).map(String::from);
+fn close_impl(id: u64, code: Option<u16>, reason: Option<String>) -> Result<(), String> {
+    let tx = session_tx_for(id)?;
     let cmd = match (code, reason) {
         (Some(c), Some(r)) => Cmd::Close(Some((c, r))),
         (Some(c), None) => Cmd::Close(Some((c, String::new()))),
         _ => Cmd::Close(None),
     };
     let _ = tx.send(cmd);
-    Ok(Value::Null)
-}
-
-#[allow(clippy::unnecessary_wraps)] // dispatch expects Result — uniform return shape
-fn list() -> Result<Value, String> {
-    let ids: Vec<Value> = SESSIONS
-        .ids()
-        .into_iter()
-        .map(|id| Value::Number(id.into()))
-        .collect();
-    Ok(Value::Array(ids))
+    Ok(())
 }
 
 #[cfg(test)]
@@ -261,12 +267,18 @@ mod tests {
 
     #[test]
     fn connect_requires_url() {
-        assert!(connect(&json!({})).unwrap_err().contains("missing 'url'"));
+        assert!(dispatch("connect", &json!({}))
+            .unwrap_err()
+            .contains("missing 'url'"));
     }
 
     #[test]
     fn send_on_missing_session_errors() {
-        let err = send(&json!({ "id": 999_999, "kind": "text", "data": "x" })).unwrap_err();
+        let err = dispatch(
+            "send",
+            &json!({ "id": 999_999u64, "kind": "text", "data": "x" }),
+        )
+        .unwrap_err();
         assert!(err.contains("not found") || err.contains("session"));
     }
 
@@ -274,19 +286,20 @@ mod tests {
     fn send_rejects_unknown_kind_when_session_missing() {
         // session_tx runs first, so this also hits the missing-session path,
         // but we still exercise the arg-shape guard.
-        let err = send(&json!({ "id": 999_998, "kind": "weird" })).unwrap_err();
+        let err =
+            dispatch("send", &json!({ "id": 999_998u64, "kind": "weird" })).unwrap_err();
         assert!(!err.is_empty());
     }
 
     #[test]
     fn close_on_missing_session_errors() {
-        let err = close(&json!({ "id": 999_997 })).unwrap_err();
+        let err = dispatch("close", &json!({ "id": 999_997u64 })).unwrap_err();
         assert!(err.contains("not found") || err.contains("session"));
     }
 
     #[test]
     fn list_returns_array() {
-        let v = list().unwrap();
+        let v = dispatch("list", &json!({})).unwrap();
         assert!(v.is_array());
     }
 }

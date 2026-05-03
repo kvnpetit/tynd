@@ -52,6 +52,8 @@ use parking_lot::RwLock;
 use serde_json::{json, Value};
 
 use super::events;
+use crate::tynd;
+#[allow(unused_imports)]
 use crate::ipc_error::IpcError;
 
 #[cfg(target_os = "linux")]
@@ -162,19 +164,47 @@ pub fn was_forwarded_to_primary() -> bool {
     STATE.get().is_some_and(|s| *s.forwarded_to_primary.read())
 }
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "register" => register(args),
-        "unregister" => unregister(args),
-        "isRegistered" => is_registered(args),
-        "getStartupUrl" => Ok(get_startup_url()),
-        "wasForwardedToPrimary" => Ok(json!(was_forwarded_to_primary())),
-        _ => Err(IpcError::unknown_method("deepLink", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — deep-link
+/// state lives in the file-level `STATE` static.
+#[derive(Debug, Default)]
+pub struct DeepLinkApi;
+
+#[tynd::handler(api = "deepLink")]
+impl DeepLinkApi {
+    /// Register `scheme` (e.g. `"tynd-app"`) with the OS so URLs
+    /// matching `<scheme>://...` route back to this binary.
+    pub fn register(scheme: String) -> Result<(), String> {
+        register_impl(&scheme)
+    }
+
+    /// Unregister `scheme` from the OS.
+    pub fn unregister(scheme: String) -> Result<(), String> {
+        unregister_impl(&scheme)
+    }
+
+    /// True when `scheme` is currently registered for the running
+    /// binary.
+    pub fn is_registered(scheme: String) -> Result<bool, String> {
+        is_registered_impl(&scheme)
+    }
+
+    /// One-shot startup URL — the deep link the host was launched
+    /// with, if any. Returns `null` after the first read so a
+    /// re-render doesn't see a stale value.
+    pub fn get_startup_url() -> Value {
+        get_startup_url()
+    }
+
+    /// True when the current process forwarded its launch URL to a
+    /// primary instance (and therefore should exit silently).
+    pub fn was_forwarded_to_primary() -> bool {
+        was_forwarded_to_primary()
     }
 }
 
-fn register(args: &Value) -> Result<Value, String> {
-    let scheme = require_scheme(args)?;
+fn register_impl(scheme: &str) -> Result<(), String> {
+    validate_scheme(scheme)?;
+    let scheme = scheme.to_string();
     let exe = current_exe_string()?;
 
     #[cfg(target_os = "windows")]
@@ -192,11 +222,12 @@ fn register(args: &Value) -> Result<Value, String> {
     }
 
     state().schemes.write().insert(scheme);
-    Ok(Value::Null)
+    Ok(())
 }
 
-fn unregister(args: &Value) -> Result<Value, String> {
-    let scheme = require_scheme(args)?;
+fn unregister_impl(scheme: &str) -> Result<(), String> {
+    validate_scheme(scheme)?;
+    let scheme = scheme.to_string();
 
     #[cfg(target_os = "windows")]
     registry::unregister(&scheme).map_err(|e| format!("deepLink.unregister: {e}"))?;
@@ -208,11 +239,12 @@ fn unregister(args: &Value) -> Result<Value, String> {
     xdg_desktop::unregister(&scheme).map_err(|e| format!("deepLink.unregister: {e}"))?;
 
     state().schemes.write().remove(&scheme);
-    Ok(Value::Null)
+    Ok(())
 }
 
-fn is_registered(args: &Value) -> Result<Value, String> {
-    let scheme = require_scheme(args)?;
+fn is_registered_impl(scheme: &str) -> Result<bool, String> {
+    validate_scheme(scheme)?;
+    let scheme = scheme.to_string();
     let exe = current_exe_string().unwrap_or_default();
 
     #[cfg(target_os = "windows")]
@@ -226,7 +258,7 @@ fn is_registered(args: &Value) -> Result<Value, String> {
 
     let owned = os_owned || state().schemes.read().contains(&scheme);
     let _ = exe;
-    Ok(json!(owned))
+    Ok(owned)
 }
 
 fn get_startup_url() -> Value {
@@ -234,15 +266,6 @@ fn get_startup_url() -> Value {
         Some(s) => Value::String(s),
         None => Value::Null,
     }
-}
-
-fn require_scheme(args: &Value) -> Result<String, String> {
-    let scheme = args
-        .get("scheme")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "deepLink: missing 'scheme'".to_string())?;
-    validate_scheme(scheme)?;
-    Ok(scheme.to_string())
 }
 
 /// Reject anything that isn't an RFC-3986 scheme. Bounded length so

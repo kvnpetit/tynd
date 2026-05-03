@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use rquickjs::{Context, Function, Runtime};
 use serde_json::{json, Value};
 
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -29,22 +29,45 @@ fn workers() -> &'static Workers {
     W.get_or_init(DashMap::new)
 }
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "spawn" => spawn(args),
-        "run" => run(args),
-        "terminate" => terminate(args),
-        "list" => list(),
-        _ => Err(IpcError::unknown_method("workers", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — worker state
+/// lives in the file-level `workers()` DashMap.
+#[derive(Debug, Default)]
+pub struct WorkersApi;
+
+#[tynd::handler(api = "workers")]
+impl WorkersApi {
+    /// Spawn a new QuickJS worker that evaluates `script` (which
+    /// must produce a function). Returns `{ id }` for use in `run` /
+    /// `terminate`.
+    pub fn spawn(script: String) -> Result<Value, String> {
+        spawn_impl(script)
+    }
+
+    /// Invoke the worker's function with `input` (JSON-serialised
+    /// before crossing the QuickJS boundary). Blocks until the
+    /// worker returns or the runtime crashes.
+    pub fn run(id: u64, input: Option<Value>) -> Result<Value, String> {
+        run_impl(id, input.unwrap_or(Value::Null))
+    }
+
+    /// Stop the worker thread for `id`. No-op when the id is not
+    /// known.
+    pub fn terminate(id: u64) {
+        if let Some((_, sender)) = workers().remove(&id) {
+            let _ = sender.send(Msg::Stop);
+        }
+    }
+
+    /// List every active worker id.
+    pub fn list() -> Vec<Value> {
+        workers()
+            .iter()
+            .map(|r| Value::Number((*r.key()).into()))
+            .collect()
     }
 }
 
-fn spawn(args: &Value) -> Result<Value, String> {
-    let script = args
-        .get("script")
-        .and_then(Value::as_str)
-        .ok_or_else(|| String::from(IpcError::missing_arg("workers", "spawn", "script")))?
-        .to_string();
+fn spawn_impl(script: String) -> Result<Value, String> {
 
     let (tx, rx) = mpsc::channel::<Msg>();
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
@@ -116,12 +139,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
     Ok(json!({ "id": id }))
 }
 
-fn run(args: &Value) -> Result<Value, String> {
-    let id = args
-        .get("id")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| String::from(IpcError::missing_arg("workers", "run", "id")))?;
-    let input = args.get("input").cloned().unwrap_or(Value::Null);
+fn run_impl(id: u64, input: Value) -> Result<Value, String> {
     let input_json = serde_json::to_string(&input).map_err(|e| e.to_string())?;
 
     let sender = workers()
@@ -146,22 +164,3 @@ fn run(args: &Value) -> Result<Value, String> {
     Ok(parsed)
 }
 
-fn terminate(args: &Value) -> Result<Value, String> {
-    let id = args
-        .get("id")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| String::from(IpcError::missing_arg("workers", "terminate", "id")))?;
-    if let Some((_, sender)) = workers().remove(&id) {
-        let _ = sender.send(Msg::Stop);
-    }
-    Ok(Value::Null)
-}
-
-#[allow(clippy::unnecessary_wraps)] // dispatch expects Result — uniform return shape
-fn list() -> Result<Value, String> {
-    let ids: Vec<Value> = workers()
-        .iter()
-        .map(|r| Value::Number((*r.key()).into()))
-        .collect();
-    Ok(Value::Array(ids))
-}

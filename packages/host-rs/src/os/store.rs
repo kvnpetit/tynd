@@ -21,7 +21,7 @@ use crossbeam_channel::{after, never, select, unbounded, Sender};
 use dashmap::DashMap;
 use serde_json::{Map, Value};
 
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
 /// Debounce window: a set/delete/clear that arrives within this delay
 /// of a previous one extends the timer instead of triggering a fresh
@@ -58,113 +58,138 @@ enum PersistCmd {
     Flush(Sender<()>),
 }
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    let namespace = args
-        .get("namespace")
-        .and_then(|v| v.as_str())
-        .unwrap_or("default")
-        .to_string();
+/// Marker for the `#[tynd::handler]` dispatch table — store state
+/// lives in the file-level `STORES` / `PERSISTERS` statics.
+#[derive(Debug, Default)]
+pub struct StoreApi;
 
-    match method {
-        "get" => {
-            let key = key_arg(args)?;
-            load_if_needed(&namespace)?;
-            Ok(STORES
-                .get(&namespace)
-                .and_then(|m| m.get(key).cloned())
-                .unwrap_or(Value::Null))
-        },
-        "set" => {
-            let key = key_arg(args)?;
-            let value = args.get("value").cloned().unwrap_or(Value::Null);
-            load_if_needed(&namespace)?;
-            mutate(&namespace, |m| {
-                m.insert(key.to_string(), value);
-            });
-            schedule_persist(&namespace)?;
-            Ok(Value::Null)
-        },
-        "delete" => {
-            let key = key_arg(args)?;
-            load_if_needed(&namespace)?;
-            mutate(&namespace, |m| {
-                m.remove(key);
-            });
-            schedule_persist(&namespace)?;
-            Ok(Value::Null)
-        },
-        "clear" => {
-            // Validate before mutating in-memory state — otherwise an
-            // invalid namespace would clear the in-memory map and then fail
-            // to persist, leaving on-disk + in-memory desynchronised.
-            validate_namespace(&namespace)?;
-            STORES.insert(namespace.clone(), Arc::new(Map::new()));
-            schedule_persist(&namespace)?;
-            Ok(Value::Null)
-        },
-        "keys" => {
-            load_if_needed(&namespace)?;
-            let keys: Vec<Value> = STORES
-                .get(&namespace)
-                .map(|m| m.keys().map(|k| Value::String(k.clone())).collect())
-                .unwrap_or_default();
-            Ok(Value::Array(keys))
-        },
-        "has" => {
-            let key = key_arg(args)?;
-            load_if_needed(&namespace)?;
-            let present = STORES
-                .get(&namespace)
-                .is_some_and(|m| m.contains_key(key));
-            Ok(Value::Bool(present))
-        },
-        "values" => {
-            load_if_needed(&namespace)?;
-            let values: Vec<Value> = STORES
-                .get(&namespace)
-                .map(|m| m.values().cloned().collect())
-                .unwrap_or_default();
-            Ok(Value::Array(values))
-        },
-        "entries" => {
-            load_if_needed(&namespace)?;
-            // Pairs serialize as `[key, value]` tuples so the JS side can
-            // destructure them straight into `Object.fromEntries` without
-            // extra remapping.
-            let entries: Vec<Value> = STORES
-                .get(&namespace)
-                .map(|m| {
-                    m.iter()
-                        .map(|(k, v)| Value::Array(vec![Value::String(k.clone()), v.clone()]))
-                        .collect()
-                })
-                .unwrap_or_default();
-            Ok(Value::Array(entries))
-        },
-        "length" => {
-            load_if_needed(&namespace)?;
-            let n = STORES.get(&namespace).map_or(0, |m| m.len());
-            Ok(Value::Number(n.into()))
-        },
-        "reload" => {
-            // Force any pending debounced write through before we drop
-            // the in-memory copy — otherwise a `set` followed immediately
-            // by `reload` would silently roll the value back to whatever
-            // is on disk.
-            flush_namespace(&namespace);
-            STORES.remove(&namespace);
-            load_if_needed(&namespace)?;
-            Ok(Value::Null)
-        },
-        "flush" => {
-            // Explicit sync — JS callers (and the host shutdown path)
-            // use this to force any debounced writes through before
-            // returning. No-op for namespaces with no pending state.
-            flush_namespace(&namespace);
-            Ok(Value::Null)
-        },
-        _ => Err(IpcError::unknown_method("store", method).into_string()),
+#[tynd::handler(api = "store")]
+impl StoreApi {
+    /// Read the value associated with `key` in `namespace`. Returns
+    /// `null` when the key (or the entire namespace) is absent.
+    pub fn get(namespace: Option<String>, key: String) -> Result<Value, String> {
+        let namespace = ns(namespace);
+        load_if_needed(&namespace)?;
+        Ok(STORES
+            .get(&namespace)
+            .and_then(|m| m.get(&key).cloned())
+            .unwrap_or(Value::Null))
     }
+
+    /// Insert or replace `value` at `key` in `namespace`. Schedules a
+    /// debounced fsync.
+    pub fn set(
+        namespace: Option<String>,
+        key: String,
+        value: Option<Value>,
+    ) -> Result<(), String> {
+        let namespace = ns(namespace);
+        let value = value.unwrap_or(Value::Null);
+        load_if_needed(&namespace)?;
+        mutate(&namespace, |m| {
+            m.insert(key, value);
+        });
+        schedule_persist(&namespace)
+    }
+
+    /// Remove `key` from `namespace`. No-op when the key is absent.
+    pub fn delete(namespace: Option<String>, key: String) -> Result<(), String> {
+        let namespace = ns(namespace);
+        load_if_needed(&namespace)?;
+        mutate(&namespace, |m| {
+            m.remove(&key);
+        });
+        schedule_persist(&namespace)
+    }
+
+    /// Drop every key in `namespace`. The next `flush` materialises
+    /// the empty state to disk.
+    pub fn clear(namespace: Option<String>) -> Result<(), String> {
+        let namespace = ns(namespace);
+        // Validate before mutating in-memory state — otherwise an
+        // invalid namespace would clear the in-memory map and then fail
+        // to persist, leaving on-disk + in-memory desynchronised.
+        validate_namespace(&namespace)?;
+        STORES.insert(namespace.clone(), Arc::new(Map::new()));
+        schedule_persist(&namespace)
+    }
+
+    /// List every key in `namespace`. Order is the underlying
+    /// `serde_json::Map` insertion order (currently hash-table — do
+    /// not rely on it).
+    pub fn keys(namespace: Option<String>) -> Result<Vec<Value>, String> {
+        let namespace = ns(namespace);
+        load_if_needed(&namespace)?;
+        Ok(STORES
+            .get(&namespace)
+            .map(|m| m.keys().map(|k| Value::String(k.clone())).collect())
+            .unwrap_or_default())
+    }
+
+    /// True when `key` exists in `namespace`.
+    pub fn has(namespace: Option<String>, key: String) -> Result<bool, String> {
+        let namespace = ns(namespace);
+        load_if_needed(&namespace)?;
+        Ok(STORES
+            .get(&namespace)
+            .is_some_and(|m| m.contains_key(&key)))
+    }
+
+    /// List every value in `namespace`.
+    pub fn values(namespace: Option<String>) -> Result<Vec<Value>, String> {
+        let namespace = ns(namespace);
+        load_if_needed(&namespace)?;
+        Ok(STORES
+            .get(&namespace)
+            .map(|m| m.values().cloned().collect())
+            .unwrap_or_default())
+    }
+
+    /// List every `[key, value]` pair in `namespace`. Tuple shape so
+    /// JS callers can pipe directly into `Object.fromEntries`.
+    pub fn entries(namespace: Option<String>) -> Result<Vec<Value>, String> {
+        let namespace = ns(namespace);
+        load_if_needed(&namespace)?;
+        Ok(STORES
+            .get(&namespace)
+            .map(|m| {
+                m.iter()
+                    .map(|(k, v)| Value::Array(vec![Value::String(k.clone()), v.clone()]))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    /// Number of keys in `namespace` (0 when the namespace is
+    /// uninitialised).
+    pub fn length(namespace: Option<String>) -> Result<u64, String> {
+        let namespace = ns(namespace);
+        load_if_needed(&namespace)?;
+        Ok(STORES.get(&namespace).map_or(0, |m| m.len()) as u64)
+    }
+
+    /// Drop the in-memory copy of `namespace` and re-read from disk.
+    /// Flushes any pending debounced write first so an unobserved
+    /// `set` isn't silently rolled back.
+    pub fn reload(namespace: Option<String>) -> Result<(), String> {
+        let namespace = ns(namespace);
+        flush_namespace(&namespace);
+        STORES.remove(&namespace);
+        load_if_needed(&namespace)
+    }
+
+    /// Force the debounced write for `namespace` through, blocking
+    /// until the background thread acks. No-op when nothing is
+    /// pending. Used by JS callers (and the host shutdown path) to
+    /// guarantee durability before returning.
+    pub fn flush(namespace: Option<String>) {
+        let namespace = ns(namespace);
+        flush_namespace(&namespace);
+    }
+}
+
+fn ns(namespace: Option<String>) -> String {
+    namespace.unwrap_or_else(|| "default".into())
 }
 
 /// Apply a mutation to the namespace map under copy-on-write semantics:
@@ -198,12 +223,6 @@ fn flush_namespace(namespace: &str) {
     // well under that; if it doesn't we'd rather return than wedge
     // the IPC dispatch thread.
     let _ = ack_rx.recv_timeout(Duration::from_secs(5));
-}
-
-fn key_arg(args: &Value) -> Result<&str, String> {
-    args.get("key")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| String::from(IpcError::missing_arg("store", "*", "key")))
 }
 
 /// Cache of namespaces already validated. Stores `()` so the lookup is

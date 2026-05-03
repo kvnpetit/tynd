@@ -14,35 +14,110 @@ use serde_json::{json, Value};
 use crate::{
     ipc_error::IpcError,
     os::{events, security},
+    tynd,
 };
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "exec" => exec(args, false),
-        "execShell" => exec(args, true),
-        "spawn" => spawn(args),
-        "writeStdin" => write_stdin(args),
-        "closeStdin" => close_stdin(args),
-        "kill" => kill(args),
-        _ => Err(IpcError::unknown_method("process", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — process state
+/// (per-PID `SpawnEntry` registry) lives in the file-level `REGISTRY`
+/// static.
+#[derive(Debug, Default)]
+pub struct ProcessApi;
+
+#[tynd::handler(api = "process")]
+impl ProcessApi {
+    /// Run `cmd` with `args` and wait for it to exit. Returns
+    /// `{ code, stdout, stderr }`. `cwd`, `env`, and `input` are
+    /// optional. `cwd` is gated by the host's fs allow-list.
+    pub fn exec(
+        cmd: String,
+        argv: Option<Vec<String>>,
+        cwd: Option<String>,
+        env: Option<serde_json::Map<String, Value>>,
+        input: Option<String>,
+    ) -> Result<Value, String> {
+        exec_impl(&cmd, argv, cwd, env, input, false)
+    }
+
+    /// Run `cmd` through the system shell. The `cmd` string is
+    /// passed verbatim to `cmd /C` (Windows) or `sh -c` (Unix) — no
+    /// extra `args` may be supplied (embed them directly into
+    /// `cmd`). Gated by `security.shellExecAllowedCommands`.
+    pub fn exec_shell(
+        cmd: String,
+        cwd: Option<String>,
+        env: Option<serde_json::Map<String, Value>>,
+        input: Option<String>,
+    ) -> Result<Value, String> {
+        exec_impl(&cmd, None, cwd, env, input, true)
+    }
+
+    /// Spawn `cmd` with `args` in streaming mode. Returns `{ pid }`
+    /// — the host emits `process:stdout:<pid>`,
+    /// `process:stderr:<pid>` and `process:exit:<pid>` until the
+    /// child exits.
+    pub fn spawn(
+        cmd: String,
+        argv: Option<Vec<String>>,
+        cwd: Option<String>,
+        env: Option<serde_json::Map<String, Value>>,
+    ) -> Result<Value, String> {
+        spawn_impl(&cmd, argv.unwrap_or_default(), cwd, env)
+    }
+
+    /// Write `data` to the child's stdin. Accepts a UTF-8 string or
+    /// a JSON array of byte values (`number[]`) — symmetric with the
+    /// frontend's `string | Uint8Array` shape. Errors when the pid
+    /// has exited or stdin was closed.
+    pub fn write_stdin(pid: u32, data: Value) -> Result<(), String> {
+        let bytes: Vec<u8> = if let Some(s) = data.as_str() {
+            s.as_bytes().to_vec()
+        } else if let Some(arr) = data.as_array() {
+            arr.iter()
+                .map(|v| {
+                    v.as_u64().and_then(|n| u8::try_from(n).ok()).ok_or_else(|| {
+                        IpcError::new(
+                            "process",
+                            "writeStdin",
+                            "'data' bytes out of range",
+                        )
+                        .into_string()
+                    })
+                })
+                .collect::<Result<Vec<u8>, String>>()?
+        } else {
+            return Err(IpcError::new(
+                "process",
+                "writeStdin",
+                "'data' must be string or byte array",
+            )
+            .into_string());
+        };
+        write_stdin_impl(pid, &bytes)
+    }
+
+    /// Close the child's stdin pipe. The child sees EOF on its
+    /// stdin descriptor.
+    pub fn close_stdin(pid: u32) -> Result<(), String> {
+        close_stdin_impl(pid)
+    }
+
+    /// Send `signal` (default `SIGTERM`) to the child. Windows
+    /// always issues `TerminateProcess` — the signal name is
+    /// recorded but ignored.
+    pub fn kill(pid: u32, signal: Option<String>) -> Result<(), String> {
+        kill_impl(pid, signal.as_deref().unwrap_or("SIGTERM"))
     }
 }
 
-fn exec(args: &Value, shell: bool) -> Result<Value, String> {
-    let cmd_str = args
-        .get("cmd")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| String::from(IpcError::missing_arg("process", "exec", "cmd")))?;
-
-    let argv: Vec<String> = args
-        .get("args")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|a| a.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
+fn exec_impl(
+    cmd_str: &str,
+    args_in: Option<Vec<String>>,
+    cwd: Option<String>,
+    env: Option<serde_json::Map<String, Value>>,
+    input: Option<String>,
+    shell: bool,
+) -> Result<Value, String> {
+    let argv: Vec<String> = args_in.unwrap_or_default();
 
     // `execShell` mode runs `cmd` through the system shell, which interprets
     // metacharacters. Naively appending caller-controlled `args` would let any
@@ -88,7 +163,7 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
         c
     };
 
-    if let Some(cwd) = args.get("cwd").and_then(|v| v.as_str()) {
+    if let Some(cwd) = cwd.as_deref() {
         // SECURITY: route `cwd` through the same fs allow-list as every
         // other host file access. Without this, a caller can pin a child
         // process to `/etc` (Unix) or `C:\Windows\System32` (Windows) and
@@ -100,15 +175,13 @@ fn exec(args: &Value, shell: bool) -> Result<Value, String> {
         command.current_dir(cwd);
     }
 
-    if let Some(env_obj) = args.get("env").and_then(|v| v.as_object()) {
+    if let Some(env_obj) = env {
         let merged: HashMap<String, String> = env_obj
             .iter()
             .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
             .collect();
         command.envs(merged);
     }
-
-    let input = args.get("input").and_then(|v| v.as_str()).map(String::from);
 
     command.stdin(if input.is_some() {
         Stdio::piped()
@@ -193,15 +266,6 @@ fn registry_get(pid: u32) -> Option<Arc<SpawnEntry>> {
     REGISTRY.get(&pid).map(|e| e.value().clone())
 }
 
-fn require_pid(args: &Value, op: &str) -> Result<u32, String> {
-    let v = args
-        .get("pid")
-        .ok_or_else(|| String::from(IpcError::missing_arg("process", op, "pid")))?;
-    v.as_u64()
-        .map(|n| n as u32)
-        .ok_or_else(|| IpcError::new("process", op, "'pid' must be a number").into_string())
-}
-
 /// Read one bytes chunk and emit it as `process:<stream>:<pid>`. Stops on
 /// EOF or read error. We avoid the per-byte JSON cost by emitting the
 /// whole chunk once per read — typical pipe reads return up to 64 KiB at
@@ -263,26 +327,16 @@ fn pump_stream<R: Read>(mut reader: R, event_name: String) {
     }
 }
 
-fn spawn(args: &Value) -> Result<Value, String> {
-    let cmd_str = args
-        .get("cmd")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "process.spawn: missing 'cmd'".to_string())?;
-
-    let argv: Vec<String> = args
-        .get("args")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|a| a.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-
+fn spawn_impl(
+    cmd_str: &str,
+    argv: Vec<String>,
+    cwd: Option<String>,
+    env: Option<serde_json::Map<String, Value>>,
+) -> Result<Value, String> {
     let mut command = Command::new(cmd_str);
     command.args(&argv);
 
-    if let Some(cwd) = args.get("cwd").and_then(|v| v.as_str()) {
+    if let Some(cwd) = cwd.as_deref() {
         // SECURITY: same gate as `exec` — `cwd` becomes the child's working
         // directory and any relative path it dereferences is resolved
         // against this. Run it through the fs policy before honoring it.
@@ -291,7 +345,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
         })?;
         command.current_dir(cwd);
     }
-    if let Some(env_obj) = args.get("env").and_then(|v| v.as_object()) {
+    if let Some(env_obj) = env {
         let merged: HashMap<String, String> = env_obj
             .iter()
             .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
@@ -390,28 +444,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
     Ok(json!({ "pid": pid }))
 }
 
-fn write_stdin(args: &Value) -> Result<Value, String> {
-    let pid = require_pid(args, "writeStdin")?;
-    // Accept either a string ("data" as utf-8) or an array of bytes.
-    let bytes: Vec<u8> = if let Some(s) = args.get("data").and_then(Value::as_str) {
-        s.as_bytes().to_vec()
-    } else if let Some(arr) = args.get("data").and_then(Value::as_array) {
-        arr.iter()
-            .map(|v| {
-                v.as_u64().and_then(|n| u8::try_from(n).ok()).ok_or_else(|| {
-                    IpcError::new("process", "writeStdin", "'data' bytes out of range").into_string()
-                })
-            })
-            .collect::<Result<Vec<u8>, String>>()?
-    } else {
-        return Err(IpcError::new(
-            "process",
-            "writeStdin",
-            "'data' must be string or byte array",
-        )
-        .into_string());
-    };
-
+fn write_stdin_impl(pid: u32, bytes: &[u8]) -> Result<(), String> {
     let entry = registry_get(pid).ok_or_else(|| {
         IpcError::new(
             "process",
@@ -425,13 +458,12 @@ fn write_stdin(args: &Value) -> Result<Value, String> {
         IpcError::new("process", "writeStdin", format!("stdin closed for pid {pid}")).into_string()
     })?;
     stdin
-        .write_all(&bytes)
+        .write_all(bytes)
         .map_err(|e| IpcError::new("process", "writeStdin", e).into_string())?;
-    Ok(Value::Null)
+    Ok(())
 }
 
-fn close_stdin(args: &Value) -> Result<Value, String> {
-    let pid = require_pid(args, "closeStdin")?;
+fn close_stdin_impl(pid: u32) -> Result<(), String> {
     let entry = registry_get(pid).ok_or_else(|| {
         IpcError::new("process", "closeStdin", format!("pid {pid} not found")).into_string()
     })?;
@@ -440,16 +472,10 @@ fn close_stdin(args: &Value) -> Result<Value, String> {
     *entry
         .stdin
         .lock() = None;
-    Ok(Value::Null)
+    Ok(())
 }
 
-fn kill(args: &Value) -> Result<Value, String> {
-    let pid = require_pid(args, "kill")?;
-    let signal = args
-        .get("signal")
-        .and_then(Value::as_str)
-        .unwrap_or("SIGTERM");
-
+fn kill_impl(pid: u32, signal: &str) -> Result<(), String> {
     let entry = registry_get(pid).ok_or_else(|| {
         IpcError::new("process", "kill", format!("pid {pid} not found")).into_string()
     })?;
@@ -504,7 +530,7 @@ fn kill(args: &Value) -> Result<Value, String> {
             .kill()
             .map_err(|e| IpcError::new("process", "kill", e).into_string())?;
     }
-    Ok(Value::Null)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -531,34 +557,35 @@ mod tests {
     #[test]
     fn echo_captures_stdout() {
         #[cfg(target_os = "windows")]
-        let v = exec(
-            &json!({ "cmd": "cmd", "args": ["/C", "echo hello"] }),
-            false,
+        let v = dispatch(
+            "exec",
+            &json!({ "cmd": "cmd", "argv": ["/C", "echo hello"] }),
         )
         .unwrap();
         #[cfg(not(target_os = "windows"))]
-        let v = exec(&json!({ "cmd": "echo", "args": ["hello"] }), false).unwrap();
+        let v = dispatch("exec", &json!({ "cmd": "echo", "argv": ["hello"] })).unwrap();
         assert!(v["stdout"].as_str().unwrap().contains("hello"));
         assert_eq!(v["code"].as_i64().unwrap(), 0);
     }
 
     #[test]
     fn exec_shell_runs_simple_command_when_whitelisted() {
-        let _g = security::test_lock()
-            .lock();
+        let _g = security::test_lock().lock();
         let _reset = allow_shell(&["echo"]);
-        let v = exec(&json!({ "cmd": "echo piped" }), true).unwrap();
+        let v = dispatch("execShell", &json!({ "cmd": "echo piped" })).unwrap();
         let stdout = v["stdout"].as_str().unwrap();
-        assert!(stdout.contains("piped"), "expected stdout to contain 'piped', got: {stdout}");
+        assert!(
+            stdout.contains("piped"),
+            "expected stdout to contain 'piped', got: {stdout}"
+        );
     }
 
     #[test]
     fn exec_shell_rejects_when_not_configured() {
-        let _g = security::test_lock()
-            .lock();
+        let _g = security::test_lock().lock();
         // No whitelist set — every call must reject.
         security::set_shell_exec_allowed_for_tests(Vec::new());
-        let err = exec(&json!({ "cmd": "ls" }), true).unwrap_err();
+        let err = dispatch("execShell", &json!({ "cmd": "ls" })).unwrap_err();
         assert!(
             err.contains("not permitted"),
             "expected 'not permitted' error, got: {err}"
@@ -567,10 +594,9 @@ mod tests {
 
     #[test]
     fn exec_shell_rejects_unlisted_command() {
-        let _g = security::test_lock()
-            .lock();
+        let _g = security::test_lock().lock();
         let _reset = allow_shell(&["echo"]);
-        let err = exec(&json!({ "cmd": "rm -rf /tmp/foo" }), true).unwrap_err();
+        let err = dispatch("execShell", &json!({ "cmd": "rm -rf /tmp/foo" })).unwrap_err();
         assert!(
             err.contains("not in `shellExecAllowedCommands`"),
             "expected whitelist-miss error, got: {err}"
@@ -579,52 +605,56 @@ mod tests {
 
     #[test]
     fn exec_shell_rejects_metacharacter_even_if_whitelisted() {
-        let _g = security::test_lock()
-            .lock();
+        let _g = security::test_lock().lock();
         let _reset = allow_shell(&["ls"]);
         // `ls` is whitelisted but `;` is a shell metacharacter — refuse.
-        let err = exec(&json!({ "cmd": "ls; rm -rf /" }), true).unwrap_err();
+        let err = dispatch("execShell", &json!({ "cmd": "ls; rm -rf /" })).unwrap_err();
         assert!(
             err.contains("metacharacters are not allowed"),
             "expected metachar-reject error, got: {err}"
         );
         // Pipe is also a metacharacter.
-        let err = exec(&json!({ "cmd": "ls | cat" }), true).unwrap_err();
+        let err = dispatch("execShell", &json!({ "cmd": "ls | cat" })).unwrap_err();
         assert!(err.contains("metacharacters"));
     }
 
     #[test]
     fn missing_cmd_errors() {
-        assert!(exec(&json!({}), false).is_err());
+        assert!(dispatch("exec", &json!({})).is_err());
     }
 
     #[test]
     fn nonzero_exit_preserved() {
         #[cfg(target_os = "windows")]
-        let v = exec(&json!({ "cmd": "cmd", "args": ["/C", "exit 7"] }), false).unwrap();
+        let v =
+            dispatch("exec", &json!({ "cmd": "cmd", "argv": ["/C", "exit 7"] })).unwrap();
         #[cfg(not(target_os = "windows"))]
-        let v = exec(&json!({ "cmd": "sh", "args": ["-c", "exit 7"] }), false).unwrap();
+        let v =
+            dispatch("exec", &json!({ "cmd": "sh", "argv": ["-c", "exit 7"] })).unwrap();
         assert_eq!(v["code"].as_i64().unwrap(), 7);
     }
 
     /// `spawn` returns immediately with a numeric pid that lands in the
-    /// global registry. We don't have a live event-loop in tests so we
-    /// can't assert on the emitted `process:stdout:<pid>` events directly,
-    /// but the registry insertion + a successful `kill` round trip is
-    /// enough to exercise the bookkeeping path.
+    /// global registry.
     #[test]
     fn spawn_returns_pid_and_registers_entry() {
         #[cfg(target_os = "windows")]
-        let v = spawn(&json!({
-            "cmd": "cmd",
-            "args": ["/C", "ping", "-n", "5", "127.0.0.1"]
-        }))
+        let v = dispatch(
+            "spawn",
+            &json!({
+                "cmd": "cmd",
+                "argv": ["/C", "ping", "-n", "5", "127.0.0.1"]
+            }),
+        )
         .expect("spawn");
         #[cfg(not(target_os = "windows"))]
-        let v = spawn(&json!({
-            "cmd": "sleep",
-            "args": ["2"]
-        }))
+        let v = dispatch(
+            "spawn",
+            &json!({
+                "cmd": "sleep",
+                "argv": ["2"]
+            }),
+        )
         .expect("spawn");
 
         let pid = v["pid"].as_u64().expect("pid is u64") as u32;
@@ -632,7 +662,7 @@ mod tests {
         assert!(REGISTRY.contains_key(&pid));
 
         // Kill it so the test doesn't leak processes.
-        kill(&json!({ "pid": pid })).expect("kill");
+        dispatch("kill", &json!({ "pid": pid })).expect("kill");
 
         // Give the waiter thread a moment to drain — exit emit + registry
         // remove happens off the dispatch thread.
@@ -642,9 +672,6 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
-        // If we get here the waiter never reaped the entry. Not a hard
-        // failure (the pid may still be alive if the OS is slow), but
-        // worth flagging.
         assert!(
             !REGISTRY.contains_key(&pid),
             "spawn waiter never removed pid {pid} from registry"
@@ -653,30 +680,30 @@ mod tests {
 
     #[test]
     fn spawn_invalid_binary_rejects() {
-        let err = spawn(&json!({
-            "cmd": "this-binary-does-not-exist-tynd-test-xyz",
-            "args": []
-        }))
+        let err = dispatch(
+            "spawn",
+            &json!({
+                "cmd": "this-binary-does-not-exist-tynd-test-xyz",
+                "argv": []
+            }),
+        )
         .unwrap_err();
         assert!(err.contains("process.spawn"), "got: {err}");
     }
 
     #[test]
     fn write_stdin_unknown_pid_errors() {
-        let err = write_stdin(&json!({ "pid": 99999999u64, "data": "hi" })).unwrap_err();
+        let err = dispatch(
+            "writeStdin",
+            &json!({ "pid": 99999999u64, "data": "hi" }),
+        )
+        .unwrap_err();
         assert!(err.contains("not found"), "got: {err}");
     }
 
     #[test]
     fn kill_unknown_pid_errors() {
-        let err = kill(&json!({ "pid": 99999999u64 })).unwrap_err();
+        let err = dispatch("kill", &json!({ "pid": 99999999u64 })).unwrap_err();
         assert!(err.contains("not found"), "got: {err}");
-    }
-
-    #[test]
-    fn require_pid_validates() {
-        assert!(require_pid(&json!({}), "writeStdin").is_err());
-        assert!(require_pid(&json!({ "pid": "abc" }), "writeStdin").is_err());
-        assert_eq!(require_pid(&json!({ "pid": 42 }), "writeStdin").unwrap(), 42);
     }
 }

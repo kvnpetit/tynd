@@ -25,7 +25,7 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
 /// One window's persisted state. Optional fields stay absent in the
 /// JSON file when unknown — that way a window restored before the host
@@ -128,97 +128,80 @@ pub fn save_to_disk() -> std::io::Result<()> {
     write_states_atomic(&path, &snapshot)
 }
 
-/// IPC dispatch entry point — wired into `os::dispatch` under the
-/// `windowState` API name. Mirrors the wire shape the previous
-/// `@tynd/plugin-window-state` plugin exposed so existing client
-/// code continues to work after the rename.
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "get" => dispatch_get(args),
-        "getAll" => dispatch_get_all(),
-        "set" => dispatch_set(args),
-        "clear" => dispatch_clear(args),
-        "setStoragePath" => dispatch_set_storage_path(args),
-        "loadFromDisk" => dispatch_load_from_disk(args),
-        "saveToDisk" => dispatch_save_to_disk(),
-        _ => Err(IpcError::unknown_method("windowState", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — window-state
+/// store lives in the file-level `STORE` static.
+#[derive(Debug, Default)]
+pub struct WindowStateApi;
+
+#[tynd::handler(api = "windowState")]
+impl WindowStateApi {
+    /// Return the persisted snapshot for `label`, or `null` when no
+    /// entry exists.
+    pub fn get(label: String) -> Value {
+        get(&label).map_or(Value::Null, |s| {
+            serde_json::to_value(s).unwrap_or(Value::Null)
+        })
     }
-}
 
-fn dispatch_get(args: &Value) -> Result<Value, String> {
-    let label = args
-        .get("label")
-        .and_then(Value::as_str)
-        .ok_or_else(|| String::from(IpcError::missing_arg("windowState", "get", "label")))?;
-    Ok(get(label).map_or(Value::Null, |s| {
-        serde_json::to_value(s).unwrap_or(Value::Null)
-    }))
-}
-
-fn dispatch_get_all() -> Result<Value, String> {
-    let guard = store().states.read();
-    let mut out = serde_json::Map::with_capacity(guard.len());
-    for (label, state) in guard.iter() {
-        out.insert(
-            label.clone(),
-            serde_json::to_value(state).unwrap_or(Value::Null),
-        );
+    /// Return every persisted snapshot, keyed by window label.
+    pub fn get_all() -> Value {
+        let guard = store().states.read();
+        let mut out = serde_json::Map::with_capacity(guard.len());
+        for (label, state) in guard.iter() {
+            out.insert(
+                label.clone(),
+                serde_json::to_value(state).unwrap_or(Value::Null),
+            );
+        }
+        Value::Object(out)
     }
-    Ok(Value::Object(out))
-}
 
-fn dispatch_set(args: &Value) -> Result<Value, String> {
-    let label = args
-        .get("label")
-        .and_then(Value::as_str)
-        .ok_or_else(|| String::from(IpcError::missing_arg("windowState", "set", "label")))?;
-    let raw = args
-        .get("state")
-        .ok_or_else(|| String::from(IpcError::missing_arg("windowState", "set", "state")))?;
-    let state: WindowState = serde_json::from_value(raw.clone()).map_err(|e| {
-        IpcError::new("windowState", "set", format!("invalid 'state': {e}")).into_string()
-    })?;
-    set(label, state);
-    Ok(Value::Null)
-}
+    /// Replace the in-memory snapshot for `label`. Does not flush
+    /// to disk — call `saveToDisk` to materialise.
+    pub fn set(label: String, state: WindowState) {
+        set(&label, state);
+    }
 
-fn dispatch_clear(args: &Value) -> Result<Value, String> {
-    let label = args.get("label").and_then(Value::as_str);
-    clear(label).map_err(|e| IpcError::new("windowState", "clear", e).into_string())?;
-    Ok(Value::Null)
-}
+    /// Drop the snapshot for `label`. When `label` is omitted,
+    /// every entry is wiped.
+    pub fn clear(label: Option<String>) -> Result<(), String> {
+        clear(label.as_deref())
+            .map_err(|e| IpcError::new("windowState", "clear", e).into_string())
+    }
 
-fn dispatch_set_storage_path(args: &Value) -> Result<Value, String> {
-    let path = args.get("path").and_then(Value::as_str).ok_or_else(|| {
-        String::from(IpcError::missing_arg("windowState", "setStoragePath", "path"))
-    })?;
-    set_storage_path(PathBuf::from(path));
-    Ok(Value::Null)
-}
+    /// Configure the on-disk JSON path used by `loadFromDisk` /
+    /// `saveToDisk`.
+    pub fn set_storage_path(path: String) {
+        set_storage_path(PathBuf::from(path));
+    }
 
-fn dispatch_load_from_disk(args: &Value) -> Result<Value, String> {
-    // `path` is optional once `setStoragePath` has been called; fall
-    // back to the configured path otherwise.
-    let path = if let Some(p) = args.get("path").and_then(Value::as_str) {
-        PathBuf::from(p)
-    } else {
-        store().storage_path.read().clone().ok_or_else(|| {
-            IpcError::new(
-                "windowState",
-                "loadFromDisk",
-                "no path provided and none configured",
-            )
-            .into_string()
-        })?
-    };
-    load_from_disk(path)
-        .map_err(|e| IpcError::new("windowState", "loadFromDisk", e).into_string())?;
-    Ok(Value::Null)
-}
+    /// Load the persisted state from `path` (or the
+    /// previously-configured path when omitted). Corrupted JSON is
+    /// silently treated as an empty map — a corrupted file should
+    /// never crash the host.
+    pub fn load_from_disk(path: Option<String>) -> Result<(), String> {
+        let path = if let Some(p) = path {
+            PathBuf::from(p)
+        } else {
+            store().storage_path.read().clone().ok_or_else(|| {
+                IpcError::new(
+                    "windowState",
+                    "loadFromDisk",
+                    "no path provided and none configured",
+                )
+                .into_string()
+            })?
+        };
+        load_from_disk(path)
+            .map_err(|e| IpcError::new("windowState", "loadFromDisk", e).into_string())
+    }
 
-fn dispatch_save_to_disk() -> Result<Value, String> {
-    save_to_disk().map_err(|e| IpcError::new("windowState", "saveToDisk", e).into_string())?;
-    Ok(json!(null))
+    /// Atomically write the in-memory snapshot to the configured
+    /// storage path. Errors when no path has been set yet.
+    pub fn save_to_disk() -> Result<(), String> {
+        save_to_disk()
+            .map_err(|e| IpcError::new("windowState", "saveToDisk", e).into_string())
+    }
 }
 
 /// Read a JSON file and parse it into a label → state map. Returns an

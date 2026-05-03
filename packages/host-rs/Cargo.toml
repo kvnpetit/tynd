@@ -362,19 +362,21 @@ obs-sentry = [ "dep:sentry" ]
 # launcher main.rs for that build).
 splash-screen = [ "dep:softbuffer", "dep:raw-window-handle" ]
 
-# Persistent HTTP cookie jar — workspace-pinned `cookie_store` for
-# plugin / fork consumers (the in-process ureq agent will gain its
-# own jar in the ureq3 follow-up, see workspace Cargo.toml note). The
-# feature exists today so consumers can `workspace = true` without
-# repinning the version.
+# Persistent HTTP cookie jar — wires ureq 3's built-in `CookieJar`
+# into `os::http::Agent` and persists it to
+# `~/.tynd/cookies/<app-id>.json` when the `http.cookies.persist`
+# config flag is set. `cookie_store` is the standalone serde-friendly
+# jar for forks / plugins that want to share state outside the
+# in-process agent (re-exported from `os::http::cookies`).
 http-cookies = [ "dep:cookie_store" ]
 
 # OS-native TLS root cert chain — opt-in for enterprise / corp-CA
-# users who can't manage webpki-roots. Pulls
-# `rustls-platform-verifier` (OS Keychain/Win-crypto/NSS); the actual
-# wire-up to ureq's `TlsConfig` lands with the ureq3 migration. The
-# crate is workspace-shared so plugins can depend on the same
-# version when they ship their own HTTP clients.
+# users who can't manage webpki-roots. ureq 3 carries the
+# `rustls-platform-verifier` integration through its own
+# `platform-verifier` feature (always on in our workspace pin), so
+# enabling this host feature flips the agent's `RootCerts` over to
+# `PlatformVerifier`. The standalone crate is workspace-shared so
+# plugins shipping their own HTTP clients stay on the same version.
 tls-platform-verifier = [ "dep:rustls-platform-verifier" ]
 
 # === macOS-only Tauri-parity additions ===

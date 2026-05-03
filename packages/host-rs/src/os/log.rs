@@ -24,7 +24,7 @@ use fs_err::{File, OpenOptions};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
 const DEFAULT_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const DEFAULT_MAX_FILES: u32 = 3;
@@ -138,15 +138,65 @@ fn default_path() -> PathBuf {
     base.join(&name).join("app.log")
 }
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "configure" => configure(args),
-        "write" => write_entry(args),
-        "path" => Ok(Value::String(
-            STATE.lock().path.to_string_lossy().into_owned(),
-        )),
-        _ => Err(IpcError::unknown_method("log", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — logger state
+/// lives in the file-level `STATE` static.
+#[derive(Debug, Default)]
+pub struct LogApi;
+
+#[tynd::handler(api = "log")]
+impl LogApi {
+    /// Update the logger config in-place. Every field is optional —
+    /// supply only the keys you want to change. `level` accepts
+    /// `"debug" | "info" | "warn" | "error"`. `file` must be an
+    /// absolute path. `rotation` accepts `"size" | "daily" | "hourly"
+    /// | "both"`.
+    pub fn configure(
+        level: Option<String>,
+        file: Option<String>,
+        max_bytes: Option<u64>,
+        max_files: Option<u64>,
+        rotation: Option<String>,
+    ) -> Result<(), String> {
+        configure_impl(level, file, max_bytes, max_files, rotation)
     }
+
+    /// Write a single log entry. `level` is required; `message`
+    /// defaults to the empty string; `fields` is an optional JSON
+    /// object spliced into the entry under the `fields` key.
+    pub fn write(
+        level: String,
+        message: Option<String>,
+        fields: Option<Value>,
+    ) -> Result<(), String> {
+        let args = json!({
+            "level": level,
+            "message": message.unwrap_or_default(),
+            "fields": fields.unwrap_or(Value::Null),
+        });
+        write_entry(&args).map(|_| ())
+    }
+
+    /// Return the absolute path of the current log file.
+    pub fn path() -> String {
+        STATE.lock().path.to_string_lossy().into_owned()
+    }
+}
+
+fn configure_impl(
+    level: Option<String>,
+    file: Option<String>,
+    max_bytes: Option<u64>,
+    max_files: Option<u64>,
+    rotation: Option<String>,
+) -> Result<(), String> {
+    let args = json!({
+        "level": level,
+        "file": file,
+        "maxBytes": max_bytes,
+        "maxFiles": max_files,
+        "rotation": rotation,
+    });
+    configure(&args).map(|_| ())
 }
 
 fn configure(args: &Value) -> Result<Value, String> {

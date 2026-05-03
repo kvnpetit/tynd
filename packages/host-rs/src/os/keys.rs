@@ -32,7 +32,7 @@ use parking_lot::RwLock;
 use serde_json::{json, Value};
 
 use super::events;
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
 /// Cap on registered combos. Each entry is a short heap string in a
 /// `BTreeSet`; 256 covers any realistic UX (typical apps register
@@ -44,13 +44,65 @@ const MAX_COMBOS: usize = 256;
 /// `OnceLock::get_or_init`.
 static DISABLED: LazyLock<RwLock<BTreeSet<String>>> = LazyLock::new(|| RwLock::new(BTreeSet::new()));
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "disable" => disable(args),
-        "enable" => enable(args),
-        "list" => Ok(list()),
-        "clear" => clear(),
-        _ => Err(IpcError::unknown_method("keys", method).into_string()),
+/// Marker for the `#[tynd::handler]` dispatch table — disabled-combo
+/// state lives in the file-level `DISABLED` static.
+#[derive(Debug, Default)]
+pub struct KeysApi;
+
+#[tynd::handler(api = "keys")]
+impl KeysApi {
+    /// Mark `combos` as disabled. Modifier order is normalised
+    /// (`Shift+Ctrl+R` and `Ctrl+Shift+R` collapse to one entry).
+    /// Errors when the cap of 256 entries is reached.
+    pub fn disable(combos: Vec<String>) -> Result<(), String> {
+        {
+            let mut state = DISABLED.write();
+            for combo in combos.into_iter().map(normalise_combo) {
+                if state.len() >= MAX_COMBOS && !state.contains(&combo) {
+                    return Err(IpcError::new(
+                        "keys",
+                        "disable",
+                        format!(
+                            "max {MAX_COMBOS} combos reached — call clear() or enable() first"
+                        ),
+                    )
+                    .into_string());
+                }
+                state.insert(combo);
+            }
+        }
+        broadcast();
+        Ok(())
+    }
+
+    /// Re-enable `combos` (remove them from the disabled set).
+    pub fn enable(combos: Vec<String>) {
+        {
+            let mut state = DISABLED.write();
+            for combo in combos {
+                state.remove(&normalise_combo(combo));
+            }
+        }
+        broadcast();
+    }
+
+    /// List every currently-disabled combo, in canonical
+    /// (BTreeSet-sorted) order.
+    pub fn list() -> Value {
+        Value::Array(
+            DISABLED
+                .read()
+                .iter()
+                .map(|c| Value::String(c.clone()))
+                .collect(),
+        )
+    }
+
+    /// Drop every disabled combo and broadcast `keys:set` so the
+    /// frontend rebuilds its mirror.
+    pub fn clear() {
+        DISABLED.write().clear();
+        broadcast();
     }
 }
 
@@ -59,73 +111,6 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 /// devtools output.
 pub fn current_disabled() -> Vec<String> {
     DISABLED.read().iter().cloned().collect()
-}
-
-fn disable(args: &Value) -> Result<Value, String> {
-    let combos = combos_arg(args)?;
-    {
-        let mut state = DISABLED.write();
-        for combo in combos.into_iter().map(normalise_combo) {
-            if state.len() >= MAX_COMBOS && !state.contains(&combo) {
-                return Err(IpcError::new(
-                    "keys",
-                    "disable",
-                    format!(
-                        "max {MAX_COMBOS} combos reached — call clear() or enable() first"
-                    ),
-                )
-                .into_string());
-            }
-            state.insert(combo);
-        }
-    }
-    broadcast();
-    Ok(Value::Null)
-}
-
-fn enable(args: &Value) -> Result<Value, String> {
-    let combos = combos_arg(args)?;
-    {
-        let mut state = DISABLED.write();
-        for combo in combos {
-            state.remove(&normalise_combo(combo));
-        }
-    }
-    broadcast();
-    Ok(Value::Null)
-}
-
-fn list() -> Value {
-    Value::Array(
-        DISABLED
-            .read()
-            .iter()
-            .map(|c| Value::String(c.clone()))
-            .collect(),
-    )
-}
-
-fn clear() -> Result<Value, String> {
-    DISABLED.write().clear();
-    broadcast();
-    Ok(Value::Null)
-}
-
-fn combos_arg(args: &Value) -> Result<Vec<String>, String> {
-    let arr = args
-        .get("combos")
-        .and_then(Value::as_array)
-        .ok_or_else(|| String::from(IpcError::missing_arg("keys", "*", "combos")))?;
-    let mut out = Vec::with_capacity(arr.len());
-    for v in arr {
-        let s = v
-            .as_str()
-            .ok_or_else(|| {
-                IpcError::new("keys", "*", "'combos' must contain strings").into_string()
-            })?;
-        out.push(s.to_string());
-    }
-    Ok(out)
 }
 
 fn broadcast() {

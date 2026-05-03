@@ -326,19 +326,39 @@ fn stop_periodic_check() {
 }
 
 fn http_agent(proxy: Option<&str>) -> Result<ureq::Agent, String> {
-    let mut b = ureq::AgentBuilder::new().timeout(Duration::from_secs(60));
+    let mut config = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(Duration::from_secs(60)));
     if let Some(url) = proxy {
         let p = ureq::Proxy::new(url).map_err(|e| format!("updater: bad proxy URL: {e}"))?;
-        b = b.proxy(p);
+        config = config.proxy(Some(p));
     }
-    Ok(b.build())
+
+    #[cfg(feature = "tls-platform-verifier")]
+    {
+        use ureq::tls::{RootCerts, TlsConfig};
+        config = config.tls_config(
+            TlsConfig::builder()
+                .root_certs(RootCerts::PlatformVerifier)
+                .build(),
+        );
+    }
+
+    Ok(config.build().new_agent())
 }
 
-fn apply_headers(mut req: ureq::Request, headers: Option<&Value>) -> ureq::Request {
+/// Apply caller-supplied headers to a ureq 3 GET `RequestBuilder`. The
+/// updater only ever runs GETs, so we keep this typed against
+/// `RequestBuilder<WithoutBody>` instead of going through the `http`
+/// crate's request builder + `Agent::run` indirection.
+fn apply_headers(
+    mut req: ureq::RequestBuilder<ureq::typestate::WithoutBody>,
+    headers: Option<&Value>,
+) -> ureq::RequestBuilder<ureq::typestate::WithoutBody> {
     if let Some(obj) = headers.and_then(Value::as_object) {
         for (k, v) in obj {
             if let Some(s) = v.as_str() {
-                req = req.set(k, s);
+                req = req.header(k, s);
             }
         }
     }
@@ -362,11 +382,12 @@ fn check(args: &Value) -> Result<Value, String> {
 
     let agent = http_agent(proxy)?;
     let req = apply_headers(agent.get(endpoint), args.get("headers"));
-    let resp = req
+    let mut resp = req
         .call()
         .map_err(|e| format!("updater.check({endpoint}): {e}"))?;
     let mut body = String::new();
-    resp.into_reader()
+    resp.body_mut()
+        .as_reader()
         .take(8 * 1024 * 1024)
         .read_to_string(&mut body)
         .map_err(|e| format!("updater.check: read manifest: {e}"))?;
@@ -480,15 +501,22 @@ fn download_and_verify(args: &Value) -> Result<Value, String> {
 
     let agent = http_agent(proxy)?;
     let req = apply_headers(agent.get(url), args.get("headers"));
-    let resp = req
+    let mut resp = req
         .call()
         .map_err(|e| format!("updater.downloadAndVerify({url}): {e}"))?;
     let total = resp
-        .header("Content-Length")
+        .headers()
+        .get("Content-Length")
+        .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<u64>().ok());
 
     let mut emitter = Progress::new(progress_id, "download", total);
-    let mut reader = resp.into_reader();
+    // ureq 3's `as_reader()` is unbounded — the loop below is bounded by
+    // the cumulative-write check `MAX_PATCH_BYTES` for patches; the
+    // full-binary path is bounded only by available memory + the
+    // BytesMut growth, which matches 2.x semantics (no `take(...)` cap
+    // there either, since release binaries can legitimately be 100+ MB).
+    let mut reader = resp.body_mut().as_reader();
     let mut buf = vec![0u8; 64 * 1024];
     // Cap the pre-allocation at 8 MiB so a hostile/incorrect Content-Length
     // can't make us reserve gigabytes up-front. `BytesMut` grows
@@ -599,15 +627,17 @@ fn download_and_patch(args: &Value) -> Result<Value, String> {
     // ---- 1) Download patch bytes (small, ~KB) -----------------------
     let agent = http_agent(proxy)?;
     let req = apply_headers(agent.get(url), args.get("headers"));
-    let resp = req
+    let mut resp = req
         .call()
         .map_err(|e| format!("updater.downloadAndPatch({url}): {e}"))?;
     let total = resp
-        .header("Content-Length")
+        .headers()
+        .get("Content-Length")
+        .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<u64>().ok());
 
     let mut emitter = Progress::new(progress_id, "download", total);
-    let mut reader = resp.into_reader();
+    let mut reader = resp.body_mut().as_reader();
     let mut buf = vec![0u8; 64 * 1024];
     // Cap the patch size at 256 MB — anything beyond that defeats the
     // point of delta updates (download the full binary instead) and
