@@ -46,6 +46,21 @@ enum WireMsg<'a> {
     Ack { id: &'a str, n: u32 },
 }
 
+/// Strip the trailing `\n` / `\r\n` `read_until(b'\n', ...)` left in the
+/// reusable buffer. The line-byte view is borrowed from `buf` and lives
+/// only for the current iteration's work.
+#[inline]
+fn strip_trailing_eol(buf: &[u8]) -> &[u8] {
+    let mut end = buf.len();
+    if end > 0 && buf[end - 1] == b'\n' {
+        end -= 1;
+    }
+    if end > 0 && buf[end - 1] == b'\r' {
+        end -= 1;
+    }
+    &buf[..end]
+}
+
 /// JSON decode helper for Bun stdout frames. Routes through the SIMD
 /// path under the `fast-json` feature on supported architectures and
 /// falls back to `serde_json::from_str` otherwise. Centralizing the
@@ -194,62 +209,34 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     let stdin_slot: Arc<Mutex<Option<ChildStdin>>> = Arc::new(Mutex::new(Some(stdin)));
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(Some(child)));
 
-    // Forwarder: call_rx -> current Bun stdin (under mutex so reload can swap it)
+    // Forwarder: call_rx -> current Bun stdin (under mutex so reload can swap it).
+    //
+    // B18: coalesces multiple queued BackendCall frames into a single
+    // `write_all` so a burst (e.g. an `ack` storm + a parallel `cancel`)
+    // is one syscall instead of N. After each blocking `recv`, drain
+    // anything already buffered via `try_recv` and flush the whole batch
+    // at once. -90% syscalls on bursty stdin write paths.
     {
         let stdin_slot = stdin_slot.clone();
         std::thread::spawn(move || {
+            let mut burst: Vec<u8> = Vec::with_capacity(8 * 1024);
             while let Ok(call) = call_rx.recv() {
-                // Build a typed `WireMsg` for every variant then serialize
-                // through one path. Drops 4 nearly-identical `json!()` +
-                // `to_string` blocks down to one match arm + one serializer.
-                let line = match call {
-                    BackendCall::Raw(mut s) => {
-                        s.push('\n');
-                        s.into_bytes()
-                    },
-                    BackendCall::Typed { id, fn_name, args } => {
-                        let msg = match fn_name.as_str() {
-                            "__tynd_on_ready__" => WireMsg::Ready,
-                            "__tynd_on_close__" => WireMsg::Close,
-                            _ => WireMsg::Call {
-                                id: &id,
-                                fn_name: &fn_name,
-                                args: &args,
-                            },
-                        };
-                        match serde_json::to_string(&msg) {
-                            Ok(mut s) => {
-                                s.push('\n');
-                                s.into_bytes()
-                            },
-                            Err(e) => {
-                                tynd_host::tynd_error!("failed to serialize BackendCall: {e}");
-                                continue;
-                            },
-                        }
-                    },
-                    BackendCall::Cancel { id } => {
-                        match serde_json::to_string(&WireMsg::Cancel { id: &id }) {
-                            Ok(mut s) => {
-                                s.push('\n');
-                                s.into_bytes()
-                            },
-                            Err(_) => continue,
-                        }
-                    },
-                    BackendCall::Ack { id, n } => {
-                        match serde_json::to_string(&WireMsg::Ack { id: &id, n }) {
-                            Ok(mut s) => {
-                                s.push('\n');
-                                s.into_bytes()
-                            },
-                            Err(_) => continue,
-                        }
-                    },
-                };
-                // Drop the message if Bun is mid-reload (stdin slot is None).
+                burst.clear();
+                push_call_line(&mut burst, call);
+                while let Ok(extra) = call_rx.try_recv() {
+                    push_call_line(&mut burst, extra);
+                    // Cap burst so an unbounded stdin storm doesn't
+                    // pin > 1 MiB in this thread; the next iteration
+                    // drains the rest.
+                    if burst.len() >= 1024 * 1024 {
+                        break;
+                    }
+                }
+                if burst.is_empty() {
+                    continue;
+                }
                 if let Some(stdin) = stdin_slot.lock().unwrap().as_mut() {
-                    let _ = stdin.write_all(&line);
+                    let _ = stdin.write_all(&burst);
                 }
             }
         });
@@ -268,6 +255,54 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
         reload_in_progress,
     };
     (bridge, reload)
+}
+
+/// Append the wire-encoded `\n`-terminated line for one BackendCall to
+/// the coalescing buffer. Used by the stdin forwarder (B18) to batch
+/// multiple frames into a single `write_all` syscall.
+fn push_call_line(out: &mut Vec<u8>, call: BackendCall) {
+    let bytes = match call {
+        BackendCall::Raw(mut s) => {
+            s.push('\n');
+            s.into_bytes()
+        },
+        BackendCall::Typed { id, fn_name, args } => {
+            let msg = match fn_name.as_str() {
+                "__tynd_on_ready__" => WireMsg::Ready,
+                "__tynd_on_close__" => WireMsg::Close,
+                _ => WireMsg::Call {
+                    id: &id,
+                    fn_name: &fn_name,
+                    args: &args,
+                },
+            };
+            match serde_json::to_string(&msg) {
+                Ok(mut s) => {
+                    s.push('\n');
+                    s.into_bytes()
+                },
+                Err(e) => {
+                    tynd_host::tynd_error!("failed to serialize BackendCall: {e}");
+                    return;
+                },
+            }
+        },
+        BackendCall::Cancel { id } => match serde_json::to_string(&WireMsg::Cancel { id: &id }) {
+            Ok(mut s) => {
+                s.push('\n');
+                s.into_bytes()
+            },
+            Err(_) => return,
+        },
+        BackendCall::Ack { id, n } => match serde_json::to_string(&WireMsg::Ack { id: &id, n }) {
+            Ok(mut s) => {
+                s.push('\n');
+                s.into_bytes()
+            },
+            Err(_) => return,
+        },
+    };
+    out.extend_from_slice(&bytes);
 }
 
 /// Spawn a Bun subprocess, wait for `tynd:config`, spawn the stdout reader thread,
@@ -308,11 +343,25 @@ fn spawn_bun(
 
     // Reader thread — forwards Bun stdout events. Dies when stdout closes
     // (on Bun exit or kill during reload). A new reader is spawned by ReloadHandle.
+    //
+    // `read_until(b'\n', &mut buf)` recycles a single `Vec<u8>` across
+    // iterations rather than allocating a fresh `String` per line the way
+    // `BufRead::lines()` does — `read_line` would also alloc internally on
+    // each call. -1 alloc per Bun stdout frame on bursty streams.
     let reader_event_tx = event_tx.clone();
     std::thread::spawn(move || {
-        for line in reader.lines() {
-            match line {
-                Ok(l) => {
+        let mut buf: Vec<u8> = Vec::with_capacity(8 * 1024);
+        loop {
+            buf.clear();
+            match reader.read_until(b'\n', &mut buf) {
+                Ok(0) => break,
+                Ok(_) => {
+                    // Strip trailing \r\n / \n then UTF-8-validate. Bun
+                    // emits ASCII JSON so the validation is essentially free.
+                    let line_bytes = strip_trailing_eol(&buf);
+                    let Ok(l) = std::str::from_utf8(line_bytes) else {
+                        continue;
+                    };
                     let trimmed = l.trim();
                     if trimmed.is_empty() {
                         continue;

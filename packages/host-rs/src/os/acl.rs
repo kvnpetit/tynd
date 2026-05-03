@@ -194,7 +194,11 @@ impl Authority {
         if inserted_any {
             // Sticky — we now have at least one grant on file, so the
             // process is in "configured" mode for the rest of its life.
-            self.ever_configured.store(true, Ordering::SeqCst);
+            // Sticky latch — Release pairs with the Acquire load in
+// `is_unconfigured` so any thread that observes the latch
+// flipped also sees the capability map mutation that
+// happened just before.
+self.ever_configured.store(true, Ordering::Release);
         }
         Ok(())
     }
@@ -207,7 +211,11 @@ impl Authority {
         })?;
         // Sticky latch — see `Authority::ever_configured`. Stays true
         // even after a subsequent `remove_capability` empties the map.
-        self.ever_configured.store(true, Ordering::SeqCst);
+        // Sticky latch — Release pairs with the Acquire load in
+// `is_unconfigured` so any thread that observes the latch
+// flipped also sees the capability map mutation that
+// happened just before.
+self.ever_configured.store(true, Ordering::Release);
         Ok(())
     }
 
@@ -284,7 +292,7 @@ impl Authority {
             //    this process, an empty list means "deny everything",
             //    not "back to no policy". The sticky `ever_configured`
             //    latch encodes that.
-            return !self.ever_configured.load(Ordering::SeqCst);
+            return !self.ever_configured.load(Ordering::Acquire);
         };
 
         let lookup_keys = command_lookup_keys(command);
@@ -637,7 +645,7 @@ mod tests {
         let _g = auth.write_lock.lock();
         auth.state.store(Arc::new(AuthorityState::default()));
         auth.manifests.lock().clear();
-        auth.ever_configured.store(false, Ordering::SeqCst);
+        auth.ever_configured.store(false, Ordering::Release);
     }
 
     /// Build a minimal `Manifest` with one named permission whose

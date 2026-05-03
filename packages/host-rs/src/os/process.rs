@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
+use dashmap::DashMap;
 use parking_lot::Mutex;
 use shared_child::SharedChild;
 
@@ -173,20 +174,19 @@ struct SpawnEntry {
     stdin: Mutex<Option<ChildStdin>>,
 }
 
-/// Process-wide pid → spawn entry registry. `LazyLock` initializes the
-/// inner `HashMap` on first deref. `parking_lot::Mutex` (no poison
-/// handling) lets the registry helpers drop the
-/// `unwrap_or_else(PoisonError::into_inner)` boilerplate the previous
-/// `std::sync::Mutex` shape required.
-static REGISTRY: LazyLock<Mutex<HashMap<u32, Arc<SpawnEntry>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Process-wide pid → spawn entry registry. `DashMap` shard-locks the
+/// map so a `kill()` on one pid never serialises behind a `writeStdin()`
+/// touching a different pid — the previous `Mutex<HashMap>` made every
+/// concurrent reader pay one outer lock acquisition just to fetch its
+/// own per-pid `Arc<SpawnEntry>`.
+static REGISTRY: LazyLock<DashMap<u32, Arc<SpawnEntry>>> = LazyLock::new(DashMap::default);
 
 fn registry_remove(pid: u32) -> Option<Arc<SpawnEntry>> {
-    REGISTRY.lock().remove(&pid)
+    REGISTRY.remove(&pid).map(|(_, v)| v)
 }
 
 fn registry_get(pid: u32) -> Option<Arc<SpawnEntry>> {
-    REGISTRY.lock().get(&pid).cloned()
+    REGISTRY.get(&pid).map(|e| e.value().clone())
 }
 
 fn require_pid(args: &Value, op: &str) -> Result<u32, String> {
@@ -339,7 +339,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
         std::thread::spawn(move || pump_stream(err, event_name));
     }
 
-    REGISTRY.lock().insert(pid, Arc::clone(&entry));
+    REGISTRY.insert(pid, Arc::clone(&entry));
 
     // Waiter thread — `wait()` blocks until the child exits, which is
     // exactly what we want here. The OS already gave us a separate handle
@@ -612,7 +612,7 @@ mod tests {
 
         let pid = v["pid"].as_u64().expect("pid is u64") as u32;
         assert!(pid > 0);
-        assert!(REGISTRY.lock().contains_key(&pid));
+        assert!(REGISTRY.contains_key(&pid));
 
         // Kill it so the test doesn't leak processes.
         kill(&json!({ "pid": pid })).expect("kill");
@@ -620,7 +620,7 @@ mod tests {
         // Give the waiter thread a moment to drain — exit emit + registry
         // remove happens off the dispatch thread.
         for _ in 0..50 {
-            if !REGISTRY.lock().contains_key(&pid) {
+            if !REGISTRY.contains_key(&pid) {
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
@@ -629,7 +629,7 @@ mod tests {
         // failure (the pid may still be alive if the OS is slow), but
         // worth flagging.
         assert!(
-            !REGISTRY.lock().contains_key(&pid),
+            !REGISTRY.contains_key(&pid),
             "spawn waiter never removed pid {pid} from registry"
         );
     }

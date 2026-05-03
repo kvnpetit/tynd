@@ -87,6 +87,13 @@ use serde_json::Value;
 /// compiled in. Shape matches normal dispatch errors so frontends don't
 /// need a special case. Only referenced by the `#[cfg(not(feature = ...))]`
 /// branches, so it's dead code under `default` (= `api-all`).
+///
+/// `#[cold]` (B21): the disabled-API path is rare relative to the
+/// normal dispatch hot path. Marking it cold lets the compiler optimise
+/// it for size and place it out of the hot icache region — every
+/// `Err(api_disabled(...))` arm in the macro-generated dispatch table
+/// inherits the same locality benefit.
+#[cold]
 #[allow(dead_code)]
 fn api_disabled(api: &str) -> String {
     format!(

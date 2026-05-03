@@ -99,6 +99,11 @@ sys-locale.workspace = true
 bytes.workspace       = true
 smallvec.workspace    = true
 tauri-utils.workspace = true
+# Compact-strings — inline-stores short IPC IDs/labels (≤24 B on 64-bit)
+# without heap alloc. Hot path on every dispatch.
+compact_str.workspace = true
+# SIMD hex encoder for the `tynd-bin://` hash response path.
+faster-hex.workspace  = true
 
 # Optional — pulled only when their matching `api-*` feature is enabled.
 rfd                   = { workspace = true, optional = true }

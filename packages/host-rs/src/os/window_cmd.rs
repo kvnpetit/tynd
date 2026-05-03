@@ -8,14 +8,20 @@ use crate::window;
 
 /// Set by `tyndWindow.cancelClose()` during a `window:close-requested` handler.
 /// Polled 500ms later by the event loop before actually hiding / exiting.
+///
+/// Atomic ordering: pure signal flag — no dependent data ever published
+/// through it, so the matched `Release` store / `Acquire` load is
+/// sufficient. SeqCst would force a global memory barrier on every
+/// touch with no observable benefit (no other atomic depends on this
+/// happening in any particular global order).
 static CLOSE_CANCELLED: AtomicBool = AtomicBool::new(false);
 
 pub fn reset_close_cancel() {
-    CLOSE_CANCELLED.store(false, Ordering::SeqCst);
+    CLOSE_CANCELLED.store(false, Ordering::Release);
 }
 
 pub fn close_cancelled() -> bool {
-    CLOSE_CANCELLED.load(Ordering::SeqCst)
+    CLOSE_CANCELLED.load(Ordering::Acquire)
 }
 
 /// Dispatch a window command synchronously on the main (event-loop) thread.
@@ -177,7 +183,7 @@ pub fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value, Strin
         "isVisible" => Ok(Value::Bool(win.is_visible())),
 
         "cancelClose" => {
-            CLOSE_CANCELLED.store(true, Ordering::SeqCst);
+            CLOSE_CANCELLED.store(true, Ordering::Release);
             Ok(Value::Null)
         },
 

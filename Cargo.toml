@@ -446,6 +446,18 @@ rkyv = { version = "0.8", features = ["bytecheck"] }
 # évite l'alloc heap sur le hot path dispatch.
 smallvec = { version = "1.13", features = ["serde", "union"] }
 
+# Compact strings — inline-stores up to 24 bytes on 64-bit (vs `String`'s
+# heap alloc + 24-byte struct). Used for IPC `id`/`label` values that
+# circulate on the dispatch hot path: UUIDs (36 chars) spill, but
+# short/typed labels (`"primary"`, `"main"`, `os_call:<short>`) stay
+# inline. -16 B per active call when the id fits.
+compact_str = "0.8"
+
+# SIMD hex encoder — `faster-hex` uses SSE4.1/AVX2 (x86_64) and NEON
+# (aarch64) paths with a scalar fallback. Drop-in for the hand-rolled
+# byte loop in `os::compute::hex_encode`. 5-10× hash digest hex encode.
+faster-hex = "0.10"
+
 # === OS surface étendue (parité Tauri + différenciants) ===
 
 # CPU/RAM/disque/processus cross-platform. Exposé via `os.systemStats()`

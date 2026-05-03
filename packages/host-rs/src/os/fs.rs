@@ -256,12 +256,14 @@ fn scope_summary() -> String {
     names.join(", ")
 }
 
-// Per-handle mutex so blocking I/O on one file never stalls the map lock.
-// `LazyLock` builds the empty `ahash::HashMap` on first deref; callers
-// reach the map via direct `HANDLES.lock()` instead of a `HANDLES`
-// accessor wrapping `OnceLock::get_or_init`.
-static HANDLES: LazyLock<Mutex<ahash::HashMap<u64, std::sync::Arc<Mutex<File>>>>> =
-    LazyLock::new(|| Mutex::new(ahash::HashMap::default()));
+// Per-handle mutex so blocking I/O on one file never stalls the map.
+// `DashMap` shard-locks the map itself so two threads opening / closing
+// distinct handles never serialise on a single outer mutex — the previous
+// `Mutex<HashMap>` made every call pay one Mutex acquisition just to walk
+// the bucket, even when the actual file I/O happens under the per-handle
+// `Arc<Mutex<File>>`. Per-handle behaviour is unchanged.
+static HANDLES: LazyLock<dashmap::DashMap<u64, std::sync::Arc<Mutex<File>>>> =
+    LazyLock::new(dashmap::DashMap::default);
 static NEXT_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 
 fn open_handle(args: &Value) -> Result<Value, String> {
@@ -295,9 +297,7 @@ fn open_handle(args: &Value) -> Result<Value, String> {
     let file = cap_file.into_std();
 
     let id = NEXT_HANDLE_ID.fetch_add(1, Ordering::Relaxed);
-    HANDLES
-        .lock()
-        .insert(id, std::sync::Arc::new(Mutex::new(file)));
+    HANDLES.insert(id, std::sync::Arc::new(Mutex::new(file)));
     Ok(json!({ "id": id }))
 }
 
@@ -310,9 +310,8 @@ fn with_handle<R>(args: &Value, f: impl FnOnce(&mut File) -> R) -> Result<R, Str
         .and_then(Value::as_u64)
         .ok_or_else(|| "fs: missing 'id'".to_string())?;
     let file = HANDLES
-        .lock()
         .get(&id)
-        .cloned()
+        .map(|e| e.value().clone())
         .ok_or_else(|| format!("fs: handle {id} not open"))?;
     let mut guard = file.lock();
     Ok(f(&mut guard))
@@ -332,15 +331,38 @@ fn seek_handle(args: &Value) -> Result<Value, String> {
     Ok(json!({ "position": new }))
 }
 
+// Thread-local scratch buffer for `read_handle`. Re-used across calls on
+// the same call-pool worker thread so the per-call `vec![0u8; len]`
+// alloc disappears (only the first call on a given thread allocates;
+// subsequent calls reuse the same backing storage). Capped at 4 MiB so a
+// stray jumbo read doesn't pin a huge allocation per worker thread.
+thread_local! {
+    static READ_SCRATCH: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+const READ_SCRATCH_MAX_RETAIN: usize = 4 * 1024 * 1024;
+
 fn read_handle(args: &Value) -> Result<Value, String> {
     let len = args
         .get("length")
         .and_then(Value::as_u64)
         .ok_or_else(|| "fs.read: missing 'length'".to_string())? as usize;
-    let mut buf = vec![0u8; len];
-    let n = with_handle(args, |f| f.read(&mut buf))?.map_err(|e| format!("fs.read: {e}"))?;
-    buf.truncate(n);
-    Ok(json!({ "bytes": STANDARD.encode(&buf), "read": n }))
+
+    READ_SCRATCH.with(|cell| {
+        let mut buf = cell.borrow_mut();
+        // Resize-with-zero only fills up to `len`; if the buffer is already
+        // ≥ len we just slice — no zero-fill on the hot path.
+        if buf.len() < len {
+            buf.resize(len, 0);
+        }
+        let n = with_handle(args, |f| f.read(&mut buf[..len]))?.map_err(|e| format!("fs.read: {e}"))?;
+        let encoded = STANDARD.encode(&buf[..n]);
+        // Drop oversized buffers so a one-off jumbo read doesn't pin
+        // megabytes per worker thread for the rest of the process life.
+        if buf.capacity() > READ_SCRATCH_MAX_RETAIN {
+            buf.shrink_to(READ_SCRATCH_MAX_RETAIN);
+        }
+        Ok(json!({ "bytes": encoded, "read": n }))
+    })
 }
 
 fn write_handle(args: &Value) -> Result<Value, String> {
@@ -360,7 +382,7 @@ fn close_handle(args: &Value) -> Result<Value, String> {
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "fs.close: missing 'id'".to_string())?;
-    Ok(Value::Bool(HANDLES.lock().remove(&id).is_some()))
+    Ok(Value::Bool(HANDLES.remove(&id).is_some()))
 }
 
 fn copy_dir(args: &Value) -> Result<Value, String> {

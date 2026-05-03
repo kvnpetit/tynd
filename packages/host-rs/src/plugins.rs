@@ -43,8 +43,22 @@ struct Entry {
     initialized: bool,
 }
 
+/// Snapshot of registered plugins, keyed by plugin name for O(1) lookup
+/// (B26 — drops the linear `Vec::iter().find()` scan dispatch was paying
+/// per call). Names are `&'static str` returned by `TyndPlugin::name`,
+/// so the key type stays cheap.
+///
+/// Note re B12 (arc-swap read path): rejected — `Entry` carries a
+/// `Box<dyn TyndPlugin>` and `PluginCx` which aren't `Clone`, so a
+/// snapshot-and-swap pattern would require unsafe pointer surgery to
+/// hand the same plugin to both the old and new map. The hot read path
+/// is `RwLock::read()` from `parking_lot`, which is a single CAS on the
+/// uncontended path — close enough to arc-swap's single-load-acq for
+/// the once-at-startup write workload here.
+type EntryMap = ahash::HashMap<&'static str, Entry>;
+
 struct Registry {
-    entries: RwLock<Vec<Entry>>,
+    entries: RwLock<EntryMap>,
     /// Shared emit closure — every per-plugin `PluginCx` reuses it.
     default_emit: OnceLock<EmitFn>,
     /// Shared OS dispatcher — routes `cx.os_call(...)` into the core
@@ -53,16 +67,16 @@ struct Registry {
 }
 
 impl Registry {
-    const fn new() -> Self {
+    fn new() -> Self {
         Self {
-            entries: RwLock::new(Vec::new()),
+            entries: RwLock::new(EntryMap::default()),
             default_emit: OnceLock::new(),
             default_dispatch: OnceLock::new(),
         }
     }
 }
 
-static REGISTRY: Registry = Registry::new();
+static REGISTRY: std::sync::LazyLock<Registry> = std::sync::LazyLock::new(Registry::new);
 
 /// Install the shared emit callback + wire the default OS dispatcher.
 /// Must run before the IPC loop drains its first message, but it may
@@ -90,7 +104,7 @@ pub fn install_emit(emit: EmitFn) {
         .clone();
 
     let mut entries = REGISTRY.entries.write();
-    for entry in entries.iter_mut() {
+    for entry in entries.values_mut() {
         if entry.initialized {
             continue;
         }
@@ -126,11 +140,11 @@ pub fn register_with_caps(plugin: PluginBox, allowed_apis: Option<Vec<String>>) 
     // before running `init`. Otherwise an `init` that does anything
     // plugin-aware (e.g. emits an event a sibling plugin listens to)
     // would self-deadlock on the write guard.
+    let name = plugin.name();
     {
         let read = REGISTRY.entries.read();
-        let name = plugin.name();
         assert!(
-            !read.iter().any(|e| e.plugin.name() == name),
+            !read.contains_key(name),
             "duplicate plugin registration: {name}"
         );
     }
@@ -155,7 +169,7 @@ pub fn register_with_caps(plugin: PluginBox, allowed_apis: Option<Vec<String>>) 
         _ => (None, false),
     };
 
-    REGISTRY.entries.write().push(Entry {
+    REGISTRY.entries.write().insert(name, Entry {
         plugin,
         cx,
         allowed_apis,
@@ -173,8 +187,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 
     let entries = REGISTRY.entries.read();
     let entry = entries
-        .iter()
-        .find(|e| e.plugin.name() == plugin_name)
+        .get(plugin_name)
         .ok_or_else(|| format!("unknown plugin: '{plugin_name}'"))?;
 
     let cx = entry

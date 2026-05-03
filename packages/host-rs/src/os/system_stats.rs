@@ -13,6 +13,7 @@ use std::sync::LazyLock;
 
 use parking_lot::Mutex;
 use serde_json::{json, Value};
+use smallvec::SmallVec;
 use sysinfo::{Disks, ProcessRefreshKind, RefreshKind, System};
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
@@ -111,8 +112,10 @@ fn processes(args: &Value) -> Value {
     );
 
     // Stable order = ascending PID. sysinfo's `processes()` returns a
-    // HashMap; sort once then page.
-    let mut pids: Vec<&sysinfo::Pid> = s.processes().keys().collect();
+    // HashMap; sort once then page. Use a `SmallVec` with a 64-PID inline
+    // capacity so dev machines / lightly loaded boxes never spill to the
+    // heap; busier hosts (>64 procs) transparently fall back to heap.
+    let mut pids: SmallVec<[&sysinfo::Pid; 64]> = s.processes().keys().collect();
     pids.sort();
 
     let arr: Vec<Value> = pids

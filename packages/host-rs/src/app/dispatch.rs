@@ -5,6 +5,7 @@
 
 use std::sync::LazyLock;
 
+use compact_str::CompactString;
 use crossbeam_channel as mpsc;
 use dashmap::DashMap;
 use serde_json::Value;
@@ -19,7 +20,13 @@ use crate::{os, runtime::BackendCall};
 /// their own yields). Entries are cleared on `Return`. `LazyLock` builds
 /// the `DashMap` on first deref so callers reach it via direct
 /// `CALL_LABELS.get(...)` instead of a `call_labels()` accessor.
-pub(super) static CALL_LABELS: LazyLock<DashMap<String, String>> = LazyLock::new(DashMap::default);
+///
+/// Value type is `CompactString`: window labels are typically short
+/// (`"primary"`, `"main"`, user-supplied window names ≤24 B) and inline
+/// without a heap alloc. Keys stay `String` because UUIDs (36 chars) spill
+/// past CompactString's 24-byte inline cap on 64-bit anyway.
+pub(super) static CALL_LABELS: LazyLock<DashMap<String, CompactString>> =
+    LazyLock::new(DashMap::default);
 
 /// Zero-allocation scan for `"id":"<value>"` in the IPC fast path. The shim
 /// produces compact `JSON.stringify` output with deterministic key order, so
@@ -53,7 +60,7 @@ pub(super) fn handle_ipc_body(
     // (slow path below) tolerates any rare prefix anyway.
     if body.starts_with(r#"{"type":"call""#) {
         if let Some(id) = extract_call_id(&body) {
-            CALL_LABELS.insert(id, label.to_string());
+            CALL_LABELS.insert(id, CompactString::from(label));
         }
         let _ = call_tx.send(BackendCall::Raw(body));
         return;

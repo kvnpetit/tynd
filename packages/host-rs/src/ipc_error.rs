@@ -43,6 +43,12 @@ pub struct IpcError(String);
 
 impl IpcError {
     /// Build a fully-qualified error: `"<api>.<method>: <msg>"`.
+    ///
+    /// `#[cold]` (B21): every constructor here lives on the IPC error
+    /// path, which is by definition off the hot dispatch path. Marking
+    /// these cold helps the compiler keep the format machinery out of
+    /// the hot icache lines that the success branches occupy.
+    #[cold]
     pub fn new(api: &str, method: &str, msg: impl Display) -> Self {
         Self(format!("{api}.{method}: {msg}"))
     }
@@ -50,12 +56,14 @@ impl IpcError {
     /// Common shape for "the JSON `args` payload is missing the named
     /// argument". Drops the trailing `'arg'` quoting that a hand-rolled
     /// `format!` would otherwise leave inconsistent across sites.
+    #[cold]
     pub fn missing_arg(api: &str, method: &str, arg: &str) -> Self {
         Self::new(api, method, format!("missing '{arg}' argument"))
     }
 
     /// Catch-all for the trailing `_ => Err(...)` arm in every dispatch
     /// table. Keeps the unknown-method shape uniform across APIs.
+    #[cold]
     pub fn unknown_method(api: &str, method: &str) -> Self {
         Self::new(api, method, "unknown method")
     }

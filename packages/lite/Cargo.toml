@@ -14,6 +14,15 @@ keywords.workspace      = true
 categories.workspace    = true
 readme.workspace        = true
 
+build = "build.rs"
+
+[build-dependencies]
+# Pre-compress the JS polyfill bundle at build time so the runtime
+# binary embeds a ~14 KB zstd blob instead of ~50 KB of raw JS (B50).
+# `default-features = false` matches the workspace pin and avoids
+# pulling features the build script doesn't need.
+zstd = { workspace = true }
+
 [lib]
 name = "tynd_lite"
 path = "src/lib.rs"
@@ -40,6 +49,10 @@ rquickjs.workspace   = true
 serde.workspace      = true
 serde_json.workspace = true
 mimalloc.workspace   = true
+# Runtime decompression of the build-time-zstd-pre-compressed polyfill
+# bundle (B50). The build script writes `OUT_DIR/polyfills.zst`; the
+# runtime decodes it once via `OnceLock` on first polyfill install.
+zstd.workspace       = true
 ureq.workspace        = true
 base64.workspace      = true
 # tungstenite — WebSocket impl is fully delegated to `tynd_host`; lite

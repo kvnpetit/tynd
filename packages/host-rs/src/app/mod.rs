@@ -464,23 +464,29 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     // terminating Return — otherwise the frontend iterator
                     // would finalize before the last chunks arrived.
                     flush_yields(&mut yield_buffer, &webview, &secondaries);
-                    let label = dispatch::CALL_LABELS
+                    let label: String = dispatch::CALL_LABELS
                         .remove(&id)
-                        .map_or_else(|| PRIMARY_LABEL.into(), |(_, l)| l);
+                        .map_or_else(|| PRIMARY_LABEL.into(), |(_, l)| l.into());
                     let wv = webview_for(&label, &webview, &secondaries);
                     let _ = wv.evaluate_script(&ipc::eval_resolve(&id, ok, &value));
                 },
                 BackendEvent::Yield { id, value } => {
-                    let label = dispatch::CALL_LABELS
+                    let label: String = dispatch::CALL_LABELS
                         .get(&id)
-                        .map_or_else(|| PRIMARY_LABEL.into(), |e| e.clone());
+                        .map_or_else(|| PRIMARY_LABEL.into(), |e| e.value().as_str().into());
                     let bucket = yield_buffer.entry(label).or_default();
                     bucket.push((id, value));
                     // Synchronous flush when any bucket gets hot — avoids
                     // memory growth if a single stream fires in a tight loop.
                     if bucket.len() >= YIELD_BATCH_MAX {
                         flush_yields(&mut yield_buffer, &webview, &secondaries);
-                    } else if !flush_scheduled.swap(true, Ordering::SeqCst) {
+                    } else if !flush_scheduled.swap(true, Ordering::AcqRel) {
+                        // AcqRel single-flight latch — pairs with the
+                        // matching Release store(false) in the
+                        // FlushYields handler. SeqCst would force a
+                        // global barrier on the dispatch hot path; the
+                        // latch only guards a single FlushYields spawn
+                        // against itself, no cross-atomic ordering needed.
                         let proxy = proxy.clone();
                         std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_millis(YIELD_FLUSH_MS));
@@ -1038,6 +1044,12 @@ fn cancel_streams_for_label(label: &str, call_tx: &crossbeam_channel::Sender<Bac
 /// `YieldBucket` derefs to `&[(String, String)]` so `eval_yield_batch` (which
 /// already takes a slice) accepts it unchanged regardless of whether the
 /// `SmallVec` lives inline or has spilled to the heap.
+///
+/// B29: single-yield fast path — if the bucket holds exactly one entry,
+/// route through `eval_yield` (a plain `format!`) instead of building the
+/// 2-D `[[id,val]]` batch envelope. Saves the BytesMut alloc + the
+/// nested-array bracket bookkeeping for the common low-rate streaming
+/// case (~2 µs per single yield).
 fn flush_yields(
     buffer: &mut HashMap<String, YieldBucket>,
     primary: &WebView,
@@ -1048,7 +1060,12 @@ fn flush_yields(
             continue;
         }
         let wv = webview_for(&label, primary, secondaries);
-        let _ = wv.evaluate_script(&ipc::eval_yield_batch(&pairs));
+        if pairs.len() == 1 {
+            let (id, value) = &pairs[0];
+            let _ = wv.evaluate_script(&ipc::eval_yield(id, value));
+        } else {
+            let _ = wv.evaluate_script(&ipc::eval_yield_batch(&pairs));
+        }
     }
 }
 

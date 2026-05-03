@@ -204,7 +204,33 @@ fn key_arg(args: &Value) -> Result<&str, String> {
         .ok_or_else(|| "store: missing 'key' argument".to_string())
 }
 
+/// Cache of namespaces already validated. Stores `()` so the lookup is
+/// presence-only — once a namespace string has passed validation in this
+/// process, the same string is fast-pathed through `contains_key`. Names
+/// are trusted (frontend-supplied IPC arg) but bounded by the validator
+/// itself (rejects anything not `[A-Za-z0-9_.-]`); the cache can grow at
+/// most as wide as the legitimate namespace set the app uses, which is
+/// always finite (one entry per `tynd.config.ts` declaration plus the
+/// occasional dynamic ns).
+static VALIDATED_NS: std::sync::LazyLock<dashmap::DashMap<String, ()>> =
+    std::sync::LazyLock::new(dashmap::DashMap::default);
+
 fn validate_namespace(namespace: &str) -> Result<(), String> {
+    // Fast path — already accepted in this process. Cheap concurrent
+    // read on the DashMap (single shard load), no allocation.
+    if VALIDATED_NS.contains_key(namespace) {
+        return Ok(());
+    }
+    validate_namespace_uncached(namespace)?;
+    // Insert under the original `&str` only after the slow path proved
+    // it valid. `to_string` allocs once per *new* namespace; subsequent
+    // calls hit the fast path above.
+    VALIDATED_NS.insert(namespace.to_string(), ());
+    Ok(())
+}
+
+#[cold]
+fn validate_namespace_uncached(namespace: &str) -> Result<(), String> {
     // Namespaces become directory names under `config_dir/`. Reject anything
     // that would let a caller escape the parent directory or write to a
     // sibling app's data: empty strings, leading dots, slashes, and any

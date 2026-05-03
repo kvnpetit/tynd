@@ -39,29 +39,28 @@ pub(crate) fn install<'js>(
     fetch::register(ctx, &g, js_tx)?;
     websocket::register(ctx, &g, js_tx)?;
     perf::register(ctx, &g)?;
-    ctx.eval::<(), _>(POLYFILLS_JS.as_bytes())?;
+    ctx.eval::<(), _>(polyfills_js().as_bytes())?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests;
 
-/// Concatenated polyfill JS. Order encodes dependency: base64 + text
-/// first (define `btoa`/`atob` + `__tynd_b64_*`/`TextEncoder`), then
-/// `_bridge.js` (publishes `__tynd_to_bytes` + the polyfill-event
-/// dispatcher used by crypto/fetch/websocket), then abort (fetch
-/// prereq), then crypto, then fetch, then the assorted standalones.
-pub(super) const POLYFILLS_JS: &str = concat!(
-    include_str!("base64.js"),
-    include_str!("text.js"),
-    include_str!("_bridge.js"),
-    include_str!("abort.js"),
-    include_str!("crypto.js"),
-    include_str!("fetch.js"),
-    include_str!("url.js"),
-    include_str!("websocket.js"),
-    include_str!("perf.js"),
-    include_str!("clone.js"),
-    include_str!("blob.js"),
-    include_str!("event-source.js"),
-);
+/// Compile-time zstd-compressed polyfill bundle (B50). Source order is
+/// identical to the previous `concat!(include_str!(...))` chain — see
+/// `lite/build.rs` for the file list. Trades ~30-40 KB binary size for
+/// one synchronous zstd decompress on first reach (a few ms during
+/// QuickJS startup, hidden behind `OnceLock`).
+const POLYFILLS_ZST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/polyfills.zst"));
+
+/// Lazy-decompressed polyfill JS. The first reach pays the zstd
+/// decode cost; every subsequent reach hands back the same `&'static str`.
+fn polyfills_js() -> &'static str {
+    static DECOMPRESSED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DECOMPRESSED.get_or_init(|| {
+        let bytes = zstd::stream::decode_all(POLYFILLS_ZST)
+            .expect("lite polyfills: zstd decode failed (corrupt embedded blob)");
+        String::from_utf8(bytes)
+            .expect("lite polyfills: post-decode bytes are not valid UTF-8")
+    })
+}

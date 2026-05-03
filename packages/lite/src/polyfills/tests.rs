@@ -3,7 +3,7 @@
 
 use rquickjs::{Context, Function, Runtime};
 
-use super::POLYFILLS_JS;
+use super::polyfills_js;
 
 fn boot_pure() -> (Runtime, Context) {
     let rt = Runtime::new().unwrap();
@@ -70,7 +70,7 @@ fn boot_pure() -> (Runtime, Context) {
             Function::new(ctx.clone(), || -> f64 { 0.0 }).unwrap(),
         )
         .unwrap();
-        ctx.eval::<(), _>(POLYFILLS_JS.as_bytes()).unwrap();
+        ctx.eval::<(), _>(polyfills_js().as_bytes()).unwrap();
     });
     (rt, ctx)
 }

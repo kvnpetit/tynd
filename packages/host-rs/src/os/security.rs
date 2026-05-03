@@ -444,7 +444,7 @@ fn configure(args: &Value) -> Result<Value, String> {
         POLICY.store(Arc::new(next));
     }
     // Latch so subsequent `add_*_allow(...)` calls don't try to re-merge.
-    PERSISTED.auto_restored.store(true, Ordering::SeqCst);
+    PERSISTED.auto_restored.store(true, Ordering::Release);
     Ok(Value::Null)
 }
 
@@ -706,7 +706,7 @@ fn load_persisted_unlocked() -> PersistedGrants {
 /// already merges persisted grants into its initial allow-list.
 fn auto_restore_persisted() {
     let s = &PERSISTED;
-    if s.auto_restored.swap(true, Ordering::SeqCst) {
+    if s.auto_restored.swap(true, Ordering::AcqRel) {
         return;
     }
     // Snapshot under the read lock, then mutate the policy without
@@ -893,7 +893,7 @@ fn set_persisted_storage_for_tests(path: PathBuf) {
     let s = &PERSISTED;
     *s.grants.write() = PersistedGrants::default();
     *s.storage_path.write() = Some(path);
-    s.auto_restored.store(false, Ordering::SeqCst);
+    s.auto_restored.store(false, Ordering::Release);
 }
 
 // Cross-module test gate: anything hitting `check_fs` or `check_http`

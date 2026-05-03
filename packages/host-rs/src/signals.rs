@@ -51,7 +51,13 @@ static INSTALLED: AtomicBool = AtomicBool::new(false);
 /// Hosts (`tynd-full` / `tynd-lite`) call this once at startup, right
 /// after `init_tracing()`.
 pub fn init() {
-    if INSTALLED.swap(true, Ordering::SeqCst) {
+    // AcqRel: single-flight idempotency latch. The Release on the
+    // successful swap publishes the upcoming `set_handler` install to
+    // any thread that later observes `INSTALLED == true` via Acquire
+    // (none does today — the latch is fire-and-forget — but cheap to be
+    // correct). SeqCst would only be needed for a global ordering with
+    // unrelated atomics, which we don't have here.
+    if INSTALLED.swap(true, Ordering::AcqRel) {
         return;
     }
 
