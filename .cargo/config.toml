@@ -1,0 +1,30 @@
+# Workspace-wide cargo configuration.
+#
+# Linker tuning for Linux: prefer `mold` (5-15× faster link than `ld.bfd`,
+# typically 2-4× faster than `ld.lld`). The flag is passed via `link-arg`
+# rather than `-Clinker=mold` so rustc still drives the regular linker
+# binary (`cc`/`gcc`) and only the `-fuse-ld=mold` request changes which
+# backend is invoked.
+#
+# Fallback behavior:
+#   - If `mold` is not installed locally, the link will fail with a clear
+#     "mold: not found" error. Install with:
+#       Debian/Ubuntu : `sudo apt install mold`
+#       Fedora/RHEL   : `sudo dnf install mold`
+#       Arch          : `sudo pacman -S mold`
+#       macOS/Win     : N/A (this block is Linux-only).
+#   - To opt out per-machine without editing this file, drop a
+#     `~/.cargo/config.toml` entry that re-targets the same triple with
+#     an empty rustflags array; the user-level config wins for keys it
+#     defines outright.
+#
+# macOS uses `ld64` (Apple's linker) by default — no override needed; the
+# `lld` macOS port is not yet stable enough across all dylib edge cases
+# in the wry/objc2 graph. Windows uses MSVC's `link.exe` via the MSVC
+# toolchain or `lld-link` via the GNU toolchain — both are already fast.
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = [ "-C", "link-arg=-fuse-ld=mold" ]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = [ "-C", "link-arg=-fuse-ld=mold" ]

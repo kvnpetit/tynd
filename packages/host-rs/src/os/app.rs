@@ -4,14 +4,20 @@
 //! The frontend then queries via `app.getName` / `app.getVersion`.
 //! Exit + relaunch are uniform across runtimes.
 
-use std::{sync::OnceLock, time::Duration};
+use std::{sync::LazyLock, time::Duration};
 
 use parking_lot::Mutex;
 use serde_json::Value;
 
-static APP_NAME: OnceLock<Mutex<String>> = OnceLock::new();
-static APP_VERSION: OnceLock<Mutex<String>> = OnceLock::new();
-static BUNDLE_ID: OnceLock<Mutex<String>> = OnceLock::new();
+// `LazyLock` initializes the inner `Mutex<String>` to `String::new()`
+// on first access — empty string is the sentinel for "the backend
+// hasn't called `app.setInfo` yet" so the getters fall back to the
+// process-derived default. The previous `OnceLock` shape used `None`
+// for the same purpose; the empty-string check is equivalent and saves
+// the per-call `Option::map` boilerplate.
+static APP_NAME: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(String::new()));
+static APP_VERSION: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(String::new()));
+static BUNDLE_ID: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(String::new()));
 
 /// Tynd host version — baked in at compile time from the workspace Cargo.toml.
 const FRAMEWORK_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -45,40 +51,32 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 }
 
 fn set_bundle_id(id: String) {
-    match BUNDLE_ID.get() {
-        Some(m) => *m.lock() = id,
-        None => {
-            let _ = BUNDLE_ID.set(Mutex::new(id));
-        },
-    }
+    *BUNDLE_ID.lock() = id;
 }
 
 fn get_bundle_id() -> Option<String> {
-    BUNDLE_ID.get().map(|m| m.lock().clone())
+    let v = BUNDLE_ID.lock();
+    if v.is_empty() {
+        None
+    } else {
+        Some(v.clone())
+    }
 }
 
 fn set_name(name: String) {
-    match APP_NAME.get() {
-        Some(m) => *m.lock() = name,
-        None => {
-            let _ = APP_NAME.set(Mutex::new(name));
-        },
-    }
+    *APP_NAME.lock() = name;
 }
 
 fn set_version(version: String) {
-    match APP_VERSION.get() {
-        Some(m) => *m.lock() = version,
-        None => {
-            let _ = APP_VERSION.set(Mutex::new(version));
-        },
-    }
+    *APP_VERSION.lock() = version;
 }
 
 fn get_name() -> String {
-    if let Some(m) = APP_NAME.get() {
-        return m.lock().clone();
+    let v = APP_NAME.lock();
+    if !v.is_empty() {
+        return v.clone();
     }
+    drop(v);
     // Fallback: filename of the running binary without extension.
     std::env::current_exe()
         .ok()
@@ -87,9 +85,12 @@ fn get_name() -> String {
 }
 
 fn get_version() -> String {
-    APP_VERSION
-        .get()
-        .map_or_else(|| "0.0.0".into(), |m| m.lock().clone())
+    let v = APP_VERSION.lock();
+    if v.is_empty() {
+        "0.0.0".into()
+    } else {
+        v.clone()
+    }
 }
 
 fn relaunch() -> Result<Value, String> {

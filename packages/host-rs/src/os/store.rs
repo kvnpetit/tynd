@@ -1,16 +1,16 @@
 //! JSON key/value store at `config_dir()/<ns>/store.json`. Loaded once per
 //! namespace and cached; writes flush synchronously.
 
-use std::{fs, io::Write as _, path::PathBuf, sync::OnceLock};
+use std::{fs, io::Write as _, path::PathBuf, sync::LazyLock};
 
 use dashmap::DashMap;
 use serde_json::{Map, Value};
 
-static STORES: OnceLock<DashMap<String, Map<String, Value>>> = OnceLock::new();
-
-fn stores() -> &'static DashMap<String, Map<String, Value>> {
-    STORES.get_or_init(DashMap::new)
-}
+/// Process-wide namespace → in-memory map cache. `LazyLock` (Rust
+/// 1.80+) builds the inner `DashMap` on first deref so callers reach
+/// the map via direct `STORES.get(...)` instead of a `stores()`
+/// accessor wrapping `OnceLock::get_or_init`.
+static STORES: LazyLock<DashMap<String, Map<String, Value>>> = LazyLock::new(DashMap::new);
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     let namespace = args
@@ -23,7 +23,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "get" => {
             let key = key_arg(args)?;
             load_if_needed(&namespace)?;
-            Ok(stores()
+            Ok(STORES
                 .get(&namespace)
                 .and_then(|m| m.get(key).cloned())
                 .unwrap_or(Value::Null))
@@ -32,7 +32,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             let key = key_arg(args)?;
             let value = args.get("value").cloned().unwrap_or(Value::Null);
             load_if_needed(&namespace)?;
-            stores()
+            STORES
                 .entry(namespace.clone())
                 .or_default()
                 .insert(key.to_string(), value);
@@ -42,7 +42,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "delete" => {
             let key = key_arg(args)?;
             load_if_needed(&namespace)?;
-            if let Some(mut m) = stores().get_mut(&namespace) {
+            if let Some(mut m) = STORES.get_mut(&namespace) {
                 m.remove(key);
             }
             persist(&namespace)?;
@@ -53,13 +53,13 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             // invalid namespace would clear the in-memory map and then fail
             // to persist, leaving on-disk + in-memory desynchronised.
             validate_namespace(&namespace)?;
-            stores().insert(namespace.clone(), Map::new());
+            STORES.insert(namespace.clone(), Map::new());
             persist(&namespace)?;
             Ok(Value::Null)
         },
         "keys" => {
             load_if_needed(&namespace)?;
-            let keys: Vec<Value> = stores()
+            let keys: Vec<Value> = STORES
                 .get(&namespace)
                 .map(|m| m.keys().map(|k| Value::String(k.clone())).collect())
                 .unwrap_or_default();
@@ -68,14 +68,14 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "has" => {
             let key = key_arg(args)?;
             load_if_needed(&namespace)?;
-            let present = stores()
+            let present = STORES
                 .get(&namespace)
                 .is_some_and(|m| m.contains_key(key));
             Ok(Value::Bool(present))
         },
         "values" => {
             load_if_needed(&namespace)?;
-            let values: Vec<Value> = stores()
+            let values: Vec<Value> = STORES
                 .get(&namespace)
                 .map(|m| m.values().cloned().collect())
                 .unwrap_or_default();
@@ -86,7 +86,7 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
             // Pairs serialize as `[key, value]` tuples so the JS side can
             // destructure them straight into `Object.fromEntries` without
             // extra remapping.
-            let entries: Vec<Value> = stores()
+            let entries: Vec<Value> = STORES
                 .get(&namespace)
                 .map(|m| {
                     m.iter()
@@ -98,14 +98,14 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         },
         "length" => {
             load_if_needed(&namespace)?;
-            let n = stores().get(&namespace).map_or(0, |m| m.len());
+            let n = STORES.get(&namespace).map_or(0, |m| m.len());
             Ok(Value::Number(n.into()))
         },
         "reload" => {
             // Drop the in-memory copy so the next read re-parses the disk
             // file. Useful when an external process (another app instance,
             // a manual edit) mutated `store.json` under our feet.
-            stores().remove(&namespace);
+            STORES.remove(&namespace);
             load_if_needed(&namespace)?;
             Ok(Value::Null)
         },
@@ -158,7 +158,7 @@ fn store_path(namespace: &str) -> Result<PathBuf, String> {
 }
 
 fn load_if_needed(namespace: &str) -> Result<(), String> {
-    if stores().contains_key(namespace) {
+    if STORES.contains_key(namespace) {
         return Ok(());
     }
     let path = store_path(namespace)?;
@@ -173,7 +173,7 @@ fn load_if_needed(namespace: &str) -> Result<(), String> {
     // concurrent threads can both miss `contains_key`, both read the file,
     // and the second `insert` would silently clobber the first (losing any
     // `set` that happened in between).
-    stores().entry(namespace.to_string()).or_insert(map);
+    STORES.entry(namespace.to_string()).or_insert(map);
     Ok(())
 }
 
@@ -183,7 +183,7 @@ fn persist(namespace: &str) -> Result<(), String> {
         .parent()
         .ok_or_else(|| format!("store: path {} has no parent dir", path.display()))?;
     fs::create_dir_all(parent).map_err(|e| format!("store: mkdir {}: {e}", parent.display()))?;
-    let data = stores()
+    let data = STORES
         .get(namespace)
         .map(|r| r.value().clone())
         .unwrap_or_default();
@@ -269,7 +269,7 @@ mod tests {
         let n = ns("persist");
         dispatch("set", &json!({ "namespace": &n, "key": "k", "value": "v" })).unwrap();
         // Evict the in-memory copy so the next read has to hit disk.
-        stores().remove(&n);
+        STORES.remove(&n);
         let v = dispatch("get", &json!({ "namespace": &n, "key": "k" })).unwrap();
         assert_eq!(v.as_str().unwrap(), "v");
         let _ = fs::remove_dir_all(store_path(&n).unwrap().parent().unwrap());

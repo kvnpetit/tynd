@@ -464,14 +464,14 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
                     // terminating Return — otherwise the frontend iterator
                     // would finalize before the last chunks arrived.
                     flush_yields(&mut yield_buffer, &webview, &secondaries);
-                    let label = dispatch::call_labels()
+                    let label = dispatch::CALL_LABELS
                         .remove(&id)
                         .map_or_else(|| PRIMARY_LABEL.into(), |(_, l)| l);
                     let wv = webview_for(&label, &webview, &secondaries);
                     let _ = wv.evaluate_script(&ipc::eval_resolve(&id, ok, &value));
                 },
                 BackendEvent::Yield { id, value } => {
-                    let label = dispatch::call_labels()
+                    let label = dispatch::CALL_LABELS
                         .get(&id)
                         .map_or_else(|| PRIMARY_LABEL.into(), |e| e.clone());
                     let bucket = yield_buffer.entry(label).or_default();
@@ -1010,11 +1010,11 @@ fn deep_link_scheme() -> Option<&'static str> {
 }
 
 /// Cancel every active streaming call whose origin window just closed. Looks
-/// up ids in `dispatch::call_labels()` and sends `BackendCall::Cancel` for
+/// up ids in `dispatch::CALL_LABELS` and sends `BackendCall::Cancel` for
 /// each match. Without this, a closed secondary window leaves its async
 /// generators running forever on the backend.
 fn cancel_streams_for_label(label: &str, call_tx: &crossbeam_channel::Sender<BackendCall>) {
-    let labels = dispatch::call_labels();
+    let labels = &dispatch::CALL_LABELS;
     // Closing a window typically leaves 0-2 in-flight streaming calls (a
     // chat completion, maybe a log tail). Inline-4 covers that without a
     // heap allocation; the rare app that fans out beyond 4 streams per

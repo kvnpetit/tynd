@@ -4,7 +4,7 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
-        OnceLock,
+        LazyLock,
     },
     time::UNIX_EPOCH,
 };
@@ -89,11 +89,10 @@ struct Root {
     dir: Dir,
 }
 
-static ROOTS: OnceLock<Vec<Root>> = OnceLock::new();
-
-fn roots() -> &'static Vec<Root> {
-    ROOTS.get_or_init(build_default_roots)
-}
+/// `LazyLock` (Rust 1.80+) builds the root list once on first deref.
+/// Direct `&*ROOTS` calls replace the previous `roots()` accessor —
+/// the helper only existed to wrap `OnceLock::get_or_init`.
+static ROOTS: LazyLock<Vec<Root>> = LazyLock::new(build_default_roots);
 
 fn build_default_roots() -> Vec<Root> {
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -215,7 +214,7 @@ pub(crate) fn resolve(input: &str) -> Result<(&'static Dir, PathBuf), String> {
     // wins so that nested roots (e.g. data_dir under home_dir) resolve via
     // the more specific one when both apply.
     let mut best: Option<(&'static Root, PathBuf)> = None;
-    for root in roots() {
+    for root in ROOTS.iter() {
         if let Ok(rel) = cleaned.strip_prefix(&root.prefix) {
             // Reject any residual `..` — `lexical_clean` should have removed
             // them, but a path like `/cwd/..` could lex-clean to `/` which
@@ -250,7 +249,7 @@ pub(crate) fn resolve(input: &str) -> Result<(&'static Dir, PathBuf), String> {
 }
 
 fn scope_summary() -> String {
-    let names: Vec<String> = roots()
+    let names: Vec<String> = ROOTS
         .iter()
         .map(|r| r.prefix.display().to_string())
         .collect();
@@ -258,12 +257,12 @@ fn scope_summary() -> String {
 }
 
 // Per-handle mutex so blocking I/O on one file never stalls the map lock.
-static HANDLES: OnceLock<Mutex<ahash::HashMap<u64, std::sync::Arc<Mutex<File>>>>> = OnceLock::new();
+// `LazyLock` builds the empty `ahash::HashMap` on first deref; callers
+// reach the map via direct `HANDLES.lock()` instead of a `HANDLES`
+// accessor wrapping `OnceLock::get_or_init`.
+static HANDLES: LazyLock<Mutex<ahash::HashMap<u64, std::sync::Arc<Mutex<File>>>>> =
+    LazyLock::new(|| Mutex::new(ahash::HashMap::default()));
 static NEXT_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
-
-fn handles() -> &'static Mutex<ahash::HashMap<u64, std::sync::Arc<Mutex<File>>>> {
-    HANDLES.get_or_init(|| Mutex::new(ahash::HashMap::default()))
-}
 
 fn open_handle(args: &Value) -> Result<Value, String> {
     let path_str = string_arg(args, "path")?;
@@ -296,7 +295,7 @@ fn open_handle(args: &Value) -> Result<Value, String> {
     let file = cap_file.into_std();
 
     let id = NEXT_HANDLE_ID.fetch_add(1, Ordering::Relaxed);
-    handles()
+    HANDLES
         .lock()
         .insert(id, std::sync::Arc::new(Mutex::new(file)));
     Ok(json!({ "id": id }))
@@ -310,7 +309,7 @@ fn with_handle<R>(args: &Value, f: impl FnOnce(&mut File) -> R) -> Result<R, Str
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "fs: missing 'id'".to_string())?;
-    let file = handles()
+    let file = HANDLES
         .lock()
         .get(&id)
         .cloned()
@@ -361,7 +360,7 @@ fn close_handle(args: &Value) -> Result<Value, String> {
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "fs.close: missing 'id'".to_string())?;
-    Ok(Value::Bool(handles().lock().remove(&id).is_some()))
+    Ok(Value::Bool(HANDLES.lock().remove(&id).is_some()))
 }
 
 fn copy_dir(args: &Value) -> Result<Value, String> {
@@ -472,12 +471,12 @@ fn hardlink(args: &Value) -> Result<Value, String> {
 /// `{ id, kind, path }` per event, one per affected path.
 type WatchHandle = Debouncer<RecommendedWatcher, RecommendedCache>;
 
-static WATCHERS: OnceLock<Mutex<ahash::HashMap<u64, WatchHandle>>> = OnceLock::new();
+// `LazyLock` builds the empty `ahash::HashMap` on first deref; callers
+// reach the map via direct `WATCHERS.lock()` instead of a `WATCHERS`
+// accessor wrapping `OnceLock::get_or_init`.
+static WATCHERS: LazyLock<Mutex<ahash::HashMap<u64, WatchHandle>>> =
+    LazyLock::new(|| Mutex::new(ahash::HashMap::default()));
 static NEXT_WATCH_ID: AtomicU64 = AtomicU64::new(1);
-
-fn watchers() -> &'static Mutex<ahash::HashMap<u64, WatchHandle>> {
-    WATCHERS.get_or_init(|| Mutex::new(ahash::HashMap::default()))
-}
 
 fn kind_label(kind: EventKind) -> &'static str {
     match kind {
@@ -552,7 +551,7 @@ fn watch(args: &Value) -> Result<Value, String> {
         .watch(Path::new(path_str), mode)
         .map_err(|e| format!("fs.watch({path_str}): {e}"))?;
 
-    watchers().lock().insert(id, debouncer);
+    WATCHERS.lock().insert(id, debouncer);
     Ok(json!({ "id": id }))
 }
 
@@ -561,7 +560,7 @@ fn unwatch(args: &Value) -> Result<Value, String> {
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "fs.unwatch: missing 'id'".to_string())?;
-    let removed = watchers().lock().remove(&id);
+    let removed = WATCHERS.lock().remove(&id);
     Ok(Value::Bool(removed.is_some()))
 }
 

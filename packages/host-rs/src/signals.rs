@@ -21,7 +21,7 @@
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        OnceLock,
+        LazyLock,
     },
     time::{Duration, Instant},
 };
@@ -35,8 +35,11 @@ use parking_lot::Mutex;
 const HARD_EXIT_WINDOW_MS: u64 = 2_000;
 
 /// Tracks whether we've already received a graceful-shutdown signal.
-/// Read on every signal hit; written exactly once.
-static FIRST_SIGNAL_AT: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+/// Read on every signal hit; written exactly once. `LazyLock` initializes
+/// the inner `Mutex<Option<Instant>>` to `None` on first deref so the
+/// signal handler doesn't need a `OnceLock::get_or_init` dance on
+/// every hit.
+static FIRST_SIGNAL_AT: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
 /// Idempotency flag for `init_signals()`. Multiple presets calling it (or
 /// integration tests) must not re-register the OS handler.
 static INSTALLED: AtomicBool = AtomicBool::new(false);
@@ -52,7 +55,9 @@ pub fn init() {
         return;
     }
 
-    let _ = FIRST_SIGNAL_AT.set(Mutex::new(None));
+    // `LazyLock` builds the inner `Mutex<Option<Instant>>` on first
+    // deref — no explicit init needed, the signal handler can reach it
+    // directly via `FIRST_SIGNAL_AT.lock()`.
 
     let result = ctrlc::set_handler(|| {
         on_signal();
@@ -81,14 +86,7 @@ pub fn init() {
 /// `std::process::exit`) happens either inline on the hard-exit branch or
 /// later inside the event loop on the soft branch.
 fn on_signal() {
-    let Some(cell) = FIRST_SIGNAL_AT.get() else {
-        // `init()` wasn't called — defensive path. Just exit immediately;
-        // the app never registered a graceful-shutdown hook anyway.
-        crate::cleanup::run();
-        std::process::exit(130);
-    };
-
-    let mut slot = cell.lock();
+    let mut slot = FIRST_SIGNAL_AT.lock();
     let now = Instant::now();
 
     match *slot {

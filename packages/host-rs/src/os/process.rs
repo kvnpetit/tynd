@@ -2,8 +2,10 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     process::{Child, ChildStdin, Command, Stdio},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, LazyLock},
 };
+
+use parking_lot::Mutex;
 
 use serde_json::{json, Value};
 
@@ -161,24 +163,20 @@ struct SpawnEntry {
     stdin: Mutex<Option<ChildStdin>>,
 }
 
-static REGISTRY: OnceLock<Mutex<HashMap<u32, Arc<SpawnEntry>>>> = OnceLock::new();
-
-fn registry() -> &'static Mutex<HashMap<u32, Arc<SpawnEntry>>> {
-    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn registry_lock() -> std::sync::MutexGuard<'static, HashMap<u32, Arc<SpawnEntry>>> {
-    registry()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
+/// Process-wide pid → spawn entry registry. `LazyLock` initializes the
+/// inner `HashMap` on first deref. `parking_lot::Mutex` (no poison
+/// handling) lets the registry helpers drop the
+/// `unwrap_or_else(PoisonError::into_inner)` boilerplate the previous
+/// `std::sync::Mutex` shape required.
+static REGISTRY: LazyLock<Mutex<HashMap<u32, Arc<SpawnEntry>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn registry_remove(pid: u32) -> Option<Arc<SpawnEntry>> {
-    registry_lock().remove(&pid)
+    REGISTRY.lock().remove(&pid)
 }
 
 fn registry_get(pid: u32) -> Option<Arc<SpawnEntry>> {
-    registry_lock().get(&pid).cloned()
+    REGISTRY.lock().get(&pid).cloned()
 }
 
 fn require_pid(args: &Value, op: &str) -> Result<u32, String> {
@@ -195,19 +193,47 @@ fn require_pid(args: &Value, op: &str) -> Result<u32, String> {
 /// whole chunk once per read — typical pipe reads return up to 64 KiB at
 /// once on every platform, so this is a small constant number of events
 /// per second on a busy stream rather than one per byte.
+///
+/// # Wire format
+///
+/// Default (no `process-bytes-array` feature) emits
+/// `{ data: "<base64>" }` — 25× smaller on the wire than the legacy
+/// `Number[]` array (1 byte = 1 JSON number = 1-3 ASCII chars + comma)
+/// and ~50× cheaper to serialize on the host (no per-byte
+/// `Value::from(u32)` allocation per chunk). Frontend decodes via
+/// `atob(data)` then `Uint8Array.from(...)`.
+///
+/// With `process-bytes-array` enabled, the legacy `Number[]` shape is
+/// preserved for forks / plugins still pinned to the old contract.
 fn pump_stream<R: Read>(mut reader: R, event_name: String) {
     let mut buf = [0u8; 8192];
     loop {
         match reader.read(&mut buf) {
             Ok(0) => break, // EOF — child closed the stream.
             Ok(n) => {
-                // serde_json encodes `&[u8]` as a `Number[]` array, which is
-                // what the frontend `process.spawn` proxy expects (it
-                // rebuilds a `Uint8Array` from the array). A typed array
-                // wire format would shave allocations but JSON keeps the
-                // path identical to every other OS event.
-                let chunk: Vec<Value> = buf[..n].iter().map(|b| Value::from(u32::from(*b))).collect();
-                events::emit(&event_name, &json!({ "data": Value::Array(chunk) }));
+                #[cfg(feature = "process-bytes-array")]
+                {
+                    // Legacy wire format — `Number[]` per byte. Kept
+                    // behind a feature gate so plugins pinned to the
+                    // old `chunkFromEvent` JS path can rebuild on
+                    // `--features process-bytes-array` without
+                    // touching their decoder.
+                    let chunk: Vec<Value> = buf[..n]
+                        .iter()
+                        .map(|b| Value::from(u32::from(*b)))
+                        .collect();
+                    events::emit(&event_name, &json!({ "data": Value::Array(chunk) }));
+                }
+                #[cfg(not(feature = "process-bytes-array"))]
+                {
+                    // Default base64 path — see fn-level docs for the
+                    // perf rationale. `STANDARD` (with `=` padding)
+                    // matches `atob` exactly so the JS side doesn't
+                    // need a custom decoder shim.
+                    use base64::Engine;
+                    let chunk = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                    events::emit(&event_name, &json!({ "data": chunk }));
+                }
             },
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::Interrupted {
@@ -292,7 +318,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
         std::thread::spawn(move || pump_stream(err, event_name));
     }
 
-    registry_lock().insert(pid, Arc::clone(&entry));
+    REGISTRY.lock().insert(pid, Arc::clone(&entry));
 
     // Waiter thread — `wait()` blocks until the child exits, which is
     // exactly what we want here. The OS already gave us a separate handle
@@ -306,8 +332,7 @@ fn spawn(args: &Value) -> Result<Value, String> {
         let child_opt = {
             let mut guard = waiter_entry
                 .child
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                .lock();
             guard.take()
         };
         if let Some(mut c) = child_opt {
@@ -368,8 +393,7 @@ fn write_stdin(args: &Value) -> Result<Value, String> {
         .ok_or_else(|| format!("process.writeStdin: pid {pid} not found (already exited?)"))?;
     let mut stdin_opt = entry
         .stdin
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+        .lock();
     let stdin = stdin_opt
         .as_mut()
         .ok_or_else(|| format!("process.writeStdin: stdin closed for pid {pid}"))?;
@@ -387,8 +411,7 @@ fn close_stdin(args: &Value) -> Result<Value, String> {
     // sees EOF on stdin which is exactly what users mean by "close stdin".
     *entry
         .stdin
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        .lock() = None;
     Ok(Value::Null)
 }
 
@@ -419,8 +442,7 @@ fn kill(args: &Value) -> Result<Value, String> {
         let target_pid: Option<i32> = {
             let guard = entry
                 .child
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                .lock();
             guard.as_ref().map(|c| c.id() as i32)
         };
         let Some(target_pid) = target_pid else {
@@ -456,8 +478,7 @@ fn kill(args: &Value) -> Result<Value, String> {
         let _ = signal;
         let mut child_opt = entry
             .child
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .lock();
         if let Some(child) = child_opt.as_mut() {
             child
                 .kill()
@@ -505,8 +526,7 @@ mod tests {
     #[test]
     fn exec_shell_runs_simple_command_when_whitelisted() {
         let _g = security::test_lock()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .lock();
         let _reset = allow_shell(&["echo"]);
         let v = exec(&json!({ "cmd": "echo piped" }), true).unwrap();
         let stdout = v["stdout"].as_str().unwrap();
@@ -516,8 +536,7 @@ mod tests {
     #[test]
     fn exec_shell_rejects_when_not_configured() {
         let _g = security::test_lock()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .lock();
         // No whitelist set — every call must reject.
         security::set_shell_exec_allowed_for_tests(Vec::new());
         let err = exec(&json!({ "cmd": "ls" }), true).unwrap_err();
@@ -530,8 +549,7 @@ mod tests {
     #[test]
     fn exec_shell_rejects_unlisted_command() {
         let _g = security::test_lock()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .lock();
         let _reset = allow_shell(&["echo"]);
         let err = exec(&json!({ "cmd": "rm -rf /tmp/foo" }), true).unwrap_err();
         assert!(
@@ -543,8 +561,7 @@ mod tests {
     #[test]
     fn exec_shell_rejects_metacharacter_even_if_whitelisted() {
         let _g = security::test_lock()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .lock();
         let _reset = allow_shell(&["ls"]);
         // `ls` is whitelisted but `;` is a shell metacharacter — refuse.
         let err = exec(&json!({ "cmd": "ls; rm -rf /" }), true).unwrap_err();
@@ -593,7 +610,7 @@ mod tests {
 
         let pid = v["pid"].as_u64().expect("pid is u64") as u32;
         assert!(pid > 0);
-        assert!(registry_lock().contains_key(&pid));
+        assert!(REGISTRY.lock().contains_key(&pid));
 
         // Kill it so the test doesn't leak processes.
         kill(&json!({ "pid": pid })).expect("kill");
@@ -601,7 +618,7 @@ mod tests {
         // Give the waiter thread a moment to drain — exit emit + registry
         // remove happens off the dispatch thread.
         for _ in 0..50 {
-            if !registry_lock().contains_key(&pid) {
+            if !REGISTRY.lock().contains_key(&pid) {
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
@@ -610,7 +627,7 @@ mod tests {
         // failure (the pid may still be alive if the OS is slow), but
         // worth flagging.
         assert!(
-            !registry_lock().contains_key(&pid),
+            !REGISTRY.lock().contains_key(&pid),
             "spawn waiter never removed pid {pid} from registry"
         );
     }

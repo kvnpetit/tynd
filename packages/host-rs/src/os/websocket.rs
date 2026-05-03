@@ -6,7 +6,7 @@ use std::{
     io::ErrorKind,
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc, OnceLock,
+        mpsc, LazyLock,
     },
     time::Duration,
 };
@@ -33,10 +33,10 @@ pub enum Cmd {
 
 type Sessions = DashMap<u64, mpsc::Sender<Cmd>>;
 
-fn sessions() -> &'static Sessions {
-    static S: OnceLock<Sessions> = OnceLock::new();
-    S.get_or_init(DashMap::new)
-}
+/// `LazyLock` (Rust 1.80+) builds the `DashMap` on first deref so
+/// callers reach it via direct `SESSIONS.get(...)` instead of a
+/// `sessions()` accessor wrapping `OnceLock::get_or_init`.
+static SESSIONS: LazyLock<Sessions> = LazyLock::new(DashMap::new);
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -57,7 +57,7 @@ fn connect(args: &Value) -> Result<Value, String> {
 
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let (tx, rx) = mpsc::channel::<Cmd>();
-    sessions().insert(id, tx);
+    SESSIONS.insert(id, tx);
 
     std::thread::spawn(move || run_session(id, &url, &rx));
     Ok(json!({ "id": id }))
@@ -71,7 +71,7 @@ fn run_session(id: u64, url: &str, rx: &mpsc::Receiver<Cmd>) {
         }
         events::emit(name, &data);
     });
-    sessions().remove(&id);
+    SESSIONS.remove(&id);
 }
 
 /// Drive a WebSocket session until close. The caller supplies a sink that
@@ -172,7 +172,7 @@ fn session_tx(args: &Value) -> Result<mpsc::Sender<Cmd>, String> {
         .get("id")
         .and_then(Value::as_u64)
         .ok_or_else(|| "websocket: missing 'id'".to_string())?;
-    sessions()
+    SESSIONS
         .get(&id)
         .map(|r| r.value().clone())
         .ok_or_else(|| format!("websocket: session {id} not found"))
@@ -222,7 +222,7 @@ fn close(args: &Value) -> Result<Value, String> {
 
 #[allow(clippy::unnecessary_wraps)] // dispatch expects Result — uniform return shape
 fn list() -> Result<Value, String> {
-    let ids: Vec<Value> = sessions()
+    let ids: Vec<Value> = SESSIONS
         .iter()
         .map(|r| Value::Number((*r.key()).into()))
         .collect();

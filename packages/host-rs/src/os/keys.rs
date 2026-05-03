@@ -25,7 +25,7 @@
 
 use std::{
     collections::BTreeSet,
-    sync::OnceLock,
+    sync::LazyLock,
 };
 
 use parking_lot::RwLock;
@@ -38,11 +38,10 @@ use super::events;
 /// 5–10 combos) while bounding the per-keydown lookup set.
 const MAX_COMBOS: usize = 256;
 
-static DISABLED: OnceLock<RwLock<BTreeSet<String>>> = OnceLock::new();
-
-fn slot() -> &'static RwLock<BTreeSet<String>> {
-    DISABLED.get_or_init(|| RwLock::new(BTreeSet::new()))
-}
+/// `LazyLock` initializes the inner `RwLock<BTreeSet<String>>` on
+/// first access — replaces a `slot()` accessor wrapping
+/// `OnceLock::get_or_init`.
+static DISABLED: LazyLock<RwLock<BTreeSet<String>>> = LazyLock::new(|| RwLock::new(BTreeSet::new()));
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -58,16 +57,13 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 /// frontend `Set` rebuild is deterministic — useful for tests and stable
 /// devtools output.
 pub fn current_disabled() -> Vec<String> {
-    DISABLED
-        .get()
-        .map(|s| s.read().iter().cloned().collect())
-        .unwrap_or_default()
+    DISABLED.read().iter().cloned().collect()
 }
 
 fn disable(args: &Value) -> Result<Value, String> {
     let combos = combos_arg(args)?;
     {
-        let mut state = slot().write();
+        let mut state = DISABLED.write();
         for combo in combos.into_iter().map(normalise_combo) {
             if state.len() >= MAX_COMBOS && !state.contains(&combo) {
                 return Err(format!(
@@ -84,7 +80,7 @@ fn disable(args: &Value) -> Result<Value, String> {
 fn enable(args: &Value) -> Result<Value, String> {
     let combos = combos_arg(args)?;
     {
-        let mut state = slot().write();
+        let mut state = DISABLED.write();
         for combo in combos {
             state.remove(&normalise_combo(combo));
         }
@@ -95,7 +91,7 @@ fn enable(args: &Value) -> Result<Value, String> {
 
 fn list() -> Value {
     Value::Array(
-        slot()
+        DISABLED
             .read()
             .iter()
             .map(|c| Value::String(c.clone()))
@@ -104,7 +100,7 @@ fn list() -> Value {
 }
 
 fn clear() -> Result<Value, String> {
-    slot().write().clear();
+    DISABLED.write().clear();
     broadcast();
     Ok(Value::Null)
 }
@@ -125,7 +121,7 @@ fn combos_arg(args: &Value) -> Result<Vec<String>, String> {
 }
 
 fn broadcast() {
-    let combos: Vec<Value> = slot()
+    let combos: Vec<Value> = DISABLED
         .read()
         .iter()
         .map(|c| Value::String(c.clone()))
@@ -199,7 +195,7 @@ mod tests {
     static SERIAL: Mutex<()> = Mutex::new(());
 
     fn reset() {
-        slot().write().clear();
+        DISABLED.write().clear();
     }
 
     #[test]

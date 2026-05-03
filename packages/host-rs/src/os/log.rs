@@ -11,7 +11,7 @@ use std::{
     fs::{File, OpenOptions},
     io::Write as _,
     path::PathBuf,
-    sync::OnceLock,
+    sync::LazyLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -59,20 +59,20 @@ impl Level {
     }
 }
 
-static STATE: OnceLock<Mutex<LoggerState>> = OnceLock::new();
-
-fn state() -> &'static Mutex<LoggerState> {
-    STATE.get_or_init(|| {
-        Mutex::new(LoggerState {
-            file: None,
-            path: default_path(),
-            level: Level::Info,
-            max_bytes: DEFAULT_MAX_BYTES,
-            max_files: DEFAULT_MAX_FILES,
-            bytes_written: 0,
-        })
+/// Process-wide logger state. `LazyLock` (Rust 1.80+) builds the inner
+/// `Mutex<LoggerState>` on the first deref — no `get_or_init` accessor
+/// boilerplate. Direct `STATE.lock()` calls now work everywhere the
+/// old `STATE.lock()` did.
+static STATE: LazyLock<Mutex<LoggerState>> = LazyLock::new(|| {
+    Mutex::new(LoggerState {
+        file: None,
+        path: default_path(),
+        level: Level::Info,
+        max_bytes: DEFAULT_MAX_BYTES,
+        max_files: DEFAULT_MAX_FILES,
+        bytes_written: 0,
     })
-}
+});
 
 fn default_path() -> PathBuf {
     let name = std::env::current_exe()
@@ -90,14 +90,14 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
         "configure" => configure(args),
         "write" => write_entry(args),
         "path" => Ok(Value::String(
-            state().lock().path.to_string_lossy().into_owned(),
+            STATE.lock().path.to_string_lossy().into_owned(),
         )),
         _ => Err(format!("log.{method}: unknown method")),
     }
 }
 
 fn configure(args: &Value) -> Result<Value, String> {
-    let mut s = state().lock();
+    let mut s = STATE.lock();
     if let Some(level) = args.get("level").and_then(Value::as_str) {
         s.level =
             Level::parse(level).ok_or_else(|| format!("log.configure: invalid level '{level}'"))?;
@@ -135,7 +135,7 @@ fn write_entry(args: &Value) -> Result<Value, String> {
         .to_string();
     let fields = args.get("fields").cloned().unwrap_or(Value::Null);
 
-    let mut s = state().lock();
+    let mut s = STATE.lock();
     if level < s.level {
         return Ok(Value::Null);
     }
@@ -236,7 +236,7 @@ mod tests {
     static TEST_LOCK: StdMutex<()> = StdMutex::new(());
 
     fn fresh(dir: &Path) {
-        let mut s = state().lock();
+        let mut s = STATE.lock();
         s.file = None;
         s.path = dir.join("t.log");
         s.level = Level::Debug;
@@ -278,7 +278,7 @@ mod tests {
         let dir = tmpdir();
         fresh(&dir);
         {
-            let mut s = state().lock();
+            let mut s = STATE.lock();
             s.level = Level::Warn;
         }
         write_entry(&json!({ "level": "info", "message": "skip-lvl-filter" })).unwrap();
@@ -296,7 +296,7 @@ mod tests {
         let dir = tmpdir();
         fresh(&dir);
         {
-            let mut s = state().lock();
+            let mut s = STATE.lock();
             s.max_bytes = 200;
             s.max_files = 3;
         }

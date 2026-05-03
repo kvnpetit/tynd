@@ -59,15 +59,29 @@ interface ExitInfo {
 
 /**
  * Wire-side stdout/stderr chunk shape. The host emits each chunk as a
- * JSON object `{ data: number[] }` rather than base64 to skip a decode
- * step on the hot streaming path. The frontend just rebuilds a typed
- * array from the byte array.
+ * JSON object `{ data: "<base64>" }` — 25× smaller on the wire than
+ * the legacy `Number[]` array (1 byte = 1-3 ASCII chars + comma) and
+ * ~50× cheaper to serialize on the host. The legacy array shape is
+ * still accepted (host built with `process-bytes-array` feature) so a
+ * mismatched core/host pair degrades gracefully instead of dropping
+ * every chunk.
  */
 function chunkFromEvent(raw: unknown): Uint8Array | null {
   if (typeof raw !== "object" || raw === null) return null;
   const data = (raw as { data?: unknown }).data;
-  if (!Array.isArray(data)) return null;
-  return Uint8Array.from(data as number[]);
+  // Default base64 wire format — `atob` decodes the standard alphabet
+  // (with `=` padding), which is what `base64::engine::general_purpose::STANDARD`
+  // emits on the host.
+  if (typeof data === "string") {
+    const binary = atob(data);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  }
+  // Legacy `Number[]` shape — preserved for forks running the host with
+  // `--features process-bytes-array`. New code should leave it off.
+  if (Array.isArray(data)) return Uint8Array.from(data as number[]);
+  return null;
 }
 
 /**

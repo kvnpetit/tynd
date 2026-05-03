@@ -36,6 +36,7 @@ sha2.workspace               = true
 blake3.workspace             = true
 rand.workspace               = true
 parking_lot.workspace        = true
+arc-swap.workspace           = true
 dashmap.workspace            = true
 ahash.workspace              = true
 tempfile.workspace           = true
@@ -114,7 +115,10 @@ self-replace          = { workspace = true, optional = true }
 # (`bidiff`) lives in the bundler crate.
 bipatch               = { workspace = true, optional = true }
 auto-launch           = { workspace = true, optional = true }
-keyring               = { workspace = true, optional = true }
+# `keyring` is gated per-OS in the `target.'cfg(...)'.dependencies` tables
+# below — each platform pins exactly one backend feature
+# (apple-native / windows-native / sync-secret-service) instead of
+# carrying the union set. Kept optional so `api-keyring` can flip it off.
 global-hotkey         = { workspace = true, optional = true }
 user-idle             = { workspace = true, optional = true }
 
@@ -250,6 +254,20 @@ api-keys            = [  ]
 # Process argv parsing exposed to the frontend. Pure logic — no external dep.
 api-cli             = [  ]
 
+# WIRE FORMAT GATE — `process.spawn`'s stdout/stderr stream chunk shape.
+#
+# Default (this feature OFF) emits `{ data: "<base64>" }` per chunk:
+# 25× smaller on the wire than the legacy `Number[]` array (1 byte = 1
+# JSON number = 1-3 ASCII chars + comma) and ~50× cheaper to serialize
+# on the host (no per-byte `Value::from(u32)` allocation). Frontend
+# decodes via `atob(data)` → `Uint8Array.from(...)`.
+#
+# Opt INTO `process-bytes-array` to restore the legacy
+# `{ data: number[] }` shape — for plugins / forks pinned to the old
+# wire contract that haven't migrated their consumers yet. New code
+# should leave this OFF and use the base64 path.
+process-bytes-array = [  ]
+
 # Production observability — strictly opt-in. Both gates are off by
 # default (including in `api-all`) because the OTel + Sentry pipelines
 # pull tokio + reqwest + tonic which would inflate every preset build.
@@ -272,11 +290,21 @@ obs-sentry = [ "dep:sentry" ]
 # unconditionally on Unix targets — `os::process` is part of every
 # preset and the dep is small (no transitive deps with `default-features = false`).
 nix = { workspace = true }
+# Hand-rolled assembly path for SHA-2 — pulls `sha2-asm`'s `cc` build
+# script which only resolves `as`/`gcc` toolchains. 2-3× over the
+# `cpufeatures` SIMD fallback on x86_64 / aarch64. Windows builds
+# can't use this (MSVC `cl.exe` doesn't grok `.S` files) and stay on
+# the intrinsics path — still 1.5-2× over pure Rust.
+sha2 = { version = "0.10", default-features = false, features = [ "asm" ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Linux needs the wayland-data-control feature on arboard; re-declared here
 # as optional so it's only pulled with api-clipboard.
 arboard       = { version = "3", features = [ "wayland-data-control" ], optional = true }
+# Keyring on Linux uses Secret Service (sync) — kwallet/gnome-keyring
+# both expose the same DBus surface. Avoids the async-secret-service
+# variant which would pull tokio.
+keyring       = { version = "3", default-features = false, features = [ "sync-secret-service" ], optional = true }
 gtk.workspace = true
 # systemd-logind DBus signals (PrepareForSleep, Session.Lock/Unlock) for
 # the `os::power` watcher. `default-features = false` + `blocking-api`
@@ -286,6 +314,9 @@ zbus = { version = "5.14", default-features = false, features = [ "blocking-api"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tauri-winrt-notification = { workspace = true, optional = true }
+# Keyring on Windows uses Credential Manager + DPAPI via the native
+# windows-native backend; avoids the legacy `winapi` shim path.
+keyring                  = { version = "3", default-features = false, features = [ "windows-native" ], optional = true }
 # Per-user `HKCU\Software\Classes\<scheme>` registry write/read for the
 # deep-link OS API. Only consumed in `os::deep_link::registry` (Windows
 # only); kept optional here so non-Windows builds and `api-deep-link`-off
@@ -308,6 +339,9 @@ windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphi
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mac-notification-sys = { workspace = true, optional = true }
+# Keyring on macOS uses Keychain via the apple-native backend
+# (Security.framework — `SecItemAdd`/`SecItemCopyMatching`).
+keyring              = { version = "3", default-features = false, features = [ "apple-native" ], optional = true }
 # NSWorkspace.notificationCenter observers for the `os::power` watcher
 # (sleep/wake + session active/inactive). Only pulled with `api-power`
 # so non-power builds stay free of objc2-app-kit's generated bindings.

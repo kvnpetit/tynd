@@ -9,7 +9,7 @@
 //! Disks live in their own `Disks` collection (sysinfo 0.32 split system
 //! data from disk/network), recomputed on each call since they're cheap.
 
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 
 use parking_lot::Mutex;
 use serde_json::{json, Value};
@@ -29,15 +29,13 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
 /// Process-wide `System` snapshot. sysinfo computes CPU usage as a
 /// delta between two refreshes — re-instantiating per call always
 /// reports 0%. The mutex is short-lived (refresh + read) so contention
-/// stays bounded even under concurrent OS calls.
-static SYS: OnceLock<Mutex<System>> = OnceLock::new();
-
-fn sys() -> &'static Mutex<System> {
-    SYS.get_or_init(|| Mutex::new(System::new_with_specifics(RefreshKind::new())))
-}
+/// stays bounded even under concurrent OS calls. `LazyLock` builds the
+/// `System` once on first access.
+static SYS: LazyLock<Mutex<System>> =
+    LazyLock::new(|| Mutex::new(System::new_with_specifics(RefreshKind::new())));
 
 fn cpu() -> Value {
-    let mut s = sys().lock();
+    let mut s = SYS.lock();
     s.refresh_cpu_usage();
     let cpus = s.cpus();
     // Aggregate usage = mean across logical CPUs. Per-core breakdown
@@ -61,7 +59,7 @@ fn cpu() -> Value {
 }
 
 fn memory() -> Value {
-    let mut s = sys().lock();
+    let mut s = SYS.lock();
     s.refresh_memory();
     let total = s.total_memory();
     let used = s.used_memory();
@@ -105,7 +103,7 @@ fn processes(args: &Value) -> Value {
         .min(1000) as usize;
     let offset = args.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
 
-    let mut s = sys().lock();
+    let mut s = SYS.lock();
     s.refresh_processes_specifics(
         sysinfo::ProcessesToUpdate::All,
         true,

@@ -19,7 +19,7 @@ use std::{
     collections::VecDeque,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        OnceLock,
+        LazyLock,
     },
     thread,
 };
@@ -35,15 +35,15 @@ struct Pool {
     alive_workers: AtomicUsize,
 }
 
-fn pool() -> &'static Pool {
-    static POOL: OnceLock<Pool> = OnceLock::new();
-    POOL.get_or_init(|| Pool {
-        queue: Mutex::new(VecDeque::with_capacity(32)),
-        not_empty: Condvar::new(),
-        max_workers: thread::available_parallelism().map_or(16, |n| (n.get() * 4).clamp(8, 64)),
-        alive_workers: AtomicUsize::new(0),
-    })
-}
+/// Process-wide pool. `LazyLock` builds the inner `Pool` on first
+/// deref so a host that never calls an OS API pays zero cost. Direct
+/// `&*POOL` calls replace the previous `pool()` accessor.
+static POOL: LazyLock<Pool> = LazyLock::new(|| Pool {
+    queue: Mutex::new(VecDeque::with_capacity(32)),
+    not_empty: Condvar::new(),
+    max_workers: thread::available_parallelism().map_or(16, |n| (n.get() * 4).clamp(8, 64)),
+    alive_workers: AtomicUsize::new(0),
+});
 
 /// RAII guard that decrements `alive_workers` when the worker thread
 /// exits — covers both the "loop returned normally" path (currently
@@ -57,13 +57,13 @@ struct WorkerLifeTracker;
 
 impl Drop for WorkerLifeTracker {
     fn drop(&mut self) {
-        pool().alive_workers.fetch_sub(1, Ordering::AcqRel);
+        POOL.alive_workers.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
 fn worker_loop() {
     let _tracker = WorkerLifeTracker;
-    let p = pool();
+    let p: &Pool = &POOL;
     loop {
         let job = {
             let mut q = p.queue.lock();
@@ -84,7 +84,7 @@ fn worker_loop() {
 /// thread once the backlog exceeds `max_workers * 2` so bursts don't starve
 /// urgent calls behind a row of blocked dialogs.
 pub fn submit<F: FnOnce() + Send + 'static>(f: F) {
-    let p = pool();
+    let p: &Pool = &POOL;
     let overflow_threshold = p.max_workers.saturating_mul(2);
     let mut q = p.queue.lock();
     if q.len() >= overflow_threshold {

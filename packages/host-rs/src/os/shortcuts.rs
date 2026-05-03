@@ -10,7 +10,7 @@ use std::{
     str::FromStr as _,
     sync::{
         atomic::{AtomicBool, Ordering},
-        OnceLock,
+        LazyLock, OnceLock,
     },
 };
 
@@ -28,20 +28,14 @@ static MANAGER: OnceLock<Result<Mutex<GlobalHotKeyManager>, String>> = OnceLock:
 
 /// `HotKey::id()` → user-supplied string id (or the accelerator string
 /// when no explicit id was provided). Keyed by the OS hotkey id so the
-/// event handler can route fast.
-static ID_MAP: OnceLock<DashMap<u32, String>> = OnceLock::new();
+/// event handler can route fast. `LazyLock` (Rust 1.80+) builds the
+/// `DashMap` on first deref — direct `ID_MAP.get(...)` calls replace
+/// the previous accessor wrapping `OnceLock::get_or_init`.
+static ID_MAP: LazyLock<DashMap<u32, String>> = LazyLock::new(DashMap::new);
 /// User-supplied string id → registered HotKey. Lets `unregister`
 /// recover the HotKey without reparsing.
-static HOTKEYS: OnceLock<DashMap<String, HotKey>> = OnceLock::new();
+static HOTKEYS: LazyLock<DashMap<String, HotKey>> = LazyLock::new(DashMap::new);
 static HANDLER_INSTALLED: AtomicBool = AtomicBool::new(false);
-
-fn id_map() -> &'static DashMap<u32, String> {
-    ID_MAP.get_or_init(DashMap::new)
-}
-
-fn hotkeys() -> &'static DashMap<String, HotKey> {
-    HOTKEYS.get_or_init(DashMap::new)
-}
 
 pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     match method {
@@ -75,7 +69,7 @@ fn ensure_handler() {
             if !matches!(evt.state, global_hotkey::HotKeyState::Pressed) {
                 return;
             }
-            let id = id_map()
+            let id = ID_MAP
                 .get(&evt.id)
                 .map_or_else(|| format!("hotkey-{}", evt.id), |e| e.clone());
             events::emit("shortcut:triggered", &json!({ "id": id }));
@@ -94,7 +88,7 @@ fn register(args: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .map_or_else(|| accel.clone(), str::to_string);
 
-    if hotkeys().contains_key(&user_id) {
+    if HOTKEYS.contains_key(&user_id) {
         return Err(format!(
             "shortcuts.register: id '{user_id}' already registered"
         ));
@@ -109,8 +103,8 @@ fn register(args: &Value) -> Result<Value, String> {
         .register(hotkey)
         .map_err(|e| format!("shortcuts.register({accel}): {e}"))?;
 
-    id_map().insert(hotkey.id(), user_id.clone());
-    hotkeys().insert(user_id.clone(), hotkey);
+    ID_MAP.insert(hotkey.id(), user_id.clone());
+    HOTKEYS.insert(user_id.clone(), hotkey);
 
     Ok(json!({ "id": user_id }))
 }
@@ -123,10 +117,10 @@ fn unregister(args: &Value) -> Result<Value, String> {
         .or_else(|| args.get("id").and_then(Value::as_str).map(str::to_string))
         .ok_or_else(|| "shortcuts.unregister: missing 'id'".to_string())?;
 
-    let Some((_, hotkey)) = hotkeys().remove(&user_id) else {
+    let Some((_, hotkey)) = HOTKEYS.remove(&user_id) else {
         return Ok(Value::Bool(false));
     };
-    id_map().remove(&hotkey.id());
+    ID_MAP.remove(&hotkey.id());
     manager()?
         .lock()
         .unregister(hotkey)
@@ -135,7 +129,7 @@ fn unregister(args: &Value) -> Result<Value, String> {
 }
 
 fn unregister_all() -> Result<Value, String> {
-    let ids: Vec<String> = hotkeys().iter().map(|e| e.key().clone()).collect();
+    let ids: Vec<String> = HOTKEYS.iter().map(|e| e.key().clone()).collect();
     let mut err: Option<String> = None;
     for id in &ids {
         if let Err(e) = unregister(&Value::String(id.clone())) {
@@ -149,5 +143,5 @@ fn is_registered(args: &Value) -> bool {
     args.as_str()
         .map(str::to_string)
         .or_else(|| args.get("id").and_then(Value::as_str).map(str::to_string))
-        .is_some_and(|id| hotkeys().contains_key(&id))
+        .is_some_and(|id| HOTKEYS.contains_key(&id))
 }

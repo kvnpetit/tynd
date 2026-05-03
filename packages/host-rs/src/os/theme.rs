@@ -15,7 +15,7 @@
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, OnceLock,
+        Arc, LazyLock,
     },
     thread::JoinHandle,
     time::Duration,
@@ -64,14 +64,13 @@ impl Watcher {
     }
 }
 
-static WATCHER: OnceLock<Mutex<Option<Watcher>>> = OnceLock::new();
-
-fn watcher_slot() -> &'static Mutex<Option<Watcher>> {
-    WATCHER.get_or_init(|| Mutex::new(None))
-}
+/// `LazyLock` initializes the inner `Mutex<Option<Watcher>>` to `None`
+/// on first access — replaces a `watcher_slot()` accessor wrapping
+/// `OnceLock::get_or_init`.
+static WATCHER: LazyLock<Mutex<Option<Watcher>>> = LazyLock::new(|| Mutex::new(None));
 
 fn start_watch() -> Result<Value, String> {
-    let mut slot = watcher_slot().lock();
+    let mut slot = WATCHER.lock();
     if slot.is_some() {
         return Ok(json!({ "watching": true }));
     }
@@ -111,7 +110,7 @@ fn start_watch() -> Result<Value, String> {
 }
 
 fn stop_watch() {
-    let prev = watcher_slot().lock().take();
+    let prev = WATCHER.lock().take();
     if let Some(w) = prev {
         w.stop();
     }

@@ -14,7 +14,7 @@ use std::{
     fs,
     io::{BufRead, BufReader, Write},
     path::PathBuf,
-    sync::OnceLock,
+    sync::{LazyLock, OnceLock},
 };
 
 use fslock::LockFile;
@@ -25,8 +25,10 @@ use serde_json::{json, Value};
 use super::events;
 
 // File lock outlives the process; keep it in a static so the OS releases
-// only on real exit.
-static LOCK: OnceLock<Mutex<Option<LockFile>>> = OnceLock::new();
+// only on real exit. `LazyLock` initializes the inner `Mutex<Option<LockFile>>`
+// to `None` on first access — replaces a `OnceLock::get_or_init`
+// dance inside `acquire()`.
+static LOCK: LazyLock<Mutex<Option<LockFile>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Rust-side callback fired alongside the `app:second-launch` OS event —
 /// lets `app.rs` refocus the primary window without going through the
@@ -62,8 +64,7 @@ fn acquire(args: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .ok_or_else(|| "singleInstance.acquire: missing 'id'".to_string())?;
 
-    let cell = LOCK.get_or_init(|| Mutex::new(None));
-    let mut guard = cell.lock();
+    let mut guard = LOCK.lock();
     if guard.is_some() {
         return Ok(json!({ "acquired": true, "already": true }));
     }
@@ -85,7 +86,7 @@ fn acquire(args: &Value) -> Result<Value, String> {
 }
 
 fn is_held() -> bool {
-    LOCK.get().is_some_and(|c| c.lock().is_some())
+    LOCK.lock().is_some()
 }
 
 /// Cross-platform local-socket name derived from the user-supplied id.

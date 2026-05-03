@@ -85,9 +85,15 @@ base64 = "0.22"
 # Cross-platform pseudo-terminal for the embedded terminal API
 portable-pty = "0.9"
 
-# Compute helpers
+# Compute helpers. `sha2` enables `asm` only on Unix targets in
+# consumer crates (per-target table) — the `sha2-asm` build script
+# shells out to `as`/`gcc` and doesn't bind through MSVC's `cl.exe`,
+# so Windows builds fall back to the SIMD intrinsics path
+# (`cpufeatures` runtime detection — already 1.5-2× over the pure-Rust
+# fallback). `blake3` carries `rayon` here so the workspace shares one
+# version pin; large-input hashing parallelizes across cores.
 sha2   = { version = "0.10", default-features = false }
-blake3 = { version = "1.5", default-features = false }
+blake3 = { version = "1.5", default-features = false, features = [ "rayon" ] }
 hmac   = { version = "0.12", default-features = false }
 
 # Ed25519 signatures for the auto-updater manifest + binary integrity.
@@ -139,8 +145,12 @@ mac-notification-sys     = "0.6"
 auto-launch = "0.5"
 
 # Secure credential storage — Keychain (macOS), Credential Manager + DPAPI
-# (Windows), Secret Service / kwallet (Linux).
-keyring = { version = "3", features = [ "apple-native", "windows-native", "sync-secret-service" ] }
+# (Windows), Secret Service / kwallet (Linux). Per-OS feature gating in
+# consumer crates avoids cross-platform feature pollution. The base entry
+# below carries the shared version pin so consumers can `workspace = true`
+# from a per-target table; `default-features = false` prevents the
+# combined feature set from leaking into builds.
+keyring = { version = "3", default-features = false }
 
 # CSPRNG + WebSocket + embedded SQL (lite parity with bun:sqlite)
 rand        = { version = "0.8", default-features = false, features = [ "std", "std_rng" ] }
@@ -149,6 +159,12 @@ rusqlite    = { version = "0.32", features = [ "bundled" ] }
 
 # Performance primitives
 parking_lot = "0.12" # lock-free fast path + no poison handling (saves a branch per lock)
+# Lock-free `Arc<T>` swap for read-mostly state (security policy + ACL
+# authority). Reads compile down to a single atomic load; writes do an
+# `Arc::new(...).store(...)` and never block readers. Used where the
+# previous `RwLock<T>` made every check_* call pay a lock acquisition
+# even when the policy hadn't changed in hours.
+arc-swap    = "1"
 dashmap     = "6"    # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
 ahash       = "0.8"  # faster non-crypto hasher for small keys (sessions, routes)
 # MPMC sync channel with `select!` macro + native timeouts. Drop-in for
@@ -494,6 +510,12 @@ panic         = "abort"
 strip         = true
 debug         = false
 incremental   = false
+
+# `tynd-lite` is the size-sensitive preset — it ships with an embedded
+# QuickJS runtime, so we trade a bit of raw throughput for ~2-3 MB off
+# the final binary. The rest of the workspace stays at `opt-level = 3`.
+[profile.release.package.tynd-lite]
+opt-level = "z"
 
 [profile.dev]
 opt-level = 0

@@ -323,3 +323,15 @@ jobs:
         working-directory: packages/host-src
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Render the CHANGELOG entry + GH Release notes from conventional
+      # commits between the previous tag and this one. Runs after every
+      # publish step so the immutable npm provenance reflects the version
+      # we cut, then the changelog/release lands as a follow-up.
+      - name: Render changelog entry
+        run: bunx changelogen@latest --output CHANGELOG.md --no-commit --no-tag
+
+      - name: Publish GitHub Release notes
+        run: bunx changelogen@latest gh release --token "$GITHUB_TOKEN"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

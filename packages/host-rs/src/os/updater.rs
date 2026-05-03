@@ -23,7 +23,7 @@ use std::{
     io::Read,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, OnceLock,
+        Arc, LazyLock,
     },
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -117,15 +117,14 @@ impl PeriodicTask {
     }
 }
 
-static PERIODIC: OnceLock<Mutex<Option<PeriodicTask>>> = OnceLock::new();
+/// `LazyLock` initializes the inner `Mutex<Option<PeriodicTask>>` to
+/// `None` on first deref — replaces a `periodic_slot()` accessor
+/// wrapping `OnceLock::get_or_init`.
+static PERIODIC: LazyLock<Mutex<Option<PeriodicTask>>> = LazyLock::new(|| Mutex::new(None));
 static PERIODIC_ID: AtomicU64 = AtomicU64::new(0);
 
-fn periodic_slot() -> &'static Mutex<Option<PeriodicTask>> {
-    PERIODIC.get_or_init(|| Mutex::new(None))
-}
-
 fn start_periodic_check(args: &Value) -> Result<Value, String> {
-    let mut slot = periodic_slot().lock();
+    let mut slot = PERIODIC.lock();
     if slot.is_some() {
         // Already running — return the current task id unchanged.
         return Ok(json!({ "id": PERIODIC_ID.load(Ordering::Relaxed) }));
@@ -175,7 +174,7 @@ fn start_periodic_check(args: &Value) -> Result<Value, String> {
 }
 
 fn stop_periodic_check() {
-    let prev = periodic_slot().lock().take();
+    let prev = PERIODIC.lock().take();
     if let Some(task) = prev {
         task.stop();
     }

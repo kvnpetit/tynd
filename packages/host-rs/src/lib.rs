@@ -6,9 +6,11 @@
 embed_plist::embed_plist!("Info.plist");
 
 pub mod app;
+pub mod args_ext;
 pub mod cleanup;
 pub mod embed;
 pub mod ipc;
+pub mod ipc_error;
 pub mod logging;
 pub(crate) mod menu;
 pub mod observability;

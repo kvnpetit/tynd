@@ -3,7 +3,7 @@
 //! The WebView handler runs on a wry-owned thread — we keep that closure
 //! minimal and delegate the parsing + fan-out here.
 
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 
 use crossbeam_channel as mpsc;
 use dashmap::DashMap;
@@ -16,12 +16,10 @@ use crate::{os, runtime::BackendCall};
 /// Maps backend call `id` to the window `label` that issued it. Needed so the
 /// main loop can route `BackendEvent::Yield` / `Return` back to the webview
 /// that originated the streaming call (otherwise secondary windows never see
-/// their own yields). Entries are cleared on `Return`.
-static CALL_LABELS: OnceLock<DashMap<String, String>> = OnceLock::new();
-
-pub(super) fn call_labels() -> &'static DashMap<String, String> {
-    CALL_LABELS.get_or_init(DashMap::default)
-}
+/// their own yields). Entries are cleared on `Return`. `LazyLock` builds
+/// the `DashMap` on first deref so callers reach it via direct
+/// `CALL_LABELS.get(...)` instead of a `call_labels()` accessor.
+pub(super) static CALL_LABELS: LazyLock<DashMap<String, String>> = LazyLock::new(DashMap::default);
 
 /// Zero-allocation scan for `"id":"<value>"` in the IPC fast path. The shim
 /// produces compact `JSON.stringify` output with deterministic key order, so
@@ -47,12 +45,15 @@ pub(super) fn handle_ipc_body(
     }
 
     // Fast path: the IPC shim always produces {"type":"call",...} via
-    // JSON.stringify (compact, no spaces). Detect without a full parse
-    // and forward directly to Bun — owned body moves straight into the
-    // channel, no extra allocation on the hot RPC path.
-    if body.trim_start().starts_with(r#"{"type":"call""#) {
+    // JSON.stringify (compact, no spaces, no leading whitespace).
+    // Detect without a full parse and forward directly to Bun — owned
+    // body moves straight into the channel, no extra allocation on the
+    // hot RPC path. We bind on `body.starts_with(...)` directly: the
+    // shim never emits leading whitespace, and serde_json downstream
+    // (slow path below) tolerates any rare prefix anyway.
+    if body.starts_with(r#"{"type":"call""#) {
         if let Some(id) = extract_call_id(&body) {
-            call_labels().insert(id, label.to_string());
+            CALL_LABELS.insert(id, label.to_string());
         }
         let _ = call_tx.send(BackendCall::Raw(body));
         return;
@@ -67,7 +68,7 @@ pub(super) fn handle_ipc_body(
         if !id.is_empty() {
             // Drop the label mapping first — otherwise cancelled streams that
             // the backend honours (no Return fired) leak an entry per call.
-            call_labels().remove(&id);
+            CALL_LABELS.remove(&id);
             let _ = call_tx.send(BackendCall::Cancel { id });
         }
         return;

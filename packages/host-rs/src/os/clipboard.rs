@@ -1,6 +1,6 @@
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    OnceLock,
+    LazyLock,
 };
 
 use arboard::{Clipboard, ImageData};
@@ -145,12 +145,10 @@ fn clear() -> Result<Value, String> {
 // the "last seen" marker just notes transitions.
 
 static MONITORING: AtomicBool = AtomicBool::new(false);
-static LAST_HASH: OnceLock<Mutex<u64>> = OnceLock::new();
+/// `LazyLock` initializes the inner `Mutex<u64>` to 0 on first access
+/// — replaces a `last_hash()` accessor wrapping `OnceLock::get_or_init`.
+static LAST_HASH: LazyLock<Mutex<u64>> = LazyLock::new(|| Mutex::new(0));
 const DEFAULT_POLL_MS: u64 = 200;
-
-fn last_hash() -> &'static Mutex<u64> {
-    LAST_HASH.get_or_init(|| Mutex::new(0))
-}
 
 #[allow(clippy::unnecessary_wraps)]
 fn start_monitoring(args: &Value) -> Result<Value, String> {
@@ -172,7 +170,7 @@ fn start_monitoring(args: &Value) -> Result<Value, String> {
     let initial = Clipboard::new()
         .and_then(|mut c| c.get_text())
         .unwrap_or_default();
-    *last_hash().lock() = hash(initial.as_bytes());
+    *LAST_HASH.lock() = hash(initial.as_bytes());
 
     std::thread::spawn(move || {
         while MONITORING.load(Ordering::Acquire) {
@@ -182,7 +180,7 @@ fn start_monitoring(args: &Value) -> Result<Value, String> {
             };
             let text = cb.get_text().unwrap_or_default();
             let h = hash(text.as_bytes());
-            let mut last = last_hash().lock();
+            let mut last = LAST_HASH.lock();
             if h != *last {
                 *last = h;
                 drop(last);

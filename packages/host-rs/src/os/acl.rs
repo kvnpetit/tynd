@@ -58,11 +58,12 @@ use std::{
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
-        OnceLock,
+        Arc, LazyLock,
     },
 };
 
-use parking_lot::RwLock;
+use arc_swap::ArcSwap;
+use parking_lot::Mutex;
 use serde_json::{json, Value};
 use tauri_utils::{
     acl::{
@@ -74,23 +75,52 @@ use tauri_utils::{
     platform::Target,
 };
 
-/// Singleton authority: holds capabilities + plugin manifests + a
-/// pre-resolved lookup table. Rebuilt whenever capabilities or manifests
-/// change so `is_allowed` stays a single `BTreeMap::get` + glob-match.
-#[derive(Debug)]
-pub struct Authority {
+/// Immutable snapshot of the authority state. Lives behind an `ArcSwap`
+/// so `is_allowed` reads are lock-free — single atomic load + Arc bump
+/// per call. The `Resolved` lookup table is the only field the hot path
+/// reads; capabilities live here too so `Authority::list()` doesn't
+/// have to round-trip through the (rarely-touched) manifest mutex.
+///
+/// `Manifest` from `tauri_utils` is non-`Clone`, so manifests live
+/// outside the snapshot in a small `Mutex<BTreeMap<String, Manifest>>`
+/// behind `Authority::manifests`. They're write-rare (registered once
+/// per plugin at boot), so the mutex never contends with the read hot
+/// path. `Resolved` is wrapped in `Arc` so cloning the snapshot only
+/// bumps a refcount.
+#[derive(Debug, Clone, Default)]
+struct AuthorityState {
     /// Active capabilities, keyed by `Capability::identifier`.
-    capabilities: RwLock<BTreeMap<String, Capability>>,
-    /// Plugin manifests, keyed by plugin name (or [`APP_ACL_KEY`] for
-    /// app-level permissions). One entry per plugin that declares
-    /// permissions — the resolver walks this map to expand permission
-    /// references into concrete commands.
-    manifests: RwLock<BTreeMap<String, Manifest>>,
+    capabilities: BTreeMap<String, Capability>,
     /// Compiled lookup. `None` until the first capability is loaded
     /// (matches the "open by default" behaviour of [`os::security`] —
     /// without an active manifest, every call is allowed). Rebuilt on
     /// every mutation.
-    resolved: RwLock<Option<Resolved>>,
+    resolved: Option<Arc<Resolved>>,
+}
+
+/// Singleton authority: holds capabilities + a pre-resolved lookup
+/// table behind an `ArcSwap` for lock-free reads. Rebuilt whenever
+/// capabilities or manifests change so `is_allowed` stays a single
+/// `BTreeMap::get` + glob-match on a stable snapshot.
+#[derive(Debug)]
+pub struct Authority {
+    /// Lock-free read state. Snapshots are immutable once published —
+    /// `is_allowed` only does `state.load()` (atomic) + Arc deref.
+    state: ArcSwap<AuthorityState>,
+    /// Plugin manifests live outside the snapshot because
+    /// `tauri_utils::acl::manifest::Manifest` is non-`Clone`. Writes
+    /// are rare (one `register_manifest` per plugin at boot) so the
+    /// mutex never blocks the hot path. The `Resolved` rebuild reads
+    /// this map under the same `write_lock`; we hold it for the
+    /// duration of `mutate_state` so a manifest swap can't race with a
+    /// capability add.
+    manifests: Mutex<BTreeMap<String, Manifest>>,
+    /// Writer-only mutex. Serializes RMW (`add_capability`,
+    /// `remove_capability`, `register_manifest`, `load_file`) so two
+    /// concurrent mutators don't lose updates between
+    /// `state.load_full()` and `state.store(Arc::new(...))`. Held only
+    /// on the slow path; readers never touch it.
+    write_lock: Mutex<()>,
     /// Sticky latch — flips to `true` the first time `add_capability`
     /// (or `load_file`) registers a real grant and **never** flips
     /// back. Used by `is_allowed` to keep the deny-by-default posture
@@ -103,11 +133,45 @@ pub struct Authority {
 impl Authority {
     fn new() -> Self {
         Self {
-            capabilities: RwLock::new(BTreeMap::new()),
-            manifests: RwLock::new(BTreeMap::new()),
-            resolved: RwLock::new(None),
+            state: ArcSwap::from_pointee(AuthorityState::default()),
+            manifests: Mutex::new(BTreeMap::new()),
+            write_lock: Mutex::new(()),
             ever_configured: AtomicBool::new(false),
         }
+    }
+
+    /// RMW under the writer mutex: clone the current snapshot, hand it
+    /// to `f`, recompute `resolved` from the mutated capabilities +
+    /// the current manifest set, and publish the new `Arc`. The lock
+    /// is dropped after `store(...)` so a follow-up reader sees the
+    /// new state on its next `state.load()`.
+    fn mutate_state<F, R>(&self, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&mut AuthorityState) -> R,
+    {
+        let _guard = self.write_lock.lock();
+        let current = self.state.load_full();
+        let mut next = (*current).clone();
+        let r = f(&mut next);
+        next.resolved = self.recompute_resolved(&next.capabilities)?;
+        self.state.store(Arc::new(next));
+        Ok(r)
+    }
+
+    /// Re-resolve the lookup table from the current capabilities +
+    /// manifests. Caller holds `write_lock` so the manifest snapshot
+    /// is consistent with the capabilities being resolved against.
+    fn recompute_resolved(
+        &self,
+        capabilities: &BTreeMap<String, Capability>,
+    ) -> Result<Option<Arc<Resolved>>, String> {
+        if capabilities.is_empty() {
+            return Ok(None);
+        }
+        let mans = self.manifests.lock();
+        let resolved = Resolved::resolve(&mans, capabilities.clone(), Target::current())
+            .map_err(|e| format!("acl: resolve failed — {e}"))?;
+        Ok(Some(Arc::new(resolved)))
     }
 
     /// Load capabilities from a `.json` capability file (single object,
@@ -122,34 +186,37 @@ impl Authority {
             CapabilityFile::List(list) | CapabilityFile::NamedList { capabilities: list } => list,
         };
         let inserted_any = !caps.is_empty();
-        {
-            let mut write = self.capabilities.write();
+        self.mutate_state(|s| {
             for c in caps {
-                write.insert(c.identifier.clone(), c);
+                s.capabilities.insert(c.identifier.clone(), c);
             }
-        }
+        })?;
         if inserted_any {
             // Sticky — we now have at least one grant on file, so the
             // process is in "configured" mode for the rest of its life.
             self.ever_configured.store(true, Ordering::SeqCst);
         }
-        self.rebuild_resolved()
+        Ok(())
     }
 
     /// Add a capability at runtime. Replaces any existing capability
     /// with the same identifier.
     pub fn add_capability(&self, cap: Capability) -> Result<(), String> {
-        self.capabilities.write().insert(cap.identifier.clone(), cap);
+        self.mutate_state(|s| {
+            s.capabilities.insert(cap.identifier.clone(), cap);
+        })?;
         // Sticky latch — see `Authority::ever_configured`. Stays true
         // even after a subsequent `remove_capability` empties the map.
         self.ever_configured.store(true, Ordering::SeqCst);
-        self.rebuild_resolved()
+        Ok(())
     }
 
     /// Remove a capability by identifier. No-op if not present.
     pub fn remove_capability(&self, id: &str) -> Result<(), String> {
-        self.capabilities.write().remove(id);
-        self.rebuild_resolved()
+        self.mutate_state(|s| {
+            s.capabilities.remove(id);
+        })?;
+        Ok(())
     }
 
     /// Register a plugin's manifest (one per plugin). Pass
@@ -157,13 +224,23 @@ impl Authority {
     /// Triggers a rebuild — call once per plugin at boot, not in a hot
     /// loop.
     pub fn register_manifest(&self, name: &str, manifest: Manifest) -> Result<(), String> {
-        self.manifests.write().insert(name.to_string(), manifest);
-        self.rebuild_resolved()
+        // The writer mutex serializes us against any concurrent
+        // `mutate_state` so the manifests + capabilities resolved
+        // together stay coherent. The manifests live outside the
+        // snapshot (non-`Clone`), so we mutate them directly here and
+        // then rebuild `resolved` from a fresh snapshot.
+        let _guard = self.write_lock.lock();
+        self.manifests.lock().insert(name.to_string(), manifest);
+        let current = self.state.load_full();
+        let mut next = (*current).clone();
+        next.resolved = self.recompute_resolved(&next.capabilities)?;
+        self.state.store(Arc::new(next));
+        Ok(())
     }
 
     /// All currently-loaded capabilities (for inspection / debug).
     pub fn list(&self) -> Vec<Capability> {
-        self.capabilities.read().values().cloned().collect()
+        self.state.load().capabilities.values().cloned().collect()
     }
 
     /// Check if a command is allowed for the given context.
@@ -192,8 +269,12 @@ impl Authority {
         webview: Option<&str>,
         origin: Option<&str>,
     ) -> bool {
-        let resolved_guard = self.resolved.read();
-        let Some(resolved) = resolved_guard.as_ref() else {
+        // Lock-free snapshot — single atomic load + Arc bump. Holds the
+        // immutable state for the duration of the check; concurrent
+        // mutators see a fresh snapshot on their next `state.load()`
+        // without ever blocking this read.
+        let snapshot = self.state.load();
+        let Some(resolved) = snapshot.resolved.as_deref() else {
             // Nothing resolved. Two cases:
             //  * Truly unconfigured (no `add_capability` / `load_file`
             //    has ever run) → fail open, matching the `security.rs`
@@ -236,24 +317,6 @@ impl Authority {
         // "deny by default" — the caller has opted into the ACL model.
         false
     }
-
-    /// Recompile the resolved lookup. Cheap (a few μs for typical
-    /// manifests); runs under a write lock on `resolved` so callers
-    /// reading mid-rebuild see the previous state.
-    fn rebuild_resolved(&self) -> Result<(), String> {
-        let caps = self.capabilities.read().clone();
-        let mans = self.manifests.read();
-
-        if caps.is_empty() {
-            *self.resolved.write() = None;
-            return Ok(());
-        }
-
-        let resolved = Resolved::resolve(&mans, caps, Target::current())
-            .map_err(|e| format!("acl: resolve failed — {e}"))?;
-        *self.resolved.write() = Some(resolved);
-        Ok(())
-    }
 }
 
 /// Test whether `url` matches a Chrome-style URL pattern such as
@@ -292,12 +355,15 @@ pub fn url_matches(pattern: &str, url: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Singleton accessor — same pattern as `os::security`.
-static AUTHORITY: OnceLock<Authority> = OnceLock::new();
+/// Singleton authority — same pattern as `os::security`. `LazyLock`
+/// (Rust 1.80+) builds the inner `Authority` on first deref so the
+/// `authority()` accessor below is a thin re-export, kept for the
+/// public API surface (every consumer outside this module calls it).
+static AUTHORITY: LazyLock<Authority> = LazyLock::new(Authority::new);
 
-/// Get (or lazily create) the process-wide ACL authority.
+/// Get the process-wide ACL authority.
 pub fn authority() -> &'static Authority {
-    AUTHORITY.get_or_init(Authority::new)
+    &AUTHORITY
 }
 
 /// Build the set of resolved-command keys to look up for a user-friendly
@@ -565,9 +631,13 @@ mod tests {
     /// on purpose, but tests own the singleton across runs.
     fn reset() {
         let auth = authority();
-        auth.capabilities.write().clear();
-        auth.manifests.write().clear();
-        *auth.resolved.write() = None;
+        // Reset every piece of authority state to the post-`new()`
+        // shape: empty snapshot, empty manifest map, sticky latch off.
+        // We hold the writer mutex briefly to avoid racing with an
+        // in-flight `mutate_state` from a parallel test.
+        let _g = auth.write_lock.lock();
+        auth.state.store(Arc::new(AuthorityState::default()));
+        auth.manifests.lock().clear();
         auth.ever_configured.store(false, Ordering::SeqCst);
     }
 

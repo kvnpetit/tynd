@@ -88,316 +88,98 @@ fn api_disabled(api: &str) -> String {
     )
 }
 
+/// Generates the `api → cfg-gated module::dispatch` arms in the
+/// outer `match`. Each row is `("name", "feature", module, "label")`:
+/// the macro emits the literal arm with one `#[cfg(feature = "feature")]`
+/// branch returning `module::dispatch(...)` and a sibling
+/// `#[cfg(not(feature = "feature"))]` branch returning the
+/// `api_disabled("label")` error string. The label is intentionally
+/// the user-friendly name (e.g. `"deep-link"`, `"system-stats"`) so
+/// the disabled message reads the same way the deployer wrote the
+/// corresponding `apis: [...]` entry in `tynd.config.ts`.
+///
+/// Replaces 28 hand-written `match` arms (~280 LOC) with a single
+/// declarative table.
+macro_rules! dispatch_apis {
+    (
+        $api:ident, $method:ident, $args:ident,
+        [ $( $name:literal => $feat:literal => $module:ident => $label:literal ),* $(,)? ]
+        $( , $extra_arm:tt )* $(,)?
+    ) => {
+        match $api {
+            $(
+                $name => {
+                    #[cfg(feature = $feat)]
+                    { $module::dispatch($method, $args) }
+                    #[cfg(not(feature = $feat))]
+                    { Err(api_disabled($label)) }
+                },
+            )*
+            $( $extra_arm )*
+            _ => Err(format!("Unknown OS API: '{}'", $api)),
+        }
+    };
+}
+
 /// Dispatch a non-window OS API call from a background thread.
 /// Returns `Ok(value)` or `Err(user-facing message)`.
-#[allow(clippy::too_many_lines)]
 pub fn dispatch(api: &str, method: &str, args: &Value) -> Result<Value, String> {
+    // Always-on arms (no `api-*` feature gate — these crates are
+    // structural). The `dispatch_apis!` macro then expands the rest.
     match api {
-        "app" => app::dispatch(method, args),
-        "os" => os_info::dispatch(method, args),
-        "security" => security::dispatch(method, args),
+        "app" => return app::dispatch(method, args),
+        "os" => return os_info::dispatch(method, args),
+        "security" => return security::dispatch(method, args),
         // Native plugins (api-* features irrelevant — plugin registry is
         // populated at process startup from the CLI-generated main.rs).
-        "plugin" => crate::plugins::dispatch(method, args),
-
-        "acl" => {
-            #[cfg(feature = "api-acl")]
-            {
-                acl::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-acl"))]
-            {
-                Err(api_disabled("acl"))
-            }
-        },
-        "autolaunch" => {
-            #[cfg(feature = "api-autolaunch")]
-            {
-                autolaunch::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-autolaunch"))]
-            {
-                Err(api_disabled("autolaunch"))
-            }
-        },
-        "biometric" => {
-            #[cfg(feature = "api-biometric")]
-            {
-                biometric::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-biometric"))]
-            {
-                Err(api_disabled("biometric"))
-            }
-        },
-        "clipboard" => {
-            #[cfg(feature = "api-clipboard")]
-            {
-                clipboard::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-clipboard"))]
-            {
-                Err(api_disabled("clipboard"))
-            }
-        },
-        "keys" => {
-            #[cfg(feature = "api-keys")]
-            {
-                keys::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-keys"))]
-            {
-                Err(api_disabled("keys"))
-            }
-        },
-        "cli" => {
-            #[cfg(feature = "api-cli")]
-            {
-                cli::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-cli"))]
-            {
-                Err(api_disabled("cli"))
-            }
-        },
-        "compute" => {
-            #[cfg(feature = "api-compute")]
-            {
-                compute::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-compute"))]
-            {
-                Err(api_disabled("compute"))
-            }
-        },
-        "deepLink" => {
-            #[cfg(feature = "api-deep-link")]
-            {
-                deep_link::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-deep-link"))]
-            {
-                Err(api_disabled("deep-link"))
-            }
-        },
-        "dialog" => {
-            #[cfg(feature = "api-dialog")]
-            {
-                dialog::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-dialog"))]
-            {
-                Err(api_disabled("dialog"))
-            }
-        },
-        "fs" => {
-            #[cfg(feature = "api-fs")]
-            {
-                fs::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-fs"))]
-            {
-                Err(api_disabled("fs"))
-            }
-        },
-        "http" => {
-            #[cfg(feature = "api-http")]
-            {
-                http::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-http"))]
-            {
-                Err(api_disabled("http"))
-            }
-        },
-        "keyring" => {
-            #[cfg(feature = "api-keyring")]
-            {
-                keyring::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-keyring"))]
-            {
-                Err(api_disabled("keyring"))
-            }
-        },
-        "log" => {
-            #[cfg(feature = "api-log")]
-            {
-                log::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-log"))]
-            {
-                Err(api_disabled("log"))
-            }
-        },
-        "network" => {
-            #[cfg(feature = "api-network")]
-            {
-                network::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-network"))]
-            {
-                Err(api_disabled("network"))
-            }
-        },
-        "notification" => {
-            #[cfg(feature = "api-notification")]
-            {
-                notification::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-notification"))]
-            {
-                Err(api_disabled("notification"))
-            }
-        },
-        "power" => {
-            #[cfg(feature = "api-power")]
-            {
-                power::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-power"))]
-            {
-                Err(api_disabled("power"))
-            }
-        },
-        "process" => {
-            #[cfg(feature = "api-process")]
-            {
-                process::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-process"))]
-            {
-                Err(api_disabled("process"))
-            }
-        },
-        "screenshot" => {
-            #[cfg(feature = "api-screenshot")]
-            {
-                screenshot::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-screenshot"))]
-            {
-                Err(api_disabled("screenshot"))
-            }
-        },
-        "shell" => {
-            #[cfg(feature = "api-shell")]
-            {
-                shell::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-shell"))]
-            {
-                Err(api_disabled("shell"))
-            }
-        },
-        "shortcuts" => {
-            #[cfg(feature = "api-shortcuts")]
-            {
-                shortcuts::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-shortcuts"))]
-            {
-                Err(api_disabled("shortcuts"))
-            }
-        },
-        "sidecar" => {
-            #[cfg(feature = "api-sidecar")]
-            {
-                sidecar::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-sidecar"))]
-            {
-                Err(api_disabled("sidecar"))
-            }
-        },
-        "singleInstance" => {
-            #[cfg(feature = "api-single-instance")]
-            {
-                single_instance::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-single-instance"))]
-            {
-                Err(api_disabled("singleInstance"))
-            }
-        },
-        "store" => {
-            #[cfg(feature = "api-store")]
-            {
-                store::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-store"))]
-            {
-                Err(api_disabled("store"))
-            }
-        },
-        "systemStats" => {
-            #[cfg(feature = "api-system-stats")]
-            {
-                system_stats::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-system-stats"))]
-            {
-                Err(api_disabled("system-stats"))
-            }
-        },
-        "theme" => {
-            #[cfg(feature = "api-theme")]
-            {
-                theme::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-theme"))]
-            {
-                Err(api_disabled("theme"))
-            }
-        },
-        "updater" => {
-            #[cfg(feature = "api-updater")]
-            {
-                updater::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-updater"))]
-            {
-                Err(api_disabled("updater"))
-            }
-        },
-        "vault" => {
-            #[cfg(feature = "api-vault")]
-            {
-                vault::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-vault"))]
-            {
-                Err(api_disabled("vault"))
-            }
-        },
-        "websocket" => {
-            #[cfg(feature = "api-websocket")]
-            {
-                websocket::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-websocket"))]
-            {
-                Err(api_disabled("websocket"))
-            }
-        },
-        "windowState" => {
-            #[cfg(feature = "api-window-state")]
-            {
-                window_persistence::dispatch(method, args)
-            }
-            #[cfg(not(feature = "api-window-state"))]
-            {
-                Err(api_disabled("window-state"))
-            }
-        },
-
+        "plugin" => return crate::plugins::dispatch(method, args),
+        // `workers` has bespoke semantics — present in `embedded-js`
+        // builds, hard-error-with-hint everywhere else. Stays out of
+        // the table because the disabled message isn't an
+        // `api_disabled(...)` template.
         #[cfg(feature = "embedded-js")]
-        "workers" => workers::dispatch(method, args),
+        "workers" => return workers::dispatch(method, args),
         #[cfg(not(feature = "embedded-js"))]
         "workers" => {
-            Err("workers API is lite-only; in full runtime use Bun.Worker natively".to_string())
+            return Err(
+                "workers API is lite-only; in full runtime use Bun.Worker natively".to_string(),
+            );
         },
-
-        _ => Err(format!("Unknown OS API: '{api}'")),
+        _ => {},
     }
+
+    dispatch_apis!(
+        api, method, args,
+        [
+            "acl"            => "api-acl"             => acl                 => "acl",
+            "autolaunch"     => "api-autolaunch"      => autolaunch          => "autolaunch",
+            "biometric"      => "api-biometric"       => biometric           => "biometric",
+            "clipboard"      => "api-clipboard"       => clipboard           => "clipboard",
+            "keys"           => "api-keys"            => keys                => "keys",
+            "cli"            => "api-cli"             => cli                 => "cli",
+            "compute"        => "api-compute"         => compute             => "compute",
+            "deepLink"       => "api-deep-link"       => deep_link           => "deep-link",
+            "dialog"         => "api-dialog"          => dialog              => "dialog",
+            "fs"             => "api-fs"              => fs                  => "fs",
+            "http"           => "api-http"            => http                => "http",
+            "keyring"        => "api-keyring"         => keyring             => "keyring",
+            "log"            => "api-log"             => log                 => "log",
+            "network"        => "api-network"         => network             => "network",
+            "notification"   => "api-notification"    => notification        => "notification",
+            "power"          => "api-power"           => power               => "power",
+            "process"        => "api-process"         => process             => "process",
+            "screenshot"     => "api-screenshot"      => screenshot          => "screenshot",
+            "shell"          => "api-shell"           => shell               => "shell",
+            "shortcuts"      => "api-shortcuts"       => shortcuts           => "shortcuts",
+            "sidecar"        => "api-sidecar"         => sidecar             => "sidecar",
+            "singleInstance" => "api-single-instance" => single_instance     => "singleInstance",
+            "store"          => "api-store"           => store               => "store",
+            "systemStats"    => "api-system-stats"    => system_stats        => "system-stats",
+            "theme"          => "api-theme"           => theme               => "theme",
+            "updater"        => "api-updater"         => updater             => "updater",
+            "vault"          => "api-vault"           => vault               => "vault",
+            "websocket"      => "api-websocket"       => websocket           => "websocket",
+            "windowState"    => "api-window-state"    => window_persistence  => "window-state",
+        ]
+    )
 }
