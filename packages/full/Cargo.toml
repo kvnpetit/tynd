@@ -60,6 +60,15 @@ human-panic.workspace = true
 # builds stay on `serde_json::from_slice`; opt-in users flip
 # `--features fast-json` to pick the platform-appropriate decoder for
 # the Bun↔host IPC frame parse loop.
+# U1 Layer 1: binary IPC wire format on the Bun↔host edge. CBOR via
+# `ciborium` (Rust) + `cbor-x` (JS). Opt-in via the `binary-ipc`
+# feature; default stays JSON for back-compat. Toggle with
+# `TYND_IPC_FORMAT=cbor` env var (or `runtime.ipcFormat: "cbor"` in
+# `tynd.config.ts` once the CLI threads it through). The Bun child
+# inherits the env var so both sides agree before the first frame.
+ciborium    = { workspace = true, optional = true }
+ciborium-io = { workspace = true, optional = true }
+
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 sonic-rs = { workspace = true, optional = true }
 
@@ -90,3 +99,12 @@ deep-link = ["tynd-host/api-deep-link"]
 # in `bun.rs` falls back to `serde_json::from_slice` when this feature
 # is off OR the target arch isn't covered.
 fast-json = [ "dep:sonic-rs", "dep:simd-json" ]
+
+# U1 Layer 1: opt-in binary IPC wire format on the Bun↔host edge.
+# Length-prefixed CBOR frames replace the `\n`-delimited JSON loop in
+# `bun.rs`. ~10× decode throughput, 30-50% smaller wire size. Enabled
+# at runtime via `TYND_IPC_FORMAT=cbor`; falls back to JSON when the
+# feature is off or the env var is unset / set to anything else.
+# Bun child inherits the env var so both sides agree on the format
+# before the first frame is written.
+binary-ipc = [ "dep:ciborium", "dep:ciborium-io" ]

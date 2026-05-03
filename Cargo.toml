@@ -1,5 +1,5 @@
 [workspace]
-members = [ "packages/host-rs", "packages/full", "packages/lite" ]
+members = [ "packages/host-rs", "packages/host-macros", "packages/full", "packages/lite" ]
 # Generated/vendored trees that should not be members of the monorepo
 # workspace. `packages/host-src/native/` is a flattened mirror of
 # `packages/host-rs` produced by `bun run --cwd packages/host-src sync`;
@@ -30,7 +30,21 @@ ignored = [
     # (host-rs feature flags, future plugins) can opt in via `workspace = true`
     # without re-pinning versions. Shear them when wired:
     "base64-simd",   # SIMD base64 fallback for binary IPC string transit
-    "swift-rs",      # Swift↔Rust bridge for niche macOS-native APIs
+    # Tauri-parity additions — workspace-pinned so per-platform / per-feature
+    # consumers (host-rs's `swift-bridge`, `splash-screen`,
+    # `api-apple-script`, `tls-platform-verifier`) can `workspace = true`
+    # without re-pinning the version. Shear-ignored because the
+    # workspace.dependencies declaration is itself "unused" by direct path
+    # — the actual `[dependencies]` lines live in `host-rs/Cargo.toml`
+    # under `target.'cfg(target_os = "macos")'.dependencies` (swift-rs,
+    # osakit) or behind a feature gate (softbuffer, raw-window-handle,
+    # rustls-platform-verifier).
+    "swift-rs",                 # Swift↔Rust bridge for niche macOS-native APIs
+    "cookie_store",             # standalone cookie jar for plugins / forks
+    "softbuffer",               # CPU-buffer splash screen (`splash-screen` feature)
+    "raw-window-handle",        # softbuffer's window handle abstraction
+    "osakit",                   # macOS AppleScript runner (api-apple-script)
+    "rustls-platform-verifier", # OS-native cert validation (enterprise CA)
     # Async WebSocket scaffolding — staged behind `tynd-host/ws-async`,
     # not yet wired to the dispatcher (see `os::websocket` follow-up).
     # Carrying the version pin here avoids cargo-shear flagging the
@@ -87,6 +101,14 @@ image       = { version = "0.25.10", default-features = false, features = [ "png
 rquickjs = { version = "0.11.0", features = [ "full" ] }
 
 # HTTP + binary encoding. `json` dropped — we parse via serde_json directly.
+#
+# NOTE: ureq 3 migration is deferred — the typestate split
+# (`RequestBuilder<WithBody>` vs `RequestBuilder<WithoutBody>`) +
+# `Agent::config_builder()` + the `Body`/`SendBody` API churn touches
+# every call site in `os::http`, `os::updater`, and the lite-runtime
+# `polyfills::fetch` bridge. Concurrent edits in those files made the
+# in-place migration unsafe; the bump is staged for a follow-up sprint
+# with a single-author refactor pass. Kept on 2.x in the meantime.
 ureq   = { version = "2.12", default-features = false, features = [ "tls", "gzip", "brotli" ] }
 base64 = "0.22"
 
@@ -253,6 +275,15 @@ self-replace = "1.5"
 # `.tynd/build/` template substitutes a registry version when generating
 # custom runtimes for end users.
 tynd_plugin_sdk = { path = "../plugin-sdk/native" }
+
+# Host-side proc-macros — `#[tynd::handler]` collapses the per-OS-API
+# `dispatch(method, args)` boilerplate (a `match method { ... }` ladder
+# + per-arm `args.get(...)` extraction + per-arm `to_value` return
+# mapping) into one attribute on the API's `impl` block. Lives in-tree
+# at `packages/host-macros/`; the host depends on it unconditionally
+# because the always-on dispatch arms (`os::os_info`, `os::security`,
+# `os::app`) flow through the macro just like the gatable APIs do.
+tynd-host-macros = { path = "packages/host-macros" }
 
 # Structured logging + error helpers — `tracing` for spans/JSON output,
 # `anyhow` for app code with `.context()`, `thiserror` for typed public
@@ -442,6 +473,17 @@ bytes = "1.7"
 # parle JSON nativement.
 rkyv = { version = "0.8", features = ["bytecheck"] }
 
+# CBOR (RFC 8949) — binary IPC wire format on the Bun↔host edge
+# (U1 Layer 1). Picked over `postcard` because mature JS encoders
+# (`cbor-x`) exist for the Bun side, while postcard's TS port is
+# experimental. ~10× faster decode than serde_json on typed frames,
+# 30-50% smaller wire size (no `"key":` strings, varint numbers).
+# Opt-in via `binary-ipc` feature on `tynd-full`; default stays JSON
+# for back-compat with existing apps. Kept `default-features = false`
+# so we don't pull `std`-conditional features twice across the graph.
+ciborium    = { version = "0.2", default-features = false }
+ciborium-io = { version = "0.2", default-features = false, features = ["std"] }
+
 # Stack-allocated petits vecs. Args RPC font typiquement <8 items —
 # évite l'alloc heap sur le hot path dispatch.
 smallvec = { version = "1.13", features = ["serde", "union"] }
@@ -517,9 +559,58 @@ base64-simd = "0.8"
 
 # Bridge Swift↔Rust avec build.rs auto. Pour features macOS-natives
 # (FSEvents avancés, NSAppleScript, AVFoundation) qui n'ont pas de
-# bindings Rust idiomatiques. À tirer derrière une feature côté
-# consommateur uniquement si un besoin spécifique macOS apparaît.
-swift-rs = "1.0"
+# bindings Rust idiomatiques. Activated via `swift-bridge` feature on
+# tynd-host (macOS-only, default off — keeps Linux/Windows builds
+# unaffected). Build script `host-rs/build.rs` compiles the Swift
+# sources under `host-rs/swift/` when the feature is on. See
+# `os::macos_swift` for the bridge module + smoke test. The same crate
+# is consumed twice — once as a runtime dep (no features, just the
+# `swift!` macro + linker shim) and once as a build dep with the
+# `build` feature on (pulls `SwiftLinker`). Cargo dedupes the two on
+# the same workspace pin.
+swift-rs = { version = "1.0", default-features = false }
+
+# === Tauri-parity additions (V1) ===
+
+# Standalone cookie store with serde + persistence — wired through
+# `os::http::cookies` behind the `http.cookies` config flag. ureq 3
+# ships its own `CookieJar` (via the `cookies` feature) which we use
+# for the in-process jar; `cookie_store` is kept here for forks /
+# plugins that want to share a cookie state outside the ureq agent
+# (e.g. a webview-side cookie sync).
+cookie_store = { version = "0.22", default-features = false }
+
+# CPU-buffer windowing primitive — used for the splash-screen pre-window
+# to prevent the white-flash that browsers / wry exhibit during webview
+# init on cold start (esp. Windows). Pre-creates a tao::Window with a
+# softbuffer surface, paints a single frame (color or PNG), and hands a
+# handle back to the launcher for `close()` once the main webview is
+# ready. Pairs with the existing `tao` workspace dep — softbuffer takes
+# any `raw-window-handle::HasWindowHandle` impl, which `tao::Window`
+# satisfies.
+softbuffer = { version = "0.4", default-features = false }
+# `raw-window-handle` v0.6 — softbuffer 0.4's window-handle abstraction.
+# tao 0.35 already exposes `HasWindowHandle` via `raw-window-handle 0.6`
+# so the version is forced for graph-dedup; pinning here keeps a future
+# upgrade in lockstep.
+raw-window-handle = "0.6"
+
+# Native AppleScript runner — used by `os::apple_script` (macOS only)
+# behind the `api-apple-script` feature. Unlocks integrations the
+# webview can't do natively: post-update relaunch via
+# `tell application "Finder" to activate`, OS-level automation
+# (Calendar, Reminders, …), and any vendor-specific script bridge that
+# expects an OSA host. Not pulled on Linux/Windows.
+osakit = "0.3"
+
+# Cargo-direct rustls platform verifier — same crate the ureq
+# `platform-verifier` feature pulls transitively. Declared here so
+# consumers (host-rs / plugins) can construct an
+# `Agent::config_builder().tls_config(TlsConfig::builder().root_certs(
+# RootCerts::PlatformVerifier))` without re-pinning the version.
+# Enables enterprise / corp-CA root-cert chains on macOS Keychain,
+# Windows CryptoAPI, and Linux's NSS / OpenSSL stores.
+rustls-platform-verifier = "0.4"
 
 # Property-based testing (dev-only) — used by host-rs to fuzz path
 # canonicalization invariants and updater semver ordering against the

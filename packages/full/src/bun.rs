@@ -21,6 +21,8 @@ use tynd_host::{
     window::WindowConfig,
 };
 
+use crate::bun_ipc::WireFormat;
+
 /// Outbound wire frame to Bun's stdin. Single typed enum so all four
 /// shapes share the same builder + serializer call site instead of
 /// four near-identical `serde_json::json!()` blobs in the forwarder
@@ -144,6 +146,11 @@ pub(crate) struct ReloadHandle {
     /// reader thread can tell an expected stdout-close apart from a real
     /// Bun crash. Shared between the reload trigger and the reader.
     reload_in_progress: Arc<AtomicBool>,
+    /// Wire format negotiated for this Bun lifetime — propagated to the
+    /// freshly-spawned child on reload so the format stays stable across
+    /// the swap (otherwise an env-var change between launches could
+    /// corrupt the in-flight call queue).
+    wire_fmt: WireFormat,
 }
 
 impl ReloadHandle {
@@ -170,6 +177,7 @@ impl ReloadHandle {
             &self.entry_path,
             &self.event_tx,
             self.reload_in_progress.clone(),
+            self.wire_fmt,
         ) {
             Ok((child, stdin, _config)) => {
                 *self.child_slot.lock().unwrap() = Some(child);
@@ -197,8 +205,18 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
     let (event_tx, event_rx) = mpsc::unbounded::<BackendEvent>();
     let reload_in_progress = Arc::new(AtomicBool::new(false));
 
-    let (child, stdin, config) = match spawn_bun(entry_path, &event_tx, reload_in_progress.clone())
-    {
+    // Pick the wire format once at process start. Both directions
+    // (host→Bun stdin, Bun→host stdout) use the same format — the
+    // Bun child inherits `TYND_IPC_FORMAT` set by `spawn_bun`.
+    let wire_fmt = WireFormat::from_env();
+    tynd_host::tynd_debug!("Bun IPC wire format: {}", wire_fmt.as_env_value());
+
+    let (child, stdin, config) = match spawn_bun(
+        entry_path,
+        &event_tx,
+        reload_in_progress.clone(),
+        wire_fmt,
+    ) {
         Ok(t) => t,
         Err(e) => {
             tynd_log!("{e}");
@@ -222,9 +240,9 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
             let mut burst: Vec<u8> = Vec::with_capacity(8 * 1024);
             while let Ok(call) = call_rx.recv() {
                 burst.clear();
-                push_call_line(&mut burst, call);
+                push_call_line(&mut burst, call, wire_fmt);
                 while let Ok(extra) = call_rx.try_recv() {
-                    push_call_line(&mut burst, extra);
+                    push_call_line(&mut burst, extra, wire_fmt);
                     // Cap burst so an unbounded stdin storm doesn't
                     // pin > 1 MiB in this thread; the next iteration
                     // drains the rest.
@@ -253,18 +271,53 @@ pub(crate) fn start(entry_path: &str) -> (BackendBridge, ReloadHandle) {
         child_slot,
         event_tx,
         reload_in_progress,
+        wire_fmt,
     };
     (bridge, reload)
 }
 
-/// Append the wire-encoded `\n`-terminated line for one BackendCall to
-/// the coalescing buffer. Used by the stdin forwarder (B18) to batch
-/// multiple frames into a single `write_all` syscall.
-fn push_call_line(out: &mut Vec<u8>, call: BackendCall) {
-    let bytes = match call {
-        BackendCall::Raw(mut s) => {
-            s.push('\n');
-            s.into_bytes()
+/// Append the wire-encoded frame for one BackendCall to the coalescing
+/// buffer. Used by the stdin forwarder (B18) to batch multiple frames
+/// into a single `write_all` syscall.
+///
+/// The wire format is picked once at process start (see
+/// [`bun_ipc::WireFormat::from_env`]). On the JSON path each frame is
+/// `\n`-terminated; on the CBOR path each frame is length-prefixed
+/// (4-byte u32 LE header + body). Both paths funnel through the same
+/// match arm so the coalescing semantics stay identical.
+fn push_call_line(out: &mut Vec<u8>, call: BackendCall, fmt: WireFormat) {
+    // `Raw` is a pre-encoded JSON line forwarded straight from the
+    // webview shim. It only makes sense on the JSON wire — on the
+    // binary wire the webview shim will emit pre-encoded CBOR (one
+    // frame per IPC message) or call through the typed path.
+    match call {
+        BackendCall::Raw(s) => match fmt {
+            WireFormat::Json => {
+                let mut bytes = s.into_bytes();
+                bytes.push(b'\n');
+                out.extend_from_slice(&bytes);
+            },
+            #[cfg(feature = "binary-ipc")]
+            WireFormat::Cbor => {
+                // Webview pre-encoded JSON can't be forwarded verbatim
+                // on the binary wire. Decode → re-encode as CBOR. This
+                // is only the cold edge case where a webview opted into
+                // binary IPC but a plugin still emits a JSON Raw frame;
+                // typed callers go through the no-decode path below.
+                match serde_json::from_str::<Value>(&s) {
+                    Ok(v) => {
+                        let mut body: Vec<u8> = Vec::with_capacity(s.len());
+                        if let Err(e) = ciborium::ser::into_writer(&v, &mut body) {
+                            tynd_host::tynd_error!("Raw → CBOR re-encode failed: {e}");
+                            return;
+                        }
+                        crate::bun_ipc::push_cbor_frame_into(out, &body);
+                    },
+                    Err(e) => {
+                        tynd_host::tynd_error!("Raw frame is not valid JSON: {e}");
+                    },
+                }
+            },
         },
         BackendCall::Typed { id, fn_name, args } => {
             let msg = match fn_name.as_str() {
@@ -276,33 +329,43 @@ fn push_call_line(out: &mut Vec<u8>, call: BackendCall) {
                     args: &args,
                 },
             };
-            match serde_json::to_string(&msg) {
-                Ok(mut s) => {
-                    s.push('\n');
-                    s.into_bytes()
-                },
-                Err(e) => {
-                    tynd_host::tynd_error!("failed to serialize BackendCall: {e}");
-                    return;
-                },
+            encode_wire_msg(out, &msg, fmt);
+        },
+        BackendCall::Cancel { id } => {
+            encode_wire_msg(out, &WireMsg::Cancel { id: &id }, fmt);
+        },
+        BackendCall::Ack { id, n } => {
+            encode_wire_msg(out, &WireMsg::Ack { id: &id, n }, fmt);
+        },
+    }
+}
+
+/// Format-aware encoder for a single `WireMsg` — JSON line on the
+/// legacy path, length-prefixed CBOR frame on the binary path. Errors
+/// are logged and the frame is dropped (matches the previous JSON
+/// path's `Err(_) => return` semantics — a serialize failure on
+/// IPC is unrecoverable, the dispatch is already lost).
+fn encode_wire_msg(out: &mut Vec<u8>, msg: &WireMsg<'_>, fmt: WireFormat) {
+    match fmt {
+        WireFormat::Json => match serde_json::to_string(msg) {
+            Ok(mut s) => {
+                s.push('\n');
+                out.extend_from_slice(s.as_bytes());
+            },
+            Err(e) => {
+                tynd_host::tynd_error!("failed to serialize WireMsg as JSON: {e}");
+            },
+        },
+        #[cfg(feature = "binary-ipc")]
+        WireFormat::Cbor => {
+            let mut body: Vec<u8> = Vec::with_capacity(128);
+            if let Err(e) = ciborium::ser::into_writer(msg, &mut body) {
+                tynd_host::tynd_error!("failed to serialize WireMsg as CBOR: {e}");
+                return;
             }
+            crate::bun_ipc::push_cbor_frame_into(out, &body);
         },
-        BackendCall::Cancel { id } => match serde_json::to_string(&WireMsg::Cancel { id: &id }) {
-            Ok(mut s) => {
-                s.push('\n');
-                s.into_bytes()
-            },
-            Err(_) => return,
-        },
-        BackendCall::Ack { id, n } => match serde_json::to_string(&WireMsg::Ack { id: &id, n }) {
-            Ok(mut s) => {
-                s.push('\n');
-                s.into_bytes()
-            },
-            Err(_) => return,
-        },
-    };
-    out.extend_from_slice(&bytes);
+    }
 }
 
 /// Spawn a Bun subprocess, wait for `tynd:config`, spawn the stdout reader thread,
@@ -311,6 +374,7 @@ fn spawn_bun(
     entry_path: &str,
     event_tx: &mpsc::Sender<BackendEvent>,
     reload_in_progress: Arc<AtomicBool>,
+    wire_fmt: WireFormat,
 ) -> Result<(Child, ChildStdin, BackendConfig), String> {
     let bun_bin = std::env::var("TYND_BUN_PATH").unwrap_or_else(|_| "bun".into());
 
@@ -324,6 +388,12 @@ fn spawn_bun(
         } else {
             Stdio::null()
         });
+
+    // Make the wire-format contract explicit on the child env so the
+    // Bun runtime's stdin reader picks the matching decoder. Set even
+    // for `Json` so a stale `cbor` value left in the parent shell
+    // can't accidentally cross over to the child.
+    cmd.env("TYND_IPC_FORMAT", wire_fmt.as_env_value());
 
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -339,7 +409,7 @@ fn spawn_bun(
     let bun_stdin = child.stdin.take().expect("Bun stdin not piped");
     let bun_stdout = child.stdout.take().expect("Bun stdout not piped");
     let mut reader = BufReader::with_capacity(64 * 1024, bun_stdout);
-    let config = read_config(&mut reader)?;
+    let config = read_config(&mut reader, wire_fmt)?;
 
     // Reader thread — forwards Bun stdout events. Dies when stdout closes
     // (on Bun exit or kill during reload). A new reader is spawned by ReloadHandle.
@@ -350,61 +420,10 @@ fn spawn_bun(
     // each call. -1 alloc per Bun stdout frame on bursty streams.
     let reader_event_tx = event_tx.clone();
     std::thread::spawn(move || {
-        let mut buf: Vec<u8> = Vec::with_capacity(8 * 1024);
-        loop {
-            buf.clear();
-            match reader.read_until(b'\n', &mut buf) {
-                Ok(0) => break,
-                Ok(_) => {
-                    // Strip trailing \r\n / \n then UTF-8-validate. Bun
-                    // emits ASCII JSON so the validation is essentially free.
-                    let line_bytes = strip_trailing_eol(&buf);
-                    let Ok(l) = std::str::from_utf8(line_bytes) else {
-                        continue;
-                    };
-                    let trimmed = l.trim();
-                    if trimmed.is_empty() {
-                        continue;
-                    }
-                    if !trimmed.starts_with('{') {
-                        eprintln!("[bun] {trimmed}");
-                        continue;
-                    }
-                    match parse_bun_msg(trimmed) {
-                        Ok(BunMsg::Return { id, ok, v, error }) => {
-                            // On success, `v` carries the devalue payload. On
-                            // error, `error` is a plain string we surface as
-                            // the wire value (the webview's resolve hook
-                            // displays it without further parsing).
-                            let value = if ok {
-                                v.unwrap_or_else(|| "null".into())
-                            } else {
-                                error.unwrap_or_else(|| "unknown error".into())
-                            };
-                            let _ = reader_event_tx.send(BackendEvent::Return { id, ok, value });
-                        },
-                        Ok(BunMsg::Yield { id, v }) => {
-                            let _ = reader_event_tx.send(BackendEvent::Yield { id, value: v });
-                        },
-                        Ok(BunMsg::Event { name, p, to }) => {
-                            let _ = reader_event_tx.send(BackendEvent::Emit {
-                                name,
-                                payload: p,
-                                to,
-                            });
-                        },
-                        Ok(BunMsg::EvalInFrontend { script, to }) => {
-                            let _ =
-                                reader_event_tx.send(BackendEvent::EvalInFrontend { script, to });
-                        },
-                        Ok(BunMsg::Config { .. }) => {},
-                        Err(e) => tynd_log!("Parse error ({e}): {trimmed}"),
-                    }
-                },
-                // Any error means Bun closed or crashed — the reader thread exits.
-                // ReloadHandle will spawn a fresh reader if/when a new Bun starts.
-                Err(_) => break,
-            }
+        match wire_fmt {
+            WireFormat::Json => json_reader_loop(&mut reader, &reader_event_tx),
+            #[cfg(feature = "binary-ipc")]
+            WireFormat::Cbor => cbor_reader_loop(&mut reader, &reader_event_tx),
         }
         // Reader thread is exiting. If it's not because of a controlled
         // reload, this is an unexpected Bun death — the runtime crashed,
@@ -429,44 +448,177 @@ fn spawn_bun(
     Ok((child, bun_stdin, config))
 }
 
-fn read_config(reader: &mut BufReader<std::process::ChildStdout>) -> Result<BackendConfig, String> {
+/// Forward a parsed `BunMsg` to the host event channel. Single shared
+/// helper between the JSON and CBOR reader loops so both paths produce
+/// identical `BackendEvent` shapes.
+fn forward_bun_msg(msg: BunMsg, tx: &mpsc::Sender<BackendEvent>) {
+    match msg {
+        BunMsg::Return { id, ok, v, error } => {
+            // On success, `v` carries the devalue payload. On error,
+            // `error` is a plain string we surface as the wire value
+            // (the webview's resolve hook displays it without further
+            // parsing).
+            let value = if ok {
+                v.unwrap_or_else(|| "null".into())
+            } else {
+                error.unwrap_or_else(|| "unknown error".into())
+            };
+            let _ = tx.send(BackendEvent::Return { id, ok, value });
+        },
+        BunMsg::Yield { id, v } => {
+            let _ = tx.send(BackendEvent::Yield { id, value: v });
+        },
+        BunMsg::Event { name, p, to } => {
+            let _ = tx.send(BackendEvent::Emit {
+                name,
+                payload: p,
+                to,
+            });
+        },
+        BunMsg::EvalInFrontend { script, to } => {
+            let _ = tx.send(BackendEvent::EvalInFrontend { script, to });
+        },
+        BunMsg::Config { .. } => {
+            // Stale config frame mid-stream — ignore (would only happen
+            // if Bun re-emitted config after handshake, which is a
+            // contract violation but not worth crashing over).
+        },
+    }
+}
+
+/// Legacy `\n`-delimited JSON reader. Recycles a single `Vec<u8>`
+/// across iterations rather than allocating a fresh `String` per line
+/// the way `BufRead::lines()` does — `read_line` would also alloc
+/// internally on each call. -1 alloc per Bun stdout frame on bursty
+/// streams.
+fn json_reader_loop(
+    reader: &mut BufReader<std::process::ChildStdout>,
+    tx: &mpsc::Sender<BackendEvent>,
+) {
+    let mut buf: Vec<u8> = Vec::with_capacity(8 * 1024);
     loop {
-        let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(0) | Err(_) => {
-                return Err("Runtime exited before sending config (is app.start() called?)".into());
+        buf.clear();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) => break,
+            Ok(_) => {
+                // Strip trailing \r\n / \n then UTF-8-validate. Bun
+                // emits ASCII JSON so the validation is essentially free.
+                let line_bytes = strip_trailing_eol(&buf);
+                let Ok(l) = std::str::from_utf8(line_bytes) else {
+                    continue;
+                };
+                let trimmed = l.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if !trimmed.starts_with('{') {
+                    eprintln!("[bun] {trimmed}");
+                    continue;
+                }
+                match parse_bun_msg(trimmed) {
+                    Ok(msg) => forward_bun_msg(msg, tx),
+                    Err(e) => tynd_log!("Parse error ({e}): {trimmed}"),
+                }
             },
-            Ok(_) => {},
+            // Any error means Bun closed or crashed — the reader thread exits.
+            // ReloadHandle will spawn a fresh reader if/when a new Bun starts.
+            Err(_) => break,
         }
+    }
+}
 
-        let trimmed = line.trim();
-        if !trimmed.starts_with('{') {
-            eprintln!("[bun] {trimmed}");
-            continue;
+/// Length-prefixed CBOR reader. Each frame is a 4-byte u32 LE header
+/// followed by a CBOR-encoded `BunMsg` body. Framing errors break
+/// the loop so the surrounding thread surfaces the dead-IPC banner;
+/// per-frame decode errors are logged and skipped (matches the JSON
+/// path's "log and keep going" semantic for malformed frames).
+#[cfg(feature = "binary-ipc")]
+fn cbor_reader_loop(
+    reader: &mut BufReader<std::process::ChildStdout>,
+    tx: &mpsc::Sender<BackendEvent>,
+) {
+    loop {
+        let body = match crate::bun_ipc::read_cbor_frame(reader) {
+            Ok(Some(b)) => b,
+            Ok(None) => break, // clean EOF — Bun closed stdout
+            Err(e) => {
+                tynd_host::tynd_error!("CBOR framing error on Bun stdout: {e}");
+                break;
+            },
+        };
+        match ciborium::de::from_reader::<BunMsg, _>(&body[..]) {
+            Ok(msg) => forward_bun_msg(msg, tx),
+            Err(e) => tynd_log!("CBOR decode error ({e}): {} bytes", body.len()),
         }
+    }
+}
 
-        match parse_bun_msg(trimmed) {
-            Ok(BunMsg::Config {
-                window,
+fn read_config(
+    reader: &mut BufReader<std::process::ChildStdout>,
+    fmt: WireFormat,
+) -> Result<BackendConfig, String> {
+    let msg = read_first_bun_msg(reader, fmt)?;
+    match msg {
+        BunMsg::Config {
+            window,
+            dev_url,
+            frontend_dir,
+            menu,
+            tray,
+            quit_on_last_window_closed,
+        } => {
+            let icon_path = std::env::var("TYND_ICON_PATH").ok();
+            Ok(BackendConfig {
+                window: window.unwrap_or_default(),
                 dev_url,
                 frontend_dir,
+                icon_path,
                 menu,
                 tray,
                 quit_on_last_window_closed,
-            }) => {
-                let icon_path = std::env::var("TYND_ICON_PATH").ok();
-                return Ok(BackendConfig {
-                    window: window.unwrap_or_default(),
-                    dev_url,
-                    frontend_dir,
-                    icon_path,
-                    menu,
-                    tray,
-                    quit_on_last_window_closed,
-                });
-            },
-            Ok(other) => return Err(format!("Expected tynd:config, got: {other:?}")),
-            Err(e) => return Err(format!("Failed to parse tynd:config: {e}\nLine: {trimmed}")),
-        }
+            })
+        },
+        other => Err(format!("Expected tynd:config, got: {other:?}")),
+    }
+}
+
+/// Read frames from Bun stdout until we land on a `BunMsg`. On the
+/// JSON wire, plain log lines (anything not starting with `{`) are
+/// re-emitted to stderr so devs see them; on the binary wire there's
+/// no such fallback (binary log lines would corrupt the framer), so
+/// any decode error returns. Skips empty lines on the JSON path.
+fn read_first_bun_msg(
+    reader: &mut BufReader<std::process::ChildStdout>,
+    fmt: WireFormat,
+) -> Result<BunMsg, String> {
+    match fmt {
+        WireFormat::Json => loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(0) | Err(_) => {
+                    return Err(
+                        "Runtime exited before sending config (is app.start() called?)".into(),
+                    );
+                },
+                Ok(_) => {},
+            }
+            let trimmed = line.trim();
+            if !trimmed.starts_with('{') {
+                eprintln!("[bun] {trimmed}");
+                continue;
+            }
+            return parse_bun_msg(trimmed)
+                .map_err(|e| format!("Failed to parse tynd:config: {e}\nLine: {trimmed}"));
+        },
+        #[cfg(feature = "binary-ipc")]
+        WireFormat::Cbor => {
+            let body = crate::bun_ipc::read_cbor_frame(reader)
+                .map_err(|e| format!("CBOR framing error reading config: {e}"))?
+                .ok_or_else(|| {
+                    "Runtime exited before sending config (is app.start() called?)".to_string()
+                })?;
+            ciborium::de::from_reader::<BunMsg, _>(&body[..])
+                .map_err(|e| format!("Failed to decode tynd:config CBOR frame: {e}"))
+        },
     }
 }

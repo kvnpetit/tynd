@@ -81,6 +81,28 @@ pub mod window_persistence;
 #[cfg(feature = "embedded-js")]
 pub mod workers;
 
+// === Tauri-parity additions (V1) ===
+//
+// Splash screen — CPU-buffer pre-window via softbuffer. Not an IPC
+// API; consumed directly by the launcher's startup path before the
+// webview spawns. Module is `#[cfg(feature = "splash-screen")]`
+// internally, so this re-export resolves to nothing on default builds.
+#[cfg(feature = "splash-screen")]
+pub mod splash;
+
+// AppleScript runner — macOS only, behind `api-apple-script`.
+// Dispatched as the `appleScript` API (camelCase to match the JS-side
+// proxy); the dispatch arm in the table below short-circuits to
+// `api_disabled("apple-script")` on Linux/Windows.
+#[cfg(all(target_os = "macos", feature = "api-apple-script"))]
+pub mod apple_script;
+
+// Swift↔Rust bridge smoke test — macOS only, behind `swift-bridge`.
+// Re-exported so plugin authors can `use tynd_host::os::macos_swift`
+// when they want to extend with their own `swift!` declarations.
+#[cfg(all(target_os = "macos", feature = "swift-bridge"))]
+pub mod macos_swift;
+
 use serde_json::Value;
 
 /// Produced whenever an API name is known but the feature wasn't
@@ -175,6 +197,14 @@ pub fn dispatch(api: &str, method: &str, args: Value) -> Result<Value, String> {
                 "workers API is lite-only; in full runtime use Bun.Worker natively".to_string(),
             );
         },
+        // AppleScript — macOS only. Bespoke arm because the gate is
+        // `cfg(target_os = "macos")` *and* `feature = "api-apple-script"`,
+        // which the `dispatch_apis!` macro can't express in a single
+        // row (the macro only handles a single feature gate).
+        #[cfg(all(target_os = "macos", feature = "api-apple-script"))]
+        "appleScript" => return apple_script::dispatch(method, &args),
+        #[cfg(not(all(target_os = "macos", feature = "api-apple-script")))]
+        "appleScript" => return Err(api_disabled("apple-script")),
         _ => {},
     }
 

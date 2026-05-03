@@ -1,0 +1,53 @@
+[package]
+name          = "tynd-host-macros"
+version       = "0.1.0"
+publish       = false
+edition       = "2021"
+rust-version  = "1.83"
+license       = "Apache-2.0"
+description   = "Proc-macros for the Tynd native host (`#[tynd::handler]` typed dispatch)."
+repository    = "https://github.com/tynd-apps/tynd"
+homepage      = "https://tynd.kvnpetit.com/"
+documentation = "https://tynd.kvnpetit.com/docs"
+authors       = ["Kevin Petit <74395438+kvnpetit@users.noreply.github.com>"]
+
+# Proc-macro crates MUST be declared as such; the rustc plugin harness
+# only loads `proc-macro = true` libs.
+[lib]
+proc-macro = true
+
+[dependencies]
+syn          = { version = "2", features = ["full", "extra-traits"] }
+quote        = "1"
+proc-macro2  = "1"
+
+[dev-dependencies]
+serde       = { version = "1.0.228", features = ["derive"] }
+serde_json  = "1.0.149"
+# Snapshot tests over the macro's expanded code — pin the exact
+# dispatch shape under version control so even cosmetic codegen
+# drifts surface in review instead of silently changing the public
+# surface every host module relies on.
+insta       = "1"
+
+[lints.rust]
+unused_must_use               = "deny"
+unsafe_op_in_unsafe_fn        = "deny"
+missing_debug_implementations = "warn"
+unreachable_pub               = "warn"
+unused_lifetimes              = "warn"
+unused_qualifications         = "warn"
+rust_2018_idioms              = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all      = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions  = "allow"
+must_use_candidate       = "allow"
+missing_errors_doc       = "allow"
+missing_panics_doc       = "allow"
+return_self_not_must_use = "allow"
+too_many_lines           = "allow"
+doc_markdown             = "allow"
+items_after_statements   = "allow"
+unnecessary_wraps        = "allow"

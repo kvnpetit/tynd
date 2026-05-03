@@ -42,6 +42,25 @@ pub use tynd_plugin_sdk as plugin_sdk;
 // re-exports this very crate.
 pub use dpi;
 
+/// Host proc-macros — `#[tynd::handler]` typed dispatch (U10).
+///
+/// Re-exported as a private alias so handler call sites stay terse:
+///
+/// ```ignore
+/// use crate::tynd;
+///
+/// #[tynd::handler(api = "compute")]
+/// impl ComputeApi { /* ... */ }
+/// ```
+///
+/// The macro emits a `dispatch(method, args)` fn next to the `impl`
+/// that the per-API arm in [`os::dispatch`] calls, with per-arg
+/// `serde_json::from_value` extraction and per-method JSDoc capture
+/// (forwarded to the gen-types pipeline). Hidden from docs — handler
+/// authors only ever see the macro paths, never the underlying crate.
+#[doc(hidden)]
+pub use tynd_host_macros as tynd;
+
 /// Initialize the framework's structured logger (`tracing` + `tracing-subscriber`),
 /// the global panic hook, and the cross-platform SIGINT/SIGTERM handler.
 /// (See the OOM note below — the alloc-error hook is gated on a nightly API.)

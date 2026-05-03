@@ -14,8 +14,18 @@ keywords.workspace      = true
 categories.workspace    = true
 readme.workspace        = true
 
+build = "build.rs"
+
 [lints]
 workspace = true
+
+# `swift-rs` ships `SwiftLinker` under its `build` feature. Only
+# consumed inside the `cfg(all(target_os = "macos", feature =
+# "swift-bridge"))` arm of `build.rs` — Cargo still resolves the dep
+# on every target listed in this table, but Linux/Windows builds skip
+# the table entirely. The crate itself is tiny (~few hundred lines).
+[target.'cfg(target_os = "macos")'.build-dependencies]
+swift-rs = { workspace = true, features = [ "build" ] }
 
 [dependencies]
 # Always-on — structural or used by more than one always-on module.
@@ -151,6 +161,22 @@ robius-authentication = { workspace = true, optional = true }
 # Memory wiping for vault password buffers. Tied to api-vault below.
 zeroize               = { workspace = true, optional = true }
 
+# Tauri-parity additions (V1) — all opt-in.
+#
+# `softbuffer`+`raw-window-handle`: CPU-buffer splash window, paint a
+#   color/PNG before the webview is ready. Anti-flash on Windows cold
+#   start. Gated behind `splash-screen`.
+# `cookie_store`: standalone cookie jar used by plugins / forks that
+#   want to share state outside the in-process ureq agent. Gated behind
+#   `http-cookies` (no-op until consumers wire it).
+# `rustls-platform-verifier`: OS-native TLS root cert chain
+#   (Keychain/Win-crypto/NSS). Gated behind `tls-platform-verifier`;
+#   plugins consume it directly through workspace dep.
+softbuffer               = { workspace = true, optional = true }
+raw-window-handle        = { workspace = true, optional = true }
+cookie_store             = { workspace = true, optional = true }
+rustls-platform-verifier = { workspace = true, optional = true }
+
 rquickjs = { workspace = true, optional = true }
 
 # Production observability — opt-in via the `obs-otel` / `obs-sentry`
@@ -167,6 +193,11 @@ sentry                = { workspace = true, optional = true }
 # tiny and the host always needs them to dispatch plugin calls when one
 # or more native plugins are compiled in.
 tynd_plugin_sdk.workspace = true
+
+# Host proc-macros — `#[tynd::handler]` typed dispatch. Re-exported
+# under the `tynd` ident at the crate root so user-facing call sites
+# read `#[tynd::handler(api = "compute")]` without an extra `use`.
+tynd-host-macros.workspace = true
 
 [features]
 # Preset builds (tynd-full / tynd-lite) get `default = ["api-all"]` so every
@@ -213,6 +244,9 @@ api-all = [
     "api-deep-link",
     "api-keys",
     "api-cli",
+    # Macros-only on macOS via per-target dep gating; harmless on
+    # Linux/Windows (the dispatch arm short-circuits to api_disabled).
+    "api-apple-script",
 ]
 
 # Per-API gates. Each feature enables its module + dispatch arm + pulls the
@@ -316,6 +350,59 @@ obs-otel = [
 ]
 obs-sentry = [ "dep:sentry" ]
 
+# === Tauri-parity additions ===
+
+# CPU-buffer splash window — painted before the webview spawns to
+# eliminate the white-flash that wry exhibits during init on Windows
+# cold start. `os::splash` exposes `show(SplashConfig) -> SplashHandle`
+# + `handle.close()`. The actual paint runs on the main thread (tao's
+# event loop) so callers must hold the handle until the webview is
+# attached. Off by default — opt in via `tynd.config.ts`'s
+# `splash.enabled = true` (CLI flips this feature when generating the
+# launcher main.rs for that build).
+splash-screen = [ "dep:softbuffer", "dep:raw-window-handle" ]
+
+# Persistent HTTP cookie jar — workspace-pinned `cookie_store` for
+# plugin / fork consumers (the in-process ureq agent will gain its
+# own jar in the ureq3 follow-up, see workspace Cargo.toml note). The
+# feature exists today so consumers can `workspace = true` without
+# repinning the version.
+http-cookies = [ "dep:cookie_store" ]
+
+# OS-native TLS root cert chain — opt-in for enterprise / corp-CA
+# users who can't manage webpki-roots. Pulls
+# `rustls-platform-verifier` (OS Keychain/Win-crypto/NSS); the actual
+# wire-up to ureq's `TlsConfig` lands with the ureq3 migration. The
+# crate is workspace-shared so plugins can depend on the same
+# version when they ship their own HTTP clients.
+tls-platform-verifier = [ "dep:rustls-platform-verifier" ]
+
+# === macOS-only Tauri-parity additions ===
+#
+# Both gates are no-ops on Linux/Windows (the deps live in the
+# `target.'cfg(target_os = "macos")'.dependencies` table below).
+# `api-apple-script` exposes `os.appleScript.run(script)` via osakit;
+# `swift-bridge` lights up the swift-rs bridge and forces a build.rs
+# pass that compiles the bundled Swift sources under `host-rs/swift/`.
+
+# AppleScript runner (macOS only). Wires `os::apple_script::run(...)`
+# behind the dispatch table — frontends hit `os.appleScript.run("tell
+# app \"Finder\" ...")` and get the OSA result back. On non-mac builds
+# the dispatch arm short-circuits to `api_disabled("apple-script")`.
+# `dep:osakit` resolves only on macOS targets thanks to the
+# `target.'cfg(target_os = "macos")'.dependencies` table — toggling
+# this feature on Linux/Windows is a no-op at link time.
+api-apple-script = [ "dep:osakit" ]
+
+# Swift↔Rust bridge (macOS only). Lights up `os::macos_swift` (smoke
+# test: `get_system_uptime_swift()` via NSProcessInfo) and pulls in
+# the `build.rs` step that compiles the Swift sources. Plugin authors
+# can extend by dropping `.swift` files under `host-rs/swift/` and
+# declaring extern bindings in `os::macos_swift`. `dep:swift-rs`
+# resolves only on macOS — non-mac builds skip the build script
+# entirely (see `build.rs::main`).
+swift-bridge = [ "dep:swift-rs" ]
+
 [target.'cfg(unix)'.dependencies]
 # POSIX `kill(2)` for `os::process::kill` — `Child::kill()` always sends
 # SIGKILL, so we go through `nix::sys::signal::kill` to honour the
@@ -375,6 +462,17 @@ mac-notification-sys = { workspace = true, optional = true }
 # Keyring on macOS uses Keychain via the apple-native backend
 # (Security.framework — `SecItemAdd`/`SecItemCopyMatching`).
 keyring              = { version = "3", default-features = false, features = [ "apple-native" ], optional = true }
+# AppleScript runner (osakit) — wired through `os::apple_script` behind
+# `api-apple-script`. macOS-only crate; declared here so non-mac
+# builds skip it entirely. `os::apple_script` itself is `#[cfg(...)]`
+# on `target_os = "macos"` so the dispatch arm short-circuits when
+# the platform doesn't apply.
+osakit               = { workspace = true, optional = true }
+# Swift↔Rust bridge — see `os::macos_swift`. The crate is tiny
+# (header-only macros + a tiny runtime), but enabling the bridge
+# requires the `host-rs/build.rs` step to compile the bundled Swift
+# sources, so we gate via the `swift-bridge` feature.
+swift-rs             = { workspace = true, optional = true }
 # NSWorkspace.notificationCenter observers for the `os::power` watcher
 # (sleep/wake + session active/inactive). Only pulled with `api-power`
 # so non-power builds stay free of objc2-app-kit's generated bindings.
@@ -404,6 +502,13 @@ bidiff = { workspace = true, features = [ "enc" ] }
 # bytecheck/munge cost; flip back to `[dependencies]` when wired into
 # host↔plugin or host↔Bun edges.
 rkyv = { workspace = true }
+# CBOR binary IPC encoder/decoder — the U1 Layer 1 wire format on the
+# Bun↔host edge. Used by the `ipc_binary_frame` bench to compare
+# serde_json (baseline) vs ciborium vs rkyv on a typical IPC frame.
+# Already promoted to a regular dep on `tynd-full` behind the
+# `binary-ipc` feature; the host-rs side keeps it dev-only since the
+# host doesn't speak CBOR directly (the Bun bridge owns that edge).
+ciborium = { workspace = true }
 
 # `harness = false` lets criterion's own runner take over from libtest,
 # which is what gives us the criterion HTML reports + per-bench
@@ -427,6 +532,10 @@ harness = false
 
 [[bench]]
 name    = "ipc_rkyv_vs_serde"
+harness = false
+
+[[bench]]
+name    = "ipc_binary_frame"
 harness = false
 
 [[bench]]

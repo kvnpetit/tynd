@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { match } from "ts-pattern";
 import * as v from "valibot";
 import { encodeIpcError, type TyndIpcErrorCode } from "../errors";
@@ -8,7 +9,28 @@ import { getPluginMethod, parsePluginCall } from "../plugin";
 import type { AppConfig } from "../types";
 import { redirectConsoleToStderr } from "./console";
 import { sanitizedMessage } from "./error";
+import { CborFrameReader, encodeCborFrame, pickWireFormat, type WireFormat } from "./ipc-frame";
 import { decodeArgs, encode as encodeWire } from "./wire";
+
+/** Wire format negotiated for the lifetime of this Bun process. Sampled
+ *  once at module load; the Rust spawner sets `TYND_IPC_FORMAT` on the
+ *  child env so both ends agree before any frame ships. */
+const _wireFormat: WireFormat = pickWireFormat();
+
+/**
+ * Write an outbound IPC frame using the active wire format. On JSON
+ * the payload is JSON-stringified and `\n`-terminated (legacy line
+ * protocol); on CBOR the payload becomes a length-prefixed binary
+ * frame. Both paths funnel through `process.stdout.write` so the
+ * back-pressure semantics stay identical.
+ */
+function writeIpcFrame(payload: Record<string, unknown>): void {
+  if (_wireFormat === "cbor") {
+    process.stdout.write(encodeCborFrame(payload));
+  } else {
+    process.stdout.write(`${JSON.stringify(payload)}\n`);
+  }
+}
 
 const CallMsgSchema = v.object({
   type: v.literal("call"),
@@ -87,7 +109,7 @@ async function getModule(entryPath: string): Promise<Record<string, unknown>> {
 export function startFull(config: AppConfig): void {
   redirectConsoleToStderr();
 
-  const configMsg = JSON.stringify({
+  writeIpcFrame({
     type: "tynd:config",
     window: config.window ?? {},
     devUrl: config.devUrl ?? process.env.TYND_DEV_URL,
@@ -96,7 +118,6 @@ export function startFull(config: AppConfig): void {
     tray: config.tray ?? null,
     quitOnLastWindowClosed: config.quitOnLastWindowClosed ?? false,
   });
-  process.stdout.write(`${configMsg}\n`);
 
   setEmitFn((name, payload, to) => {
     // Reserved framework event — `evalInFrontend` ships a raw JS script
@@ -109,7 +130,7 @@ export function startFull(config: AppConfig): void {
         tynd.error("__tynd:eval__: payload.script must be a string — dropped");
         return;
       }
-      process.stdout.write(`${JSON.stringify({ type: "evalInFrontend", script, to })}\n`);
+      writeIpcFrame({ type: "evalInFrontend", script, to });
       return;
     }
     let p: string;
@@ -119,8 +140,10 @@ export function startFull(config: AppConfig): void {
       tynd.error(`emit: payload for '${name}' is not encodable (${sanitizedMessage(e)}) — dropped`);
       return;
     }
-    // Frame is JSON; the user payload rides as a devalue string in `p`.
-    process.stdout.write(`${JSON.stringify({ type: "event", name, p, to })}\n`);
+    // Frame envelope is wire-format-aware (JSON line OR CBOR frame); the
+    // user payload still rides as a devalue string in `p` so the webview
+    // shim's existing parser keeps working unchanged.
+    writeIpcFrame({ type: "event", name, p, to });
   });
 
   // Plugins are registered by the CLI-injected header at the top of the
@@ -138,6 +161,16 @@ export function startFull(config: AppConfig): void {
 }
 
 function startListener(entryPath: string): void {
+  if (_wireFormat === "cbor") {
+    startBinaryListener(entryPath);
+  } else {
+    startJsonListener(entryPath);
+  }
+}
+
+/** Legacy newline-delimited JSON reader. Untouched semantics — kept as
+ *  the default so existing apps see no behaviour change. */
+function startJsonListener(entryPath: string): void {
   let buffer = "";
 
   process.stdin.setEncoding("utf8");
@@ -171,6 +204,36 @@ function startListener(entryPath: string): void {
   process.stdin.on("error", () => process.exit(0));
 }
 
+/** Length-prefixed CBOR reader (U1 Layer 1). Stays in raw `Buffer`
+ *  mode so the frame splitter can inspect the 4-byte prefix without
+ *  paying the UTF-8 decode cost the JSON path needs. */
+function startBinaryListener(entryPath: string): void {
+  const reader = new CborFrameReader();
+
+  process.stdin.on("data", (chunk: Buffer) => {
+    let frames: unknown[];
+    try {
+      frames = reader.push(chunk);
+    } catch (e) {
+      // Framing errors aren't recoverable on a binary stream — once
+      // we lose sync there's no `\n` to re-anchor against. Log and
+      // exit so the host's "Bun stdout closed unexpectedly" path
+      // surfaces a banner the dev can act on.
+      tynd.error(`CBOR framing error: ${sanitizedMessage(e)} — exiting`);
+      process.exit(1);
+    }
+    for (const raw of frames) {
+      handleParsedMsg(raw, entryPath).catch((e) => tynd.error(`IPC error: ${e}`));
+    }
+  });
+
+  process.stdin.on("end", () => {
+    fireClose();
+    process.exit(0);
+  });
+  process.stdin.on("error", () => process.exit(0));
+}
+
 /** Keep log lines terminal-friendly; a multi-MiB malformed payload would
  * otherwise blow up the log itself. */
 const LOG_PREVIEW = 200;
@@ -186,10 +249,17 @@ async function handleLine(line: string, entryPath: string): Promise<void> {
     tynd.error(`Invalid JSON from Rust: ${preview(line)}`);
     return;
   }
+  return handleParsedMsg(raw, entryPath);
+}
 
+/** Dispatch a parsed IPC message — shared by both wire formats so the
+ *  schema validation + match arms live in one place. JSON parses to
+ *  `raw` via `JSON.parse`; CBOR parses via `cbor-x` Decoder; both feed
+ *  the same valibot schema and ts-pattern dispatch. */
+async function handleParsedMsg(raw: unknown, entryPath: string): Promise<void> {
   const parsed = v.safeParse(IpcMsgSchema, raw);
   if (!parsed.success) {
-    tynd.error(`Invalid IPC message shape: ${preview(line)}`);
+    tynd.error(`Invalid IPC message shape: ${preview(JSON.stringify(raw) ?? String(raw))}`);
     return;
   }
   // Exhaustive dispatch over the IPC message union. `ts-pattern`'s
@@ -264,9 +334,7 @@ async function handleCall(
         );
       }
       dispatchFrontendEmit(eventName, args[1]);
-      process.stdout.write(
-        `${JSON.stringify({ type: "return", id, ok: true, v: encodeWire(null) })}\n`,
-      );
+      writeIpcFrame({ type: "return", id, ok: true, v: encodeWire(null) });
       return;
     }
 
@@ -304,7 +372,7 @@ async function handleCall(
           `return value for '${fn}' is not encodable: ${sanitizedMessage(e)}`,
         );
       }
-      process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, v })}\n`);
+      writeIpcFrame({ type: "return", id, ok: true, v });
     }
   } catch (e) {
     _activeStreams.delete(id);
@@ -319,14 +387,12 @@ async function handleCall(
 
 /** Single emitter for IPC error-return frames — keeps the wire envelope (sentinel + JSON payload) DRY. */
 function writeIpcError(id: string, code: TyndIpcErrorCode, message: string, fn?: string): void {
-  process.stdout.write(
-    `${JSON.stringify({
-      type: "return",
-      id,
-      ok: false,
-      error: encodeIpcError({ code, message, fn }),
-    })}\n`,
-  );
+  writeIpcFrame({
+    type: "return",
+    id,
+    ok: false,
+    error: encodeIpcError({ code, message, fn }),
+  });
 }
 
 async function streamIterable(
@@ -366,7 +432,7 @@ async function streamIterable(
           `yielded value is not encodable on stream ${id}: ${sanitizedMessage(e)}`,
         );
       }
-      process.stdout.write(`${JSON.stringify({ type: "yield", id, v })}\n`);
+      writeIpcFrame({ type: "yield", id, v });
       if (!_activeStreams.has(id)) break;
     }
   } finally {
@@ -394,5 +460,5 @@ async function streamIterable(
     writeIpcError(id, "PROTOCOL_ERROR", `final value is not encodable: ${sanitizedMessage(e)}`, fn);
     return;
   }
-  process.stdout.write(`${JSON.stringify({ type: "return", id, ok: true, v })}\n`);
+  writeIpcFrame({ type: "return", id, ok: true, v });
 }

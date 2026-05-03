@@ -22,6 +22,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod args;
 mod bun;
+mod bun_ipc;
 mod embed;
 
 use args::Args;

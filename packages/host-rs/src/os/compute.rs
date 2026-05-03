@@ -3,25 +3,26 @@ use rand::RngCore;
 use serde_json::Value;
 use sha2::{Digest, Sha256, Sha384, Sha512};
 
-use crate::ipc_error::IpcError;
+use crate::{ipc_error::IpcError, tynd};
 
-pub fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "randomBytes" => random_bytes(args),
-        // hash / compress / decompress route through the `tynd-bin://`
-        // custom protocol (see host-rs/src/scheme_bin.rs) — the raw-bytes
-        // variants live below and avoid base64 for multi-MB payloads.
-        _ => Err(IpcError::unknown_method("compute", method).into()),
+/// Marker for the `#[tynd::handler]` dispatch table — compute is
+/// stateless; every method is an associated function (no `&self`).
+/// Hash / compress / decompress route through the `tynd-bin://`
+/// custom protocol (see host-rs/src/scheme_bin.rs) for multi-MB
+/// payloads, so they don't appear here.
+#[derive(Debug, Default)]
+pub struct ComputeApi;
+
+#[tynd::handler(api = "compute")]
+impl ComputeApi {
+    /// Generate `n` random bytes from the OS CSPRNG, base64-encoded.
+    /// `n` is bounded to `1..=1_048_576` to keep the response under the
+    /// IPC frame ceiling (the lite runtime's QuickJS bridge caps at
+    /// ~2 MB per message after base64 expansion).
+    pub fn random_bytes(n: u64) -> Result<String, String> {
+        let buf = random_bytes_raw(n as usize)?;
+        Ok(STANDARD.encode(&buf))
     }
-}
-
-fn random_bytes(args: &Value) -> Result<Value, String> {
-    let n = args
-        .get("n")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| String::from(IpcError::missing_arg("compute", "randomBytes", "n")))?;
-    let buf = random_bytes_raw(n as usize)?;
-    Ok(Value::String(STANDARD.encode(&buf)))
 }
 
 /// Fill `n` bytes from the OS CSPRNG. Used by both the frontend dispatch
@@ -130,8 +131,13 @@ mod tests {
 
     #[test]
     fn random_bytes_respects_length_and_is_distinct() {
-        let a = random_bytes(&json!({ "n": 32 })).unwrap();
-        let b = random_bytes(&json!({ "n": 32 })).unwrap();
+        // Dispatch through the macro-generated `dispatch` so the test
+        // exercises the same code path the IPC bridge does (per-arg
+        // `serde_json::from_value` + return-mapping). Pre-U10 the test
+        // called the per-method fn directly, but with the macro the
+        // canonical entry point is the dispatch table.
+        let a = dispatch("randomBytes", &json!({ "n": 32 })).unwrap();
+        let b = dispatch("randomBytes", &json!({ "n": 32 })).unwrap();
         let a_bytes = STANDARD.decode(a.as_str().unwrap()).unwrap();
         let b_bytes = STANDARD.decode(b.as_str().unwrap()).unwrap();
         assert_eq!(a_bytes.len(), 32);
@@ -142,8 +148,16 @@ mod tests {
 
     #[test]
     fn random_bytes_rejects_out_of_range() {
-        assert!(random_bytes(&json!({ "n": 0 })).is_err());
-        assert!(random_bytes(&json!({ "n": 2_000_000 })).is_err());
-        assert!(random_bytes(&json!({})).is_err());
+        assert!(dispatch("randomBytes", &json!({ "n": 0 })).is_err());
+        assert!(dispatch("randomBytes", &json!({ "n": 2_000_000 })).is_err());
+        // Missing required arg → uniform `IpcError::missing_arg` shape.
+        assert!(dispatch("randomBytes", &json!({})).is_err());
+    }
+
+    #[test]
+    fn dispatch_rejects_unknown_method() {
+        let err = dispatch("nope", &json!({})).unwrap_err();
+        assert!(err.contains("compute.nope"));
+        assert!(err.contains("unknown method"));
     }
 }

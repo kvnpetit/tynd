@@ -35,6 +35,21 @@ export interface TyndAppConfig {
   devCommand?: string;
   icon?: string;
   binaryArgs?: string[];
+  /**
+   * U1 Layer 1 — Bun↔host IPC wire format. Default `"json"` (legacy
+   * newline-delimited JSON, back-compat). `"cbor"` enables length-prefixed
+   * CBOR frames — ~10× decode throughput on bursty/large payloads, but
+   * requires the `binary-ipc` Cargo feature on the host runtime crate
+   * (`tynd-full`). The CLI translates this into `TYND_IPC_FORMAT=cbor`
+   * on the spawned Bun child env so both sides agree before the first
+   * frame.
+   *
+   * When set to `"cbor"` against a runtime built without `binary-ipc`,
+   * the host quietly falls back to JSON to avoid deadlocking the IPC
+   * channel. The Bun side does the same — both check the env var
+   * independently.
+   */
+  ipcFormat?: "json" | "cbor";
   window?: {
     title?: string;
     width?: number;
