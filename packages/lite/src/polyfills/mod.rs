@@ -23,6 +23,7 @@ use crate::quickjs::JsMsg;
 mod _session;
 pub(crate) mod crypto;
 pub(crate) mod fetch;
+pub(crate) mod node_bridges;
 pub(crate) mod perf;
 pub(crate) mod websocket;
 
@@ -39,6 +40,7 @@ pub(crate) fn install<'js>(
     fetch::register(ctx, &g, js_tx)?;
     websocket::register(ctx, &g, js_tx)?;
     perf::register(ctx, &g)?;
+    node_bridges::register(ctx, &g)?;
     ctx.eval::<(), _>(polyfills_js().as_bytes())?;
     Ok(())
 }

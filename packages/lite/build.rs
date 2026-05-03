@@ -18,9 +18,11 @@ use std::path::PathBuf;
 /// dependencies — base64 + text first, then the bridge, then crypto/
 /// fetch/etc. Re-arranging breaks the polyfill init.
 const POLYFILL_FILES: &[&str] = &[
+    // Core: base64 + text first (deps for everything else).
     "src/polyfills/base64.js",
     "src/polyfills/text.js",
     "src/polyfills/_bridge.js",
+    // Web standards.
     "src/polyfills/abort.js",
     "src/polyfills/crypto.js",
     "src/polyfills/fetch.js",
@@ -30,6 +32,26 @@ const POLYFILL_FILES: &[&str] = &[
     "src/polyfills/clone.js",
     "src/polyfills/blob.js",
     "src/polyfills/event-source.js",
+    // Node compat layer. events MUST come before streams (Node Readable/
+    // Writable subclass EventEmitter). process must come before path/os
+    // (they read __tynd_platform__()), buffer before fs/crypto, fs before
+    // bun_shim. node_misc last so it can reference everything else
+    // (e.g. `Buffer`, `util`).
+    "src/polyfills/events.js",
+    "src/polyfills/streams.js",
+    "src/polyfills/process.js",
+    "src/polyfills/path.js",
+    "src/polyfills/os.js",
+    "src/polyfills/querystring.js",
+    "src/polyfills/util.js",
+    "src/polyfills/buffer.js",
+    "src/polyfills/fs.js",
+    "src/polyfills/node_http.js",
+    "src/polyfills/node_crypto.js",
+    "src/polyfills/node_misc.js",
+    // require() and Bun.* shims sit on top — both consume __tynd_modules.
+    "src/polyfills/require.js",
+    "src/polyfills/bun_shim.js",
 ];
 
 fn main() {
