@@ -34,31 +34,31 @@ jobs:
         include:
           - runner: windows-latest
             target: windows-x64
+            npm_pkg: host-win32-x64
+            bin_ext: .exe
             full_bin: target/release/tynd-full.exe
             lite_bin: target/release/tynd-lite.exe
-            full_asset: tynd-full-windows-x64.exe
-            lite_asset: tynd-lite-windows-x64.exe
 
           - runner: windows-11-arm
             target: windows-arm64
+            npm_pkg: host-win32-arm64
+            bin_ext: .exe
             full_bin: target/release/tynd-full.exe
             lite_bin: target/release/tynd-lite.exe
-            full_asset: tynd-full-windows-arm64.exe
-            lite_asset: tynd-lite-windows-arm64.exe
 
           - runner: ubuntu-latest
             target: linux-x64
+            npm_pkg: host-linux-x64
+            bin_ext: ""
             full_bin: target/release/tynd-full
             lite_bin: target/release/tynd-lite
-            full_asset: tynd-full-linux-x64
-            lite_asset: tynd-lite-linux-x64
 
           - runner: ubuntu-24.04-arm
             target: linux-arm64
+            npm_pkg: host-linux-arm64
+            bin_ext: ""
             full_bin: target/release/tynd-full
             lite_bin: target/release/tynd-lite
-            full_asset: tynd-full-linux-arm64
-            lite_asset: tynd-lite-linux-arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -90,26 +90,27 @@ jobs:
       - name: Build tynd-lite
         run: cargo build --release -p tynd-lite
 
-      - name: Stage release assets
+      - name: Stage binaries into platform sub-package
         shell: bash
         run: |
-          cp "${{ matrix.full_bin }}" "${{ matrix.full_asset }}"
-          cp "${{ matrix.lite_bin }}" "${{ matrix.lite_asset }}"
+          mkdir -p "packages/${{ matrix.npm_pkg }}/bin"
+          cp "${{ matrix.full_bin }}" "packages/${{ matrix.npm_pkg }}/bin/tynd-full${{ matrix.bin_ext }}"
+          cp "${{ matrix.lite_bin }}" "packages/${{ matrix.npm_pkg }}/bin/tynd-lite${{ matrix.bin_ext }}"
+          cp LICENSE "packages/${{ matrix.npm_pkg }}/LICENSE" || true
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            ${{ matrix.full_asset }}
-            ${{ matrix.lite_asset }}
+            packages/${{ matrix.npm_pkg }}/bin/tynd-full${{ matrix.bin_ext }}
+            packages/${{ matrix.npm_pkg }}/bin/tynd-lite${{ matrix.bin_ext }}
 
-      - name: Upload binaries to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload sub-package artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          files: |
-            ${{ matrix.full_asset }}
-            ${{ matrix.lite_asset }}
+          name: ${{ matrix.npm_pkg }}
+          path: packages/${{ matrix.npm_pkg }}/
+          if-no-files-found: error
 
   build-macos:
     name: Build macOS (x64 + arm64)
@@ -148,35 +149,37 @@ jobs:
       - name: Build tynd-lite (aarch64-apple-darwin)
         run: cargo build --release --target aarch64-apple-darwin -p tynd-lite
 
-      - name: Stage release assets
+      - name: Stage binaries into platform sub-packages
         shell: bash
         run: |
-          cp target/x86_64-apple-darwin/release/tynd-full tynd-full-macos-x64
-          cp target/x86_64-apple-darwin/release/tynd-lite tynd-lite-macos-x64
-          cp target/aarch64-apple-darwin/release/tynd-full tynd-full-macos-arm64
-          cp target/aarch64-apple-darwin/release/tynd-lite tynd-lite-macos-arm64
+          mkdir -p packages/host-darwin-x64/bin packages/host-darwin-arm64/bin
+          cp target/x86_64-apple-darwin/release/tynd-full packages/host-darwin-x64/bin/tynd-full
+          cp target/x86_64-apple-darwin/release/tynd-lite packages/host-darwin-x64/bin/tynd-lite
+          cp target/aarch64-apple-darwin/release/tynd-full packages/host-darwin-arm64/bin/tynd-full
+          cp target/aarch64-apple-darwin/release/tynd-lite packages/host-darwin-arm64/bin/tynd-lite
+          cp LICENSE packages/host-darwin-x64/LICENSE
+          cp LICENSE packages/host-darwin-arm64/LICENSE
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            tynd-full-macos-x64
-            tynd-lite-macos-x64
-            tynd-full-macos-arm64
-            tynd-lite-macos-arm64
+            packages/host-darwin-x64/bin/tynd-full
+            packages/host-darwin-x64/bin/tynd-lite
+            packages/host-darwin-arm64/bin/tynd-full
+            packages/host-darwin-arm64/bin/tynd-lite
 
-      - name: Upload binaries to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload sub-package artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          files: |
-            tynd-full-macos-x64
-            tynd-lite-macos-x64
-            tynd-full-macos-arm64
-            tynd-lite-macos-arm64
+          name: host-darwin
+          path: |
+            packages/host-darwin-x64/
+            packages/host-darwin-arm64/
+          if-no-files-found: error
 
   publish:
-    name: Publish npm packages (core + host + host-src)
+    name: Publish npm packages (platform sub-packages + wrapper + core + host-src)
     needs: [build, build-macos]
     runs-on: ubuntu-latest
     permissions:
@@ -218,6 +221,31 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Download built sub-packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Restore staged sub-packages into workspace
+        shell: bash
+        run: |
+          # Each `build` matrix job uploads its `packages/host-<plat>-<arch>/`
+          # tree under an artifact named `host-<plat>-<arch>`. macOS uploads
+          # both x64 and arm64 under a single `host-darwin` artifact.
+          for art in artifacts/host-*; do
+            name=$(basename "$art")
+            if [ "$name" = "host-darwin" ]; then
+              cp -R "$art/host-darwin-x64" packages/
+              cp -R "$art/host-darwin-arm64" packages/
+            else
+              cp -R "$art" "packages/$name"
+            fi
+          done
+          # Sanity: every sub-package now has populated bin/
+          for d in packages/host-*-*/bin; do
+            ls -la "$d"
+          done
+
       - name: Define publish_with_retry
         run: |
           cat > "$RUNNER_TEMP/publish.sh" <<'EOF'
@@ -239,13 +267,52 @@ jobs:
           EOF
           chmod +x "$RUNNER_TEMP/publish.sh"
 
+      # Publish platform sub-packages BEFORE the wrapper. esbuild's pattern:
+      # the wrapper resolves them as optionalDependencies, so they must
+      # exist on the registry first or `bun add @tynd/host` will skip them.
+      - name: Publish @tynd/host-darwin-x64
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/host-darwin-x64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @tynd/host-darwin-arm64
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/host-darwin-arm64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @tynd/host-linux-x64
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/host-linux-x64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @tynd/host-linux-arm64
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/host-linux-arm64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @tynd/host-win32-x64
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/host-win32-x64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @tynd/host-win32-arm64
+        run: "$RUNNER_TEMP/publish.sh"
+        working-directory: packages/host-win32-arm64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish @tynd/core
         run: "$RUNNER_TEMP/publish.sh"
         working-directory: packages/core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @tynd/host
+      - name: Publish @tynd/host (wrapper, after sub-packages)
         run: "$RUNNER_TEMP/publish.sh"
         working-directory: packages/host
         env:

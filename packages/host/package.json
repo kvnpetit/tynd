@@ -1,7 +1,7 @@
 {
   "name": "@tynd/host",
   "version": "1.0.0",
-  "description": "Pre-built native host binaries for Tynd. Downloads the right binary for the user's platform on install.",
+  "description": "Native host binaries for Tynd. Resolves the right platform binary via npm optionalDependencies — no postinstall, no GitHub fetch, lockfile-reproducible.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
   "homepage": "https://tynd.kvnpetit.com/",
@@ -26,32 +26,34 @@
   "engines": {
     "bun": ">=1.3.0"
   },
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ],
-  "cpu": [
-    "x64",
-    "arm64"
-  ],
   "private": false,
   "type": "module",
   "sideEffects": false,
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
   "files": [
-    "install.ts",
+    "index.ts",
     "LICENSE",
     "NOTICE",
     "README.md",
     "CHANGELOG.md"
   ],
   "scripts": {
-    "postinstall": "bun run install.ts",
     "typecheck": "tsc --noEmit"
   },
+  "optionalDependencies": {
+    "@tynd/host-darwin-x64": "1.0.0",
+    "@tynd/host-darwin-arm64": "1.0.0",
+    "@tynd/host-linux-x64": "1.0.0",
+    "@tynd/host-linux-arm64": "1.0.0",
+    "@tynd/host-win32-x64": "1.0.0",
+    "@tynd/host-win32-arm64": "1.0.0"
+  },
   "devDependencies": {
-    "@biomejs/biome": "2.4.13",
-    "@types/bun": "latest",
+    "@biomejs/biome": "2.4.14",
+    "@types/bun": "1.3.13",
     "typescript": "~6.0.2"
   }
 }
