@@ -34,6 +34,16 @@ pub mod window;
 pub use tracing as __tracing;
 pub use tynd_plugin_sdk as plugin_sdk;
 
+// U12 phase 1 — the leaf utilities (`IpcError`, `ArgsExt`, OS event
+// emitter) now live in `tynd-host-core`. The crate is re-exported here
+// so consumers that want a single dependency on `tynd-host` can still
+// reach the core types via `tynd_host::core::*`. The historical paths
+// (`tynd_host::ipc_error::*`, `tynd_host::args_ext::*`,
+// `tynd_host::os::events`) keep working through the per-module
+// re-export shims under `src/ipc_error.rs`, `src/args_ext.rs`, and
+// `src/os/events.rs`.
+pub use tynd_host_core as core;
+
 // Re-export the standalone `dpi` crate so consumer crates can type their
 // window commands (positions / sizes) against the same canonical
 // `LogicalPosition`, `PhysicalSize`, … types the host already uses

@@ -1,20 +1,7 @@
-//! Process-wide OS event emitter. Background threads emit without holding the
-//! `EventLoopProxy`. `app.rs` wires `set_emitter` once at startup.
+//! Backward-compat re-export — the OS event emitter lives in the
+//! `tynd-host-core` leaf crate (U12 phase 1 split). Background threads
+//! reach this through the `crate::os::events` path that all `os/*`
+//! modules already use; the underlying types and `set_emitter` /
+//! `emit` symbols come from `tynd_host_core::events`.
 
-use std::sync::OnceLock;
-
-use serde_json::Value;
-
-pub type EmitFn = Box<dyn Fn(&str, &Value) + Send + Sync + 'static>;
-
-static EMITTER: OnceLock<EmitFn> = OnceLock::new();
-
-pub fn set_emitter(f: EmitFn) {
-    let _ = EMITTER.set(f);
-}
-
-pub fn emit(name: &str, data: &Value) {
-    if let Some(f) = EMITTER.get() {
-        f(name, data);
-    }
-}
+pub use tynd_host_core::events::*;

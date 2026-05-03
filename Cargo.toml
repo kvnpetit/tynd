@@ -1,5 +1,5 @@
 [workspace]
-members = [ "packages/host-rs", "packages/host-macros", "packages/full", "packages/lite" ]
+members = [ "packages/host-core", "packages/host-rs", "packages/host-macros", "packages/full", "packages/lite" ]
 # Generated/vendored trees that should not be members of the monorepo
 # workspace. `packages/host-src/native/` is a flattened mirror of
 # `packages/host-rs` produced by `bun run --cwd packages/host-src sync`;
@@ -292,6 +292,13 @@ tynd_plugin_sdk = { path = "../plugin-sdk/native" }
 # because the always-on dispatch arms (`os::os_info`, `os::security`,
 # `os::app`) flow through the macro just like the gatable APIs do.
 tynd-host-macros = { path = "packages/host-macros" }
+
+# Host core leaf utilities — `IpcError`, `ArgsExt`, OS event emitter.
+# Bottom of the host's compile graph: zero platform-specific code, no
+# feature gates, no transitive OS deps. Re-exported through
+# `tynd-host` so consumer crates keep their existing import paths.
+# Extracted from the historical monolithic `host-rs` (U12 phase 1).
+tynd-host-core = { path = "packages/host-core" }
 
 # Structured logging + error helpers — `tracing` for spans/JSON output,
 # `anyhow` for app code with `.context()`, `thiserror` for typed public

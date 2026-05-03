@@ -8279,6 +8279,7 @@ dependencies = [
  "trash",
  "tray-icon",
  "tungstenite 0.24.0",
+ "tynd-host-core",
  "tynd-host-macros",
  "tynd_plugin_sdk",
  "ureq 3.3.0",
@@ -8295,6 +8296,14 @@ dependencies = [
  "zbus",
  "zeroize",
  "zstd",
+]
+
+[[package]]
+name = "tynd-host-core"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

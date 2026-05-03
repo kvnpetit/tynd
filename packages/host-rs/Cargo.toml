@@ -199,6 +199,13 @@ tynd_plugin_sdk.workspace = true
 # read `#[tynd::handler(api = "compute")]` without an extra `use`.
 tynd-host-macros.workspace = true
 
+# Host core leaf utilities (U12 phase 1) — `IpcError`, `ArgsExt`, the
+# OS event emitter. Re-exported from the crate root so existing
+# `use tynd_host::ipc_error::IpcError` / `tynd_host::os::events`
+# imports stay valid; new code in this crate uses
+# `tynd_host_core::*` directly.
+tynd-host-core.workspace = true
+
 [features]
 # Preset builds (tynd-full / tynd-lite) get `default = ["api-all"]` so every
 # OS API is compiled in. Custom builds pass `--no-default-features` and pick
