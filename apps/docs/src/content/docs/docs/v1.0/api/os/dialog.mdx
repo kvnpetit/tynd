@@ -48,19 +48,17 @@ Pick a directory.
 const dir = await dialog.openDirectory({ title: "Choose project root" });
 ```
 
-Options:
+### `openDirectories(opts?): Promise<string[] | null>`
+
+Pick several directories. Returns `string[]` on success, `null` if cancelled.
 
 ```ts
-interface OpenDirectoryOptions {
-  title?:                string;
-  defaultDir?:           string;
-  canCreateDirectories?: boolean;
-}
+const dirs = await dialog.openDirectories({ showHiddenFiles: true });
 ```
 
 ### `saveFile(opts?): Promise<string | null>`
 
-Ask the user where to save a new file.
+Ask the user where to save a new file. Every OS asks for confirmation before the user picks an existing file.
 
 ```ts
 const dest = await dialog.saveFile({
@@ -69,59 +67,95 @@ const dest = await dialog.saveFile({
 });
 ```
 
-## Message dialogs
+### Picker options
 
-### `message(text, opts?): Promise<void>`
+| Option | Type | Applies to | Description |
+|---|---|---|---|
+| `title` | `string` | all | Window title (OS default when omitted). |
+| `defaultDir` | `string` | all | Directory the picker opens in. |
+| `defaultName` | `string` | `saveFile` | Pre-filled file name. |
+| `filters` | `FileFilter[]` | `openFile`, `openFiles`, `saveFile` | `{ name, extensions }`, extensions without the leading dot. |
+| `canCreateDirectories` | `boolean` | all | macOS: show the "New Folder" button. |
+| `showHiddenFiles` | `boolean` | all | List hidden files. |
+| `parent` | `boolean` | all | Modal to the app's active window (default `true`). Windows only; macOS and Linux pickers are app-modal. |
+| `grantAccess` | `boolean` | all | Let the app's file APIs reach what the user picks, even outside the configured `security.fs` scope: read-only for the open pickers (a picked directory with its whole subtree), read and write for the `saveFile` target. Refused for remote pages. `security.fs.deny` still applies. |
 
-Informational message with an OK button.
+### Granting the picked path
+
+With `grantAccess: true` the picked paths become [runtime grants](/docs/v1.0/api/os/security#runtime-grants-backend), the same as `capabilities.allowPath` from the backend. Use it when the policy (`security.fs.allow`, `defaultDeny`) would otherwise refuse a file the user chose, or when the file is outside the default roots (another drive, an external volume).
 
 ```ts
-await dialog.message("Operation complete.", { title: "Success" });
+const path = await dialog.openFile({ grantAccess: true });
+if (path) console.log(await fs.readText(path)); // read-only grant
 ```
+
+## Message dialogs
+
+### `message(text, opts?): Promise<MessageResult>`
+
+Message box with custom buttons and an optional checkbox. Resolves to `{ response, checkboxChecked }`: the index of the clicked button (`cancelId` when the user presses Esc or closes the box) and the final checkbox state.
+
+```ts
+const { response, checkboxChecked } = await dialog.message("Save changes to report.md?", {
+  kind: "question",
+  detail: "Your changes are lost if you don't save them.",
+  buttons: ["Save", "Don't save", "Cancel"],
+  defaultId: 0,
+  checkboxLabel: "Always save on close",
+});
+if (response === 0) await save();
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `title` | `string` | `"Message"` | Window title (macOS alerts have no title bar). |
+| `detail` | `string` | | Secondary text under the message. |
+| `kind` | `"none" \| "info" \| "warning" \| "error" \| "question"` | `"info"` | Icon / severity. |
+| `buttons` | `string[]` | localized OK | Up to 16 labels; `response` is the index. |
+| `defaultId` | `number` | `0` | Button focused when the box opens (Enter). |
+| `cancelId` | `number` | first "Cancel" / "No" button, else `0` | Index reported on Esc / close. |
+| `checkboxLabel` | `string` | | Show a checkbox with this label. |
+| `checkboxChecked` | `boolean` | `false` | Initial checkbox state. |
+| `parent` | `boolean` | `true` | Modal to the app's active window. |
+
+An out-of-range `defaultId` / `cancelId`, an empty label or an unknown `kind` rejects before anything is shown.
 
 ### `confirm(text, opts?): Promise<boolean>`
 
-OK/Cancel. Returns `true` if the user clicked OK.
+Localized OK / Cancel. Returns `true` if the user clicked OK. Takes `title` (default `"Confirm"`), `detail`, `kind` and `parent`.
 
 ```ts
-const ok = await dialog.confirm("Delete this file?", { title: "Are you sure?" });
+const ok = await dialog.confirm("Delete this file?", { detail: "This cannot be undone.", kind: "warning" });
 if (ok) await fs.remove(path);
 ```
 
-### `warn(text, opts?): Promise<void>`
+### `warn(text, opts?)` / `error(text, opts?)`
 
-Same shape as `message` with a warning icon (shorthand for `message(..., { kind: "warning" })`). `message` itself takes `kind: "info" | "warning" | "error"` (default `"info"`).
-
-```ts
-await dialog.warn("Unsaved changes will be lost.");
-```
-
-### `error(text, opts?): Promise<void>`
-
-Same shape as `message` with an error icon.
+Shorthands for `message(text, { ...opts, kind: "warning" })` and `kind: "error"`.
 
 ```ts
 await dialog.error("Network unreachable.", { title: "Cannot sync" });
 ```
 
-## Options
+## Platform support
 
-Shared:
-
-- `title` — window title. Message dialogs default to `"Message"`, `confirm` to `"Confirm"`; pickers use the OS default.
-
-File-picker-specific:
-
-- `defaultDir` — directory the picker opens in.
-- `defaultName` — (`saveFile` only) pre-filled file name.
-- `filters` — (`openFile`, `openFiles`, `saveFile`) array of `{ name, extensions }`. Extensions without leading dots.
-- `canCreateDirectories` — (macOS) allow the user to create directories from the picker.
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Message box | Task dialog (Common Controls v6) | `NSAlert` | `GtkMessageDialog` |
+| Custom buttons, `defaultId`, `cancelId` | yes | yes | yes |
+| Checkbox | yes (verification checkbox) | yes (suppression checkbox) | yes |
+| `kind` icon | yes (`question` uses the system question icon) | `warning` / `error` styles; `info`, `question`, `none` show the app icon | yes |
+| Message box `parent` | owned by the active window | sheet on the key window | transient for the active window |
+| Picker `parent` | owned by the active window | app-modal | app-modal |
+| `showHiddenFiles` | yes | yes | yes |
+| Overwrite confirmation on save | yes | yes | yes |
+| `grantAccess` | yes | yes | yes |
 
 ## Notes
 
-- Each dialog runs on the host's worker pool, off the UI thread — it won't block the JS event loop.
-- Dialogs are not modal to your main window by default. OS-specific attachment is handled for you.
-- Custom button labels, show-hidden-files, and modal-to-parent aren't currently exposed.
+- Each dialog runs on the host's worker pool, off the UI thread: it doesn't block the JS event loop.
+- "Active window" is the app window in the foreground when the call arrives: the one the user just interacted with. With `parent: false`, or when no app window is active, the dialog is unowned.
+- macOS has no option to browse into packages (`.app` bundles) from the picker.
 
 ## Related
 

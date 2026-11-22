@@ -16,49 +16,72 @@ Tauri and Tynd share a **native WebView stack** — both use `wry` + `tao` (the 
 | Typed RPC | **`createBackend<typeof backend>()`** — zero codegen | `@tauri-apps/api` — command-by-command bindings, codegen plugin required for full types |
 | Runtime | Bun backend + a native host compiled per app | One binary shape |
 | Mobile | ❌ | ✅ iOS + Android |
-| Capability ACLs | ✅ per-command/window/webview/origin + generated plugin command permissions + path/URL policy | ✅ broader prebuilt plugin scopes |
-| Multiple WebViews per window | ✅ Windows/macOS + Linux X11/Wayland | ✅ |
 | Plugin ecosystem | ✅ official plugin packages + plugin SDK for community plugins | ✅ large official/community plugin catalog |
 | IPC transport | `wry` postMessage + custom scheme | same |
 | Release size | Measure the signed artifact for each target and enabled feature set | Measure the signed artifact for each target and enabled feature set |
 
+## Feature comparison
+
+Tauri cells name the core API or the official plugin. Features left out of this table are not compared.
+
+| Feature | Tynd | Tauri v2 |
+|---|---|---|
+| Multi-window | `multiwindow` handles, also from the backend (`getWindow`) | `WebviewWindow` |
+| Multiple webviews per window | Windows, macOS, Linux X11 / Wayland | ✅ |
+| Window effects | `setEffects`: Mica, Tabbed, Acrylic, Blur, macOS materials; rejects on Linux | `setEffects` |
+| Frameless drag regions | `data-tynd-drag` / `data-tynd-no-drag` / `data-tynd-resize` | `data-tauri-drag-region` |
+| Per-window menu bar | Windows, Linux (macOS has one app-wide bar) | ✅ |
+| Context menus | Programmatic + declarative (`data-tynd-contextmenu`) | `Menu.popup` |
+| Tray | Several icons; attached popover window (Windows, macOS) | Several tray icons; positioner plugin for tray-relative placement |
+| Custom protocols | `app.protocol` from the TypeScript backend | URI scheme protocols in Rust |
+| Asset protocol | `convertFileSrc`, Range seeking, glob scope | `convertFileSrc`, asset scope |
+| Push channel | `Channel<T>` | `Channel` |
+| Binary in RPC | base64 inside JSON frames (about 4/3 size, 8 MiB frames); `tynd-bin://` for `fs` | Raw request / response bodies |
+| Capabilities | Per command / window / webview / origin / platform, deny by default for native commands | Per window / webview / remote URL / platform, with plugin permission sets and scopes |
+| File scope | Default app-folder scope, protected locations, `fs.deny` | Plugin scopes |
+| Runtime grants | `capabilities.allowPath` / `allowUrl`, `dialog` `grantAccess`, optional persistence | Runtime scope APIs, persisted-scope plugin |
+| IPC frame check | Per-message frame origin + secret IPC token held by the top-frame bridge | Isolation pattern (optional) |
+| CSP | Auto-injected on bundled pages | Injected from config |
+| Windows packages | NSIS, MSI, MSIX | NSIS, MSI |
+| macOS packages | `.app`, DMG | `.app`, DMG |
+| Linux packages | AppImage, deb, rpm, Flatpak, Snap, PKGBUILD | AppImage, deb, rpm |
+| Universal macOS / cross-compilation | ❌ / ❌ | ✅ / partial |
+| Updater | Signed full + patch (bsdiff) updates, channels, staged rollout | Signed updates (updater plugin) |
+| Icon generation | `tynd icon` | `tauri icon` |
+
 ## When Tynd wins
 
 - **TypeScript-only shop.** You never write Rust application code. Like Tauri, Tynd compiles the native host with Cargo, so a Rust toolchain must be installed, but the host is generated for you.
-- **TypeScript backend.** Application logic runs on Bun instead of requiring Rust.
-- **Zero-codegen RPC.** Rename a backend function and the compiler catches every stale frontend call. No `invoke("cmd", …)` strings.
+- **Zero-codegen RPC.** Rename a backend function and the compiler catches every stale frontend call. No `invoke("cmd", …)` strings. Calls are cancellable end-to-end.
 - **Bun backend.** Full Bun and Node-compatible APIs without writing Rust application code.
-- **Layered security.** Exports define backend RPC; startup capabilities gate every native renderer command; `security` adds fs/http/process rules.
+- **Layered security.** Exports define backend RPC; startup capabilities gate every native renderer command; `security` adds fs/http/process rules on top of a default app-folder scope with protected locations.
+- **Built-in distribution extras.** MSIX, Flatpak, Snap and PKGBUILD targets, patch updates, channels and staged rollout in the core updater.
 
 ## When Tauri wins
 
-- **Permission ecosystem maturity.** Both generate named native-plugin command
-  permissions. Tauri ships more prebuilt resource-scope schemas and production
-  examples; Tynd uses inline command grants plus `security` for core
-  path/URL/process scopes.
+- **Permission ecosystem maturity.** Both generate named native-plugin command permissions. Tauri ships more prebuilt resource-scope schemas and production examples; Tynd uses inline command grants plus `security` for core path/URL/process scopes.
 - **Mobile.** iOS and Android share the same command model as desktop. Tynd is desktop-only.
-- **Plugin catalog.** Tauri's plugin catalog is broader, especially for mobile-adjacent and platform-specialized integrations such as NFC. Tynd covers encrypted secrets with `keyring` / `vault`, declarative FS and HTTP scopes in `security`, and window positioning in `window.positionAt`.
-- **Cross-compilation.** Tauri supports cross-compiling from one host to another. Tynd does not.
-- **Remaining platform-specific window depth.** Tauri exposes more platform-specific configuration. Tynd covers native multi-WebView composition on Windows, macOS, Linux X11, and pure Wayland, plus incognito and named data partitions, backdrop, traffic-light inset, context menus, taskbar progress, badges, content protection, and runtime window mutation.
-- **Updater maturity.** Tynd supports signed full releases and patch entries; Tauri's updater ecosystem is older and has more real-world deployment history.
+- **Plugin catalog.** Tauri's plugin catalog is broader, especially for mobile-adjacent and platform-specialized integrations such as NFC.
+- **Build reach.** Tauri builds universal macOS binaries and supports some cross-compilation. Tynd builds for the machine it runs on only.
+- **Updater maturity.** Tauri's updater ecosystem is older and has more real-world deployment history.
 
 ## Where they're tied
 
 - **IPC stack** — both use `wry` + `tao` + custom scheme. Zero TCP, no firewall prompt.
 - **OS APIs that are covered by both** — dialogs, clipboard, shell, notification, tray, menu, global shortcuts, FS, HTTP, store, and auto-updating. Both use signed update metadata, but their manifests are not drop-in interchangeable.
 - **Code signing + notarization** — both cover Windows signing and macOS signing/notarization. Tynd's built-in macOS path uses a P12 certificate plus an App Store Connect API-key JSON; manual Apple `codesign` / `notarytool` remains available as an advanced fallback.
-- **Bundle formats** — both ship `.app` / `.dmg` / `.deb` / `.rpm` / `.AppImage` / NSIS / MSI.
 
 ## Migration path
 
 Porting Tauri → Tynd:
 
 - **Commands** (`#[tauri::command] fn greet(name: &str)`) → backend `export async function greet(name: string)`.
-- **Events** (`app.emit("event", …)` + `await listen("event", …)`) → `createEmitter` + `api.on("event", …)`.
+- **Events** (`app.emit("event", …)` + `await listen("event", …)`) → `createEmitter` + `api.on("event", …)`; `Channel` → `Channel<T>` from `@tynd/core`.
 - **Plugins that Tynd has first-class** (fs, http, websocket, sql, store, notification, dialog, clipboard, shell, process, global-shortcut, autolaunch, deep-link, single-instance, updater, tray, menu, keyring, biometric, log) → the matching official plugin (`tynd add <name>`, imported from `@tynd/plugin-<name>/client`); Tauri's global-shortcut maps to `tynd add shortcuts` (`@tynd/plugin-shortcuts`), and `log` is built into `@tynd/core/client`.
 - **Stronghold-style secrets** → use `keyring` for OS-managed credentials or `vault` for encrypted larger values.
-- **Positioner** → use `tyndWindow.positionAt(...)`, including tray-aware presets.
-- **Persisted scope** → no runtime grants; declare FS and HTTP scopes in the startup `security` policy.
+- **Positioner** → use `tyndWindow.positionAt(...)`, including tray-aware presets, or `tray.attachWindow` (Windows, macOS).
+- **Persisted scope** → `capabilities.allowPath` / `allowUrl` from the backend, or `grantAccess: true` on a dialog, with `security.persistGrants: true`.
+- **URI scheme protocols** → `app.protocol(name, handler)`.
 - **NFC** → no direct desktop equivalent; use a Bun-native package or a custom Tynd plugin.
 - **Capability ACLs** — port command grants to `app.start({ capabilities })`, path/URL/process scopes to `security`, and keep app-specific authorization in backend logic.
 

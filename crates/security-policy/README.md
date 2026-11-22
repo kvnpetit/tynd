@@ -23,7 +23,11 @@ and fuzzable.
 - `SecurityPolicy` — built with `SecurityPolicy::from_input(...)`. Checks:
   `check_fs`, `check_fs_resolved`, `check_http`, `check_process`,
   `check_shell_exec`, `check_shell_exec_with_env`,
-  `check_sensitive_capability`.
+  `check_sensitive_capability`, and `check_fs_with_grants` /
+  `check_http_with_grants` with runtime grants.
+- `Grants` / `PathGrant` / `FsAccess` — runtime scope grants (paths with
+  directory / recursive / write flags, `http(s)://` URL patterns). A grant
+  never overrides a deny rule and a read-only grant never admits a write.
 - Helpers: `canonicalize_fs`, `canonicalize_http_url`,
   `canonicalize_process_binary`, `expand_tilde`, `matches_pattern`,
   `validate_glob_pattern`, and `env_key_denied` (blocks loader and profiler

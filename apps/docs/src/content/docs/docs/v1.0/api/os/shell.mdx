@@ -59,8 +59,17 @@ Open the OS file manager with `path` selected — Windows `explorer /select`, ma
 await shell.revealInFolder("/Users/me/Downloads/report.pdf");
 ```
 
+## `beep(): Promise<void>`
+
+Plays the OS alert sound: the Windows default beep, `NSBeep` on macOS, the GDK display bell on Linux. Resolves at once.
+
+```ts
+await shell.beep();
+```
+
 ## Notes
 
+- To move a file to the trash / recycle bin, use [`fs.trash`](/docs/v1.0/api/os/fs).
 - `openPath` and `openExternal` do not throw on missing files / unreachable URLs — the OS handler surfaces those errors to the user. `openPath` does throw for a refused file type.
 
 ## Related

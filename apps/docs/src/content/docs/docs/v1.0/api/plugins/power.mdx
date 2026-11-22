@@ -1,6 +1,6 @@
 ---
 title: power
-description: "Power status, power events and sleep prevention. Facade over the core `power` host API."
+description: "Power status, thermal state, power events and sleep prevention. Facade over the core `power` host API."
 ---
 
 # `power`
@@ -29,7 +29,7 @@ Declaring the plugin compiles the matching `api-power` Cargo feature into the ap
 | Aliases for `tynd add` | `battery`, `power-state` |
 | Catalog permission labels | `host:power` |
 | Estimated size | 80 KB |
-| Client exports | `BatteryInfo`, `PowerStatus`, `PowerSubscription`, `PreventSleepOptions`, `power` |
+| Client exports | `BatteryInfo`, `PowerSourceChange`, `PowerStatus`, `PowerSubscription`, `PreventSleepOptions`, `ThermalState`, `power` |
 
 
 ## Related

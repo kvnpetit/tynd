@@ -93,7 +93,7 @@ t.onExit((code) => {
 
 Sidecars **don't** get zstd-compressed — they inflate your binary by their raw size. A 60 MB ffmpeg-static ships in your installer. Alternatives:
 
-- **Download on first launch** — ship a lean binary, `http.download` the sidecar to `os.dataDir()` the first time the user needs it.
+- **Download on first launch** — ship a lean binary, `http.download` the sidecar to `os.appDataDir()` the first time the user needs it.
 - **Use the system binary if available** — `process.exec("ffmpeg", …)` first; fall back to bundled.
 
 **Related:** [sidecar API](/docs/v1.0/api/os/sidecar) · [Sidecars guide](/docs/v1.0/guides/sidecars).

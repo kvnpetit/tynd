@@ -134,7 +134,7 @@ Inside the `about` window your router sees `window.location.pathname === "/about
 
 ## Per-window RPC + streaming
 
-Every window uses the same `createBackend<typeof backend>()` import — each call / stream is independent. Streams originating in a window are automatically canceled when that window closes (`cancel_streams_for_label` in the Rust host).
+Every window uses the same `createBackend<typeof backend>()` import — each call / stream is independent. Calls and streams a window started are cancelled when that window closes or its page navigates or reloads; the backend handler sees `getCallContext().signal` abort.
 
 ## Window lifecycle
 
@@ -154,6 +154,20 @@ await tyndWindow.cancelClose();
 - `onCloseRequested` lets you preventDefault() synchronously to cancel the close.
 - If nothing cancels within 500 ms, the close proceeds.
 - If you `preventDefault`, close the window yourself when ready: `multiwindow.closeSelf()` in a secondary window, `app.exit()` in the primary one.
+- This works the same for the main window and every secondary window.
+- The backend can guard a window too, without any renderer code:
+
+```ts
+// backend
+import { getWindow } from "@tynd/core";
+
+getWindow("editor").onCloseRequested((e) => {
+  if (hasUnsavedChanges("editor")) e.preventDefault();
+});
+getWindow("editor").onClosed(() => releaseEditorState());
+```
+
+Backend window handles get every window and webview event except `onDragOver`.
 
 ## Sizing, positioning, monitors
 

@@ -25,7 +25,7 @@ import { tyndWindow } from "@tynd/core/client";
 // to await from multiple boot sites. It loads previously saved states
 // from disk, attaches resize / move / maximize / fullscreen listeners,
 // and starts auto-saving (debounced 500 ms by default).
-await windowState.init({ appId: "com.example.myapp" });
+await windowState.init();
 
 // Re-apply the snapshot saved during the previous session, if any.
 // Returns `false` on cold-start (nothing on disk yet).
@@ -39,16 +39,16 @@ tyndWindow.onCloseRequested(async () => {
 ```
 
 That's the whole recipe. The on-disk JSON lives at
-`<dataDir>/<appId>/window-states.json` by default — pass
+`<appDataDir>/window-states.json` by default (`os.appDataDir()`, named
+after `bundle.identifier`, so two apps never share it) — pass
 `storagePath` to `init()` to override.
 
 ## Tuning
 
 | Option | Default | When to change |
 |---|---|---|
-| `appId` | `"tynd-app"` | Always set this — keeps multiple apps from clobbering each other's state. |
 | `debounceMs` | `500` | Lower (e.g. `100`) for snappier persistence on tile-managers; higher for ultra-low-spec disks. |
-| `storagePath` | `<dataDir>/<appId>/window-states.json` | Set when you ship a portable app and want state alongside the binary. |
+| `storagePath` | `<appDataDir>/window-states.json` | Set when you ship a portable app and want state alongside the binary (add that folder to `security.fs.allow`). |
 
 ## Multi-window apps
 

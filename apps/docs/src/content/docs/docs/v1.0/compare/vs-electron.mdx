@@ -12,46 +12,75 @@ Electron bundles Chromium and exposes Node.js in the main process. Tynd uses the
 | | Tynd | Electron |
 |---|---|---|
 | WebView | System (WebView2 / WKWebView / WebKitGTK) | Bundled Chromium |
-| Browser runtime | Uses the OS WebView | Bundles Chromium |
 | Rendering consistency across OSes | Varies with OS WebView version | Identical everywhere |
 | Main-process API | TypeScript on Bun + native host APIs | Full Node.js |
 | Typed RPC | Zero-codegen | Requires manual typing or `electron-trpc` |
-| Screen capture / print-to-PDF / Chrome extensions | Partial screenshots + recording plugin; no Chromium `desktopCapturer` / `printToPDF` | ✅ |
-| Touch Bar / StoreKit / spellcheck / find-in-page | ❌ | ✅ |
 | Release size priority | Measure the signed artifact for your app and targets | Bundled Chromium generally increases the baseline |
+
+## Feature comparison
+
+Electron columns name the Electron API (or, for packaging and updates, the usual Electron Forge / electron-builder tooling).
+
+| Feature | Tynd | Electron |
+|---|---|---|
+| Multi-window handles | `multiwindow` handles, also from the backend (`getWindow`) | `BrowserWindow` |
+| Window effects | `setEffects`: Mica, Tabbed, Acrylic, Blur, macOS materials; rejects on Linux | `vibrancy` (macOS), `backgroundMaterial` (Windows 11) |
+| Kiosk | `setKiosk`, `kiosk` option | `kiosk` option |
+| Frameless drag regions | `data-tynd-drag` / `data-tynd-no-drag` / `data-tynd-resize` attributes | CSS `app-region: drag` |
+| Per-window menu bar | Windows, Linux (macOS has one app-wide bar) | `win.setMenu` (Windows, Linux) |
+| Drag files out | `startDrag`, `data-tynd-drag-file` | `webContents.startDrag` |
+| Context menus | Programmatic + declarative (`data-tynd-contextmenu`) | `Menu.popup` |
+| Dock menu / jump list | `app.dock.setMenu` / `app.setJumpList` | `app.dock.setMenu` / `app.setJumpList` |
+| Windows thumbnail toolbar | ❌ | `setThumbarButtons` |
+| Tray | Several icons; attached popover window (Windows, macOS) | Several `Tray` instances; attached windows through community packages |
+| Tray balloon | ❌ | `displayBalloon` (Windows) |
+| Message box with checkbox | `dialog.message({ checkboxLabel })` | `showMessageBox({ checkboxLabel })` |
+| Picked path widens the file scope | `grantAccess: true` | N/A (no renderer file scope) |
+| Notification actions | Actions and categories on every OS; inline reply on Windows and macOS | `actions` (macOS), `toastXml` (Windows) |
+| Web permissions | Static per-webview `permissions` option | `setPermissionRequestHandler` (runtime callback) |
+| PDF / page capture / clear data | `printToPdf`, `capturePage`, `clearData` | `printToPDF`, `capturePage`, `clearStorageData` |
+| Silent print | Windows, Linux | `print({ silent: true })` |
+| Find in page | `findInPage` (uses `window.find`) | `findInPage` |
+| Custom protocols | `app.protocol` (buffered, 4 MiB bodies) + asset protocol with Range | `protocol.handle` |
+| Request interception, basic-auth, certificate handlers | ❌ | `webRequest`, `login`, `certificate-error` |
+| Download progress / cancel | ❌ (start and result events only) | `DownloadItem` |
+| IPC cancellation | `handle.cancel()`, `AbortSignal`, timeouts; handler sees `signal` | App-level |
+| Push channel | `Channel<T>` | `MessagePort` |
+| Binary in RPC | base64 inside JSON frames (about 4/3 size, 8 MiB frames); `tynd-bin://` for `fs` | Structured clone |
+| Backend window events | `getWindow(label).on*`, preventable close | `BrowserWindow` events |
+| Crash reporter | Local JSON reports (host panic, backend exit, renderer loss), no upload | Crashpad minidumps with optional upload |
+| Native command ACL | Capabilities per window / webview / origin, deny by default | Preload / `contextBridge` decides exposure |
+| File scope | Default app-folder scope, protected locations, deny rules, runtime grants | N/A |
+| CSP | Auto-injected on bundled pages | Set by the app |
+| Windows packages | NSIS, MSI, MSIX | NSIS, MSI, MSIX/AppX, Squirrel |
+| macOS packages | `.app`, DMG | `.app`, DMG, PKG |
+| Linux packages | AppImage, deb, rpm, Flatpak, Snap, PKGBUILD | AppImage, deb, rpm, Flatpak, Snap, pacman |
+| Universal macOS / cross-compilation | ❌ / ❌ | `@electron/universal` / partial (electron-builder) |
+| Updater | Signed full + patch updates, channels, staged rollout | `autoUpdater`; electron-updater adds channels, staged rollout, differential downloads |
+| Pack integrity | BLAKE3 digest checked at every start | ASAR integrity fuse |
+| Icon generation | `tynd icon` | Through packaging tooling |
 
 ## When Tynd wins
 
 - **Runtime packaging.** Tynd reuses the system WebView; Electron ships Chromium with the application. Compare signed release artifacts for your actual features and targets.
-- **System-WebView reuse.** This can reduce duplicated runtime payload, while the measured memory footprint still depends on the application, pages, extensions, and OS.
-- **TypeScript end-to-end** without main-process / renderer distinction. The backend is just `export async function` — no IPC `ipcMain.handle` / `ipcRenderer.invoke` dance.
-- **Zero-codegen typed RPC** — Electron has no first-class typed RPC; you layer `electron-trpc` or similar on top.
-- **Structural security** — what the frontend can call is what the backend exports. No preload-script boundary to remember.
-- **Zero-network IPC** — same as Tauri. Electron's Chromium IPC is also non-TCP, but it doesn't ship zero-copy binary channels.
-- **No "main process" / "renderer process" mental model.** The backend is TypeScript, the frontend is TypeScript, and the bridge is typed.
+- **TypeScript end-to-end** without main-process / renderer distinction. The backend is just `export async function` — no `ipcMain.handle` / `ipcRenderer.invoke` dance.
+- **Zero-codegen typed RPC with cancellation.** A call handle has `cancel()`, `api.withOptions({ signal, timeout })` cancels or times out, and the backend handler receives an `AbortSignal`.
+- **Structural security** — what the frontend can call is what the backend exports; native commands need a capability grant; renderer file access stays inside the app's own folders unless allowed or granted.
+- **Built-in packaging and updates.** Every installer format, patch updates, channels, staged rollout and `tynd icon` come with the CLI.
 
 ## When Electron wins
 
 - **Rendering consistency.** WebView2 version varies by Windows install, WebKitGTK version varies by distro, WKWebView is tied to the macOS version. Electron's bundled Chromium guarantees the same engine everywhere.
 - **Full Node stdlib.** `node:fs`, `child_process`, `net`, `tls`, `dns`, `http.createServer` — everything in the main process without IPC.
-- **Chromium-native features:**
-  - `desktopCapturer` — screen and window capture as MediaStreams. Tynd has [`screenshot`](/docs/v1.0/api/os/screenshot) for PNG captures and `@tynd/plugin-screen-rec` for recording, but not this Chromium API.
-  - `printToPDF` — programmatic PDF export.
-  - `findInPage` / `stopFindInPage`.
-  - Built-in spellchecker with custom dictionaries.
-  - Chrome extension loading (`session.loadExtension`, MV3).
-  - Touch Bar (macOS) API.
-  - `safeStorage` — OS-level encrypted secret storage (Tynd has `keyring` for this).
-- **inAppPurchase** — StoreKit product lookup + receipt validation.
+- **Chromium-level hooks** that Tynd does not expose: `desktopCapturer` MediaStreams (Tynd has [`screenshot`](/docs/v1.0/api/os/screenshot) and `@tynd/plugin-screen-rec`), `webRequest` interception, runtime permission-request handlers, download progress and cancel, `login` / `certificate-error` handlers, built-in spellchecker API, Chrome extensions.
+- **Platform extras:** Windows thumbnail toolbar, tray balloons, Touch Bar, StoreKit in-app purchase.
+- **Build reach:** universal macOS binaries and some cross-platform builds through its packaging tools.
 - **Massive npm ecosystem** — any npm package (including native bindings) works in the main process.
-- **MessageChannelMain** — transferable-object IPC between main and renderer.
 
 ## Where they're tied
 
-- **Native notifications**, **tray**, **menu**, **clipboard**, **shell.openExternal**, **dialog**, **global shortcuts**, **deep linking**, **single instance** — both cover these, often with near-identical semantics.
-- **Auto-updater** — both have first-class auto-updaters.
+- **Native notifications**, **tray**, **menus** (including the Dock menu and jump list), **clipboard**, **shell.openExternal**, **dialogs**, **global shortcuts**, **deep linking**, **single instance**, **PDF export** and **page capture** — both cover these.
 - **Code signing + notarization** — both support Windows signing and macOS signing/notarization. Tynd's built-in macOS path uses a P12 certificate and an App Store Connect API-key JSON.
-- **Bundle formats** — both ship `.app` / `.dmg` / `.deb` / `.rpm` / `.AppImage` / NSIS / MSI.
 
 ## Migration path
 
@@ -60,17 +89,19 @@ Porting Electron → Tynd:
 - **`BrowserWindow`** → `app.start({ window: { … } })` or `multiwindow.create` (`@tynd/plugin-multiwindow`) for secondary.
 - **`ipcMain.handle("cmd", fn)`** → `export async function cmd(…)` in `backend/main.ts`.
 - **`ipcRenderer.invoke("cmd", …)`** → `await api.cmd(…)` with `createBackend<typeof backend>()`.
-- **`BrowserWindow.webContents.send("evt", …)`** → `events.emit("evt", …)` from backend, `api.on("evt", …)` on frontend.
+- **`BrowserWindow.webContents.send("evt", …)`** → `events.emit("evt", …)` from backend, `api.on("evt", …)` on frontend; per-call pushes → `Channel<T>`.
 - **Node modules** — use Bun's Node compatibility or Tynd OS APIs (`fs`, `http`, `sql`, `process`, …).
-- **Preload scripts / contextBridge** — N/A in Tynd. Exposure surface = exported backend functions. No separate "context isolation" step.
-- **`session` / cookies / custom protocols** — Tynd's `tynd://` + `tynd-bin://` schemes are fixed; no per-session customization.
-- **Electron `desktopCapturer` / `printToPDF`** — no direct replacement for Chromium MediaStreams or WebContents PDF rendering. Use [`screenshot`](/docs/v1.0/api/os/screenshot), `@tynd/plugin-screen-rec`, or a native CLI via `sidecar` depending on the workflow.
+- **Preload scripts / contextBridge** — N/A in Tynd. Exposure surface = exported backend functions plus capability grants.
+- **`protocol.handle`** → `app.protocol(name, handler)`; local files → `convertFileSrc` with `app.start({ assets })`.
+- **`printToPDF` / `capturePage`** → `tyndWebview.printToPdf` / `capturePage`.
+- **`setPermissionRequestHandler`** → the static `permissions` window option.
+- **`crashReporter`** → `app.crashReporter` (local reports; upload them yourself).
+- **`desktopCapturer`**, `webRequest`, `DownloadItem` progress — no direct replacement. Use [`screenshot`](/docs/v1.0/api/os/screenshot), `@tynd/plugin-screen-rec`, the backend's own `fetch`, or a native CLI via `sidecar` depending on the workflow.
 
 Porting Tynd → Electron:
 
-- **Backend** becomes Electron's main process. All TypeScript still works in the main process — just via `ipcMain` + `ipcRenderer` dance.
+- **Backend** becomes Electron's main process. All TypeScript still works in the main process — just via `ipcMain` + `ipcRenderer`.
 - **OS APIs** — most have Electron or npm equivalents. `compute` → use `crypto` node module. `workers` → `Worker` from `node:worker_threads`.
-- **Binary IPC** — Electron has MessageChannel, not a dedicated bytes channel. Usually OK for the size.
 
 ## Related
 

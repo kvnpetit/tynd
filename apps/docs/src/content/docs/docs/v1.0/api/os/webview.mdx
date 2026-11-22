@@ -1,6 +1,6 @@
 ---
 title: tyndWebview
-description: "The current WebView: label, parent window, cookies, popup and download policies, and capability identity."
+description: "The current WebView: label, parent window, cookies, permissions, script evaluation, PDF export, capture, popup and download policies, and capability identity."
 ---
 
 # `tyndWebview`
@@ -15,6 +15,13 @@ several WebViews; each has its own label, IPC route, browsing-data store, and
 needs the [`multiwindow`](/docs/v1.0/api/plugins/multiwindow) plugin
 (`multiwindow.webview.*`), added with `tynd add multiwindow` and imported from
 `@tynd/plugin-multiwindow/client`.
+
+The IPC bridge (`window.__tynd__`) is installed in each webview's top frame
+only, plus subframes whose own location is app content. An iframe showing a
+remote site gets no bridge, and the host drops IPC messages that do not carry
+the webview's secret token, so the iframe cannot post through the platform
+message handler either. See
+[Local and remote webviews](/docs/v1.0/concepts/security#local-and-remote-webviews).
 
 ```ts
 console.log(tyndWebview.label());       // "preview"
@@ -97,9 +104,129 @@ await multiwindow.webview.create({ label: "browser", url: "https://example.com",
 
 Accepted forms are `http://host:port` (HTTP CONNECT) and `socks5://host:port`. No credentials and no path are allowed; `http` defaults to port 80, `socks5` needs an explicit port. An invalid value rejects the create call. Proxying works on every platform, including macOS 14+ (Tynd's minimum macOS).
 
-## Permission prompts
+## Permissions (camera, microphone, geolocation...)
 
-Camera, microphone and geolocation requests from a page are not intercepted: the WebView applies the OS default behavior, and Tynd offers no handler to grant or deny them.
+`permissions` on the `window` option of `app.start(...)` (primary window), `multiwindow.create` and `multiwindow.webview.create` decides each web permission request:
+
+```ts
+app.start({
+  window: { permissions: { camera: "allow", microphone: "allow", geolocation: "deny" } },
+});
+```
+
+| Value | Behavior |
+|---|---|
+| `"allow"` | Granted without a prompt |
+| `"deny"` | Refused |
+| `"prompt"` | The WebView's own prompt (WebView2, WKWebView). WebKitGTK has no prompt and refuses |
+| unset (default) | `"prompt"` while the webview shows app content, `"deny"` while it shows remote content |
+
+A configured value applies whatever the webview shows, so prefer leaving kinds unset (or `"deny"`) on webviews that load untrusted sites. The decision uses the content of the webview's main frame: an iframe gets the decision of the page that embeds it. An unknown kind or value rejects the create call.
+
+| Kind | Windows | macOS | Linux |
+|---|---|---|---|
+| `camera`, `microphone` | yes | yes | yes |
+| `geolocation`, `notifications` | yes | no (OS default) | yes |
+| `displayCapture` | no | no | yes |
+| `pointerLock` | no | no | yes |
+| `clipboardRead`, `midi`, `sensors`, `localFonts`, `windowManagement`, `automaticDownloads`, `fileSystemAccess`, `autoplay` | yes | no | no |
+
+"no" means the engine does not report that request and applies its own default. The decision is static: the engine asks synchronously, so there is no runtime callback to answer a request. A permission the user already saved inside the WebView is reused without asking Tynd.
+
+## Evaluate a script
+
+```ts
+const title = await tyndWebview.evaluate<string>("document.title", { label: "preview" });
+const links = await tyndWebview.evaluate<number>("(() => { const n = document.links.length; return n; })()");
+```
+
+The script is an expression; wrap statements in an IIFE. It resolves to the JSON-serializable result (`undefined` becomes `null`; a returned Promise is not awaited) and rejects with the page's error message when the expression throws. The script runs even under a page CSP without `unsafe-eval`. Limit: 1 MiB.
+
+## Clear browsing data
+
+```ts
+await tyndWebview.clearData({ cookies: true, localStorage: true }); // only these categories
+await tyndWebview.clearData({ label: "preview" }); // everything
+```
+
+Resolves once the engine has removed the data. Other webviews that share the same data store lose that data too.
+
+| Option | Removes |
+|---|---|
+| `cookies` | cookies |
+| `cache` | HTTP disk and memory cache, Cache API storage |
+| `localStorage` | `localStorage` |
+| `indexedDb` | IndexedDB databases |
+| `serviceWorkers` | service worker registrations |
+| `all` | every kind of data the engine stores (history and autofill included); overrides the categories |
+| `label` | webview whose data store to clear (default: caller) |
+
+With no category selected, everything is removed (same as `all: true`). `{ all: false }` alone rejects: nothing to clear.
+
+## PDF export and page capture
+
+```ts
+const pdf = await tyndWebview.printToPdf({ landscape: true, pageSize: "A4", margins: 0.5, printBackground: true });
+const png = await tyndWebview.capturePage({ label: "preview" }); // visible viewport
+```
+
+Both resolve to bytes (`Uint8Array`); write them with the `fs` plugin inside its scope. The renderer never picks a destination path. `capturePage` grabs the visible viewport as PNG.
+
+| Option | Type | Default |
+|---|---|---|
+| `landscape` | `boolean` | `false` |
+| `printBackground` | `boolean` | `false` |
+| `scale` | `0.1`..`2` | `1` |
+| `pageSize` | `"A3" \| "A4" \| "A5" \| "Letter" \| "Legal" \| "Tabloid"` or `{ width, height }` (inches, 1..100) | Letter |
+| `margins` | inches for every side, or `{ top?, right?, bottom?, left? }` (0..10, unset sides = 0) | engine default |
+| `label` | webview to render | caller |
+
+Invalid options reject before anything is rendered. On macOS, WKWebView renders the whole page as one continuous PDF page: `landscape`, `scale`, `pageSize` and `margins` do not apply. On Linux the PDF goes through the GTK print-to-file printer, and CSS backgrounds are always printed.
+
+## Print
+
+```ts
+await tyndWebview.print(); // OS print dialog
+const printers = await tyndWebview.getPrinters(); // Windows: [{ name, isDefault }]
+await tyndWebview.print({ silent: true, printer: printers[0]?.name });
+```
+
+| Option | Type | Default |
+|---|---|---|
+| `silent` | `boolean`: print without a dialog | `false` |
+| `printer` | printer name for a silent print (1..256 characters) | OS default printer |
+| `label` | webview to print | caller |
+
+A silent print resolves once the job is handed to the printer and rejects when the printer is unavailable. Only app content may print silently; a webview that shows a remote page rejects `silent: true`. `printer` without `silent: true` rejects (the dialog lets the user pick). `tyndWindow.print()` opens the same dialog as `tyndWebview.print()`.
+
+## Audio mute
+
+```ts
+await tyndWebview.setAudioMuted(true, { label: "preview" });
+console.log(await tyndWebview.isAudioMuted({ label: "preview" })); // true
+```
+
+## Targets and permissions
+
+`label` (on `evaluate`, `clearData`, `printToPdf`, `capturePage`, `setAudioMuted`, `isAudioMuted`, `print`) defaults to the caller's webview. Naming another webview needs a caller that shows app content. `window:evaluateScript` and `window:clearBrowsingData` run code in, or wipe the data of, a webview, so like the cookie calls they **always need an explicit capability grant**. The other calls follow the `window:` rules.
+
+| Call | Windows | macOS | Linux |
+|---|---|---|---|
+| `evaluate`, `clearData` (all options) | yes | yes | yes |
+| `printToPdf` | yes | yes (one continuous page, layout options ignored) | yes (backgrounds always printed) |
+| `capturePage` | yes | yes | yes |
+| `setAudioMuted`, `isAudioMuted` | yes | rejects `not supported on macOS` (WKWebView has no public mute API) | yes |
+| `print()` (dialog) | yes | yes | yes |
+| `print({ silent: true, printer? })` | yes | rejects `not supported on macOS` | yes |
+| `getPrinters` | yes | rejects `not supported on macOS` | rejects `not supported on Linux` |
+
+On Windows, PDF export and capture use the WebView2 DevTools protocol API, which works in release builds where the DevTools window is disabled; on an outdated WebView2 Runtime, silent printing rejects with `needs a newer WebView2 Runtime`.
+
+## Not available
+
+- HTTP basic-auth challenges and TLS certificate errors use the WebView's default handling (a failed load); no handler is exposed.
+- Request interception: not available.
+- Download progress, a save dialog and cancellation: the download events above report the start and the result only.
 
 ## Capability isolation
 
@@ -126,6 +253,7 @@ filter is present.
 ## Related
 
 - [Window API](/docs/v1.0/api/os/window)
+- [Custom protocols](/docs/v1.0/api/os/protocols) — `convertFileSrc` for local files, `app.protocol` for backend-served schemes
 - [`multiwindow` plugin](/docs/v1.0/api/plugins/multiwindow) — create and drive child webviews
 - [Multi-Window and Multi-WebView guide](/docs/v1.0/guides/multi-window)
 - [Security and capabilities](/docs/v1.0/concepts/security)

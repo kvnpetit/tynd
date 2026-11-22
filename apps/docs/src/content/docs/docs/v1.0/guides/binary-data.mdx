@@ -43,14 +43,18 @@ tynd add compute
 ```
 
 ```ts
+import { os, path } from "@tynd/core/client";
 import { fs } from "@tynd/plugin-fs/client";
 import { compute } from "@tynd/plugin-compute/client";
 
+// Paths inside the app's own data directory (the default fs scope).
+const dir = await os.appDataDir();
+
 // Read
-const bytes = await fs.readBinary("image.png");   // Uint8Array
+const bytes = await fs.readBinary(path.join(dir, "image.png")); // Uint8Array
 
 // Write
-await fs.writeBinary("./out/copy.png", bytes, { createDirs: true });
+await fs.writeBinary(path.join(dir, "out", "copy.png"), bytes, { createDirs: true });
 
 // Hash
 const digest = await compute.hash(bytes, { algo: "sha256" });   // base64 string
@@ -64,6 +68,8 @@ Sub-MB or text-shaped calls stay on the JSON channel where it's simpler:
 - `compute.randomBytes(32)` — small, text protocol is fine
 - `terminal:data` events — base64-encoded PTY chunks (small + streaming)
 
+Backend RPC arguments and results also take `Uint8Array` / `ArrayBuffer`, encoded as base64 text (about 4/3 of the size, plus JSON escaping). Every JSON frame is capped at 8 MiB, which leaves about 5 MiB of binary data per call.
+
 Use binary only when you have multi-MB payloads.
 
 ## When to use fetch vs binary IPC for network I/O
@@ -71,10 +77,11 @@ Use binary only when you have multi-MB payloads.
 For HTTP downloads, prefer `http.download` or `fetch` — they already stream and never round-trip through JSON:
 
 ```ts
+import { os, path } from "@tynd/core/client";
 import { http } from "@tynd/plugin-http/client";
 
-// Streams bytes straight to disk, emits progress events
-await http.download("https://.../bigfile.zip", "./downloads/bigfile.zip", {
+// Streams bytes straight to disk (inside the fs scope), emits progress events
+await http.download("https://.../bigfile.zip", path.join(await os.appCacheDir(), "bigfile.zip"), {
   onProgress: ({ loaded, total }) => {
     console.log(total ? `${((loaded / total) * 100).toFixed(1)}%` : `${loaded}B`);
   },
@@ -89,7 +96,7 @@ const { body: bytes } = await http.getBinary("https://.../image.png");
 ## Hashing large buffers
 
 ```ts
-const bytes = await fs.readBinary("video.mp4");
+const bytes = await fs.readBinary(path.join(await os.appDataDir(), "video.mp4"));
 const digest = await compute.hash(bytes, { algo: "sha256" });
 ```
 

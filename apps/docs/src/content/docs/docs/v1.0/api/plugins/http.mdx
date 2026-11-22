@@ -1,6 +1,6 @@
 ---
 title: http
-description: "Native HTTP client with progress and cancellation. Facade over the core `http` host API."
+description: "Native HTTP client with redirects, cookie jars, proxies, streaming, progress and cancellation. Facade over the core `http` host API."
 ---
 
 # `http`
@@ -29,7 +29,7 @@ Declaring the plugin compiles the matching `api-http` Cargo feature into the app
 | Aliases for `tynd add` | `fetch`, `request`, `requests` |
 | Catalog permission labels | `host:http`, `network` |
 | Estimated size | 180 KB |
-| Client exports | `HttpProgress`, `HttpRequestOptions`, `HttpResponse`, `http` |
+| Client exports | `HttpDownloadOptions`, `HttpProgress`, `HttpRedirect`, `HttpRequestOptions`, `HttpResponse`, `HttpStreamOptions`, `HttpStreamResponse`, `HttpTransportOptions`, `http` |
 
 
 ## Related

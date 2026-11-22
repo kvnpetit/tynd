@@ -7,7 +7,7 @@ description: "Build a file browser with directory walking, image thumbnails via 
 
 A working cross-platform file browser: directory tree, image thumbnails, double-click to open with the OS default handler, right-click to reveal.
 
-Exercises: [`fs.readDir`](/docs/v1.0/api/os/fs), [`fs.readBinary`](/docs/v1.0/api/os/fs) (zero-copy), [`shell.openPath`](/docs/v1.0/api/os/shell), [`shell.revealInFolder`](/docs/v1.0/api/os/shell), [`os.homeDir`](/docs/v1.0/api/os/os), [`path.join`](/docs/v1.0/api/os/path).
+Exercises: [`fs.readDir`](/docs/v1.0/api/os/fs), [`fs.readBinary`](/docs/v1.0/api/os/fs) (zero-copy), [`shell.openPath`](/docs/v1.0/api/os/shell), [`shell.revealInFolder`](/docs/v1.0/api/os/shell), [`dialog.openDirectory`](/docs/v1.0/api/os/dialog) with `grantAccess`, [`path.join`](/docs/v1.0/api/os/path).
 
 ## Scaffold
 
@@ -33,13 +33,16 @@ app.start({
 Install the required plugins:
 
 ```bash
-tynd add fs shell
+tynd add fs shell dialog
 ```
+
+The fs API only reaches the app's own directories by default, not the home folder. The user picks the folder to browse in a dialog opened with `grantAccess: true`, which grants read access to that folder and its whole subtree; browsing stays inside it.
 
 ```tsx title="src/App.tsx"
 import { useEffect, useState } from "react";
+import { dialog } from "@tynd/plugin-dialog/client";
 import { fs } from "@tynd/plugin-fs/client";
-import { os, path } from "@tynd/core/client";
+import { path } from "@tynd/core/client";
 import { shell } from "@tynd/plugin-shell/client";
 
 interface Entry {
@@ -49,12 +52,17 @@ interface Entry {
 }
 
 export default function App() {
+  // The folder the user granted; browsing never goes above it.
+  const [root, setRoot] = useState<string>("");
   const [cwd, setCwd] = useState<string>("");
   const [entries, setEntries] = useState<Entry[]>([]);
 
-  useEffect(() => {
-    os.homeDir().then((h) => h && setCwd(h));
-  }, []);
+  async function pickRoot() {
+    const picked = await dialog.openDirectory({ grantAccess: true });
+    if (!picked) return;
+    setRoot(picked);
+    setCwd(picked);
+  }
 
   useEffect(() => {
     if (!cwd) return;
@@ -72,8 +80,7 @@ export default function App() {
   }, [cwd]);
 
   function goUp() {
-    const parent = path.dirname(cwd);
-    if (parent !== cwd) setCwd(parent);
+    if (cwd !== root) setCwd(path.dirname(cwd));
   }
 
   async function onOpen(e: Entry) {
@@ -84,7 +91,8 @@ export default function App() {
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <header style={{ display: "flex", gap: 8, padding: 8, borderBottom: "1px solid #ddd" }}>
-        <button onClick={goUp}>↑</button>
+        <button onClick={pickRoot}>Open folder…</button>
+        <button onClick={goUp} disabled={!cwd || cwd === root}>↑</button>
         <code style={{ flex: 1, padding: "4px 8px", background: "#f4f4f4" }}>{cwd}</code>
       </header>
 
@@ -148,7 +156,7 @@ function Thumbnail({ path }: { path: string }) {
 tynd build
 ```
 
-The packaged app includes Bun and launches to the user's home directory.
+The packaged app includes Bun. Each launch starts with the folder picker: a [runtime grant](/docs/v1.0/api/os/security#runtime-grants-backend) lasts for the session unless `security.persistGrants` is on.
 
 ## Next ideas
 

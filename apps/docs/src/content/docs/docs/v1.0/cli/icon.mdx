@@ -1,0 +1,44 @@
+---
+title: tynd icon
+description: "Generate every app icon format from one square PNG or SVG."
+---
+
+# `tynd icon`
+
+```bash
+tynd icon                     # source: `icon` from tynd.config.ts
+tynd icon assets/logo.svg
+tynd icon assets/logo.png --out build/icons
+```
+
+Renders one source into every format the bundle targets use:
+
+| File | Used by |
+|---|---|
+| `icon.png` | 1024x1024 master; a valid `icon` value |
+| `icon.ico` | Windows executable and installers (16, 24, 32, 48, 64, 128, 256 px) |
+| `icon.icns` | macOS `.app` (16 to 1024 px, Retina variants included) |
+| `png/<n>x<n>.png` | Linux hicolor theme (16, 24, 32, 48, 64, 128, 256, 512 px) |
+| `msix/*.png` | MSIX tile assets (`StoreLogo`, `Square44x44Logo`, `Square71x71Logo`, `Square150x150Logo`, `Square310x310Logo`, `Wide310x150Logo`) |
+
+The source must be an SVG or a square PNG of at least 512x512 (1024x1024 recommended). A non-square SVG is centered on a transparent square. SVG `<text>` nodes are rejected: convert text to paths so the output does not depend on the fonts installed on the build machine.
+
+`tynd build` renders the sizes it needs from `icon` on its own; run `tynd icon` to review the rendered files, commit them, or hand them to tools outside Tynd.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `[source]` | `icon` from the config | Square PNG or SVG |
+| `--cwd <dir>` | `.` | Start of the project-root search |
+| `-o, --out <dir>` | `icons` | Output directory, relative to the project root |
+
+## What can go wrong
+
+- `no icon source`: pass a path, or set `icon` in `tynd.config.ts`.
+- `must be square` / `use at least 512x512`: re-export the PNG, or use an SVG.
+
+## Related
+
+- [Icons & Branding](/docs/v1.0/guides/icons-branding)
+- [Bundling & Distribution](/docs/v1.0/guides/bundling)

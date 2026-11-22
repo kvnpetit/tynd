@@ -1,6 +1,6 @@
 ---
 title: os
-description: "Platform / arch / OS version, common user directories, env var lookup, EOL, hostname, locale, dark-mode detection."
+description: "Platform / arch / OS version, common user directories, env var lookup, EOL, hostname, locale, regional settings, media access, dark-mode detection."
 ---
 
 # `os`
@@ -38,6 +38,45 @@ BCP-47 locale tag, e.g. `"en-US"`, `"fr-FR"`. `null` if not derivable.
 const locale = await os.locale();
 ```
 
+## Regional settings
+
+```ts
+const region    = await os.region();          // "FR", "US", "419"… or null
+const languages = await os.languages();       // ["fr-FR", "en-US"], most preferred first
+const timezone  = await os.timezone();        // "Europe/Paris" or null
+const h24       = await os.uses24HourClock(); // true / false, null when unknown
+```
+
+| Call | Windows | macOS | Linux |
+|---|---|---|---|
+| `region()` | `GetUserDefaultGeoName` (Settings > Region) | `NSLocale.regionCode` | Region of `LC_ALL` / `LC_TIME` / `LC_MESSAGES` / `LANG` |
+| `languages()` | `GetUserPreferredUILanguages` | Preferred languages | `LANGUAGE`, then the `LC_*` / `LANG` variables |
+| `timezone()` | IANA name mapped from the Windows zone | `CFTimeZone` | `/etc/localtime` / `TZ` |
+| `uses24HourClock()` | User time format (`LOCALE_STIMEFORMAT`) | CLDR preferred hour of the current locale | `nl_langinfo(T_FMT)` of `LC_TIME` |
+
+`region()` follows the region the user picked, which can differ from the region of `os.locale()` (an English UI used in France reports `"FR"`).
+
+## Media access
+
+```ts
+type MediaAccessKind   = "camera" | "microphone" | "screen";
+type MediaAccessStatus = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
+
+if ((await os.getMediaAccessStatus("camera")) === "not-determined") {
+  const granted = await os.askForMediaAccess("camera"); // macOS prompt
+}
+```
+
+`getMediaAccessStatus(kind)` reads the capture permission; `askForMediaAccess(kind)` shows the macOS permission prompt when the user has not decided yet and resolves to whether access is granted (later calls report the stored decision).
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| `getMediaAccessStatus("camera" \| "microphone")` | Settings > Privacy switches (device, user, "let desktop apps access"): `"granted"`, `"denied"` or `"unknown"` | `AVCaptureDevice.authorizationStatus` | `"unknown"` |
+| `getMediaAccessStatus("screen")` | `"granted"` (no permission for desktop apps) | `"granted"` / `"denied"` (`CGPreflightScreenCaptureAccess` cannot tell "never asked") | `"unknown"` |
+| `askForMediaAccess(kind)` | rejects: not supported (no prompt for desktop apps) | `AVCaptureDevice.requestAccess`; `"screen"` opens the Screen Recording prompt once, the grant applies after a restart | rejects: not supported (the desktop portal asks on each capture) |
+
+On macOS the bundle needs `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` in its `Info.plist`, otherwise the system terminates the app when it asks.
+
 ## `os.isDarkMode(): Promise<boolean>`
 
 ```ts
@@ -57,6 +96,20 @@ Per-OS detection, through the [`dark-light`](https://github.com/rust-dark-light/
 ```ts
 console.log(`a${await os.eol()}b`);
 ```
+
+## App directories
+
+The app's own folders, the ones its file APIs reach by default (the [default filesystem scope](/docs/v1.0/api/os/security#default-filesystem-scope)). Each is `<OS dir>/<app>`, where `<app>` is the app identifier: `bundle.identifier` from `tynd.config.ts` (for example `com.example.myapp`), or the executable name when unset. The host fixes it at startup, from the build in a packaged app and from the project config under `tynd dev`. Each call creates the directory if missing and returns `Promise<string>`; it rejects only when the OS defines no base directory for it.
+
+```ts
+const data   = await os.appDataDir();   // <dataDir>/<app>: databases, documents
+const config = await os.appConfigDir(); // <configDir>/<app>: settings (the store lives here)
+const cache  = await os.appCacheDir();  // <cacheDir>/<app>: derived data, OK to lose
+const tmp    = await os.appTempDir();   // <tmpDir>/<app>: scratch files
+const logs   = await os.appLogDir();    // <cacheDir>/<app>/logs: the default `log` file
+```
+
+The store, log, window-state, updater-state and persisted-grant files all live in these folders.
 
 ## Directories
 
@@ -114,7 +167,7 @@ const key  = await os.env("API_KEY");
 ## Notes
 
 - Every directory getter returns `null` when the OS doesn't define that path (rare on desktop). Always handle `null` when composing absolute paths.
-- For per-app paths, join with your reverse-DNS identifier: `path.join((await os.configDir()) ?? "", "com.example.myapp", "settings.json")`.
+- For per-app paths, use the [app directories](#app-directories): `path.join(await os.appConfigDir(), "settings.json")`. The shared roots above (`homeDir`, `dataDir`, `downloadsDir`, …) are outside the default fs scope; reach them through a dialog opened with `grantAccess: true` or a `security.fs.allow` rule.
 
 ## Related
 

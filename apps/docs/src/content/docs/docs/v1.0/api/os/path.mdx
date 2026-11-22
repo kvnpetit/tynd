@@ -55,7 +55,7 @@ path.extname("Makefile");    // ""
 - **Always `/`.** Paths these helpers build use `/` on every OS; inputs may use `/` or `\`. There is no `sep()`: split on `/[/\]/` if you need segments.
 - **Synchronous.** These functions do not return promises — they run in the WebView.
 - No `resolve()`, `normalize()`, or `isAbsolute()` — compose them yourself or use `URL` / framework helpers if you need them.
-- Absolute paths are produced by joining from a known root (`await os.homeDir()`, etc.) — not by a `resolve` function.
+- Absolute paths are produced by joining from a known root (`await os.appDataDir()`, etc.) — not by a `resolve` function.
 
 ## Related
 

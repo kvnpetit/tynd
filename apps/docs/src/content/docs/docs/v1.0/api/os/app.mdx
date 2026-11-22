@@ -105,6 +105,90 @@ app.onReopen(({ hasVisibleWindows }) => {
 });
 ```
 
+## `app.addRecentDocument(path): Promise<void>`
+
+Adds a file to the OS recent-documents list. The path must pass the [`fs` policy](/docs/v1.0/api/os/fs) and name an existing file.
+
+```ts
+await fs.writeText(path, contents);
+await app.addRecentDocument(path);
+```
+
+## `app.clearRecentDocuments(): Promise<void>`
+
+Clears the app's recent-documents list.
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| `addRecentDocument` | Jump list "Recent" category (shown once the app is registered for the file type through `bundle.fileAssociations`) and Explorer recent items | "Open Recent" list (`NSDocumentController`) | rejects: not supported |
+| `clearRecentDocuments` | Removes the app's jump-list destinations; Explorer recent items of other apps stay | Clears "Open Recent" | rejects: not supported |
+
+## `app.setJumpList(list): Promise<void>` (Windows)
+
+Replaces the jump list shown when the user right-clicks the taskbar button. Each link relaunches the app executable with its `args`. With [`singleInstance`](/docs/v1.0/api/os/single-instance) the arguments reach the running instance through `onSecondLaunch`; without it a new process starts with them.
+
+```ts
+import { app } from "@tynd/core/client";
+import { singleInstance } from "@tynd/plugin-single-instance/client";
+
+await app.setJumpList({
+  tasks: [
+    { title: "New window", args: ["--new-window"], description: "Open another window" },
+    { title: "Compose", args: ["--compose"], icon: "C:/Program Files/Acme/compose.ico" },
+  ],
+  categories: [
+    { name: "Pinned projects", items: [{ title: "Acme site", args: ["--open", "D:/work/acme site"] }] },
+  ],
+});
+
+singleInstance.onSecondLaunch(({ argv }) => {
+  if (argv.includes("--new-window")) void openWindow();
+});
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `tasks` | `JumpListItem[]` | "Tasks" section, at most 32 links. |
+| `categories` | `{ name, items }[]` | Custom sections, at most 16, each with 1 to 32 links and a unique `name` (1 to 260 characters). |
+| `showRecent` | `boolean` | Keep the "Recent" section fed by `addRecentDocument`. Default `true`. |
+| `item.title` | `string` | 1 to 260 characters. |
+| `item.args` | `string[]` | At most 32 arguments, quoted for you; the joined command line is limited to 1024 characters. |
+| `item.description` | `string` | Tooltip, up to 1024 characters. |
+| `item.icon` / `item.iconIndex` | `string` / `number` | `.ico`, `.exe` or `.dll` holding the icon (must pass the [`fs` policy](/docs/v1.0/api/os/fs)) and its index. Defaults to the app icon. |
+
+Links the user removed from a custom section are skipped: Windows refuses to add them back. `app.clearJumpList()` removes the custom list.
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| `setJumpList` / `clearJumpList` | `ICustomDestinationList` | rejects: not supported (use `app.dock.setMenu`) | rejects: not supported |
+
+## Dock (macOS)
+
+```ts
+await app.dock.hide();                        // menu-bar app: no Dock icon, no menu bar
+await app.dock.show();
+const id = await app.dock.bounce("critical"); // bounces until the app is activated
+await app.dock.cancelBounce(id);
+await app.dock.setIcon("/abs/badge-icon.png"); // null restores the bundle icon
+await app.dock.setMenu([
+  { id: "new-window", label: "New Window" },
+  { type: "separator" },
+  { id: "pause", label: "Pause sync", type: "checkbox", checked: false },
+]);
+await app.setActivationPolicy("accessory");   // "regular" | "accessory" | "prohibited"
+```
+
+| Call | Notes |
+|---|---|
+| `dock.show()` / `dock.hide()` | Activation policy `"regular"` / `"accessory"`. Hiding also hides the menu bar; windows stay usable. |
+| `setActivationPolicy(policy)` | `"prohibited"` also keeps the app from being activated. |
+| `dock.bounce(type?)` | `"informational"` (default, once) or `"critical"`. Resolves to a request id, `0` when the app is already active. |
+| `dock.cancelBounce(id)` | Unknown ids are ignored. |
+| `dock.setIcon(path \| null)` | The path must pass the [`fs` policy](/docs/v1.0/api/os/fs). Lasts until the app quits. |
+| `dock.setMenu(items)` | Same item shape as the [application menu](/docs/v1.0/api/os/menu); clicks emit `menu:action`. `[]` removes it. Needs the `menu` API in the build. |
+
+Every Dock call rejects with "not supported on windows / linux" off macOS. Use `tyndWindow.requestAttention`, `tyndWindow.setBadge` (taskbar overlay on Windows) and `tyndWindow.setWindowIcon` there.
+
 ## Notes
 
 - `app.exit(0)` is preferable to `process.exit(0)` — the former runs lifecycle hooks, the latter doesn't.

@@ -40,6 +40,14 @@ For the packed executable, SVG and PNG sources are converted to a Windows ICO co
 
 Installer creation forwards the configured icon to the native platform bundler. Exact presentation still depends on the target desktop environment and package format, so inspect final artifacts on every shipped platform.
 
+## Generate every format
+
+```bash
+tynd icon assets/icon.svg
+```
+
+[`tynd icon`](/docs/v1.0/cli/icon) writes `icon.png` (1024 px), `icon.ico`, `icon.icns`, the Linux hicolor PNG sizes and the MSIX tile assets to `icons/`, for review or for tools outside Tynd. The `msix`, `flatpak`, `snap` and `pkgbuild` targets render the same set from `icon` during the build, so they need a PNG or SVG source.
+
 ## Build and inspect
 
 ```bash

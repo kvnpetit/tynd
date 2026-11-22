@@ -37,8 +37,8 @@ First stable release.
   `wgpu`, `whisper`). `llm`, `whisper`, `screen-rec` and `wgpu` are
   experimental and published under the npm `experimental` dist-tag.
 - CLI commands: `create`, `init`, `add`, `remove`, `dev`, `start`, `test`,
-  `build`, `clean`, `upgrade`, `validate`, `doctor` (with `--fix`), `info`,
-  `size`, `explain`, `config show`, `plugin new|check|dev|list|types`,
+  `build`, `clean`, `upgrade`, `validate`, `doctor` (with `--fix`), `icon`,
+  `info`, `size`, `explain`, `config show`, `plugin new|check|dev|list|types`,
   `updater keygen|sign|publish|release|server`, `report`, `profile` and
   `completions`. Output paths use `--out`/`-o`.
 - `tynd dev` resolves the pinned Bun executable, waits for the frontend
@@ -47,6 +47,69 @@ First stable release.
 - Host capabilities: persisted window state, shortcuts, deep links (any
   `scheme://` URL), biometric prompts, screenshots, system stats, networking,
   vault storage, GPU controls and child WebViews.
+- Windows: `tyndWindow` state, geometry, kiosk, simple fullscreen, opacity,
+  always-on-top levels, badges, taskbar progress, content protection, cursor
+  control and `positionAt` presets (tray-aware). `setEffects` applies Mica,
+  Tabbed, Acrylic and Blur on Windows and the macOS materials, and rejects on
+  Linux. Frameless windows use `data-tynd-drag`, `data-tynd-no-drag` and
+  `data-tynd-resize`; `titleBarStyle: "overlay"` keeps the macOS traffic
+  lights. Native file drop gives real paths; `startDrag` and
+  `data-tynd-drag-file` drag files out to other apps.
+- `@tynd/plugin-multiwindow`: secondary windows with handles (from the
+  frontend, or the backend through `getWindow`), typed messages between
+  windows, a per-window menu bar (Windows and Linux; macOS has one app-wide
+  bar), `modalTo`, popover options, and child webviews with their own label,
+  bounds, data partition and capability identity.
+- Backend window events: `getWindow(label)` handles take the `on*` window
+  events, and `onCloseRequested` can prevent a user close of any window.
+- Menus (`@tynd/plugin-menu`): menu bar with icons, native roles,
+  `defaultAppMenu` and runtime mutation by id; programmatic and declarative
+  (`data-tynd-contextmenu`) context menus. `app.dock.*` (macOS: menu, bounce,
+  icon, hide), `app.setJumpList` (Windows) and recent documents (Windows,
+  macOS).
+- Tray (`@tynd/plugin-tray`): up to 16 icons with handles, runtime menu
+  mutation, pointer events with icon bounds, and `attachWindow` popover
+  windows on Windows and macOS (rejects on Linux).
+- Dialogs: file pickers with `grantAccess`, and `message` with custom buttons,
+  `defaultId` / `cancelId` and a checkbox.
+- Notifications: images, sounds, urgency, timeout, action buttons and
+  categories, inline reply (Windows, macOS), click / action / reply / close
+  events, scheduling, and delivered-notification management (Windows,
+  Linux).
+- `tyndWebview`: static per-webview web `permissions`, cookies, `evaluate`,
+  `clearData`, `printToPdf`, `capturePage`, dialog and silent `print`
+  (silent print is not on macOS; `getPrinters` is Windows-only), audio mute
+  (not on macOS), proxy, and `newWindow` / `downloads` policies with events.
+- Custom protocols: the asset protocol (`convertFileSrc`, Range seeking,
+  `assets.scope` globs) and backend-served schemes with `app.protocol`.
+- IPC: every call handle has `cancel()`, `api.withOptions({ signal, timeout })`
+  cancels or bounds a call, and the handler's `getCallContext().signal`
+  aborts; `Channel<T>` pushes values to the caller; `app.use` middleware.
+  Binary RPC values travel as base64 in frames of up to 8 MiB; `fs` binary
+  I/O uses `tynd-bin://`.
+- `app.crashReporter`: local JSON reports for host panics, backend exits and
+  renderer losses (nothing is uploaded), and `app.on("render-process-gone")`
+  on Windows and macOS.
+- Security: native renderer commands are denied unless a capability grants
+  them (per window, webview, origin and platform); renderer file access is
+  limited to the app's own folders by default, with protected locations
+  (SSH, cloud credentials, browser profiles, keychains) no rule can reach;
+  backend runtime grants (`capabilities.allowPath`, `allowUrl`), optionally
+  persisted; per-webview IPC token checked on every message; auto-injected
+  CSP on bundled pages.
+- Packaging targets: NSIS, MSI and MSIX on Windows; `.app` and DMG on macOS;
+  AppImage, deb, rpm, Flatpak, Snap and PKGBUILD on Linux. Builds target the
+  machine they run on (no cross-compilation or universal macOS binary).
+- Every packed executable carries a BLAKE3 integrity digest checked at start.
+- `tynd icon` renders `.png`, `.ico`, `.icns`, Linux sizes and MSIX tile
+  assets from one SVG or square PNG.
+- Updater: Ed25519-signed manifests and artifacts, bsdiff patch updates
+  verified after reconstruction, release channels, staged rollout
+  percentages and key rotation.
+- Not included in 1.0.0: mobile, headless/server mode, HTTP/2 in the `http`
+  plugin (use `fetch`), request interception, basic-auth and certificate
+  handlers, a runtime permission-request handler, download progress or
+  cancellation, Windows thumbnail toolbar and tray balloons.
 - macOS 14 (Sonoma) is the minimum supported macOS: `.app` bundles declare
   `LSMinimumSystemVersion` 14.0 and webview `proxy` works on every macOS build.
 - Windows installers support Evergreen, offline, skipped and fixed WebView2

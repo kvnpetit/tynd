@@ -11,6 +11,7 @@
     "start",
     "test",
     "build",
+    "icon",
     "clean",
     "validate",
     "---Inspection---",

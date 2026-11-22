@@ -4,6 +4,7 @@
     "app",
     "window",
     "webview",
+    "protocols",
     "windowState",
     "monitor",
     "dialog",

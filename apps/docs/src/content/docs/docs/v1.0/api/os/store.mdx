@@ -78,14 +78,14 @@ The failed write is kept and retried on the next change or `flush()`.
 | macOS | `~/Library/Application Support/<app-id>/<namespace>/store.json` |
 | Windows | `%APPDATA%\<app-id>\<namespace>\store.json` |
 
-`<app-id>` is the executable's file name without extension, so two apps that use the same namespace don't share a file. The directory is created lazily on first write.
+`<app-id>` is `bundle.identifier` (the executable name when unset), the folder `os.appConfigDir()` returns, so two apps that use the same namespace don't share a file. The directory is created lazily on first write.
 
 ## Durability
 
 - `set` / `delete` / `clear` update the in-memory copy and resolve; a burst of writes is coalesced into one atomic write (fsync + rename) about 100 ms later. **A resolved write is not yet durable.** A crash, kill or power loss in that window loses it. `get` and `keys` see it immediately.
 - On a graceful exit (app quit, the last window closing with `quitOnLastWindowClosed`, `SIGINT` / `SIGTERM`), host cleanup flushes pending writes of every opened namespace, bounded by a 5 s deadline shared by all namespaces. A disk that blocks past it can still drop the last writes. A host crash or kill skips this.
 - To checkpoint important data, call `flush()`; failures of background writes surface through `onError`.
-- Two processes writing the same file: last writer wins. Give each app a unique executable name.
+- Two processes writing the same file: last writer wins. Give each app a unique `bundle.identifier`.
 - **No atomic multi-key writes.** For transactional semantics across keys, use [`sql`](/docs/v1.0/api/plugins/sql) with a single `UPDATE` statement, or write a flat JSON blob with one key.
 
 ## Security

@@ -1,6 +1,6 @@
 ---
 title: theme
-description: "Read & subscribe to the OS color-scheme preference; configure light/dark palettes that update CSS variables in lockstep."
+description: "Read & subscribe to the OS color-scheme and appearance preferences (accent color, contrast, reduced motion / transparency); configure light/dark palettes that update CSS variables in lockstep."
 ---
 
 # `theme`
@@ -26,3 +26,29 @@ Wraps `prefers-color-scheme` with explicit user overrides (light / dark / system
 - `theme.toggle(): void` — flip between light and dark (resolves `"system"` to its effective value first).
 - `theme.onChange(handler)` — fires every time the effective theme flips (system-driven or user-driven).
 - `theme.dispose(): void` — tear down the resolver and detach all listeners.
+- `theme.systemPreferences(): Promise<SystemPreferences>` — OS appearance snapshot (below).
+- `theme.onSystemPreferencesChange(handler): Promise<{ dispose() }>` — fires with a fresh snapshot whenever any field changes (the OS is polled once a second). Rejects when the host watcher cannot start.
+
+`setPreference("light" | "dark")` forces the page theme app-wide (CSS `color-scheme` and the palette); native window chrome follows `tyndWindow.setTheme`.
+
+## System preferences
+
+```ts
+const prefs = await theme.systemPreferences();
+document.documentElement.style.setProperty("--accent", prefs.accentColor ?? "#0a84ff");
+
+const sub = await theme.onSystemPreferencesChange((next) => {
+  document.body.classList.toggle("reduce-motion", next.reducedMotion === true);
+});
+sub.dispose();
+```
+
+| Field | Type | Windows | macOS | Linux |
+|---|---|---|---|---|
+| `mode` | `"light" \| "dark" \| "unspecified"` | yes | yes | portal / GTK |
+| `accentColor` | `"#rrggbb" \| null` | accent color (DWM) | `controlAccentColor` | `null` |
+| `highContrast` | `boolean \| null` | high-contrast theme | "Increase contrast" | `null` |
+| `reducedMotion` | `boolean \| null` | "Animation effects" off | "Reduce motion" | `null` |
+| `reducedTransparency` | `boolean \| null` | "Transparency effects" off | "Reduce transparency" | `null` |
+
+`null` means the OS exposes no desktop-neutral source for the field.

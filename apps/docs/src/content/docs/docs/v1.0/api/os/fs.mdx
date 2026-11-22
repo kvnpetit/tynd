@@ -12,16 +12,20 @@ tynd add fs
 ```
 
 ```ts
+import { os, path } from "@tynd/core/client";
 import { fs } from "@tynd/plugin-fs/client";
+
+// The app's own data directory: inside the default scope, created on first call.
+const dir = await os.appDataDir();
 ```
 
-Cross-OS filesystem operations. Binary I/O uses the [zero-copy binary channel](/docs/v1.0/guides/binary-data).
+Cross-OS filesystem operations. Binary I/O uses the [zero-copy binary channel](/docs/v1.0/guides/binary-data). The examples below build their paths from `dir`; a path outside the [scope](#notes) is refused.
 
 ## Text I/O
 
 ```ts
-await fs.writeText("data.json", JSON.stringify(state), { createDirs: true });
-const text = await fs.readText("data.json");
+await fs.writeText(path.join(dir, "data.json"), JSON.stringify(state), { createDirs: true });
+const text = await fs.readText(path.join(dir, "data.json"));
 ```
 
 ### `readText(path): Promise<string>`
@@ -37,8 +41,8 @@ Writes UTF-8 text.
 ## Binary I/O
 
 ```ts
-const bytes = await fs.readBinary("image.png");           // Uint8Array
-await fs.writeBinary("copy.png", bytes, { createDirs: true });
+const bytes = await fs.readBinary(path.join(dir, "image.png")); // Uint8Array
+await fs.writeBinary(path.join(dir, "copy.png"), bytes, { createDirs: true });
 ```
 
 Uses the `tynd-bin://` channel — no base64, zero-copy. Accepts `Uint8Array | ArrayBuffer`. See the [Binary Data guide](/docs/v1.0/guides/binary-data).
@@ -48,7 +52,7 @@ Uses the `tynd-bin://` channel — no base64, zero-copy. Accepts `Uint8Array | A
 ### `exists(path): Promise<boolean>`
 
 ```ts
-if (await fs.exists("data.json")) { /* … */ }
+if (await fs.exists(path.join(dir, "data.json"))) { /* … */ }
 ```
 
 ### `stat(path): Promise<FileStat>`
@@ -62,7 +66,7 @@ interface FileStat {
   mtime:     number | null;   // ms since epoch; null if unsupported
 }
 
-const info = await fs.stat("data.json");
+const info = await fs.stat(path.join(dir, "data.json"));
 ```
 
 ## Directories
@@ -77,7 +81,7 @@ interface DirEntry {
   isSymlink: boolean;
 }
 
-const entries = await fs.readDir(".");
+const entries = await fs.readDir(dir);
 ```
 
 Join with the parent path for an absolute path: `path.join(dir, entry.name)`.
@@ -85,7 +89,7 @@ Join with the parent path for an absolute path: `path.join(dir, entry.name)`.
 ### `mkdir(path, opts?): Promise<void>`
 
 ```ts
-await fs.mkdir("./nested/dir", { recursive: true });
+await fs.mkdir(path.join(dir, "nested/dir"), { recursive: true });
 ```
 
 ### `remove(path, opts?): Promise<void>`
@@ -93,20 +97,20 @@ await fs.mkdir("./nested/dir", { recursive: true });
 Works on files and directories.
 
 ```ts
-await fs.remove("./old.json");
-await fs.remove("./dir", { recursive: true });
+await fs.remove(path.join(dir, "old.json"));
+await fs.remove(path.join(dir, "old-cache"), { recursive: true });
 ```
 
 ### `rename(from, to): Promise<void>`
 
 ```ts
-await fs.rename("./a.txt", "./b.txt");
+await fs.rename(path.join(dir, "a.txt"), path.join(dir, "b.txt"));
 ```
 
 ### `copy(from, to): Promise<void>`
 
 ```ts
-await fs.copy("./src.json", "./dst.json");
+await fs.copy(path.join(dir, "src.json"), path.join(dir, "dst.json"));
 ```
 
 ### `copyDir(from, to): Promise<void>`
@@ -114,7 +118,7 @@ await fs.copy("./src.json", "./dst.json");
 Recursive — files are copied, `symlink`s are left alone (call `fs.symlink` yourself if you need them).
 
 ```ts
-await fs.copyDir("./src-assets", "./dist/assets");
+await fs.copyDir(path.join(dir, "src-assets"), path.join(dir, "dist/assets"));
 ```
 
 ### `trash(path): Promise<void>`
@@ -122,15 +126,16 @@ await fs.copyDir("./src-assets", "./dist/assets");
 Move to the OS recycle bin / Trash — reversible, unlike `remove()`. Backed by the [`trash`](https://crates.io/crates/trash) crate (the freedesktop.org Trash spec on Linux).
 
 ```ts
-await fs.trash("./old.log");
+await fs.trash(path.join(dir, "old.log"));
 ```
 
 ### Symbolic + hard links
 
 ```ts
-await fs.symlink("/etc/hosts", "/tmp/hosts-link");
-const target = await fs.readlink("/tmp/hosts-link"); // "/etc/hosts"
-await fs.hardlink("./data.db", "./data.bak");
+const data = path.join(dir, "data.db");
+await fs.symlink(data, path.join(dir, "data-link"));
+const target = await fs.readlink(path.join(dir, "data-link")); // the data.db path
+await fs.hardlink(data, path.join(dir, "data.bak"));
 ```
 
 Windows chooses file vs dir symlink based on what the target currently is (falls back to file when the target doesn't exist).
@@ -140,7 +145,7 @@ Windows chooses file vs dir symlink based on what the target currently is (falls
 Open a file once, then `seek` / `read` / `write` by chunk — handy for large or partially-read files. Binary travels base64 over JSON; for multi-MB I/O prefer [`fs.readBinary` / `fs.writeBinary`](/docs/v1.0/guides/binary-data) (zero-copy via `tynd-bin://`).
 
 ```ts
-const h = await fs.open("big.bin", { read: true, write: true, create: true });
+const h = await fs.open(path.join(dir, "big.bin"), { read: true, write: true, create: true });
 await h.seek(1024);                         // "start" | "current" | "end"
 const { bytes, read } = await h.read(256);  // read up to 256 B
 const written = await h.write(new Uint8Array([1, 2, 3]));
@@ -161,7 +166,7 @@ interface FsChangeEvent {
   error?: string;
 }
 
-const watcher = await fs.watch("./notes", { recursive: true }, (event) => {
+const watcher = await fs.watch(path.join(dir, "notes"), { recursive: true }, (event) => {
   console.log(event.kind, event.path);
 });
 
@@ -177,8 +182,9 @@ await watcher.unwatch(); // false if the watch was already gone
 
 ## Notes
 
-- Paths accept both absolute and relative. Relative paths resolve against the app's **current working directory** at launch. Prefer absolute paths built from `os.dataDir()`, `os.configDir()`, etc.
-- Every path must sit under one of the capability roots: the working directory, `dataDir`, `configDir`, the temp dir or `homeDir`. Anything else, including a symlink whose target escapes them, is refused (`fs: path '…' is outside capability roots`). A configured [`security.fs`](/docs/v1.0/api/os/security) scope narrows this further.
+- Paths accept both absolute and relative. Relative paths resolve against the app's **current working directory** at launch, which is in scope under `tynd dev` only. Build absolute paths from `os.appDataDir()`, `os.appConfigDir()`, `os.appCacheDir()` or `os.appTempDir()`.
+- By default a path must sit in the app's own directories: `<dataDir>/<app>`, `<configDir>/<app>`, `<cacheDir>/<app>` or `<tmpDir>/<app>` (`<app>` is `bundle.identifier`, the executable name when unset; `os.appDataDir()` and its siblings return them), or the working directory under `tynd dev` only. The home directory and the shared data and temp directories are not in scope. Anything else, including a symlink whose target escapes them, is refused (`fs: path '…' is outside capability roots`) unless an `fs.allow` rule starting with an absolute directory above it or a runtime grant (for example a dialog opened with `grantAccess: true`) names it; a rule such as `**/*.pdf` reaches nothing outside. See [default filesystem scope](/docs/v1.0/api/os/security#default-filesystem-scope).
+- Credential stores (`~/.ssh`, `~/.aws`, `~/.git-credentials`, `~/.npmrc`, keychains...), browser profiles and Tynd's grants file are always refused (`fs: '…' is a protected location`), whatever the policy. See [protected locations](/docs/v1.0/api/os/security#protected-locations).
 - All methods run on the host's worker pool — the JS event loop is never blocked.
 
 ## Related

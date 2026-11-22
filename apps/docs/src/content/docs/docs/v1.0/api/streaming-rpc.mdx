@@ -56,7 +56,7 @@ Three mechanisms keep streaming safe at arbitrary yield rates:
 
 1. **Per-stream credit** — backend starts with 64 credits; every yield decrements; at 0 the generator awaits. Frontend replenishes with `{ type: "ack", id, n: 32 }` per 32 consumed chunks.
 2. **Yield batching** — Rust buffers yields and flushes every 10 ms or at 64 items. One `evaluate_script` per flush per webview.
-3. **Cleanup on window close** — the Rust host auto-cancels every active stream that originated in a closed window.
+3. **Cleanup on window close** — the Rust host cancels every active stream that originated in a window when it closes, navigates or reloads.
 
 See the [Streaming RPC guide](/docs/v1.0/guides/streaming) for details.
 
@@ -71,7 +71,10 @@ setTimeout(() => void stream.cancel(), 3000);
 Also triggers automatically on:
 
 - `break` out of `for await` → implicit `iterator.return()` → cancel signal.
-- Originating window closes → the Rust host cancels every stream that window started.
+- Originating window closes, navigates or reloads → the Rust host cancels every stream that window started.
+- The `signal` or `timeout` of `api.withOptions({ signal, timeout })` fires.
+
+Inside the generator, `getCallContext().signal` aborts at the same time, so pending `fetch` calls and timers can stop early.
 
 ## Error handling
 
@@ -99,6 +102,7 @@ Examples: [Streaming RPC guide](/docs/v1.0/guides/streaming).
 
 - No transferable objects; values are encoded and copied on every yield.
 - Generator back-pressure is credit-based — not propagated to the producer's I/O source (it's a generator, not a stream).
+- To push to the caller from an ordinary call (progress next to a normal result), pass a [`Channel<T>`](/docs/v1.0/api/backend#channelt) instead. A channel has no back-pressure.
 - For multi-MB binary chunks, yield handles/IDs over JSON and fetch the bytes separately via [binary IPC](/docs/v1.0/guides/binary-data).
 
 ## Next

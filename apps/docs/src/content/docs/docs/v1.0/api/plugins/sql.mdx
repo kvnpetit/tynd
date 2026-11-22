@@ -27,15 +27,13 @@ const db = await sql.open("./data.db");
 const mem = await sql.open(":memory:");
 ```
 
-Prefer joining against `os.dataDir()`:
+Prefer joining against the app's own data directory, `os.appDataDir()` (created on first call, named after `bundle.identifier`):
 
 ```ts
 import { os, path } from "@tynd/core/client";
 
-const dataDir = await os.dataDir();
-if (!dataDir) throw new Error("no data directory on this platform");
-const dbPath  = path.join(dataDir, "com.example.myapp", "data.db");
-const db      = await sql.open(dbPath);
+const dbPath = path.join(await os.appDataDir(), "data.db");
+const db     = await sql.open(dbPath);
 ```
 
 ## `SqlConnection` methods

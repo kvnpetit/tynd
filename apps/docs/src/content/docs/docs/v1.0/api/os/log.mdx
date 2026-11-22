@@ -56,5 +56,5 @@ Call `log.restoreConsole()` to revert.
 
 ## Default location
 
-`<cache_dir>/<exe-name>/app.log`, where `<exe-name>` is the executable's file stem (the data dir, then the temp dir, stand in when the OS has no cache dir). Backups use `app.log.1`,
+`<cache_dir>/<app>/logs/app.log`, the folder `os.appLogDir()` returns, where `<app>` is `bundle.identifier` (the executable name when unset; the data dir, then the temp dir, stand in when the OS has no cache dir). Backups use `app.log.1`,
 `app.log.2`, …; anything past `maxFiles` is deleted.

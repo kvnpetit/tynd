@@ -1,6 +1,6 @@
 ---
 title: notification
-description: "Native OS notifications with icon, sound, action buttons, click callback, and scheduling."
+description: "Native OS notifications with images, sounds, urgency, action buttons, inline reply, events, scheduling and delivered-notification management."
 ---
 
 # `notification`
@@ -15,50 +15,61 @@ tynd add notification
 import { notification } from "@tynd/plugin-notification/client";
 ```
 
-## `send(title, opts?): Promise<void>`
+## `send(title, opts?): Promise<number>`
 
-Fire a native notification.
+Show a native notification. Resolves with its id, which every event of that notification carries.
 
 ```ts
-await notification.send("Build Complete", { body: "0 errors." });
+const id = await notification.send("Build Complete", { body: "0 errors." });
 ```
 
 ### Options
 
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `body` | `string` | `""` | Body text (up to 4096 chars, like `title`). |
+| `icon` | `string` | app icon | Absolute path to a PNG / ICO shown as the app logo. |
+| `image` | `string` | — | Absolute path to a larger image. |
+| `sound` | `string` | system default | Sound name: `default`, `Mail`, `Glass`, ... (letters, digits, `.`, `_`, `-`). |
+| `silent` | `boolean` | `false` | Play no sound. |
+| `urgency` | `"low"` \| `"normal"` \| `"critical"` | `"normal"` | Linux sets the D-Bus urgency; Windows shows `critical` as an urgent toast. |
+| `timeout` | `"default"` \| `"never"` \| `number` | `"default"` | Time on screen in ms, or until dismissed. Windows maps a number to a short (up to 7 s) or long toast. |
+| `actions` | `{ id, label }[]` | — | Up to 5 buttons. `id`: 1–64 letters, digits, `_`, `-`. |
+| `category` | `string` | — | Use the buttons registered with `registerActions`. Exclusive with `actions`. |
+| `reply` | `{ placeholder?, buttonLabel? }` | — | Inline reply field; the text arrives in `onReply`. |
+
+`icon` and `image` paths go through the `fs` scope of the `security` policy.
+
+### Action buttons and categories
+
 ```ts
-interface NotificationOptions {
-  body?:    string;
-  icon?:    string;   // absolute path to PNG / ICO
-  sound?:   string;   // platform sound name (e.g. "default")
-  actions?: { id: string; label: string }[];
-}
+await notification.registerActions("invite", [
+  { id: "accept",  label: "Accept" },
+  { id: "decline", label: "Decline" },
+]);
+await notification.send("Meeting at 3 pm", { category: "invite" });
+
+notification.onAction(({ id, action }) => {
+  if (action === "accept") acceptInvite(id);
+});
 ```
 
-### Action buttons (cross-OS)
+`registerActions(category, actions)` registers or replaces the set (up to 64 categories). On macOS a single action is a button; two or more become a dropdown.
 
-Click emits `notification:action` with the clicked `id`.
+## Events
 
-```ts
-await notification.send("New message", {
-  body: "From Alice",
-  icon: "/abs/avatar.png",
-  sound: "default",
-  actions: [
-    { id: "reply",     label: "Reply" },
-    { id: "mark-read", label: "Mark as read" },
-  ],
-});
+| Method | Payload | Fires when |
+|---|---|---|
+| `onClick(handler)` | `{ id }` | The user clicks the notification body. |
+| `onAction(handler)` | `{ id, action }` | The user clicks an action button. |
+| `onReply(handler)` | `{ id, text }` | The user sends an inline reply. |
+| `onClose(handler)` | `{ id, reason }` | The notification closes: `reason` is `"user"`, `"timeout"`, `"app"` or `"unknown"`. |
 
-notification.onAction(({ action }) => {
-  if (action === "reply") openReplyWindow();
-});
-```
-
-Linux uses libnotify's `wait_for_action`; Windows uses `tauri-winrt-notification`'s `on_activated`; macOS uses `mac-notification-sys`' `MainButton` (single action button shows directly; two or more become a native dropdown).
+Each returns an unsubscribe function. Events reach the webview that sent the notification (or the backend once that webview is gone).
 
 ## `schedule(title, delayMs, opts?): Promise<number>`
 
-Fire after `delayMs` ms. Returns a numeric id that `cancel()` aborts.
+Fire after `delayMs` ms, with the same options as `send`. Returns an id that `cancel()` aborts while pending; once shown, events and `remove()` use the same id.
 
 ```ts
 const id = await notification.schedule("Reminder", 60_000, { body: "Stand up!" });
@@ -68,17 +79,38 @@ await notification.cancel(id); // true if the timer was still pending
 
 A scheduled notification belongs to the webview that scheduled it: another webview cannot `cancel` it (the call returns `false`). When that webview reloads, navigates or closes the notification still fires and is handed to the backend, so only the backend and app-local webviews can cancel it. A notification scheduled by a call that finishes after that is owned by the backend from the start.
 
-`cancel()` aborts scheduled deliveries; it does **not** remove notifications that were already shown (platform APIs to reach already-delivered toasts aren't exposed yet).
+## Delivered notifications
 
-## `checkPermission() / requestPermission(): Promise<"granted">`
+```ts
+const shown = await notification.getDelivered(); // { id, title, body }[]
+await notification.remove(shown[0].id);           // false for an unknown id
+const count = await notification.removeAll();
+```
 
-Native OSes grant by default; these exist for web-API parity so the same code runs in a PWA and Tynd.
+`getDelivered` lists the notifications still on screen or in the notification center (at most the 256 latest). All three only see notifications owned by the calling webview; the backend and app-local webviews see the ones handed over by closed webviews.
+
+## `checkPermission() / requestPermission(): Promise<NotificationPermission>`
+
+Resolves `"denied"` when notifications are turned off for the app in Windows settings, `"granted"` otherwise. Desktop OSes show no permission prompt, so `requestPermission` returns the current state; both exist for web-API parity.
 
 ```ts
 if ((await notification.checkPermission()) === "granted") {
   await notification.send("hi");
 }
 ```
+
+## Platform support
+
+| Feature | Windows | macOS | Linux |
+|---|---|---|---|
+| Title, body, icon, image, sound, silent | ✓ | ✓ (icon and image share one slot) | ✓ |
+| `urgency` | ✓ (`critical` only) | ignored | ✓ |
+| `timeout` | ✓ (short / long / until dismissed) | ignored | ✓ (server-dependent) |
+| Actions and categories | ✓ | ✓ | ✓ |
+| Inline `reply` | ✓ | ✓ (not with `actions`) | rejects ("not supported on linux") |
+| `onClick`, `onAction`, `onClose` | ✓ | ✓ (`onClose` on the close button) | ✓ |
+| `getDelivered`, `remove`, `removeAll` | ✓ | rejects ("not supported on macos") | ✓ |
+| Permission state | ✓ | always `"granted"` | always `"granted"` |
 
 ## Related
 

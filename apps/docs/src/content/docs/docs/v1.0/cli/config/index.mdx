@@ -181,7 +181,7 @@ Each value must start with a letter and then contain only letters, digits, `+`, 
 
 ## `bundle`
 
-`bundle.identifier` is required when creating installers with `tynd build --bundle <targets>`.
+`bundle.identifier` is required when creating installers with `tynd build --bundle <targets>`. It also names the app's own data, config, cache and temp directories (`os.appDataDir()` and its siblings, where the store, log, window state and persisted grants live): `tynd build` embeds it in the binary and `tynd dev` passes it to the host, so set it before the first release, since changing it later moves those folders. Without it they are named after the executable.
 
 ```ts
 bundle: {
@@ -191,6 +191,7 @@ bundle: {
   shortDescription: "A small desktop app",
   longDescription: "A longer package description.",
   copyright: "© 2026 Acme",
+  licenseFile: "LICENSE",
   resources: ["LICENSE", "assets/manual"],
   fileAssociations: [{
     ext: ["myapp"],
@@ -203,9 +204,11 @@ bundle: {
     depends: ["libwebkit2gtk-4.1-0"],
     section: "utils",
     priority: "optional",
+    desktopTemplate: "build/app.desktop.hbs",
   },
   rpm: {
     requires: ["webkit2gtk4.1"],
+    desktopTemplate: "build/app.desktop.hbs",
   },
   appimage: {
     bundleXdgOpen: true,
@@ -214,9 +217,15 @@ bundle: {
     webviewInstallMode: { type: "skip" },
     minimumWebView2Version: "120.0.0.0",
     allowDowngrades: false,
+    installMode: "currentUser",
+    requestedExecutionLevel: "asInvoker",
+    msix: { publisher: "CN=Example Corp" },
   },
   macos: {
     urlSchemes: ["myapp"],
+    minimumSystemVersion: "14.0",
+    entitlements: "build/app.entitlements",
+    infoPlist: "build/Info.extra.plist",
   },
 }
 ```
@@ -225,7 +234,9 @@ bundle: {
 
 `fileAssociations.ext` accepts a leading dot, which normalization removes. Other optional fields are `contentTypes`, `description`, and `exportedType: { identifier, conformsTo? }`.
 
-`bundle.macos.urlSchemes` overrides top-level `protocols` for the macOS bundle when present.
+`bundle.macos.urlSchemes` overrides top-level `protocols` for every installer when present.
+
+`licenseFile`, `desktopTemplate`, `entitlements` and `infoPlist` are project-relative files. `macos.minimumSystemVersion` cannot go below `14.0`. `windows.installMode` is the NSIS scope (`currentUser`, `perMachine`, `both`); `windows.requestedExecutionLevel` (`asInvoker`, `highestAvailable`, `requireAdministrator`) is embedded in the app executable as its application manifest. `windows.msix` (`publisher`, optional `publisherDisplayName`, `minVersion`) is required by the `msix` target. See [Bundling](/docs/v1.0/guides/bundling#metadata).
 
 ### Windows WebView2
 

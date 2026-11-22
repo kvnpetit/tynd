@@ -1,6 +1,6 @@
 ---
 title: clipboard
-description: "Read / write text, base64-PNG images, and HTML on the system clipboard."
+description: "Read / write text, HTML, RTF, files, base64-PNG images and custom formats on the system clipboard."
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -37,6 +37,45 @@ const html = await clipboard.readHtml();   // string | null
 `readHtml` returns the native HTML representation on Windows, macOS, X11, and
 Wayland, or `null` when none exists.
 
+## RTF
+
+```ts
+await clipboard.writeRtf(String.raw`{\rtf1\ansi {\b Hello} world}`, "Hello world");
+const rtf = await clipboard.readRtf();   // string | null
+```
+
+`writeRtf` replaces the clipboard with RTF and an optional plain-text fallback. Windows and macOS.
+
+## Custom formats
+
+Read and write any representation by MIME type. Common types map to the native name: `text/plain`, `text/rtf`, `image/png`, `image/tiff` (macOS), `text/uri-list`. Any other string is used as the Windows registered format name or the macOS pasteboard type (UTI), so `application/x-my-app` or `com.example.item` work as is.
+
+```ts
+await clipboard.writeFormats({
+  "application/x-my-app": new Uint8Array([1, 2, 3]),
+  "text/plain": "fallback for other apps",
+});
+
+const formats = await clipboard.availableFormats();         // string[]
+const bytes = await clipboard.readFormat("application/x-my-app"); // Uint8Array | null
+```
+
+| Method | Description |
+|---|---|
+| `availableFormats()` | Formats on the clipboard, as MIME types where one is known, else the native name. |
+| `readFormat(format)` | Bytes of `format`, or `null` when absent. |
+| `writeFormat(format, data)` | Replace the clipboard with one format. |
+| `writeFormats(record)` | Replace the clipboard with up to 32 formats at once. |
+
+`data` is a `Uint8Array` or a string (sent as UTF-8). Each format name has 1–256 characters, without control characters; each payload is at most 64 MiB. `text/html` is refused: use `readHtml` / `writeHtml`, which write the platform's HTML envelope. File-reference formats are refused for writing too, compared case-insensitively: `text/uri-list`, `public.file-url`, `NSFilenamesPboardType`, the `com.apple.pasteboard.promised-file-*` types, every macOS dynamic type (`dyn.*`, which can alias any of these), `CF_HDROP`, `FileName` / `FileNameW`, `Shell IDList Array`, `FileGroupDescriptor(W)`, `FileContents`, `x-special/gnome-copied-files`, `x-special/nautilus-clipboard`, `application/x-kde-cutselection`... Use `writeFiles`, which checks every path against the filesystem policy. URL formats are refused as well (`public.url`, `Apple URL pasteboard type`, `UniformResourceLocator(W)`, `text/x-moz-url`): they carry `file:` URLs as readily as web ones and a file manager turns a pasted one into a shortcut; write a plain URL with `writeText`. Reading all of them stays allowed.
+
+## Platform support
+
+| Feature | Windows | macOS | Linux |
+|---|---|---|---|
+| Text, HTML, files, image, clear, `onChange` | ✓ | ✓ | ✓ |
+| RTF, `availableFormats`, `readFormat`, `writeFormat(s)` | ✓ | ✓ | rejects ("not supported on linux") |
+
 ## Files
 
 ```ts
@@ -49,7 +88,10 @@ await clipboard.writeFiles([
 
 File references use the OS clipboard's native file-list format. `readFiles`
 returns `[]` when no file list exists. `writeFiles` requires 1–1024 non-empty,
-NUL-free paths; it copies references, not file contents.
+NUL-free paths; it copies references, not file contents. Every path goes
+through the [filesystem policy](/docs/v1.0/concepts/security) (scope, deny rules,
+capability roots) like any `fs` call, and the resolved canonical path is what is
+written; the first refused path rejects the whole call.
 
 ## Image
 

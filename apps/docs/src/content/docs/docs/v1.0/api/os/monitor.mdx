@@ -1,6 +1,6 @@
 ---
 title: monitors
-description: "Enumerate displays; read per-monitor DPI scale and position."
+description: "Enumerate displays; read per-monitor scale, bounds and work area; react to display changes."
 ---
 
 # `monitors`
@@ -39,15 +39,24 @@ const current = await monitors.current();
 
 ```ts
 interface Monitor {
+  id:        string;            // stable while the display stays connected
   name:      string | null;     // null on some Linux setups
   position:  { x: number; y: number };
   size:      { width: number; height: number };
-  scale:     number;             // 1.0 / 1.5 / 2.0
+  workArea:  { x: number; y: number; width: number; height: number };
+  scale:     number;            // 1.0 / 1.5 / 2.0
   isPrimary: boolean;
 }
 ```
 
-`position` and `size` are **physical pixels**. Divide by `scale` for logical pixels (what `tyndWindow.setSize` / `setPosition` use).
+`position`, `size` and `workArea` are **physical pixels**. Divide by `scale` for logical pixels (what `tyndWindow.setSize` / `setPosition` use).
+
+`workArea` is the part of the monitor not covered by the taskbar, menu bar, Dock or panels: place windows inside it so they never slide under a bar.
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| `id` | Adapter device name (`\\.\DISPLAY1`) | `CGDirectDisplayID` | Model name + rank among identical models (`DELL U2720Q#0`) |
+| `workArea` | `GetMonitorInfo` (`rcWork`) | `NSScreen.visibleFrame` | GDK monitor work area (`_NET_WORKAREA` on X11; the full monitor on most Wayland compositors) |
 
 ## Example — centre on the current monitor
 
@@ -85,6 +94,32 @@ Global cursor position in physical pixels.
 const { x, y } = await monitors.cursorPosition();
 const under = await monitors.fromPoint(x, y);
 ```
+
+## `monitors.onChange(handler): Promise<{ dispose() }>`
+
+Fires when a display is connected or disconnected, or when one changes resolution, position, scale factor or work area (taskbar or Dock moved, resized or auto-hidden). Monitors are matched by `id`; an event is only sent when something in the list actually changed. Resolves once the host watches the displays.
+
+```ts
+const sub = await monitors.onChange(({ added, removed, changed, monitors: all }) => {
+  if (removed.length > 0) tyndWindow.center(); // the window's display may be gone
+  console.log(`${all.length} displays`, { added, changed });
+});
+// later
+sub.dispose();
+```
+
+```ts
+interface MonitorChange {
+  added:    Monitor[];  // connected since the previous event
+  removed:  Monitor[];  // disconnected since the previous event
+  changed:  Monitor[];  // position, size, scale, work area or primary flag changed
+  monitors: Monitor[];  // every display after the change
+}
+```
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Source | `WM_DISPLAYCHANGE`, `WM_DPICHANGED`, `WM_SETTINGCHANGE` (`SPI_SETWORKAREA`), plus the window scale-factor change | `NSApplicationDidChangeScreenParametersNotification` | GDK `monitors-changed`, `size-changed`, monitor added / removed, per-monitor work area and scale |
 
 ## Related
 

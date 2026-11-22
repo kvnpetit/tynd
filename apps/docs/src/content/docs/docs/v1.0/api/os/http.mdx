@@ -1,6 +1,6 @@
 ---
 title: http
-description: "HTTP client with upload / download progress. TLS is bundled — no OpenSSL runtime dep."
+description: "HTTP client with redirects, cookie jars, proxies, streaming, cancellation and progress. TLS is bundled — no OpenSSL runtime dep."
 ---
 
 # `http`
@@ -15,11 +15,11 @@ tynd add http
 import { http } from "@tynd/plugin-http/client";
 ```
 
-HTTP/1.1 client with bundled TLS. For HTTP/2 or HTTP/3, use Bun's `fetch`.
+HTTP/1.1 client with bundled TLS (rustls). For HTTP/2 or HTTP/3, use Bun's `fetch`.
 
 ## Methods
 
-All return `Promise<HttpResponse<T>>` (except `download`).
+All return `Promise<HttpResponse<T>>` (except `stream`, `download` and `clearCookies`).
 
 ### `get<T = string>(url, opts?): Promise<HttpResponse<T>>`
 
@@ -55,14 +55,32 @@ await http.request(url, { method: "OPTIONS" });
 const { body } = await http.request(url, { method: "PUT", responseType: "binary" });
 ```
 
+### `stream(url, opts?): Promise<HttpStreamResponse>`
+
+Resolves once the response head is in; `body` is a `ReadableStream<Uint8Array>` fed as chunks arrive. There is no overall deadline unless `timeoutMs` is set, so it suits server-sent events and long polls. The stream rejects when no byte arrives for `idleTimeoutMs` (default 300 000 ms = 5 min, max 24 h; each chunk restarts that clock), so give long-idle event streams a server heartbeat or a larger value. Cancelling the stream or aborting its `signal` stops the request at once, even while a read is stalled. The host also ends the stream when the calling page navigates, reloads or its window closes.
+
+```ts
+const res = await http.stream("https://api.example.com/events");
+for await (const chunk of res.body) console.log(new TextDecoder().decode(chunk));
+```
+
+### `clearCookies(jar?): Promise<void>`
+
+Empties the caller's cookie jar named `jar`, or all of the caller's jars when `jar` is omitted. Jars of the backend, of other webviews and of other origins are left alone.
+
 ### `download(url, dest, opts?): Promise<{ path: string; bytes: number }>`
 
 Streams the response body to disk. Good for multi-MB downloads — bytes never round-trip through JS memory.
 
-The body is written to a temporary file next to `dest` and renamed into place only once it is complete, so a failed download never leaves a partial file or replaces an existing one. Unlike the request methods, a non-2xx status (redirects included, as `download` doesn't follow them) rejects with an error carrying the status (`HTTP status 404`) and leaves `dest` untouched.
+The body is written to a temporary file next to `dest` and renamed into place only once it is complete, so a failed download never leaves a partial file or replaces an existing one. Redirects are followed like any request. Unlike the request methods, a non-2xx final status rejects with an error carrying the status (`HTTP status 404`) and leaves `dest` untouched.
+
+`dest` must be inside the fs scope: by default the app's own directories (`os.appCacheDir()`, …). To save where the user chooses, pass the path from `dialog.saveFile({ grantAccess: true })`.
 
 ```ts
-const { path, bytes } = await http.download("https://.../big.zip", "./downloads/big.zip", {
+import { os, path as paths } from "@tynd/core/client";
+
+const dest = paths.join(await os.appCacheDir(), "big.zip");
+const { path, bytes } = await http.download("https://.../big.zip", dest, {
   onProgress: ({ loaded, total }) => {
     const pct = total ? ((loaded / total) * 100).toFixed(1) : "?";
     console.log(`${pct}%`);
@@ -72,28 +90,28 @@ const { path, bytes } = await http.download("https://.../big.zip", "./downloads/
 
 ## Options
 
-```ts
-interface HttpRequestOptions {
-  method?:    "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
-  headers?:   Record<string, string>;
-  body?:      string | Record<string, unknown> | unknown[];    // object → auto-JSON
-  timeoutMs?: number;
-  onProgress?: (p: HttpProgress) => void;
-}
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `method` | `"GET"` \| `"POST"` \| `"PUT"` \| `"PATCH"` \| `"DELETE"` \| `"HEAD"` \| `"OPTIONS"` | `"GET"` | Request methods only. |
+| `headers` | `Record<string, string>` | — | Request headers. |
+| `body` | `string` \| object \| array | — | Objects and arrays are sent as JSON. Request methods only. |
+| `responseType` | `"text"` \| `"json"` \| `"binary"` | `"text"` | `request` only. |
+| `timeoutMs` | `number` | 60 000 (none for `stream` / `download`) | Deadline of the whole call, body included. |
+| `idleTimeoutMs` | `number` | 300 000 | `stream` only. Rejects once no body byte arrived for this long (1 ms to 24 h). |
+| `connectTimeoutMs` | `number` | 30 000 when no `timeoutMs` | Deadline for opening the connection (TCP + TLS). |
+| `redirect` | `"follow"` \| `"manual"` \| `"error"` | `"follow"` | `"manual"` returns the 3xx response; `"error"` rejects on the first redirect. |
+| `maxRedirects` | `number` | 10 (max 50) | Hops followed before the call rejects. |
+| `proxy` | `string` \| `false` | environment | `http://`, `https://`, `socks4://`, `socks4a://`, `socks5://` or `socks5h://` URL (credentials allowed), or `false` to connect directly. |
+| `cookies` | `boolean` \| `string` | `false` | `true` uses the `"default"` jar; a string (letters, digits, `_`, `-`, `.`, up to 64 chars) names a jar of the caller (see below). |
+| `signal` | `AbortSignal` | — | Aborting rejects the call with an `AbortError` and stops the host transfer. |
+| `onProgress` | `(p: HttpProgress) => void` | — | Upload and download progress, throttled to about 50 ms. |
 
+```ts
 interface HttpProgress {
   phase:  "upload" | "download";
   loaded: number;
   total:  number | null;
 }
-```
-
-`onProgress` fires during both upload (when `body` is set) and download. Throttled ~50 ms by the Rust side.
-
-Download-specific options are a subset:
-
-```ts
-{ headers?, timeoutMs?, onProgress? }
 ```
 
 `download` has no default overall deadline, so a large file can stream for as long as the server keeps sending. Without `timeoutMs`, only the connection (30 s) and idle time are bounded: a download fails when no byte arrives for 60 s (the TLS handshake and the first response included), and each received chunk restarts that clock, so a slow but steady transfer is never cut. With `timeoutMs`, it limits the whole call, body included; the 60 s idle limit still applies. Other requests keep a 60 s default overall timeout.
@@ -105,13 +123,42 @@ interface HttpResponse<T> {
   status:     number;
   statusText: string;
   headers:    Record<string, string>;
+  url:        string;
+  redirected: boolean;
   body:       T;
 }
 ```
 
 Non-2xx responses **don't throw** — inspect `status` yourself. (`download` is the exception: it rejects on a non-2xx status.)
 
-Redirects are **never followed**: a 3xx comes back as the response, `Location` header included. Follow it yourself if you need to, so each hop goes through the `http` policy again.
+`url` is the final URL and `redirected` tells whether a redirect was followed.
+
+## Redirects
+
+With `redirect: "follow"`, every hop goes through the same checks as the first URL: only `http` and `https` targets, and the `security` policy's `http` rules. A 303 (and a 301 or 302 after a `POST`) is replayed as a `GET` without a body; 307 and 308 keep the method and body. `authorization`, `cookie` and `proxy-authorization` headers are dropped when a hop changes origin.
+
+## Cookies and proxies
+
+Cookie jars live in memory for the app's lifetime and belong to the caller: the backend has its own jars, and so does each webview for each origin it shows (app-local content counts as one origin). The same jar name used by two callers names two separate jars, so a page granted `http:request` never sends, plants or clears the backend's session cookies, nor those of another webview or origin. Each caller may hold up to 32 jars. A jar sends the cookies matching each hop, so a login redirect keeps its session. Jars do not consult the public-suffix list: only use them with hosts you trust.
+
+`proxy` applies to one call. Without it, `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` are read from the environment. The proxy host is checked against the `http` policy too.
+
+## Cancellation
+
+```ts
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 5_000);
+await http.get("https://example.com/slow", { signal: controller.signal });
+```
+
+The promise rejects at once; the host stops the transfer at its next chunk.
+
+## Platform support
+
+| Feature | Windows | macOS | Linux |
+|---|---|---|---|
+| Requests, redirects, cookies, proxies, streaming, cancellation | ✓ | ✓ | ✓ |
+| HTTP/2, HTTP/3 | — (use `fetch`) | — (use `fetch`) | — (use `fetch`) |
 
 ## Notes
 
@@ -119,8 +166,6 @@ Redirects are **never followed**: a 3xx comes back as the response, `Location` h
 - Request and response bodies are capped at 100 MiB; `download` at 10 GiB.
 - With a `security` policy, every URL is checked against its `http` rules (see [security](/docs/v1.0/api/os/security)); `download`'s `dest` goes through the `fs` scope.
 - TLS is bundled — no OpenSSL runtime dep.
-- Cookie jars are not managed by this plugin. Pass explicit cookie headers or keep session state in application code when required.
-- Proxy: reads `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` env vars at startup.
 
 ## Related
 

@@ -56,7 +56,8 @@ Under the hood `createBackend` is a thin `Proxy` that sends the call over `windo
 - Primitives: `string`, `number`, `boolean`, `null`, `undefined`, `bigint`
 - Arrays, plain objects, nested structures, cyclic references
 - `Date`, `Map`, `Set`, `RegExp`, `URL`, `URLSearchParams`
-- `ArrayBuffer`, typed arrays (`Uint8Array`, ...) and `DataView` — encoded as text inside the frame, so use [binary IPC](/docs/v1.0/guides/binary-data) for anything large
+- `ArrayBuffer`, typed arrays (`Uint8Array`, ...) and `DataView` — encoded as base64 text inside the frame (about 4/3 of the size, plus JSON escaping). A frame is capped at 8 MiB, so keep binary payloads under about 5 MiB per call and use [binary IPC](/docs/v1.0/guides/binary-data) for anything larger
+- `Channel<T>` arguments, which the backend pushes messages to (see below)
 
 **Not serializable:** functions, `Error` objects and class instances (non-plain objects). Encoding throws; convert them to plain data first.
 
@@ -158,6 +159,53 @@ console.log(await stream);                      // "done"
 
 See [Streaming RPC](/docs/v1.0/guides/streaming) for flow control, cancellation, and multi-window routing.
 
+## Channels — push to the caller
+
+When the backend should push progress while an ordinary call runs, take a `Channel<T>` argument. Messages go to the calling webview only, in order.
+
+```ts
+// backend
+import type { Channel } from "@tynd/core";
+
+export async function importFiles(paths: string[], progress: Channel<{ done: number; total: number }>) {
+  for (const [i, path] of paths.entries()) {
+    await importOne(path);
+    progress.send({ done: i + 1, total: paths.length });
+  }
+  progress.close();
+  return paths.length;
+}
+
+// frontend
+import { Channel } from "@tynd/core/client";
+
+const progress = new Channel<{ done: number; total: number }>(({ done, total }) => {
+  bar.value = done / total;
+});
+const count = await api.importFiles(paths, progress);
+```
+
+Use a channel for push-style progress next to a normal result, and an async generator when the frontend pulls a sequence with back-pressure. Details: [`Channel<T>`](/docs/v1.0/api/backend#channelt).
+
+## Cancellation and timeouts
+
+```ts
+// frontend
+const ac = new AbortController();
+cancelButton.onclick = () => ac.abort();
+const hits = await api.withOptions({ signal: ac.signal, timeout: 10_000 }).search(query);
+
+// backend
+import { getCallContext } from "@tynd/core";
+
+export async function search(query: string) {
+  const { signal } = getCallContext()!;
+  return (await fetch(searchUrl(query), { signal })).json();
+}
+```
+
+Aborting rejects the call with `signal.reason` (an `AbortError`); a timeout rejects with a `TyndIpcError` of code `TIMEOUT`. Either way, and also when the caller's page navigates or its window closes, the backend's `signal` aborts and the handler's result is dropped. See [Cancellation](/docs/v1.0/api/backend#cancellation).
+
 ## Calling between backend functions
 
 Just regular function calls:
@@ -236,9 +284,11 @@ Official plugin clients (`@tynd/plugin-*/client`) call the host through the WebV
 
 ```ts
 // frontend
+import { os, path } from "@tynd/core/client";
 import { fs } from "@tynd/plugin-fs/client";
 
-const config = JSON.parse(await fs.readText("./config.json"));
+const file = path.join(await os.appConfigDir(), "config.json");
+const config = JSON.parse(await fs.readText(file));
 ```
 
 `fs` belongs to `@tynd/plugin-fs`; install it with `tynd add fs`. When backend code needs a native host API, call it with [`hostCall`](/docs/v1.0/api/backend#hostcallapi-method-args-opts) from `@tynd/core`.

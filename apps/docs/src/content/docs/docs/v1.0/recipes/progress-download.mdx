@@ -5,23 +5,30 @@ description: "Stream a file to disk, render a progress bar, handle cancellation.
 
 # Download with Progress
 
-Install the required plugin:
+Install the required plugins:
 
 ```bash
-tynd add http
+tynd add http dialog
 ```
 
+The download target must be inside the fs scope. The Downloads folder is not in the default scope, so the user picks the target in a save dialog opened with `grantAccess: true`, which grants read and write access to that file. To save without asking, write into the app's own cache instead: `path.join(await os.appCacheDir(), filename)`.
+
 ```ts
+import { dialog } from "@tynd/plugin-dialog/client";
 import { http } from "@tynd/plugin-http/client";
-import { os, path } from "@tynd/core/client";
+import { os } from "@tynd/core/client";
 
 export async function downloadWithProgress(
   url: string,
   filename: string,
   onProgress: (pct: number, loaded: number, total: number | null) => void,
 ) {
-  const downloads = (await os.downloadsDir()) ?? (await os.homeDir());
-  const dest = path.join(downloads ?? "", filename);
+  const dest = await dialog.saveFile({
+    defaultDir: (await os.downloadsDir()) ?? undefined,
+    defaultName: filename,
+    grantAccess: true,
+  });
+  if (!dest) return null; // the user cancelled
 
   await http.download(url, dest, {
     onProgress: ({ loaded, total }) => {

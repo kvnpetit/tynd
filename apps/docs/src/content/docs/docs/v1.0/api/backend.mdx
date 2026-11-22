@@ -39,6 +39,7 @@ app.start({
 | `security` | `SecurityPolicy` | Startup-only path, URL, process, shell, and sensitive-capability scopes |
 | `capabilities` | `Capability[]` | Explicit renderer-native command grants. Omitted or empty means deny all. |
 | `quitOnLastWindowClosed` | `boolean` (default `false`) | Exit when the last window closes. Leave off for tray-only apps that should stay alive in the background. |
+| `assets` | `{ scope: string[] }` | Enable the asset protocol behind `convertFileSrc`: globs over absolute paths the WebViews may load. Absent means off. See [Custom protocols](/docs/v1.0/api/os/protocols). |
 
 Unknown keys are rejected at every level (`window: { titel }`, `security: { fs: { alow } }`): `app.start()` throws `Invalid app.start() config` with a `<path>: unknown option "<key>"` line that lists the valid options. Open records such as a permission's `scope` accept any key. `plugins` and other build settings belong in `tynd.config.ts`, not here.
 
@@ -56,8 +57,15 @@ Unknown keys are rejected at every level (`window: { titel }`, `security: { fs: 
 | `transparent` | `false` | Transparent background |
 | `alwaysOnTop` | `false` | Pin above other windows |
 | `center` | `false` | Center on screen at startup |
+| `x` / `y` | — | Initial position of the outer frame, in logical pixels; set both. `center` wins when both are set |
 | `fullscreen` | `false` | Start fullscreen |
 | `maximized` | `false` | Start maximized |
+| `visible` | `true` | `false` keeps the window hidden until the frontend calls `tyndWindow.show()`. See [Show the window when ready](/docs/v1.0/api/os/window#show-the-window-when-ready-splash-screen) |
+| `kiosk` | `false` | Start in kiosk mode: borderless fullscreen pinned above other windows |
+| `titleBarStyle` | `"visible"` | macOS title bar: `"visible"`, `"transparent"` or `"overlay"` (page drawn under the traffic lights). Ignored on Windows and Linux |
+| `theme` | `"system"` | Native chrome theme: `"light"`, `"dark"` or `"system"` |
+| `skipTaskbar` | `false` | Keep the window out of the taskbar (Windows, Linux; ignored on macOS) |
+| `backgroundColor` | — | `{ r, g, b, a? }` (0-255) painted before the page loads |
 | `userAgent` | — | Custom User-Agent string set on every webview request. |
 | `incognito` | `false` | Non-persistent data store: cookies, cache and local storage are discarded when the window closes |
 | `newWindow` | `"allow"` | `window.open()` / `target="_blank"` handling: `"allow"`, `"external"` or `"deny"`. See [New windows](/docs/v1.0/api/os/webview#new-windows-windowopen-target_blank) |
@@ -180,6 +188,41 @@ This API is backend-only. Renderer code uses
 [`workers`](/docs/v1.0/api/os/workers), which stays inside the WebView
 sandbox so executable source never crosses into the trusted Bun process.
 
+### Worker processes
+
+Tynd has no separate "utility process" API: Bun covers the cases.
+
+| Need | Use |
+|---|---|
+| CPU-bound function, run and return | `bunWorkers.spawn(fn)` |
+| Long-lived thread with its own message protocol | `new Worker(new URL("./indexer.ts", import.meta.url))` with `postMessage` / `onmessage` |
+| Crash isolation (native addons, untrusted parsers) | `Bun.spawn({ cmd, ipc })`, a separate process |
+
+Threads die with the backend; a crash in one takes the backend down. A child process survives its own crash, so restart it from `onExit` and stop it when the app quits:
+
+```ts
+let quitting = false;
+let indexer: ReturnType<typeof Bun.spawn>;
+
+function startIndexer(script: string) {
+  indexer = Bun.spawn({
+    cmd: ["bun", script],
+    ipc: (message) => emit("indexed", message),
+    onExit: (_proc, code) => {
+      if (code !== 0 && !quitting) startIndexer(script);
+    },
+  });
+}
+
+startIndexer(indexerScriptPath);
+app.onClose(() => {
+  quitting = true;
+  indexer.kill();
+});
+```
+
+`indexer.send(value)` posts to the child; the child reads with `process.on("message", ...)` and answers with `process.send(...)`. The child script and the `bun` it runs with must ship with the app.
+
 ## Call context and middleware
 
 ### `getCallContext()`
@@ -190,7 +233,7 @@ Inside a backend function, a JS plugin method, middleware, or a plugin `ipc:*` h
 import { getCallContext } from "@tynd/core";
 
 export async function deleteAll() {
-  const caller = getCallContext(); // { window, webview, origin } | undefined
+  const caller = getCallContext(); // { window, webview, origin, isAppContent, signal } | undefined
   if (caller?.window !== "admin") throw new Error("admin window only");
   // ...
 }
@@ -198,11 +241,30 @@ export async function deleteAll() {
 
 | Field | Meaning |
 |---|---|
-| `window` | Label of the window that owns the calling webview |
+| `window` | Label of the window that owns the calling webview. `getWindow(caller.window)` returns its handle |
 | `webview` | Label of the calling webview (child webviews differ from their window) |
-| `origin` | Origin of the calling page, or `null` when unknown |
+| `origin` | Origin of the calling frame when it shows remote content, `null` for the app's own pages |
+| `isAppContent` | `true` for the app's own pages (bundled or dev server), `false` for remote content |
+| `signal` | `AbortSignal` that aborts when the caller gives up (see [Cancellation](#cancellation)) |
 
 The host attaches this to every forwarded call and overwrites anything the frontend sent, so it can be trusted. It is `undefined` outside a call (startup code, timers created at module load) and when the host sent none or a malformed value. It stays available across `await`, for the whole life of a streaming call.
+
+### Cancellation
+
+`signal` aborts with an `AbortError` when:
+
+- the frontend calls `handle.cancel()`, breaks out of a `for await`, or the `signal` / `timeout` of `api.withOptions(...)` fires;
+- the calling window closes, or its page navigates or reloads.
+
+The frontend promise has already rejected at that point, and the handler's result is dropped. Pass the signal to whatever accepts one:
+
+```ts
+export async function search(query: string) {
+  const { signal } = getCallContext()!;
+  const res = await fetch(`https://api.example.com/search?q=${encodeURIComponent(query)}`, { signal });
+  return res.json();
+}
+```
 
 To restrict who may call a function without writing code, use `backend:<fn>` capabilities (see [Security](/docs/v1.0/concepts/security#backend-functions-and-window--tray--menu-commands)).
 
@@ -232,6 +294,19 @@ app.use(async (ctx, next) => {
 - Return without calling `next()` to short-circuit with your own value; throw to reject the call through the normal IPC error path.
 - Calling `next()` twice in one middleware throws. Passing something other than a function to `app.use` throws a `TypeError`.
 - Plugin `ipc:before` / `ipc:after` hooks run outside user middleware.
+
+## `app.protocol(name, handler)`
+
+Serves the URL scheme `name://` from the backend. Every WebView request to it runs `handler`, which returns a `Response`. Register before `app.start()`; build URLs in the frontend with `protocolUrl(name, path)`.
+
+```ts
+app.protocol("thumbs", async (request, { webview }) => {
+  const id = new URL(request.url).pathname.slice(1);
+  return new Response(await renderThumbnail(id), { headers: { "content-type": "image/png" } });
+});
+```
+
+Only app pages can reach the scheme. Request and response bodies are buffered and capped at 4 MiB. Names, limits and security rules: [Custom protocols](/docs/v1.0/api/os/protocols#backend-protocols-appprotocol).
 
 ## Plugin lifecycle hooks
 
@@ -389,7 +464,7 @@ import type { TrayConfig } from "@tynd/plugin-tray";
 - `id` defaults to `label`; it is the value `menu.onClick` and `tray.onMenu` match.
 - `accelerator` uses the muda format, for example `"CmdOrCtrl+S"` or `"Alt+F4"`. An invalid accelerator is logged and dropped.
 - `role` is one of `quit`, `copy`, `cut`, `paste`, `undo`, `redo`, `selectAll`, `minimize`, `close`, `separator`, `about`. A role item becomes the OS-provided item, which the OS manages.
-- Radio items render as check items: the OS does not group them. Keep one item checked yourself by calling `menu.setItemChecked(id, false)` (`tray.setItemChecked` in a tray menu) on the siblings when one is clicked.
+- Adjacent radio items form a group (a separator or another item ends it): clicking one, or checking it with `menu.setItemChecked` / `tray.setItemChecked`, unchecks the others.
 
 ## System tray
 
@@ -442,6 +517,112 @@ api.once("progress", (evt) => { /* … */ });
 - Types flow from `typeof backend` — no codegen.
 - Errors thrown on the backend surface as rejected promises carrying a [`TyndIpcError`](#tyndipcerror).
 - `async function*` backend handlers return [StreamCall](/docs/v1.0/api/streaming-rpc) handles — awaitable + async-iterable.
+- Every call handle has `cancel()`. `api.withOptions({ signal, timeout })` returns the same functions with a cancel signal, a deadline, or both:
+
+```ts
+const ac = new AbortController();
+const hits = await api.withOptions({ signal: ac.signal, timeout: 5_000 }).search("tynd");
+```
+
+| Option | Effect |
+|---|---|
+| `signal` | Aborting it cancels the call: the promise (or a stream's iteration) rejects with `signal.reason`, an `AbortError` by default |
+| `timeout` | After this many milliseconds the call is cancelled and rejects with a `TyndIpcError` of code `TIMEOUT` |
+
+Either way the handler's `getCallContext().signal` aborts. A call is also cancelled when its page navigates or reloads, or its window closes.
+
+- Arguments and results are devalue strings inside JSON frames. `Uint8Array` and `ArrayBuffer` work but travel as base64 (about 4/3 of their size, plus JSON escaping), and a frame is capped at 8 MiB, so keep binary payloads under about 5 MiB per call. Move larger data as described in [Binary data](/docs/v1.0/guides/binary-data).
+
+## `Channel<T>`
+
+A call argument the backend can push to any number of times. Messages go to the calling webview only, in order. The frontend passes `new Channel<T>(onMessage)` from `@tynd/core/client`; the types follow from the backend signature.
+
+```ts
+// backend
+import type { Channel } from "@tynd/core";
+
+export async function download(url: string, progress: Channel<number>) {
+  for await (const percent of fetchWithProgress(url)) progress.send(percent);
+  progress.close();
+}
+
+// frontend
+import { Channel } from "@tynd/core/client";
+
+const progress = new Channel<number>((percent) => (bar.value = percent));
+progress.onclose = () => bar.remove();
+await api.download(url, progress);
+```
+
+| Member | Side | Meaning |
+|---|---|---|
+| `send(message)` | backend | Push one devalue-encodable value. Throws after `close()` |
+| `close()` | backend | End the channel; the frontend's `onclose` runs |
+| `closed` | both | `true` once closed |
+| `onmessage` / `onclose` | frontend | Message and end handlers |
+| `close()` | frontend | Stop listening. The backend is not told: cancel the call for that |
+
+Only top-level arguments can be channels. For a pull-based stream with back-pressure, return an async generator ([Streaming RPC](/docs/v1.0/api/streaming-rpc)).
+
+## Window events in the backend
+
+`getWindow(label)` handles have the same `on*` event methods as `tyndWindow` in the frontend (`onResized`, `onMoved`, `onFocused`, `onCloseRequested`, `onClosed`, `onPageLoad`, `onDrop`…), except `onDragOver`.
+
+`onCloseRequested` works for every window, the main one and secondary ones, in a renderer or in the backend. Call `event.preventDefault()` synchronously to keep the window open:
+
+```ts
+import { getWindow } from "@tynd/core";
+
+getWindow("editor").onCloseRequested((event) => {
+  if (hasUnsavedChanges("editor")) event.preventDefault();
+});
+```
+
+A close request from the user waits 500 ms for a handler to prevent it, then the window closes. Closing a window from code (`handle.close()`) is not preventable.
+
+## `app.crashReporter`
+
+Writes one JSON report per crash to a local directory. Nothing is uploaded: the app reads the reports, usually on its next start, and decides what to send where.
+
+```ts
+app.start({ window: { title: "My App" } });
+
+await app.crashReporter.start({
+  onCrash: (report) => telemetry.send({ kind: report.kind, message: report.message }),
+});
+const last = await app.crashReporter.getLastCrash();
+```
+
+| Method | Meaning |
+|---|---|
+| `start({ directory?, onCrash? })` | Start writing reports. `directory` must be absolute; it defaults to `<local app data>/<app>/crashes`. `onCrash` receives each report it has not seen yet: crashes of earlier runs during `start()`, then renderer losses of this run. Call it after `app.start()` |
+| `getCrashReports()` | Every report, newest first |
+| `getLastCrash()` | The newest report, or `undefined` |
+
+| `kind` | Written by | Extra fields |
+|---|---|---|
+| `host-panic` | the native host, when a panic escapes it | `location`, `backtrace`, `thread` |
+| `backend-exit` | the native host, when the Bun backend exits on its own (uncaught exception, `process.exit`, killed) | `exitCode`, `stderr` (last 50 lines, where an uncaught stack ends up) |
+| `render-process-gone` | the backend, when a renderer dies | `label`, `reason` |
+
+Every report also has `time` (ms since epoch), `message`, `appVersion`, `os`, `arch` and `file` (its path); native reports add `tyndVersion`.
+
+## `app.on("render-process-gone", handler)`
+
+Fires when a webview's renderer process dies. `event.reload()` reloads that window.
+
+```ts
+app.on("render-process-gone", (event) => {
+  // event: { label, reason, reload() }
+  if (event.reason !== "browser-exited") void event.reload();
+});
+```
+
+| Platform | Source | `reason` |
+|---|---|---|
+| Windows | WebView2 `ProcessFailed` | `crashed`, `unresponsive`, `frame-crashed`, or `browser-exited` (the whole WebView2 runtime is gone; reloading cannot help) |
+| macOS | WebKit web content process termination | Always `crashed`. The host reloads the page itself |
+| Linux | — | Not reported |
 
 ## Next
 

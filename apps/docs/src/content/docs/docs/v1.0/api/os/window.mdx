@@ -20,6 +20,10 @@ const isFull = await tyndWindow.isFullscreen();
 const isVis  = await tyndWindow.isVisible();
 const isRes  = await tyndWindow.isResizable();
 const isCls  = await tyndWindow.isClosable();
+const isMinB = await tyndWindow.isMinimizable();
+const isMaxB = await tyndWindow.isMaximizable();
+const onTop  = await tyndWindow.isAlwaysOnTop();
+const kiosk  = await tyndWindow.isKiosk();
 const isFoc  = await tyndWindow.isFocused();
 const isDec  = await tyndWindow.isDecorated();
 const label  =       tyndWindow.label();           // sync — "main" / "settings" / …
@@ -41,10 +45,12 @@ const innerSize = await tyndWindow.getSize();        // { width, height } — cl
 const outerSize = await tyndWindow.getOuterSize();   // includes title bar + borders
 
 await tyndWindow.setPosition(100, 100);
-const { x, y } = await tyndWindow.getPosition();
+const { x, y } = await tyndWindow.getPosition();     // outer frame
+const inner = await tyndWindow.getInnerPosition();   // client area, below the title bar
 
 await tyndWindow.setMinSize(400, 300);
 await tyndWindow.setMaxSize(1920, 1080);
+await tyndWindow.setAspectRatio(16 / 9);             // keep 16:9 while resizing; null clears
 
 const dpi = await tyndWindow.scaleFactor();          // 1.0 / 1.5 / 2.0
 ```
@@ -60,7 +66,11 @@ await tyndWindow.minimize();
 await tyndWindow.unminimize();
 
 await tyndWindow.setFullscreen(true);
+await tyndWindow.setSimpleFullscreen(true); // macOS: no new Space, no animation
+await tyndWindow.setKiosk(true);            // borderless fullscreen pinned above everything
 ```
+
+`setKiosk(false)` leaves fullscreen and restores the previous always-on-top state. Start an app in kiosk mode with `window: { kiosk: true }`.
 
 ## Visibility & focus
 
@@ -68,8 +78,25 @@ await tyndWindow.setFullscreen(true);
 await tyndWindow.show();
 await tyndWindow.hide();
 await tyndWindow.setFocus();            // bring to front + keyboard focus
-await tyndWindow.requestAttention();    // flash taskbar / bounce Dock
+await tyndWindow.requestAttention();             // flash taskbar / bounce Dock once
+await tyndWindow.requestAttention("critical");   // keep going until the window is focused
+await tyndWindow.cancelAttention();
 ```
+
+### Show the window when ready (splash screen)
+
+The primary window is shown once its first page has rendered. To decide yourself, start it hidden with `window: { visible: false }` in `app.start()` and call `show()` from the frontend when the UI is ready:
+
+```ts
+// backend
+app.start({ window: { title: "My App", visible: false } });
+
+// frontend
+await loadSettings();
+await tyndWindow.show();
+```
+
+For a separate splash window, open it with the [`multiwindow`](/docs/v1.0/api/plugins/multiwindow) plugin, then close it after `show()`.
 
 ## Resizable / closable / maximizable / minimizable
 
@@ -78,6 +105,7 @@ await tyndWindow.setResizable(false);
 await tyndWindow.setClosable(false);
 await tyndWindow.setMaximizable(false);
 await tyndWindow.setMinimizable(false);
+await tyndWindow.setMovable(false);        // Windows / macOS; rejects on Linux
 ```
 
 ## Decorations & always-on-top
@@ -85,8 +113,38 @@ await tyndWindow.setMinimizable(false);
 ```ts
 await tyndWindow.setDecorations(false);   // no title bar (build your own via CSS)
 await tyndWindow.setAlwaysOnTop(true);
+await tyndWindow.setAlwaysOnTop(true, { level: "screen-saver" }); // above fullscreen apps (macOS)
+await tyndWindow.setAlwaysOnBottom(true);                          // desktop widgets
+await tyndWindow.setOpacity(0.9);                                  // 0..1, includes the page
 await tyndWindow.center();
 ```
+
+`level` is `"floating"` (default), `"status"` or `"screen-saver"`. macOS maps each to its window level; Windows and Linux have a single topmost band, so every level behaves the same there.
+
+## Frameless windows: drag regions and resize edges
+
+With `decorations: false`, mark the elements of your custom title bar with HTML attributes; the injected bridge script handles them, no JavaScript needed:
+
+```html
+<header data-tynd-drag>
+  <span>My App</span>
+  <div data-tynd-no-drag><input placeholder="Search" /></div>
+  <button id="minimize">–</button>  <!-- calls tyndWindow.minimize() -->
+</header>
+<div data-tynd-resize="se" class="grip"></div>
+```
+
+| Attribute | Effect |
+|---|---|
+| `data-tynd-drag` | Mouse-down drags the window from this element and its children; double-click toggles maximize |
+| `data-tynd-no-drag` | Opts an element and its children out of the enclosing drag region |
+| `data-tynd-resize="n\|ne\|e\|se\|s\|sw\|w\|nw"` | Mouse-down starts a native resize from that edge or corner |
+
+Controls inside a drag region (`button`, `input`, `select`, `textarea`, `a`, `[contenteditable]`, `[role=button]`) stay clickable. A frameless, resizable, non-maximized window also resizes from a 5 px strip along the page border, with the matching resize cursor, on Windows and Linux; macOS resizes borderless windows natively.
+
+### Title bar overlay
+
+On macOS, keep the traffic lights over your own title bar with `window: { titleBarStyle: "overlay" }` (transparent title bar, hidden title, page drawn underneath; `"transparent"` keeps the title). Move the buttons with `setTrafficLightInset(x, y)` and leave room for them in your layout. `titleBarStyle` is ignored on Windows and Linux: WebView2 and WebKitGTK cannot draw native caption buttons over the page, so use `decorations: false` with your own buttons (`minimize()`, `toggleMaximize()`, `app.exit()` or `multiwindow.closeSelf()`) inside a `data-tynd-drag` bar.
 
 ## WebView ops
 
@@ -120,20 +178,62 @@ const title = await tyndWindow.getTitle();
 ```ts
 await tyndWindow.setTheme("dark");                           // "light" | "dark" | "system"
 await tyndWindow.setBackgroundColor({ r: 20, g: 20, b: 28 });
-await tyndWindow.setShadow(false);                            // macOS only
+await tyndWindow.setShadow(false);                            // macOS; Windows frameless windows
 await tyndWindow.setWindowIcon("/abs/new-icon.png");
 await tyndWindow.setProgressBar("normal", 42);                // taskbar / dock / Unity
-await tyndWindow.setBadge({ count: 3 });                      // macOS dock / Linux launcher; rejects on Windows
+await tyndWindow.setBadge({ count: 3 });                      // macOS dock / Windows taskbar overlay / Linux launcher
 await tyndWindow.setSkipTaskbar(true);                        // Windows / Linux
 await tyndWindow.setContentProtection(true);                  // blocks screenshots + capture
 await tyndWindow.setVisibleOnAllWorkspaces(true);             // macOS Spaces
-await tyndWindow.setSystemBackdrop("mica");                   // Windows 11: mica / acrylic / tabbed / none / auto
+await tyndWindow.setEffects({ effects: ["mica", "sidebar"] }); // first material the OS supports; [] clears
 await tyndWindow.setTitlebarTransparent(true);                // macOS
 await tyndWindow.setFullsizeContentView(true);                // macOS — HTML extends under titlebar
 await tyndWindow.setTrafficLightInset(12, 18);                // macOS — reposition window controls
 ```
 
-Calls that cannot have any effect on the current OS reject with `"<method>: only supported on <OS>"` (or `not supported on <OS>`) instead of resolving silently: `setSystemBackdrop` and `setEnabled` off Windows, `setBadge` on Windows. `setBadge` shows `label` on macOS (a bare `count` is shown as text) and `count` on Linux, where a label-only call rejects.
+Calls that cannot have any effect on the current OS reject with `"<method>: only supported on <OS>"` (or `not supported on <OS>`) instead of resolving silently: `setEnabled` off Windows, `setEffects` when no listed effect runs on the OS (always on Linux), `setAspectRatio` and `setMovable` on Linux. `setBadge` shows `label` on macOS (a bare `count` is shown as text), draws `label` (at most 3 characters) or `count` (`99+` above 99) as a taskbar overlay icon on Windows, and shows `count` on Linux, where a label-only call rejects. `{}` clears the badge.
+
+### Platform support
+
+| Call | Windows | macOS | Linux |
+|---|---|---|---|
+| `setAlwaysOnTop(…, { level })` | topmost (level ignored) | window level | keep-above (level ignored) |
+| `setAlwaysOnBottom` | yes | yes | yes |
+| `setKiosk` | yes | yes | yes |
+| `setSimpleFullscreen` | borderless fullscreen | non-native fullscreen | borderless fullscreen |
+| `setOpacity` | yes | yes | compositing WM |
+| `setAspectRatio` | yes | yes | rejects |
+| `setMovable` | yes | yes | rejects |
+| `setShadow` | frameless windows | yes | no-op |
+| `requestAttention("critical")` | flashes until focused | bounces until focused | urgent hint |
+| `setBadge` | overlay icon (label up to 3 chars or count) | Dock label | launcher count |
+| `setEffects` | `mica`, `tabbed` (11), `acrylic`, `blur` | `NSVisualEffectView` materials | rejects |
+| `titleBarStyle` option | ignored | yes | ignored |
+| Automatic resize border | yes | native | yes |
+
+## Window effects
+
+`setEffects` applies a native material behind the page. List effects in order of preference: the first one the running OS supports wins, so one call covers Windows and macOS. The material shows only where the window is transparent (`transparent: true`) and the page background is transparent.
+
+```ts
+await tyndWindow.setEffects({ effects: ["mica", "underWindowBackground"] });
+await tyndWindow.setEffects({ effects: ["acrylic"], color: "#20202080" }); // tinted acrylic
+await tyndWindow.setEffects({ effects: [] });                              // clear
+```
+
+| Option | Type | Applies to | Notes |
+|---|---|---|---|
+| `effects` | `WindowEffect[]` | all | `[]` clears; rejects when none runs on the OS |
+| `state` | `"followsWindowActiveState" \| "active" \| "inactive"` | macOS | default follows the window's active state |
+| `radius` | `number` | macOS | corner radius in points, 0-1000 |
+| `color` | `"#rrggbb"` / `"#rrggbbaa"` | Windows `acrylic`, `blur` | tint |
+
+| Effect | OS |
+|---|---|
+| `mica`, `tabbed` | Windows 11 |
+| `acrylic` | Windows 10 1809+ / 11 |
+| `blur` | Windows 10 / 11 (can lag while resizing on Windows 11 22621) |
+| `titlebar`, `selection`, `menu`, `popover`, `sidebar`, `headerView`, `sheet`, `windowBackground`, `hudWindow`, `fullScreenUI`, `tooltip`, `contentBackground`, `underWindowBackground`, `underPageBackground` | macOS |
 
 ## Focus / enable
 
@@ -148,9 +248,10 @@ await tyndWindow.setEnabled(false);  // Windows only (blocks mouse + keyboard in
 await tyndWindow.setCursorIcon("grab"); // 35 icons: grab, grabbing, zoomIn, text, wait, crosshair, ...
 await tyndWindow.setCursorPosition(320, 240);
 await tyndWindow.setCursorVisible(false);
+await tyndWindow.setCursorGrab(true);         // confine the cursor to the window
 await tyndWindow.setIgnoreCursorEvents(true); // click-through — mouse passes to windows behind
 
-// Drag / resize from custom regions (no OS chrome).
+// Drag / resize from script (data-tynd-drag / data-tynd-resize need none).
 dragHandle.addEventListener("mousedown", () => void tyndWindow.startDragging());
 resizeCorner.addEventListener("mousedown", () =>
   void tyndWindow.startResizeDragging("southEast"),
@@ -166,6 +267,25 @@ tyndWindow.onDragLeave(() => clearDropZone());
 tyndWindow.onDrop(({ paths }) => {
   for (const p of paths) void openFile(p); // p is a real OS path, not a File
 });
+```
+
+## Drag files out to other apps
+
+Start a native file drag from a `mousedown` or `dragstart` handler while the button is held. The files land in Explorer, Finder, a mail client or any other drop target.
+
+```ts
+thumbnail.addEventListener("dragstart", (event) => {
+  event.preventDefault();
+  void tyndWindow.startDrag({ files: [exportPath], icon: "/abs/path/preview.png" });
+});
+```
+
+`files` holds 1 to 1024 absolute paths; `icon` is an image path or PNG bytes (`Uint8Array`), and defaults to the system file icon. Every path goes through the `fs` policy and capability roots, like an `fs` read.
+
+Or declare it in HTML: `data-tynd-drag-file` on a draggable element (an image, a link or `draggable="true"`) starts the drag with that path. Separate several paths with newlines.
+
+```html
+<img src="preview.png" data-tynd-drag-file="/Users/me/Exports/report.pdf" />
 ```
 
 ## Webview hooks
@@ -191,9 +311,7 @@ await tyndWindow.positionAt("topRight", 20);
 
 ## Other windows
 
-`tyndWindow` only drives the window it runs in. Opening, listing and closing
-secondary windows (and child webviews) is the job of the
-[`multiwindow`](/docs/v1.0/api/plugins/multiwindow) plugin:
+`tyndWindow` is the handle of the window it runs in. The [`multiwindow`](/docs/v1.0/api/plugins/multiwindow) plugin opens secondary windows and returns handles with the same methods for any label:
 
 ```bash
 tynd add multiwindow
@@ -202,8 +320,20 @@ tynd add multiwindow
 ```ts
 import { multiwindow } from "@tynd/plugin-multiwindow/client";
 
-await multiwindow.create({ label: "settings", url: "/settings", title: "Settings" });
-await multiwindow.closeSelf(); // from inside a secondary window
+const settings = await multiwindow.create({ label: "settings", url: "/settings", title: "Settings" });
+await settings.setSize(640, 480);
+await (await multiwindow.getWindow("main"))?.setTitle("Editing");
+await settings.close();
+```
+
+On a secondary window, `setMenu(items)` sets its own menu bar (Windows and Linux) and `setMenu(null)` removes it; on the primary window it replaces the application bar. `close()` closes a secondary window.
+
+From the Bun backend, `getWindow(label = "main")` from `@tynd/core` returns the same handle. Backend handles subscribe to the same `on*` events, except `onDragOver`; see [Backend API](/docs/v1.0/api/backend).
+
+```ts
+import { getWindow } from "@tynd/core";
+
+await getWindow().setAlwaysOnTop(true);
 ```
 
 See the [Multi-Window guide](/docs/v1.0/guides/multi-window).
