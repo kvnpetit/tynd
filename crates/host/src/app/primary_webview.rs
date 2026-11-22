@@ -1,9 +1,11 @@
 use tao::{event_loop::EventLoopProxy, window::Window};
 use wry::{http::Request, WebContext, WebView, WebViewBuilder};
 
+#[cfg(target_os = "windows")]
+use super::gpu;
 #[cfg(target_os = "linux")]
 use super::LinuxWebviewContainer;
-use super::{gpu, util::webview_data_dir, UserEvent, PRIMARY_LABEL};
+use super::{util::webview_data_dir, UserEvent, PRIMARY_LABEL};
 use crate::webview::{
     builder::{with_debug_tools, with_tynd_runtime},
     handlers::{apply_webview_policy, WebviewPolicy},
@@ -63,18 +65,18 @@ pub(super) fn build_primary_webview(
     let webview_app_name = app_name.to_string();
     let mut web_context = WebContext::new(webview_data_dir(app_name));
     #[cfg(target_os = "linux")]
-    let primary_webview_container =
-        LinuxWebviewContainer::new(&native_window).unwrap_or_else(|e| {
-            crate::app::exit_startup_failure(&format!(
-                "Failed to initialize Linux GTK WebView container: {e}"
-            ))
-        });
+    let primary_webview_container = LinuxWebviewContainer::new(native_window).unwrap_or_else(|e| {
+        crate::app::exit_startup_failure(&format!(
+            "Failed to initialize Linux GTK WebView container: {e}"
+        ))
+    });
 
     let policy = WebviewPolicy::for_primary(&config.window)?;
     let protocol_id = scheme_bin::renderer_id(PRIMARY_LABEL, PRIMARY_LABEL);
     let wb = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_id(&protocol_id)
-        .with_incognito(config.window.incognito.unwrap_or(false));
+        .with_incognito(config.window.incognito.unwrap_or(false))
+        .with_transparent(config.window.transparent.unwrap_or(false));
     let mut wb = with_tynd_runtime(wb, PRIMARY_LABEL, PRIMARY_LABEL, call_tx, proxy);
 
     // Debug helper — only injected when the debug protocol is on, so
@@ -131,6 +133,7 @@ pub(super) fn build_primary_webview(
              WebKitGTK (Linux) is installed."
         )
     })?;
+    crate::webview::process_failed::watch(&webview, PRIMARY_LABEL);
 
     Ok(PrimaryWebview {
         app_name: webview_app_name,

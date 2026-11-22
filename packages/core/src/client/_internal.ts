@@ -1,5 +1,6 @@
 import { TYND_IPC_ERR_SENTINEL, TyndIpcError, type TyndIpcErrorCode } from "../errors";
 import { tynd } from "../logger";
+import { encodeChannelArgs } from "./channel";
 
 const KNOWN_IPC_ERROR_CODES: ReadonlySet<TyndIpcErrorCode> = new Set([
   "UNKNOWN_FN",
@@ -187,6 +188,7 @@ export function base64ToBytes(b64: string): Uint8Array {
 export function createCallProxy<T extends object>(
   routeFn: (prop: string) => string,
   extraTraps?: (prop: string) => unknown,
+  callOptions?: CallOptions,
 ): T {
   return new Proxy({} as T, {
     get(_target, prop: string | symbol) {
@@ -204,13 +206,151 @@ export function createCallProxy<T extends object>(
 
       return (...args: unknown[]) => {
         const wireFn = routeFn(prop);
-        const handle = window.__tynd__.call(wireFn, args);
+        const handle = window.__tynd__.call(wireFn, encodeChannelArgs(args));
         // Return a new handle that intercepts both the awaited final value
         // and the async-iterable yields, transparently rethrowing host
         // errors as `TyndIpcError` when the wire envelope is present.
-        return wrapCallHandleErrors(handle, wireFn);
+        const wrapped = wrapCallHandleErrors(handle, wireFn);
+        return callOptions ? applyCallOptions(wrapped, wireFn, callOptions) : wrapped;
       };
     },
+  });
+}
+
+/** Per-call options accepted by `api.withOptions(...)`. */
+export interface CallOptions {
+  /**
+   * Cancel the call when this signal aborts: the promise (and a stream's
+   * iteration) rejects with `signal.reason` (an `AbortError` by default) and
+   * the backend handler's `getCallContext().signal` aborts.
+   */
+  signal?: AbortSignal;
+  /**
+   * Cancel the call after this many milliseconds: the promise rejects with a
+   * `TyndIpcError` of code `TIMEOUT`. No deadline by default.
+   */
+  timeout?: number;
+}
+
+/** Validate `withOptions(...)` input; a typo must fail loudly, not silently drop the deadline. */
+export function checkCallOptions(opts: unknown): CallOptions {
+  if (opts === null || typeof opts !== "object") {
+    throw new TypeError("withOptions(): expected an object like { signal, timeout }");
+  }
+  const { signal, timeout } = opts as Record<string, unknown>;
+  if (
+    signal !== undefined &&
+    (signal === null ||
+      typeof (signal as AbortSignal).addEventListener !== "function" ||
+      typeof (signal as AbortSignal).aborted !== "boolean")
+  ) {
+    throw new TypeError("withOptions(): signal must be an AbortSignal");
+  }
+  if (
+    timeout !== undefined &&
+    (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0)
+  ) {
+    throw new TypeError("withOptions(): timeout must be a positive number of milliseconds");
+  }
+  return { signal: signal as AbortSignal | undefined, timeout: timeout as number | undefined };
+}
+
+/**
+ * Bind an abort signal and/or a deadline to a call handle. Either one cancels
+ * the call (`handle.cancel()`: the host forwards the cancel, the backend
+ * aborts the handler's signal) and replaces the shim's `CANCELLED` rejection
+ * with the abort reason or a `TIMEOUT` error.
+ */
+function applyCallOptions(
+  handle: CallHandle & Promise<unknown>,
+  fn: string,
+  opts: CallOptions,
+): CallHandle & Promise<unknown> {
+  const { signal, timeout } = opts;
+  if (!signal && timeout === undefined) return handle;
+  let reason: unknown;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cleanup = (): void => {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  };
+  const stop = (why: unknown): void => {
+    if (reason !== undefined) return;
+    reason = why;
+    cleanup();
+    handle.cancel().catch(() => undefined);
+  };
+  function onAbort(): void {
+    stop(signal?.reason ?? new DOMException("call aborted", "AbortError"));
+  }
+  const mapReject = (error: unknown): never => {
+    throw reason ?? error;
+  };
+  const promise: Promise<unknown> = Promise.resolve(handle).then(
+    (value) => {
+      cleanup();
+      return value;
+    },
+    (error: unknown) => {
+      cleanup();
+      return mapReject(error);
+    },
+  );
+  const markHandled = (): void => {
+    promise.catch(() => undefined);
+  };
+
+  if (signal?.aborted) {
+    onAbort();
+  } else {
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (timeout !== undefined) {
+      timer = setTimeout(() => stop(timeoutError(fn, timeout)), timeout);
+    }
+  }
+
+  const settle = (): void => {
+    cleanup();
+    markHandled();
+  };
+  return Object.assign(promise, {
+    cancel: (): Promise<IteratorResult<unknown>> => {
+      settle();
+      return handle.cancel();
+    },
+    [Symbol.asyncIterator]: () => {
+      markHandled();
+      return optionIterator(handle, mapReject, settle);
+    },
+  }) as CallHandle & Promise<unknown>;
+}
+
+/** Iterate `handle`, mapping rejections through `mapReject`; `onReturn` runs on early exit. */
+function optionIterator(
+  handle: CallHandle,
+  mapReject: (error: unknown) => never,
+  onReturn: () => void,
+): AsyncIterator<unknown> & AsyncIterable<unknown> {
+  const inner = handle[Symbol.asyncIterator]();
+  const wrap = <R>(p: Promise<R>): Promise<R> => p.then(undefined, mapReject) as Promise<R>;
+  const iterator: AsyncIterator<unknown> & AsyncIterable<unknown> = {
+    next: () => wrap(inner.next()),
+    return: (value?: unknown) => {
+      onReturn();
+      return wrap(inner.return ? inner.return(value) : Promise.resolve({ value, done: true }));
+    },
+    [Symbol.asyncIterator]() {
+      return iterator;
+    },
+  };
+  return iterator;
+}
+
+function timeoutError(fn: string, timeout: number): TyndIpcError {
+  return new TyndIpcError({
+    code: "TIMEOUT",
+    message: `call '${fn}' timed out after ${timeout}ms`,
+    fn,
   });
 }
 

@@ -1,33 +1,49 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
 use dpi::{LogicalPosition, LogicalSize, PhysicalPosition};
 use serde_json::{json, Value};
 use tao::window::{CursorIcon, ProgressBarState, ProgressState, ResizeDirection, Theme, Window};
 
+mod drag_out;
+mod frame;
+mod monitor;
 mod platform;
 
+use frame::dispatch_frame;
+pub(crate) use frame::set_kiosk;
+#[cfg(feature = "api-tray")]
+pub(crate) use monitor::work_area as monitor_work_area;
+pub(crate) use monitor::{refresh as refresh_monitors, set_change_hook as set_monitor_change_hook};
 use platform::{dispatch_platform, set_enabled};
 
 // `center` calls `crate::window::center_window` (the host window layer)
 // directly: both live in the same crate, so no startup-registered hook is
 // needed.
 
-/// Set by `tyndWindow.cancelClose()` during a `window:close-requested` handler.
-/// Polled 500ms later by the event loop before actually hiding / exiting.
-///
-/// Atomic ordering: pure signal flag — no dependent data ever published
-/// through it, so the matched `Release` store / `Acquire` load is
-/// sufficient. SeqCst would force a global memory barrier on every
-/// touch with no observable benefit (no other atomic depends on this
-/// happening in any particular global order).
-static CLOSE_CANCELLED: AtomicBool = AtomicBool::new(false);
+type BackendWindowHook = Box<dyn Fn(&str, Value) -> Result<Value, String> + Send + Sync>;
 
-pub(crate) fn reset_close_cancel() {
-    CLOSE_CANCELLED.store(false, Ordering::Release);
+/// Installed by the event loop at startup: posts a backend window command to
+/// the main thread and waits for its answer.
+static BACKEND_WINDOW_HOOK: OnceLock<BackendWindowHook> = OnceLock::new();
+
+pub(crate) fn set_backend_window_hook(hook: BackendWindowHook) {
+    if BACKEND_WINDOW_HOOK.set(hook).is_err() {
+        crate::tynd_warn!("backend window hook already installed");
+    }
 }
 
-pub(crate) fn close_cancelled() -> bool {
-    CLOSE_CANCELLED.load(Ordering::Acquire)
+/// Run a `window.*` command for the trusted backend (`hostCall("window", …)`
+/// from Bun). `args.window` names the target window (default `"main"`).
+/// Blocks the calling thread until the event loop answers, so never call it
+/// from the main thread.
+///
+/// # Errors
+/// The command's own error, or an error when the event loop is not running.
+pub fn dispatch_backend(method: &str, args: Value) -> Result<Value, String> {
+    let hook = BACKEND_WINDOW_HOOK
+        .get()
+        .ok_or_else(|| format!("window.{method}: the window event loop is not running"))?;
+    hook(method, args)
 }
 
 /// Dispatch a window command synchronously on the main (event-loop) thread.
@@ -41,7 +57,7 @@ pub(crate) fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value
     if let Some(result) = dispatch_window_action(win, method) {
         return result;
     }
-    if let Some(result) = dispatch_monitor(win, method, args) {
+    if let Some(result) = monitor::dispatch(win, method, args) {
         return result;
     }
     if let Some(result) = dispatch_pointer(win, method, args) {
@@ -50,8 +66,14 @@ pub(crate) fn dispatch(win: &Window, method: &str, args: &Value) -> Result<Value
     if let Some(result) = dispatch_appearance(win, method, args) {
         return result;
     }
+    if let Some(result) = dispatch_frame(win, method, args) {
+        return result;
+    }
     if let Some(result) = dispatch_platform(win, method, args) {
         return result;
+    }
+    if method == "startDrag" {
+        return drag_out::start_drag(win, args);
     }
 
     Err(format!("window.{method}: unknown method"))
@@ -149,10 +171,6 @@ fn dispatch_window_configuration(win: &Window, method: &str, args: &Value) -> Di
             });
             Some(Ok(Value::Null))
         },
-        "setAlwaysOnTop" => {
-            win.set_always_on_top(bool_arg(args, "always", false));
-            Some(Ok(Value::Null))
-        },
         "setDecorations" => {
             win.set_decorations(bool_arg(args, "decorations", true));
             Some(Ok(Value::Null))
@@ -219,38 +237,10 @@ fn dispatch_window_action(win: &Window, method: &str) -> DispatchResult {
         "isMinimized" => Some(Ok(Value::Bool(win.is_minimized()))),
         "isFullscreen" => Some(Ok(Value::Bool(win.fullscreen().is_some()))),
         "isVisible" => Some(Ok(Value::Bool(win.is_visible()))),
-        "cancelClose" => {
-            CLOSE_CANCELLED.store(true, Ordering::Release);
-            Some(Ok(Value::Null))
-        },
         "setFocus" => {
             win.set_focus();
             Some(Ok(Value::Null))
         },
-        "requestAttention" => {
-            // Cross-OS "flash the taskbar / bounce the dock" — platform
-            // independently handled by tao's UserAttentionType::Informational.
-            win.request_user_attention(Some(tao::window::UserAttentionType::Informational));
-            Some(Ok(Value::Null))
-        },
-        _ => None,
-    }
-}
-
-fn dispatch_monitor(win: &Window, method: &str, args: &Value) -> DispatchResult {
-    match method {
-        "monitors" => Some(Ok(list_monitors(win))),
-        "primaryMonitor" => Some(Ok(primary_monitor(win))),
-        "currentMonitor" => Some(Ok(current_monitor(win))),
-        "monitorFromPoint" => {
-            let (x, y) = coordinates(args);
-            Some(Ok(monitor_from_point(win, x, y)))
-        },
-        "globalCursorPosition" => Some(
-            win.cursor_position()
-                .map(|position| json!({ "x": position.x, "y": position.y }))
-                .map_err(|error| format!("globalCursorPosition: {error}")),
-        ),
         _ => None,
     }
 }
@@ -435,56 +425,5 @@ fn parse_resize_direction(dir: &str) -> Result<ResizeDirection, String> {
         "southWest" => ResizeDirection::SouthWest,
         "west" => ResizeDirection::West,
         other => return Err(format!("unknown resize direction '{other}'")),
-    })
-}
-
-fn monitor_to_json(m: &tao::monitor::MonitorHandle, is_primary: bool) -> Value {
-    let size = m.size();
-    let pos = m.position();
-    json!({
-        "name": m.name(),
-        "position": { "x": pos.x, "y": pos.y },
-        "size": { "width": size.width, "height": size.height },
-        "scale": m.scale_factor(),
-        "isPrimary": is_primary,
-    })
-}
-
-fn list_monitors(win: &Window) -> Value {
-    let primary_name = win.primary_monitor().and_then(|p| p.name());
-    let monitors: Vec<Value> = win
-        .available_monitors()
-        .map(|m| {
-            let is_primary = primary_name
-                .as_ref()
-                .is_some_and(|p| m.name().as_ref() == Some(p));
-            monitor_to_json(&m, is_primary)
-        })
-        .collect();
-    Value::Array(monitors)
-}
-
-fn primary_monitor(win: &Window) -> Value {
-    win.primary_monitor()
-        .map_or(Value::Null, |m| monitor_to_json(&m, true))
-}
-
-fn current_monitor(win: &Window) -> Value {
-    let primary_name = win.primary_monitor().and_then(|p| p.name());
-    win.current_monitor().map_or(Value::Null, |m| {
-        let is_primary = primary_name
-            .as_ref()
-            .is_some_and(|p| m.name().as_ref() == Some(p));
-        monitor_to_json(&m, is_primary)
-    })
-}
-
-fn monitor_from_point(win: &Window, x: f64, y: f64) -> Value {
-    let primary_name = win.primary_monitor().and_then(|p| p.name());
-    win.monitor_from_point(x, y).map_or(Value::Null, |m| {
-        let is_primary = primary_name
-            .as_ref()
-            .is_some_and(|p| m.name().as_ref() == Some(p));
-        monitor_to_json(&m, is_primary)
     })
 }

@@ -19,6 +19,7 @@ use wry::{
 
 use crate::ipc::events::EventScope;
 use crate::webview::navigation::{check_navigation_url, remote_origin};
+use crate::webview::permissions::{permission_handler, PermissionPolicy};
 
 // ---------------------------------------------------------------------------
 // App-local content: what plugin hooks, events and downloads key off.
@@ -104,14 +105,24 @@ pub(crate) fn drag_drop_handler(label: &str) -> impl Fn(DragDropEvent) -> bool +
 
 /// Page-load observer: fires once when the document starts loading and once
 /// when it finishes. Frontend listens via `tyndWindow.onPageLoad`.
-pub(crate) fn page_load_handler(label: &str) -> impl Fn(PageLoadEvent, String) + 'static {
+/// A committed document also cancels the backend calls the previous one left
+/// in flight: their promises died with it. `on_commit` runs right after the
+/// committed document has been classified (app-local or remote).
+pub(crate) fn page_load_handler(
+    label: &str,
+    call_tx: &crossbeam_channel::Sender<tynd_protocol::runtime::BackendCall>,
+    on_commit: impl Fn() + 'static,
+) -> impl Fn(PageLoadEvent, String) + 'static {
     let label = label.to_string();
+    let call_tx = call_tx.clone();
     move |event, url| {
         let phase = match event {
             PageLoadEvent::Started => {
                 // Started is the commit of a new main-frame document on every
                 // platform: the only point where app-local trust is granted.
                 crate::webview::navigation::document_committed(&label, &url);
+                on_commit();
+                crate::ipc::dispatch::cancel_calls_for_label(&label, &call_tx);
                 "started"
             },
             PageLoadEvent::Finished => "finished",
@@ -623,6 +634,8 @@ pub(crate) struct WebviewPolicy {
     /// `None`: allow for app-local content, deny for remote content.
     pub(crate) downloads: Option<DownloadPolicy>,
     pub(crate) proxy: Option<ProxySpec>,
+    /// Camera, microphone, geolocation... decisions.
+    pub(crate) permissions: PermissionPolicy,
 }
 
 impl WebviewPolicy {
@@ -655,29 +668,34 @@ impl WebviewPolicy {
             new_window,
             downloads,
             proxy,
+            permissions: PermissionPolicy::default(),
         })
     }
 
     /// Read `newWindow` / `downloads` / `proxy` from the arguments of
     /// `window.create` / `webview.create`.
     pub(crate) fn from_args(args: &Value, operation: &str) -> Result<Self, String> {
-        Self::from_raw(
+        let mut policy = Self::from_raw(
             args.get("newWindow").and_then(Value::as_str),
             args.get("downloads").and_then(Value::as_str),
             args.get("proxy").and_then(Value::as_str),
             operation,
-        )
+        )?;
+        policy.permissions = PermissionPolicy::from_value(args.get("permissions"), operation)?;
+        Ok(policy)
     }
 
     /// Policy of the primary window, from its `newWindow` / `downloads` /
     /// `proxy` config.
     pub(crate) fn for_primary(config: &crate::window::WindowConfig) -> Result<Self, String> {
-        Self::from_raw(
+        let mut policy = Self::from_raw(
             config.new_window.as_deref(),
             config.downloads.as_deref(),
             config.proxy.as_deref(),
             "window",
-        )
+        )?;
+        policy.permissions = PermissionPolicy::from_map(config.permissions.as_ref(), "window")?;
+        Ok(policy)
     }
 }
 
@@ -694,7 +712,8 @@ pub(crate) fn apply_webview_policy<'a>(
     let mut builder = builder
         .with_new_window_req_handler(new_window_handler(label, policy.new_window))
         .with_download_started_handler(started)
-        .with_download_completed_handler(completed);
+        .with_download_completed_handler(completed)
+        .with_permission_handler(permission_handler(label, policy.permissions.clone()));
     if let Some(proxy) = &policy.proxy {
         builder = builder.with_proxy_config(proxy.to_wry());
     }
@@ -702,7 +721,7 @@ pub(crate) fn apply_webview_policy<'a>(
     let builder = crate::webview::plugin_handlers::apply_plugin_hooks(builder, label, initial_url);
     #[cfg(not(feature = "plugins"))]
     let _ = initial_url;
-    builder
+    crate::webview::protocols::apply_app_protocols(builder, label)
 }
 
 // ---------------------------------------------------------------------------

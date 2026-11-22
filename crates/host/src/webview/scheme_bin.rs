@@ -252,6 +252,14 @@ fn fetch_site_permitted(has_origin: bool, fetch_site: Option<&str>) -> bool {
 
 #[cfg(feature = "api-fs")]
 fn route_read_binary(query: &HashMap<String, String>) -> BinResponse {
+    // A read: read-only runtime grants admit it.
+    crate::security::policy::with_fs_access(tynd_security_policy::FsAccess::Read, || {
+        read_binary(query)
+    })
+}
+
+#[cfg(feature = "api-fs")]
+fn read_binary(query: &HashMap<String, String>) -> BinResponse {
     let Some(path) = query.get("path") else {
         return err_response(StatusCode::BAD_REQUEST, "missing 'path' query".into());
     };

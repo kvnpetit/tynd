@@ -13,8 +13,17 @@
 // and custom both resolve plugins from their own package.
 
 export { base64ToBytes, bytesToBase64 } from "./client/_internal";
-export { type AppInfo, app } from "./client/app";
-export { type BackendClient, createBackend } from "./client/backend";
+export {
+  type ActivationPolicy,
+  type AppInfo,
+  app,
+  type DockBounceType,
+  type JumpList,
+  type JumpListCategory,
+  type JumpListItem,
+} from "./client/app";
+export { type BackendClient, type CallOptions, createBackend } from "./client/backend";
+export { Channel } from "./client/channel";
 export { createFrontendEmitter } from "./client/frontend-emitter";
 export {
   type LogConfigureOptions,
@@ -22,10 +31,22 @@ export {
   type LogRotation,
   log,
 } from "./client/log";
-export { type Monitor, monitors } from "./client/monitor";
-export { type OsInfo, os } from "./client/os";
+export {
+  type Monitor,
+  type MonitorChange,
+  type MonitorRect,
+  type MonitorSubscription,
+  monitors,
+} from "./client/monitor";
+export {
+  type MediaAccessKind,
+  type MediaAccessStatus,
+  type OsInfo,
+  os,
+} from "./client/os";
 export { path } from "./client/path";
 export { createPluginClient, type PluginClient } from "./client/plugin";
+export { convertFileSrc, protocolUrl } from "./client/protocol";
 export {
   abortable,
   listenN,
@@ -48,13 +69,27 @@ export {
   type WebviewDownloadEvent,
   type WebviewDownloadStarted,
   type WebviewNewWindowEvent,
+  type WebviewPageSize,
+  type WebviewPdfOptions,
+  type WebviewTarget,
 } from "./client/webview";
 export {
+  type AlwaysOnTopLevel,
+  type AttentionKind,
   type DownloadPolicy,
   type NewWindowPolicy,
+  type StartDragOptions,
+  type TyndWindow,
   tyndWindow,
+  type WindowOptions,
   type WindowPreset,
 } from "./client/window";
+export type {
+  MacosEffect,
+  WindowEffect,
+  WindowEffectsOptions,
+  WindowsEffect,
+} from "./client/window-effects";
 export { type WorkerHandle, workers } from "./client/workers";
 export { TyndIpcError, type TyndIpcErrorCode } from "./errors";
 export type { Emitter, EmitterMap } from "./types";

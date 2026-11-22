@@ -15,8 +15,8 @@ use tynd_host::{tynd_info, tynd_warn};
 use tynd_protocol::runtime::{BackendCall, BackendConfig, BackendEvent, BackendReturnPayload};
 
 use super::wire::{
-    parse_bun_msg, read_bounded_json_line, read_bounded_line, read_config, strip_trailing_eol,
-    BunMsg,
+    decode_protocol_body, parse_bun_msg, read_bounded_json_line, read_bounded_line, read_config,
+    strip_trailing_eol, BunMsg,
 };
 use super::ChildSlot;
 
@@ -108,6 +108,7 @@ fn stderr_reader_loop(stderr: ChildStderr) {
             Ok(_) => {
                 let text = String::from_utf8_lossy(strip_trailing_eol(&line));
                 if !text.is_empty() {
+                    crate::crash::record_stderr_line(&text);
                     tynd_warn!("[bun:stderr] {text}");
                 }
             },
@@ -144,6 +145,15 @@ fn stdout_reader_loop<R: BufRead>(reader: &mut R, context: StdoutReaderContext) 
     let host_calls = HostCallDispatcher::new(context.call_tx.clone());
     json_reader_loop(reader, &context.event_tx, &host_calls);
     let controlled = context.shutdown_expected.load(Ordering::SeqCst);
+    if !controlled && !context.packaged_smoke {
+        // Give the child a moment to finish exiting (and its last stderr
+        // lines to arrive) so the crash report carries its exit code.
+        let exit_code = context
+            .child_slot
+            .upgrade()
+            .and_then(|slot| slot.wait_exit_code(std::time::Duration::from_millis(500)));
+        crate::crash::write_backend_exit(exit_code);
+    }
     if !controlled {
         // EOF or a framing error ended the channel: the child is dead or can no
         // longer be understood. Reap/kill it (a child blocked on a full stdout
@@ -219,6 +229,15 @@ fn forward_bun_msg(msg: BunMsg, tx: &mpsc::Sender<BackendEvent>, host_calls: &Ho
                 args,
             });
         },
+        BunMsg::ProtocolResponse {
+            id,
+            status,
+            headers,
+            body,
+        } => match decode_protocol_body(body.as_deref()) {
+            Ok(body) => tynd_host::resolve_backend_protocol(&id, status, headers, body),
+            Err(error) => tynd_host::fail_backend_protocol(&id, &error),
+        },
         BunMsg::Config { .. } => {
             // Stale config frame mid-stream — Bun re-emitted config after
             // handshake. Contract violation, but not worth crashing over.
@@ -228,12 +247,28 @@ fn forward_bun_msg(msg: BunMsg, tx: &mpsc::Sender<BackendEvent>, host_calls: &Ho
 
 /// Bun plugins are trusted application code, but they must not gain an
 /// unbounded backdoor into every native host API. The backend bridge exposes
-/// policy checks plus narrow bind validation; actual filesystem, network, or
-/// process operations remain in Bun or go through the normal renderer ACL path.
+/// policy checks, narrow bind validation and window control (what any app
+/// renderer can already do); actual filesystem, network, or process operations
+/// remain in Bun or go through the normal renderer ACL path.
 fn dispatch_backend_host_call(api: &str, method: &str, args: Value) -> Result<Value, String> {
+    // Crash reports are written by this runtime (it outlives the backend), so
+    // `crashReporter.start()` is answered here, not by a host API.
+    if api == "crashReporter" {
+        return match method {
+            "start" => crate::crash::start(&args),
+            _ => Err(format!(
+                "backend host call 'crashReporter.{method}' is not allowed"
+            )),
+        };
+    }
+    // Window control (`getWindow(label)` in the backend) runs on the event
+    // loop; this worker thread waits for its answer.
+    if api == "window" {
+        return tynd_host::dispatch_backend_window(method, args);
+    }
     if !backend_host_call_allowed(api, method) {
         return Err(format!(
-            "backend host call '{api}.{method}' is not allowed; only policy and bind checks and \
+            "backend host call '{api}.{method}' is not allowed; only policy checks, scope grants, bind and \
              the startup trust handshake (app.setInfo, updater.configure) are exposed"
         ));
     }
@@ -255,6 +290,12 @@ fn backend_host_call_allowed(api: &str, method: &str) -> bool {
                 | "checkAudioOutput"
                 | "checkScreenCapture"
                 | "checkWindow"
+                // Runtime scope grants (`capabilities.*` in `@tynd/core`).
+                | "allowPath"
+                | "revokePath"
+                | "allowUrl"
+                | "revokeUrl"
+                | "listGrants"
         ),
         "network-loopback" | "network-public" => method == "bind",
         "app" => method == "setInfo",
@@ -396,6 +437,66 @@ mod tests {
         assert!(backend_host_call_allowed("network-loopback", "bind"));
     }
 
+    /// Every `hostCall("security", "<method>", ...)` the TS backend sends
+    /// (`packages/core/src`, tests excluded) must pass the allow-list.
+    #[test]
+    fn allows_every_security_method_the_core_package_sends() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/core/src");
+        let mut methods = Vec::new();
+        for entry in std::fs::read_dir(&src).expect("read packages/core/src") {
+            let path = entry.expect("dir entry").path();
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            let is_ts = path.extension().is_some_and(|ext| ext == "ts");
+            if !is_ts || name.ends_with(".test.ts") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read TS source");
+            methods.extend(security_methods_sent(&text));
+        }
+        for method in [
+            "allowPath",
+            "revokePath",
+            "allowUrl",
+            "revokeUrl",
+            "listGrants",
+        ] {
+            assert!(
+                methods.iter().any(|m| m == method),
+                "parser missed {method}"
+            );
+        }
+        for method in &methods {
+            assert!(
+                backend_host_call_allowed("security", method),
+                "security.{method} is sent by @tynd/core but refused by the allow-list"
+            );
+        }
+    }
+
+    /// Method names of `hostCall("security", "<method>"` calls in `text`.
+    fn security_methods_sent(text: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for (index, _) in text.match_indices("hostCall(") {
+            let rest = text[index + "hostCall(".len()..].trim_start();
+            let Some(rest) = rest.strip_prefix("\"security\"") else {
+                continue;
+            };
+            let Some(rest) = rest.trim_start().strip_prefix(',') else {
+                continue;
+            };
+            let Some(rest) = rest.trim_start().strip_prefix('"') else {
+                continue;
+            };
+            if let Some(end) = rest.find('"') {
+                out.push(rest[..end].to_owned());
+            }
+        }
+        out
+    }
+
     #[test]
     fn refuses_everything_else_on_app_and_updater() {
         for (api, method) in [
@@ -412,6 +513,14 @@ mod tests {
         ] {
             assert!(!backend_host_call_allowed(api, method), "{api}.{method}");
         }
+    }
+
+    #[test]
+    fn window_calls_go_to_the_event_loop() {
+        // No event loop runs in this test binary: the host says so instead of
+        // the allow-list refusing the call.
+        let error = dispatch_backend_host_call("window", "setTitle", json!({})).unwrap_err();
+        assert!(error.contains("event loop is not running"), "{error}");
     }
 
     #[test]

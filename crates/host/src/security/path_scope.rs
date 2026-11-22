@@ -7,15 +7,23 @@ use std::{
 
 use cap_std::{ambient_authority, fs::Dir};
 
+use crate::app_dirs::{app_dir, AppDir};
+
 // Capability roots are always available, including profiles without the
 // renderer-facing `api-fs` feature. Native and Bun plugins can call
 // `security.checkFs`; that policy probe must not authorize ambient paths that
 // the capability-confined FS API itself could never reach.
 //
-// Defaults: cwd, data_dir, config_dir, temp_dir, home_dir. `Dir`-relative
-// operations retain cap-std's platform-specific confinement. The separate
-// resolved prefix is used only for policy decisions made before third-party
-// libraries that require an ambient path.
+// Default roots: the app's own `<data>/<app>`, `<config>/<app>`,
+// `<cache>/<app>` and `<temp>/<app>` directories, plus the working directory
+// under `tynd dev` only (a packaged app's cwd is whatever its launcher chose,
+// often `/` or `C:\Windows\System32`). Anything else needs an explicit
+// `fs.allow` rule (its wildcard-free leading directory is opened on demand)
+// or a runtime grant. The built-in deny list (`security::sensitive`) applies
+// on top of all of them. `Dir`-relative operations retain cap-std's
+// platform-specific confinement. The separate resolved prefix is used only
+// for policy decisions made before third-party libraries that require an
+// ambient path.
 
 struct Root {
     /// Trusted root spelling used to map a caller path to a relative `Dir`
@@ -34,21 +42,26 @@ struct Root {
 
 static ROOTS: LazyLock<Vec<Root>> = LazyLock::new(build_default_roots);
 
-fn build_default_roots() -> Vec<Root> {
+/// Default root directories, before deduplication and opening: the app's own
+/// directories (`crate::app_dirs`), plus the working directory under
+/// `tynd dev`.
+fn default_root_candidates(dev: bool) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd);
+    if dev {
+        // Never a filesystem root, even in dev: that would be the whole disk.
+        if let Some(cwd) = std::env::current_dir()
+            .ok()
+            .filter(|cwd| lexical_clean(cwd).parent().is_some())
+        {
+            candidates.push(cwd);
+        }
     }
-    if let Some(path) = dirs::data_dir() {
-        candidates.push(path);
-    }
-    if let Some(path) = dirs::config_dir() {
-        candidates.push(path);
-    }
-    candidates.push(std::env::temp_dir());
-    if let Some(path) = dirs::home_dir() {
-        candidates.push(path);
-    }
+    candidates.extend(AppDir::SCOPE_ROOTS.into_iter().filter_map(app_dir));
+    candidates
+}
+
+fn build_default_roots() -> Vec<Root> {
+    let candidates = default_root_candidates(crate::webview::scheme::dev_mode());
 
     let mut roots = Vec::new();
     for candidate in candidates {
@@ -247,12 +260,70 @@ fn resolve_existing_or_ancestor(path: &Path) -> Result<PathBuf, String> {
 /// I/O relative to the `Dir` returned by [`resolve`], or accept an already-open
 /// descriptor. A compromised renderer cannot create an out-of-root symlink
 /// through Tynd's FS API because `fs.symlink` validates both ends separately.
-pub(crate) fn resolve_for_policy(input: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_for_policy(input: &str) -> Result<(PathBuf, bool), String> {
+    resolve_scoped(input).map(|scoped| (scoped.resolved, scoped.in_roots))
+}
+
+/// A caller path after both root checks.
+struct Scoped {
+    #[cfg_attr(
+        not(any(feature = "api-fs", feature = "api-vault")),
+        allow(dead_code, reason = "read by the Dir-confined `resolve` only")
+    )]
+    lexical: PathBuf,
+    resolved: PathBuf,
+    /// Both spellings lie inside the capability roots. `false`: only a
+    /// runtime grant (`security.allowPath`, dialog `grantAccess`) admits it.
+    in_roots: bool,
+}
+
+/// Lexical then resolved root check. A path outside the capability roots is
+/// admitted only when a runtime grant covers it, checked lexically before
+/// the first kernel lookup (no out-of-root probe) and again on the resolved
+/// spelling (no symlink escape out of the grant).
+fn resolve_scoped(input: &str) -> Result<Scoped, String> {
     let lexical = absolute_lexical(input)?;
-    ensure_lexically_within_root(&lexical)?;
+    crate::security::sensitive::check(&lexical)?;
+    let lexical_in_roots = root_for_lexical(&lexical).is_some();
+    if !lexical_in_roots && !reachable_outside_roots(&lexical) {
+        ensure_lexically_within_root(&lexical)?;
+    }
     let resolved = resolve_existing_or_ancestor(&lexical)?;
-    ensure_resolved_within_root(&resolved)?;
-    Ok(resolved)
+    crate::security::sensitive::check(&resolved)?;
+    let in_roots = lexical_in_roots && ensure_resolved_within_root(&resolved).is_ok();
+    if !in_roots && !reachable_outside_roots(&resolved) {
+        ensure_resolved_within_root(&resolved)?;
+        // Inside the roots again, but reached from a granted or allowed
+        // spelling: the grant / rule must cover where the path really is.
+        return Err(format!(
+            "fs: resolved path '{}' is not covered by the grant or fs.allow rule it was reached through",
+            resolved.display()
+        ));
+    }
+    Ok(Scoped {
+        lexical,
+        resolved,
+        in_roots,
+    })
+}
+
+/// Outside the roots, a runtime grant or an explicit `fs.allow` rule admits
+/// a path.
+fn reachable_outside_roots(path: &Path) -> bool {
+    granted(path) || crate::security::policy::fs_allow_rule_matches(path)
+}
+
+fn granted(path: &Path) -> bool {
+    path.to_str().is_some_and(|path| {
+        crate::security::grants::current().allows_path(path, tynd_security_policy::FsAccess::Read)
+    })
+}
+
+/// Kernel-resolve any absolute or cwd-relative path without the root checks:
+/// existing paths are canonicalized, a missing one resolves its deepest
+/// existing ancestor. Only for the trusted grant writers.
+pub(crate) fn resolve_kernel(input: &str) -> Result<PathBuf, String> {
+    resolve_existing_or_ancestor(&absolute_lexical(input)?)
 }
 
 /// Map user input to a pre-opened capability `Dir` and relative path.
@@ -264,23 +335,69 @@ pub(crate) fn resolve_for_policy(input: &str) -> Result<PathBuf, String> {
 /// location, but host FS operations never escape their selected `Dir`.
 #[cfg(any(feature = "api-fs", feature = "api-vault"))]
 pub(crate) fn resolve(input: &str) -> Result<(&'static Dir, PathBuf), String> {
-    let lexical = absolute_lexical(input)?;
-    ensure_lexically_within_root(&lexical)?;
-    let resolved = resolve_existing_or_ancestor(&lexical)?;
-    ensure_resolved_within_root(&resolved)?;
-    crate::security::policy::check_fs_resolved(&resolved)?;
+    let scoped = resolve_scoped(input)?;
+    crate::security::policy::check_fs_scoped(&scoped.resolved, scoped.in_roots)?;
+    let lexical = scoped.lexical;
 
-    let Some((root, mut relative)) = root_for_lexical(&lexical) else {
-        return Err(format!(
-            "fs: path '{}' is outside capability roots ({})",
-            lexical.display(),
-            scope_summary(false)
-        ));
+    let (dir, mut relative) = if let Some((root, relative)) = root_for_lexical(&lexical) {
+        (&root.dir, relative)
+    } else {
+        outside_root_dir(&lexical)?
     };
     if relative.as_os_str().is_empty() {
         relative = PathBuf::from(".");
     }
-    Ok((&root.dir, relative))
+    Ok((dir, relative))
+}
+
+/// Directories opened for runtime grants and `fs.allow` anchors, opened
+/// once per path and kept for the process lifetime (`resolve` hands out
+/// `&'static Dir`). Revoking a grant does not close its `Dir`, but nothing
+/// reaches it any more: every `resolve` re-checks the live grants and policy
+/// first.
+#[cfg(any(feature = "api-fs", feature = "api-vault"))]
+static OUTSIDE_DIRS: LazyLock<
+    parking_lot::Mutex<std::collections::HashMap<PathBuf, &'static Dir>>,
+> = LazyLock::new(Default::default);
+
+/// `Dir` for a path outside the roots: the base of the grant covering it,
+/// else the anchor of the `fs.allow` rule naming it.
+#[cfg(any(feature = "api-fs", feature = "api-vault"))]
+fn outside_root_dir(lexical: &Path) -> Result<(&'static Dir, PathBuf), String> {
+    let outside = || {
+        format!(
+            "fs: path '{}' is outside capability roots ({})",
+            lexical.display(),
+            scope_summary(false)
+        )
+    };
+    let base = crate::security::grants::base_for(lexical)
+        .or_else(|| crate::security::policy::fs_allow_anchor(lexical))
+        .ok_or_else(outside)?;
+    let relative = strip_prefix_platform(lexical, &base).ok_or_else(outside)?;
+    let mut dirs = OUTSIDE_DIRS.lock();
+    if let Some(dir) = dirs.get(&base) {
+        return Ok((dir, relative));
+    }
+    if dirs.len() >= 2 * tynd_security_policy::MAX_PATH_GRANTS {
+        return Err("fs: too many directories outside the capability roots are open".into());
+    }
+    let dir = Dir::open_ambient_dir(&base, ambient_authority())
+        .map_err(|error| format!("fs: open directory '{}': {error}", base.display()))?;
+    let dir: &'static Dir = Box::leak(Box::new(dir));
+    dirs.insert(base, dir);
+    Ok((dir, relative))
+}
+
+/// A fresh directory inside the default `<temp>/<app>` capability root, for
+/// tests exercising the root-confined APIs.
+#[cfg(all(
+    test,
+    any(feature = "api-fs", feature = "api-vault", feature = "api-http")
+))]
+pub(crate) fn scoped_tempdir() -> tempfile::TempDir {
+    let base = crate::app_dirs::ensure_app_dir(AppDir::Temp).expect("app temp root");
+    tempfile::tempdir_in(base).expect("tempdir")
 }
 
 fn scope_summary(resolved: bool) -> String {
@@ -295,4 +412,97 @@ fn scope_summary(resolved: bool) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text(path: &Path) -> &str {
+        path.to_str().expect("utf-8 path")
+    }
+
+    #[test]
+    fn cwd_is_a_root_only_in_dev() {
+        let cwd = std::env::current_dir().expect("cwd");
+        assert!(!default_root_candidates(false).contains(&cwd));
+        assert!(default_root_candidates(true).contains(&cwd));
+    }
+
+    #[test]
+    fn default_roots_are_the_app_scoped_directories() {
+        let candidates = default_root_candidates(false);
+        assert!(
+            candidates.len() >= 2,
+            "data/config/cache/temp app directories"
+        );
+        for candidate in &candidates {
+            assert_eq!(
+                candidate.file_name().and_then(|name| name.to_str()),
+                Some(crate::app_dirs::name()),
+                "{}",
+                candidate.display()
+            );
+        }
+        let home = dirs::home_dir().expect("home dir");
+        assert!(!candidates.contains(&home));
+        assert!(!candidates.contains(&std::env::temp_dir()));
+    }
+
+    #[test]
+    fn home_and_other_apps_data_are_outside_the_default_scope() {
+        let home = dirs::home_dir().expect("home dir");
+        let error = resolve_for_policy(text(&home.join("tynd-not-in-scope.txt")))
+            .expect_err("home is not a root");
+        assert!(error.contains("outside capability roots"), "{error}");
+        let data = dirs::data_dir().expect("data dir");
+        assert!(resolve_for_policy(text(&data.join("SomeOtherApp").join("db.sqlite"))).is_err());
+        let own = data.join(crate::app_dirs::name()).join("settings.json");
+        assert!(resolve_for_policy(text(&own)).is_ok());
+    }
+
+    #[test]
+    fn a_filesystem_root_is_never_reachable_by_default() {
+        let root = std::env::temp_dir()
+            .ancestors()
+            .last()
+            .expect("fs root")
+            .join("tynd-root-probe.txt");
+        assert!(resolve_for_policy(text(&root)).is_err());
+    }
+
+    #[test]
+    fn credential_stores_and_the_grants_file_are_denied_inside_the_scope() {
+        let home = dirs::home_dir().expect("home dir");
+        let error =
+            resolve_for_policy(text(&home.join(".ssh").join("id_ed25519"))).expect_err("protected");
+        assert!(error.contains("protected location"), "{error}");
+        let grants = crate::security::grants::security_dir()
+            .expect("data dir")
+            .join("grants.json");
+        let error = resolve_for_policy(text(&grants)).expect_err("protected");
+        assert!(error.contains("protected location"), "{error}");
+    }
+
+    #[test]
+    fn a_grant_never_reaches_a_protected_file() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        fs::write(temp.path().join(".netrc"), b"machine x").expect("write");
+        fs::write(temp.path().join("notes.txt"), b"x").expect("write");
+        let base = dunce::canonicalize(temp.path()).expect("canonical");
+        crate::security::grants::grant_path(text(&base), true, false).expect("grant");
+        let allowed = tynd_security_policy::FsAccess::Read;
+        crate::security::policy::with_fs_access(allowed, || {
+            assert!(
+                crate::security::policy::authorize_fs_path(text(&base.join("notes.txt"))).is_ok()
+            );
+            let error = crate::security::policy::authorize_fs_path(text(&base.join(".netrc")))
+                .expect_err("protected");
+            assert!(error.contains("protected location"), "{error}");
+        });
+        let revoke = serde_json::json!({ "path": text(&base) });
+        crate::security::grants::dispatch("revokePath", &revoke)
+            .expect("grant method")
+            .expect("revoke");
+    }
 }

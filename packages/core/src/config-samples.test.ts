@@ -123,7 +123,7 @@ describe("app.start samples", () => {
 
   test("the checker flags a nested typo next to free identifiers", () => {
     expect(unknownKeys("x.md", "{ window: { titel: appName, width: size.w } } as const")).toEqual([
-      'x.md: window.titel: unknown option "titel"; valid options: title, width, height, minWidth, minHeight, maxWidth, maxHeight, resizable, decorations, transparent, alwaysOnTop, center, fullscreen, maximized, userAgent, incognito, newWindow, downloads, proxy, webgpu, hardwareAcceleration, preferredFps, contextLostRecovery, colorSpace, hdr, vrr, gpu',
+      'x.md: window.titel: unknown option "titel"; valid options: title, width, height, minWidth, minHeight, maxWidth, maxHeight, resizable, decorations, transparent, alwaysOnTop, center, fullscreen, maximized, visible, kiosk, titleBarStyle, x, y, theme, skipTaskbar, backgroundColor, userAgent, incognito, newWindow, downloads, proxy, permissions, webgpu, hardwareAcceleration, preferredFps, contextLostRecovery, colorSpace, hdr, vrr, gpu',
     ]);
   });
 

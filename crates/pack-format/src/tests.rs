@@ -382,3 +382,97 @@ fn damaged_debug_flag_fails_closed() {
     assert!(!parse_debug_flag(b"0"));
     assert!(!parse_debug_flag(b"true"));
 }
+
+#[test]
+fn integrity_digest_covers_headers_and_data_in_order() {
+    let a = [
+        PackEntry::new("bundle.js", b"x"),
+        PackEntry::new("frontend/a", b"y"),
+    ];
+    let renamed = [
+        PackEntry::new("bundle.jt", b"x"),
+        PackEntry::new("frontend/a", b"y"),
+    ];
+    let reordered = [
+        PackEntry::new("frontend/a", b"y"),
+        PackEntry::new("bundle.js", b"x"),
+    ];
+    // Moving a byte from one entry to the next keeps the concatenated data but
+    // changes the length prefixes.
+    let shifted = [
+        PackEntry::new("bundle.js", b""),
+        PackEntry::new("frontend/a", b"xy"),
+    ];
+    let digest = integrity_digest(&a);
+    assert_eq!(digest.len(), INTEGRITY_HEX_LEN);
+    assert_ne!(digest, integrity_digest(&renamed));
+    assert_ne!(digest, integrity_digest(&reordered));
+    assert_ne!(digest, integrity_digest(&shifted));
+}
+
+#[test]
+fn integrity_digest_matches_a_streaming_read_of_the_written_pack() {
+    let payload = [
+        PackEntry::new("bundle.js", b"console.log(1)"),
+        PackEntry::new("frontend/index.html", b"<html></html>"),
+    ];
+    let digest = integrity_digest(&payload);
+    let mut entries = vec![PackEntry::new(INTEGRITY_ENTRY, digest.as_bytes())];
+    entries.extend(payload);
+    let file = TempFile::with_bytes(&pack(b"HOST", &entries));
+
+    let mut reader = PackReader::open_path(&file.0).expect("pack");
+    let (first, len) = reader.next_header().expect("header").expect("entry");
+    assert_eq!(first, INTEGRITY_ENTRY);
+    let mut stored = Vec::new();
+    reader.copy_entry_to(len, &mut stored).expect("read digest");
+    let mut hasher = IntegrityHasher::new();
+    while let Some((rel, len)) = reader.next_header().expect("header") {
+        let mut data = Vec::new();
+        reader.copy_entry_to(len, &mut data).expect("read entry");
+        hasher.entry_header(&rel, len);
+        hasher.update(&data);
+    }
+    assert!(integrity_matches(&stored, &hasher.finalize_hex()));
+}
+
+#[test]
+fn integrity_matches_rejects_malformed_or_different_digests() {
+    let digest = integrity_digest(&[PackEntry::new("bundle.js", b"x")]);
+    assert!(integrity_matches(
+        digest.to_ascii_uppercase().as_bytes(),
+        &digest
+    ));
+    assert!(integrity_matches(
+        format!(" {digest}\n").as_bytes(),
+        &digest
+    ));
+    assert!(!integrity_matches(b"", &digest));
+    assert!(!integrity_matches(&digest.as_bytes()[..63], &digest));
+    let other = integrity_digest(&[PackEntry::new("bundle.js", b"y")]);
+    assert!(!integrity_matches(other.as_bytes(), &digest));
+}
+
+#[test]
+fn app_identifier_accepts_reverse_dns_and_rejects_path_tricks() {
+    for good in ["com.example.app", "com.example.my-app", "my_app", "app2"] {
+        assert!(is_valid_app_identifier(good), "{good}");
+    }
+    let too_long = "a".repeat(MAX_APP_IDENTIFIER_LEN + 1);
+    for bad in [
+        "",
+        ".",
+        "..",
+        ".hidden",
+        "com.example.",
+        "com..example",
+        "com/example",
+        r"com\example",
+        "-app",
+        "com.example.app ",
+        "café",
+        too_long.as_str(),
+    ] {
+        assert!(!is_valid_app_identifier(bad), "{bad:?}");
+    }
+}

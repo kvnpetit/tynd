@@ -138,9 +138,11 @@ fn load_source_webview_html(
         return Err("loadHtml: not permitted (set `allowLoadHtml: true` at window create)".into());
     }
     let html = args.get("html").and_then(Value::as_str).unwrap_or("");
+    // The document runs as app content: it gets the baseline CSP too.
+    let html = crate::webview::scheme::with_load_html_csp(html);
     let webview = command_source_webview(label, context.windows);
     webview
-        .load_html(html)
+        .load_html(&html)
         .map_err(|error| format!("loadHtml: {error}"))?;
     Ok(Value::Null)
 }

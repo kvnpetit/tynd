@@ -8,8 +8,10 @@
 //! - **Battery / AC**:
 //!   - Windows: `GetSystemPowerStatus` from `Win32_System_Power`.
 //!   - Linux: read-only sysfs at `/sys/class/power_supply/*`.
-//!   - macOS: needs IOKit binding (`IOPSCopyPowerSourcesInfo`); until wired, every battery field
-//!     returns null.
+//!   - macOS: `starship-battery` (IOKit `AppleSmartBattery`); "on battery" means discharging.
+//! - **Thermal state**: `NSProcessInfo.thermalState` (macOS only).
+//! - **Power-source changes**: `GUID_ACDC_POWER_SOURCE` notifications on Windows; a 5 s poll of
+//!   [`power_status`] on macOS and Linux (see `source_poll`).
 
 use std::{
     sync::LazyLock,
@@ -25,6 +27,11 @@ use crate::ipc::error::IpcError;
 use crate::tynd;
 
 mod inhibit;
+#[cfg(any(
+    all(target_os = "macos", feature = "power-events-mac"),
+    all(target_os = "linux", feature = "power-events-linux")
+))]
+mod source_poll;
 
 const MONITOR_START_TIMEOUT: Duration = Duration::from_secs(2);
 const MONITOR_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
@@ -95,9 +102,16 @@ impl PowerApi {
     }
 
     /// Install the OS power-event watcher. Idempotent. After this returns,
-    /// listeners on `power:suspend|resume|lock|unlock` start firing.
+    /// listeners on `power:suspend|resume|lock|unlock|shutdown`,
+    /// `power:source-change` and (macOS) `power:thermal-change` start firing.
     pub fn subscribe_power_events() -> Result<(), String> {
         ensure_power_monitor()
+    }
+
+    /// Thermal pressure: `"nominal"`, `"fair"`, `"serious"` or `"critical"`
+    /// on macOS, `null` elsewhere (no public OS API).
+    pub fn get_thermal_state() -> Option<&'static str> {
+        thermal_state()
     }
 
     /// Keep the system (and the display when `display` is true) awake until
@@ -223,9 +237,9 @@ fn shutdown_error() -> String {
 #[cfg(target_os = "windows")]
 type PlatformMonitor = windows_power::Monitor;
 #[cfg(all(target_os = "macos", feature = "power-events-mac"))]
-type PlatformMonitor = macos_power::Monitor;
+type PlatformMonitor = source_poll::WithSourcePoll<macos_power::Monitor>;
 #[cfg(all(target_os = "linux", feature = "power-events-linux"))]
-type PlatformMonitor = linux_power::Monitor;
+type PlatformMonitor = source_poll::WithSourcePoll<linux_power::Monitor>;
 #[cfg(any(
     all(target_os = "macos", not(feature = "power-events-mac")),
     all(target_os = "linux", not(feature = "power-events-linux")),
@@ -257,11 +271,13 @@ static MONITOR: LazyLock<MonitorLifecycle<PlatformMonitor>> =
     LazyLock::new(MonitorLifecycle::default);
 
 /// Install the per-OS power-event watcher exactly once. Each backend emits
-/// `power:{suspend,resume,lock,unlock}` via `crate::ipc::events::emit`.
+/// `power:{suspend,resume,lock,unlock,shutdown,source-change}` via
+/// `crate::ipc::events::emit`.
 ///
 /// Backends:
-/// - Windows: hidden `HWND_MESSAGE` + `WTSRegisterSessionNotification` + `GetMessageW` pump.
-///   `WM_POWERBROADCAST` and `WM_WTSSESSION_CHANGE`.
+/// - Windows: hidden top-level window + `WTSRegisterSessionNotification` +
+///   `RegisterPowerSettingNotification` + `GetMessageW` pump. `WM_POWERBROADCAST`,
+///   `WM_WTSSESSION_CHANGE` and `WM_ENDSESSION`.
 /// - macOS: `NSWorkspace` notification center observers (gated on `power-events-mac`).
 /// - Linux: `zbus` proxy on `org.freedesktop.login1.*` (gated on `power-events-linux`).
 fn ensure_power_monitor() -> Result<(), String> {
@@ -285,7 +301,7 @@ fn install_power_monitor() -> Result<PlatformMonitor, String> {
 
 #[cfg(all(target_os = "macos", feature = "power-events-mac"))]
 fn install_power_monitor() -> Result<PlatformMonitor, String> {
-    macos_power::spawn_watcher()
+    source_poll::WithSourcePoll::start(macos_power::spawn_watcher()?)
 }
 
 #[cfg(all(target_os = "macos", not(feature = "power-events-mac")))]
@@ -295,7 +311,7 @@ fn install_power_monitor() -> Result<PlatformMonitor, String> {
 
 #[cfg(all(target_os = "linux", feature = "power-events-linux"))]
 fn install_power_monitor() -> Result<PlatformMonitor, String> {
-    linux_power::spawn_watcher()
+    source_poll::WithSourcePoll::start(linux_power::spawn_watcher()?)
 }
 
 #[cfg(all(target_os = "linux", not(feature = "power-events-linux")))]
@@ -400,20 +416,7 @@ fn power_status() -> Value {
     }
     #[cfg(target_os = "macos")]
     {
-        // macOS battery: needs IOKit binding; until wired, every field
-        // returns null. Warn once per process so JS code branching on
-        // `onBattery === true` won't silently miss low-power paths on
-        // macOS laptops (mirrors `install_power_monitor`'s stub).
-        static WARNED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-        let () = *WARNED.get_or_init(|| {
-            crate::tynd_warn!("power.status: macOS IOKit binding not wired — fields return null");
-        });
-        json!({
-            "onBattery": Value::Null,
-            "batteryPercent": Value::Null,
-            "charging": Value::Null,
-            "secondsRemaining": Value::Null,
-        })
+        macos_power_status()
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {
@@ -423,6 +426,68 @@ fn power_status() -> Value {
             "charging": Value::Null,
             "secondsRemaining": Value::Null,
         })
+    }
+}
+
+/// macOS summary from `starship-battery` (IOKit). A Mac without a battery
+/// reports `onBattery: false`; "on battery" means the battery discharges,
+/// so a laptop holding its charge limit on AC reads as on AC.
+#[cfg(target_os = "macos")]
+fn macos_power_status() -> Value {
+    match battery_info() {
+        Ok(Value::Null) => json!({
+            "onBattery": false,
+            "batteryPercent": Value::Null,
+            "charging": Value::Null,
+            "secondsRemaining": Value::Null,
+        }),
+        Ok(info) => json!({
+            "onBattery": info["status"] == "discharging",
+            "batteryPercent": info["percent"].as_f64().map(f64::round),
+            "charging": info["charging"],
+            "secondsRemaining": info["secondsRemaining"],
+        }),
+        Err(_) => json!({
+            "onBattery": Value::Null,
+            "batteryPercent": Value::Null,
+            "charging": Value::Null,
+            "secondsRemaining": Value::Null,
+        }),
+    }
+}
+
+/// `NSProcessInfo.thermalState` as a wire string.
+#[cfg(target_os = "macos")]
+fn thermal_state() -> Option<&'static str> {
+    use objc2_foundation::{NSProcessInfo, NSProcessInfoThermalState};
+    let state = NSProcessInfo::processInfo().thermalState();
+    Some(match state {
+        NSProcessInfoThermalState::Fair => "fair",
+        NSProcessInfoThermalState::Serious => "serious",
+        NSProcessInfoThermalState::Critical => "critical",
+        _ => "nominal",
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn thermal_state() -> Option<&'static str> {
+    None
+}
+
+/// Next power-source event for a poll that read `now` after `previous`:
+/// `Some(on_battery)` only on a known-to-known flip.
+#[cfg_attr(
+    not(any(
+        test,
+        all(target_os = "macos", feature = "power-events-mac"),
+        all(target_os = "linux", feature = "power-events-linux")
+    )),
+    allow(dead_code, reason = "only the polling backends call it")
+)]
+fn source_transition(previous: Option<bool>, now: Option<bool>) -> Option<bool> {
+    match (previous, now) {
+        (Some(before), Some(after)) if before != after => Some(after),
+        _ => None,
     }
 }
 
@@ -521,8 +586,8 @@ fn linux_power_status() -> Value {
                 let energy = read("energy_now").and_then(|v| v.parse::<u64>().ok());
                 let power = read("power_now").and_then(|v| v.parse::<u64>().ok());
                 if let (Some(e), Some(p)) = (energy, power) {
-                    if p > 0 {
-                        secs = Some((e * 3600) / p);
+                    if let Some(remaining) = (e * 3600).checked_div(p) {
+                        secs = Some(remaining);
                     }
                 }
             },
@@ -536,4 +601,24 @@ fn linux_power_status() -> Value {
         "charging": charging.map_or(Value::Null, Value::Bool),
         "secondsRemaining": secs.map_or(Value::Null, Value::from),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_transition_fires_only_on_known_flips() {
+        assert_eq!(source_transition(Some(false), Some(true)), Some(true));
+        assert_eq!(source_transition(Some(true), Some(false)), Some(false));
+        assert_eq!(source_transition(Some(true), Some(true)), None);
+        assert_eq!(source_transition(None, Some(true)), None);
+        assert_eq!(source_transition(Some(true), None), None);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn thermal_state_is_null_off_macos() {
+        assert_eq!(PowerApi::get_thermal_state(), None);
+    }
 }

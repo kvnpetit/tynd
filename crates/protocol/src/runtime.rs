@@ -93,6 +93,45 @@ pub enum BackendCall {
         ok: bool,
         value: Value,
     },
+    /// A native window or webview event (`window:resized`, `webview:page-load`…)
+    /// delivered to the backend so `getWindow(label).on*` handlers run there.
+    /// The Bun runtime receives it as `{ "type": "tynd:os_event", name, data }`.
+    OsEvent {
+        name: String,
+        data: Value,
+    },
+    /// A webview request to a backend-served custom protocol
+    /// (`app.protocol(...)`). Answered by the runtime through
+    /// `tynd_host::resolve_backend_protocol`.
+    Protocol(Box<ProtocolRequest>),
+}
+
+/// One webview request forwarded to a backend protocol handler. The body is
+/// raw bytes here; the runtime picks the wire encoding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProtocolRequest {
+    pub id: String,
+    pub scheme: String,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+    /// Label of the webview that issued the request.
+    pub webview: String,
+}
+
+/// Opt-in `asset://` protocol: absolute-path globs a webview may read through
+/// `convertFileSrc`. Absent means the protocol is not registered.
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AssetsConfig {
+    pub scope: Vec<String>,
+}
+
+/// Whether the host forwards OS event `name` to the backend: window and
+/// webview events only, minus the per-pixel `window:drag-over` stream.
+pub fn forwards_os_event(name: &str) -> bool {
+    (name.starts_with("window:") || name.starts_with("webview:")) && name != "window:drag-over"
 }
 
 impl BackendCall {
@@ -145,6 +184,11 @@ pub struct BackendConfig {
     pub menu: Vec<MenuItemDef>,
     pub tray: Option<TrayConfig>,
     pub quit_on_last_window_closed: bool,
+    /// `asset://` protocol scope; `None` keeps the protocol unregistered.
+    pub assets: Option<AssetsConfig>,
+    /// Schemes served by backend `app.protocol(...)` handlers, registered on
+    /// every webview before it is created.
+    pub protocols: Vec<String>,
     #[serde(skip)]
     pub smoke_mode: bool,
 }
@@ -177,6 +221,29 @@ pub enum MenuRole {
     Close,
     Separator,
     About,
+    Hide,
+    HideOthers,
+    ShowAll,
+    Services,
+    Maximize,
+    Fullscreen,
+    BringAllToFront,
+}
+
+/// Image shown next to a menu item. A plain string is a file path (gated by
+/// the fs allow-list); `png` / `rgba` carry base64-encoded pixels.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(untagged)]
+pub enum MenuIcon {
+    Path(String),
+    Rgba {
+        rgba: String,
+        width: u32,
+        height: u32,
+    },
+    Png {
+        png: String,
+    },
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
@@ -187,6 +254,9 @@ pub struct ItemDef {
     pub enabled: Option<bool>,
     pub role: Option<MenuRole>,
     pub accelerator: Option<String>,
+    pub icon: Option<MenuIcon>,
+    /// Platform icon name (`"add"`, `"folder"`, …), see `NativeIcon` in muda.
+    pub native_icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
@@ -215,11 +285,15 @@ pub struct SubmenuDef {
     pub id: Option<String>,
     pub label: Option<String>,
     pub enabled: Option<bool>,
+    pub icon: Option<MenuIcon>,
+    pub native_icon: Option<String>,
     #[serde(default)]
     pub items: Vec<MenuItemDef>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+/// One menu entry, tagged by `type`. A missing `type` means `"submenu"` when
+/// the entry has `items`, `"item"` otherwise (same default as the TS clients).
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum MenuItemDef {
     Separator,
@@ -227,6 +301,42 @@ pub enum MenuItemDef {
     Checkbox(CheckboxDef),
     Radio(RadioDef),
     Item(ItemDef),
+}
+
+/// Parse twin of [`MenuItemDef`]; its `type` tag is filled in beforehand.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum MenuItemWire {
+    Separator,
+    Submenu(SubmenuDef),
+    Checkbox(CheckboxDef),
+    Radio(RadioDef),
+    Item(ItemDef),
+}
+
+impl<'de> Deserialize<'de> for MenuItemDef {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut value = Value::deserialize(deserializer)?;
+        if let Value::Object(map) = &mut value {
+            if !map.contains_key("type") {
+                let kind = if map.contains_key("items") {
+                    "submenu"
+                } else {
+                    "item"
+                };
+                map.insert("type".into(), Value::from(kind));
+            }
+        }
+        Ok(
+            match MenuItemWire::deserialize(value).map_err(serde::de::Error::custom)? {
+                MenuItemWire::Separator => Self::Separator,
+                MenuItemWire::Submenu(submenu) => Self::Submenu(submenu),
+                MenuItemWire::Checkbox(checkbox) => Self::Checkbox(checkbox),
+                MenuItemWire::Radio(radio) => Self::Radio(radio),
+                MenuItemWire::Item(item) => Self::Item(item),
+            },
+        )
+    }
 }
 
 impl MenuItemDef {

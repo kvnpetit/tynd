@@ -44,6 +44,27 @@ export type NewWindowPolicy = (typeof NEW_WINDOW_POLICIES)[number];
 
 /** Download handling for a window or webview. */
 export const DOWNLOAD_POLICIES = ["allow", "deny"] as const;
+/** Decision for one web permission kind. */
+export const WEB_PERMISSION_DECISIONS = ["allow", "deny", "prompt"] as const;
+const WebPermissionDecisionSchema = v.optional(v.picklist(WEB_PERMISSION_DECISIONS));
+const WebPermissionsSchema = strictOptions({
+  camera: WebPermissionDecisionSchema,
+  microphone: WebPermissionDecisionSchema,
+  geolocation: WebPermissionDecisionSchema,
+  notifications: WebPermissionDecisionSchema,
+  clipboardRead: WebPermissionDecisionSchema,
+  displayCapture: WebPermissionDecisionSchema,
+  midi: WebPermissionDecisionSchema,
+  sensors: WebPermissionDecisionSchema,
+  localFonts: WebPermissionDecisionSchema,
+  windowManagement: WebPermissionDecisionSchema,
+  pointerLock: WebPermissionDecisionSchema,
+  automaticDownloads: WebPermissionDecisionSchema,
+  fileSystemAccess: WebPermissionDecisionSchema,
+  autoplay: WebPermissionDecisionSchema,
+});
+/** `permissions` option: decision per web permission kind. */
+export type WebPermissions = v.InferOutput<typeof WebPermissionsSchema>;
 export type DownloadPolicy = (typeof DOWNLOAD_POLICIES)[number];
 
 /**
@@ -67,6 +88,39 @@ const WindowConfigSchema = strictOptions({
   center: v.optional(v.boolean()),
   fullscreen: v.optional(v.boolean()),
   maximized: v.optional(v.boolean()),
+  /**
+   * `false` keeps the window hidden after the first page load; the frontend
+   * calls `tyndWindow.show()` when it is ready (splash-screen pattern).
+   * Defaults to `true` (shown once the first page has rendered).
+   */
+  visible: v.optional(v.boolean()),
+  /** Start in kiosk mode: borderless fullscreen pinned above other windows. */
+  kiosk: v.optional(v.boolean()),
+  /**
+   * macOS title bar: `"visible"` (default), `"transparent"` (see-through,
+   * title kept) or `"overlay"` (hidden title, page drawn under the traffic
+   * lights). Ignored on Windows and Linux.
+   */
+  titleBarStyle: v.optional(v.picklist(["visible", "transparent", "overlay"])),
+  /** Initial outer position in logical pixels; needs both `x` and `y`. `center` wins. */
+  x: v.optional(v.pipe(v.number(), v.finite())),
+  y: v.optional(v.pipe(v.number(), v.finite())),
+  /** Theme override: `"light"`, `"dark"` or `"system"` (default, follows the OS). */
+  theme: v.optional(v.picklist(["light", "dark", "system"])),
+  /** Hide the window from the taskbar (Windows / Linux; ignored on macOS). */
+  skipTaskbar: v.optional(v.boolean()),
+  /**
+   * Native background shown before the page paints and through transparent
+   * HTML. Channels are `0..255`; `a` defaults to `255`.
+   */
+  backgroundColor: v.optional(
+    strictOptions({
+      r: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(255)),
+      g: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(255)),
+      b: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(255)),
+      a: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(255))),
+    }),
+  ),
   userAgent: v.optional(v.pipe(v.string(), v.minLength(1))),
   /**
    * Use a non-persistent webview data store. Cookies, cache, and local
@@ -96,6 +150,13 @@ const WindowConfigSchema = strictOptions({
       v.regex(PROXY_URL_PATTERN, "must be http://host[:port] or socks5://host:port"),
     ),
   ),
+  /**
+   * Camera, microphone, geolocation... requests from pages in this window:
+   * `"allow"`, `"deny"` or `"prompt"` (the WebView's own prompt; WebKitGTK
+   * denies). A kind left unset prompts while the window shows app content and
+   * is denied while it shows remote content. See {@link WebPermissions}.
+   */
+  permissions: v.optional(WebPermissionsSchema),
 
   // ─────────── GPU acceleration knobs (all optional, sane defaults) ───────────
   /**
@@ -151,7 +212,12 @@ const WindowConfigSchema = strictOptions({
 });
 export type WindowConfig = v.InferOutput<typeof WindowConfigSchema>;
 
-/** Native OS roles for menu items. Role items are managed by the OS. */
+/**
+ * Native OS roles for menu items. Role items are managed by the OS; `label`
+ * overrides their text. `fullscreen`, `hideOthers`, `showAll`, `services`
+ * and `bringAllToFront` exist on macOS only; Linux only has the edit roles
+ * (`undo` … `selectAll`) and `separator`. An unavailable role renders nothing.
+ */
 export const MENU_ROLES = [
   "quit",
   "copy",
@@ -161,24 +227,127 @@ export const MENU_ROLES = [
   "redo",
   "selectAll",
   "minimize",
+  "maximize",
+  "fullscreen",
   "close",
   "separator",
   "about",
+  "hide",
+  "hideOthers",
+  "showAll",
+  "services",
+  "bringAllToFront",
 ] as const;
 export type MenuRole = (typeof MENU_ROLES)[number];
+
+/**
+ * Platform icons for menu items (`nativeIcon`): the AppKit image on macOS,
+ * the shell stock icon on Windows, the freedesktop theme icon on Linux, where
+ * an equivalent exists.
+ */
+export const MENU_NATIVE_ICONS = [
+  "add",
+  "advanced",
+  "bluetooth",
+  "bookmarks",
+  "caution",
+  "colorPanel",
+  "columnView",
+  "computer",
+  "enterFullScreen",
+  "everyone",
+  "exitFullScreen",
+  "flowView",
+  "folder",
+  "folderBurnable",
+  "folderSmart",
+  "followLinkFreestanding",
+  "fontPanel",
+  "goLeft",
+  "goRight",
+  "home",
+  "iChatTheater",
+  "iconView",
+  "info",
+  "invalidDataFreestanding",
+  "leftFacingTriangle",
+  "listView",
+  "lockLocked",
+  "lockUnlocked",
+  "menuMixedState",
+  "menuOnState",
+  "mobileMe",
+  "multipleDocuments",
+  "network",
+  "path",
+  "preferencesGeneral",
+  "quickLook",
+  "refreshFreestanding",
+  "refresh",
+  "remove",
+  "revealFreestanding",
+  "rightFacingTriangle",
+  "share",
+  "slideshow",
+  "smartBadge",
+  "statusAvailable",
+  "statusNone",
+  "statusPartiallyAvailable",
+  "statusUnavailable",
+  "stopProgressFreestanding",
+  "stopProgress",
+  "trashEmpty",
+  "trashFull",
+  "user",
+  "userAccounts",
+  "userGroup",
+  "userGuest",
+] as const;
+export type MenuNativeIcon = (typeof MENU_NATIVE_ICONS)[number];
+
+const MenuIconSchema = v.union([
+  v.pipe(v.string(), v.minLength(1)),
+  strictOptions({ png: v.pipe(v.string(), v.minLength(1)) }),
+  strictOptions({
+    rgba: v.pipe(v.string(), v.minLength(1)),
+    width: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(512)),
+    height: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(512)),
+  }),
+]);
+/**
+ * Menu item image: a file path (inside the fs allow-list), base64 PNG bytes
+ * (`{ png }`), or base64 raw RGBA pixels (`{ rgba, width, height }`). At most
+ * 512x512 px.
+ */
+export type MenuIcon = v.InferOutput<typeof MenuIconSchema>;
 
 const MenuSeparatorSchema = strictOptions({ type: v.literal("separator") });
 export type MenuSeparator = v.InferOutput<typeof MenuSeparatorSchema>;
 
-const MenuActionSchema = strictOptions({
-  type: v.optional(v.literal("item")),
-  id: v.optional(v.string()),
-  label: v.string(),
-  enabled: v.optional(v.boolean()),
-  role: v.optional(v.picklist(MENU_ROLES)),
-  /** Keyboard accelerator (muda format — e.g. `"CmdOrCtrl+S"`, `"Alt+F4"`). */
-  accelerator: v.optional(v.string()),
-});
+const MenuActionSchema = v.pipe(
+  strictOptions({
+    type: v.optional(v.literal("item")),
+    id: v.optional(v.string()),
+    /** Required unless `role` is set (roles bring their OS label). */
+    label: v.optional(v.string()),
+    enabled: v.optional(v.boolean()),
+    role: v.optional(v.picklist(MENU_ROLES)),
+    /** Keyboard accelerator (muda format — e.g. `"CmdOrCtrl+S"`, `"Alt+F4"`). */
+    accelerator: v.optional(v.string()),
+    /** Image shown next to the label. Exclusive with `nativeIcon`. */
+    icon: v.optional(MenuIconSchema),
+    /** Platform icon shown next to the label. Exclusive with `icon`. */
+    nativeIcon: v.optional(v.picklist(MENU_NATIVE_ICONS)),
+  }),
+  v.check(
+    (item) => item.label !== undefined || item.role !== undefined,
+    "menu item needs a `label` (or a `role`)",
+  ),
+  v.check(
+    (item) => item.icon === undefined || item.nativeIcon === undefined,
+    "menu item: set either `icon` or `nativeIcon`, not both",
+  ),
+);
 export type MenuAction = v.InferOutput<typeof MenuActionSchema>;
 
 const MenuCheckboxSchema = strictOptions({
@@ -191,8 +360,8 @@ const MenuCheckboxSchema = strictOptions({
 });
 export type MenuCheckbox = v.InferOutput<typeof MenuCheckboxSchema>;
 
-/** Radio items behave like checkboxes; enforce single-selection in userland by
- * updating `checked` on click (native OS doesn't group muda check items). */
+/** Adjacent radio items in the same submenu form a group (a separator or a
+ * non-radio item ends it): clicking one unchecks the others. */
 const MenuRadioSchema = strictOptions({
   type: v.literal("radio"),
   id: v.optional(v.string()),
@@ -206,8 +375,12 @@ export type MenuRadio = v.InferOutput<typeof MenuRadioSchema>;
 // Recursive — declare the type first, then the schema references itself.
 export interface MenuSubmenu {
   type: "submenu";
+  /** Handle for `menu.item(id)` / `menu.append(item, { parent: id })`. */
+  id?: string | undefined;
   label: string;
   enabled?: boolean | undefined;
+  icon?: MenuIcon | undefined;
+  nativeIcon?: MenuNativeIcon | undefined;
   items: MenuItem[];
 }
 export type MenuItem = MenuSeparator | MenuAction | MenuCheckbox | MenuRadio | MenuSubmenu;
@@ -224,14 +397,19 @@ export interface TrayMenuItem {
   role?: MenuRole;
   accelerator?: string;
   checked?: boolean;
+  icon?: MenuIcon;
+  nativeIcon?: MenuNativeIcon;
   items?: TrayMenuItem[];
 }
 
 const MenuSubmenuSchema: v.GenericSchema<MenuSubmenu> = v.lazy(() =>
   strictOptions({
     type: v.literal("submenu"),
+    id: v.optional(v.string()),
     label: v.string(),
     enabled: v.optional(v.boolean()),
+    icon: v.optional(MenuIconSchema),
+    nativeIcon: v.optional(v.picklist(MENU_NATIVE_ICONS)),
     items: v.array(MenuItemSchema),
   }),
 );
@@ -278,6 +456,13 @@ export const SecurityPolicySchema = strictOptions({
   ),
   processAllowedBinaries: v.optional(v.array(v.string())),
   shellExecAllowedCommands: v.optional(v.array(v.string())),
+  /**
+   * Keep the runtime grants of `capabilities.allowPath` / `allowUrl` and of
+   * dialogs opened with `grantAccess: true` across restarts. Stored in the app
+   * data directory; each path is resolved again on load and dropped when it no
+   * longer resolves to what was granted.
+   */
+  persistGrants: v.optional(v.boolean()),
 });
 export type SecurityPolicy = v.InferOutput<typeof SecurityPolicySchema>;
 
@@ -337,6 +522,20 @@ export interface ObservabilityConfig {
   };
 }
 
+/** `app.start({ assets })`: the `asset://` scope. */
+const AssetsConfigSchema = strictOptions({
+  scope: v.array(
+    v.pipe(
+      v.string(),
+      v.check(
+        (glob) => glob.startsWith("/") || /^[A-Za-z]:[\\/]/.test(glob),
+        "must be an absolute path glob such as /home/me/Videos/** or C:/Users/me/Videos/**",
+      ),
+    ),
+  ),
+});
+export type AssetsConfig = v.InferOutput<typeof AssetsConfigSchema>;
+
 const AppConfigEntries = {
   window: v.optional(WindowConfigSchema),
   menu: v.optional(v.array(MenuSubmenuSchema)),
@@ -358,6 +557,12 @@ const AppConfigEntries = {
    * for tray-only apps that should stay alive after all windows are hidden.
    */
   quitOnLastWindowClosed: v.optional(v.boolean()),
+  /**
+   * Enable the `asset://` protocol behind `convertFileSrc(path)`: globs over
+   * absolute paths the webviews may load (`/home/me/Videos/**`). Absent = off;
+   * `security.fs.deny` still applies.
+   */
+  assets: v.optional(AssetsConfigSchema),
 };
 
 /**

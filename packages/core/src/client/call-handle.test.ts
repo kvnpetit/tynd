@@ -19,19 +19,52 @@ interface Posted {
  * Evaluate the real webview shim (`JS_SHIM` in crates/host/src/webview/shim.rs) against a fake
  * `window`, so call/cancel/os_call semantics are tested on the shipped code.
  */
-function loadShim() {
+/** Token literal of the unfilled `JS_SHIM` template (`ipc_shim` substitutes the real one). */
+const TOKEN = "__TYND_IPC_TOKEN__";
+
+function shimSource(): string {
   const path = fileURLToPath(
     new URL("../../../../crates/host/src/webview/shim.rs", import.meta.url),
   );
   const source = readFileSync(path, "utf8");
   const match = /pub\(crate\) const JS_SHIM: &str = r#"([\s\S]*?)"#;/.exec(source);
   if (!match?.[1]) throw new Error("JS_SHIM not found in crates/host/src/webview/shim.rs");
-  const posted: Posted[] = [];
-  // biome-ignore lint/suspicious/noExplicitAny: the shim writes untyped hooks on the fake window
-  const win: any = {
-    ipc: { postMessage: (m: string) => posted.push(JSON.parse(m) as Posted) },
+  return match[1];
+}
+
+/**
+ * Evaluate the shim in a fake frame. `frame` makes it a subframe at that location (the top
+ * frame otherwise); `raw` collects the messages exactly as posted, token prefix included.
+ */
+function evalShim(
+  frame?: { protocol: string; origin: string },
+  onPost?: (m: string) => void,
+  topLocation?: { protocol: string; origin: string; href: string },
+) {
+  const raw: string[] = [];
+  const postMessage = (m: string) => {
+    raw.push(m);
+    onPost?.(m);
   };
-  new Function("window", match[1])(win);
+  // biome-ignore lint/suspicious/noExplicitAny: the shim writes untyped hooks on the fake window
+  const win: any = { ipc: { postMessage } };
+  if (frame) {
+    win.top = {};
+    win.location = frame;
+  } else {
+    win.top = win;
+    if (topLocation) win.location = topLocation;
+  }
+  new Function("window", shimSource())(win);
+  return { win, raw };
+}
+
+function loadShim() {
+  const posted: Posted[] = [];
+  const { win } = evalShim(undefined, (m) => {
+    if (!m.startsWith(TOKEN)) throw new Error(`message without the IPC token: ${m}`);
+    posted.push(JSON.parse(m.slice(TOKEN.length)) as Posted);
+  });
   g.window = win;
   return { win, posted };
 }
@@ -289,5 +322,166 @@ describe("mock parity with the real shim", () => {
     await expect(
       window.__tynd__.os_call("dialog", "openFile", null, { timeoutMs: 5 }),
     ).rejects.toThrow(/timed out after 5ms/);
+  });
+});
+
+describe("real shim: withOptions", () => {
+  test("an aborted signal cancels the call and rejects with its reason", async () => {
+    const { posted } = loadShim();
+    const api = createBackend<Api>();
+    const ac = new AbortController();
+    const pending = api.withOptions({ signal: ac.signal }).save(1);
+    const id = (posted[0] as Posted).id;
+    ac.abort();
+    const error = await caught(pending);
+    expect((error as DOMException).name).toBe("AbortError");
+    expect(posted.some((m) => m.type === "cancel" && m.id === id)).toBe(true);
+  });
+
+  test("a signal aborted before the call cancels it right away", async () => {
+    const { posted } = loadShim();
+    const reason = new Error("stop");
+    const error = await caught(
+      createBackend<Api>()
+        .withOptions({ signal: AbortSignal.abort(reason) })
+        .save(1),
+    );
+    expect(error).toBe(reason);
+    expect(posted.map((m) => m.type)).toEqual(["call", "cancel"]);
+  });
+
+  test("timeout rejects with a TIMEOUT TyndIpcError and cancels the call", async () => {
+    const { posted } = loadShim();
+    const error = await caught(createBackend<Api>().withOptions({ timeout: 5 }).save(1));
+    expect(error).toBeInstanceOf(TyndIpcError);
+    expect((error as TyndIpcError).code).toBe("TIMEOUT");
+    expect((error as TyndIpcError).fn).toBe("save");
+    expect(posted.map((m) => m.type)).toEqual(["call", "cancel"]);
+  });
+
+  test("a call that settles in time is untouched and clears its timer", async () => {
+    const { win, posted } = loadShim();
+    const pending = createBackend<Api>().withOptions({ timeout: 50 }).save(1);
+    win.__tynd_resolve__((posted[0] as Posted).id, true, "2");
+    expect(await pending).toBe(2);
+    await tick(60);
+    expect(posted.map((m) => m.type)).toEqual(["call"]);
+  });
+});
+
+describe("real shim: withOptions on streams and bad input", () => {
+  test("abort ends a stream's iteration with the abort reason", async () => {
+    const { win, posted } = loadShim();
+    const ac = new AbortController();
+    const handle = createBackend<Api>().withOptions({ signal: ac.signal }).tail();
+    const id = (posted[0] as Posted).id;
+    win.__tynd_yield__(id, "1");
+    const seen: number[] = [];
+    const loop = (async () => {
+      for await (const n of handle) {
+        seen.push(n);
+        ac.abort();
+      }
+    })();
+    const error = await caught(loop);
+    expect(seen).toEqual([1]);
+    expect((error as DOMException).name).toBe("AbortError");
+  });
+
+  test("invalid options fail loudly", () => {
+    loadShim();
+    const api = createBackend<Api>();
+    expect(() => api.withOptions({ timeout: -1 })).toThrow(/timeout/);
+    expect(() => api.withOptions({ signal: {} as AbortSignal })).toThrow(/AbortSignal/);
+  });
+});
+
+describe("real shim: frame trust and IPC token", () => {
+  test("every message carries the token and the captured sink is not re-read", async () => {
+    const { win, raw } = evalShim();
+    g.window = win;
+    // A page script replacing the channel later cannot observe the token.
+    const sniffed: string[] = [];
+    win.ipc.postMessage = (m: string) => sniffed.push(m);
+    const os = win.__tynd__.os_call("app", "getInfo", {});
+    expect(sniffed).toEqual([]);
+    expect(raw.length).toBe(1);
+    expect(raw[0]?.startsWith(TOKEN)).toBe(true);
+    expect(JSON.parse((raw[0] as string).slice(TOKEN.length))).toMatchObject({
+      type: "os_call",
+      api: "app",
+      method: "getInfo",
+    });
+    const id = JSON.parse((raw[0] as string).slice(TOKEN.length)).id;
+    win.__tynd_os_result__(id, true, 1);
+    expect(await os).toBe(1);
+  });
+
+  test("a remote or opaque subframe gets no bridge", () => {
+    for (const frame of [
+      { protocol: "https:", origin: "https://evil.example" },
+      { protocol: "about:", origin: "null" },
+    ]) {
+      const { win, raw } = evalShim(frame);
+      expect(win.__tynd__).toBeUndefined();
+      expect(win.__tynd_resolve__).toBeUndefined();
+      expect(raw).toEqual([]);
+    }
+  });
+
+  test("an app-content subframe gets the bridge", () => {
+    const { win } = evalShim({ protocol: "tynd:", origin: "tynd://localhost" });
+    expect(typeof win.__tynd__.os_call).toBe("function");
+  });
+});
+
+describe("real shim: app and remote tokens", () => {
+  test("an app top document posts only after the host hands it the app token", async () => {
+    const { win, raw } = evalShim(undefined, undefined, {
+      protocol: "tynd:",
+      origin: "tynd://localhost",
+      href: "tynd://localhost/index.html",
+    });
+    g.window = win;
+    // Only the app-token request goes out, under the remote token.
+    expect(raw.length).toBe(1);
+    const request = raw[0] as string;
+    expect(request.startsWith(`${TOKEN}?tynd-app-token:`)).toBe(true);
+    const requestId = request.slice(TOKEN.length + 1);
+
+    const os = win.__tynd__.os_call("app", "getInfo", {});
+    expect(raw.length).toBe(1);
+
+    // A page script cannot replace the receiver of the answer.
+    const receiver = win.__tynd_os_result__;
+    expect(() => {
+      win.__tynd_os_result__ = null;
+    }).toThrow();
+    expect(win.__tynd_os_result__).toBe(receiver);
+
+    win.__tynd_os_result__(requestId, true, "APP_TOKEN");
+    expect(raw.length).toBe(2);
+    expect(raw[1]?.startsWith("APP_TOKEN")).toBe(true);
+    const id = JSON.parse((raw[1] as string).slice("APP_TOKEN".length)).id;
+    // A second answer does not replace the token.
+    win.__tynd_os_result__(requestId, true, "OTHER");
+    win.__tynd__.os_call("app", "getInfo", {});
+    expect(raw[2]?.startsWith("APP_TOKEN")).toBe(true);
+
+    win.__tynd_os_result__(id, true, 1);
+    expect(await os).toBe(1);
+  });
+
+  test("a remote top document never asks for the app token", () => {
+    const { win, raw } = evalShim(undefined, undefined, {
+      protocol: "https:",
+      origin: "https://evil.example",
+      href: "https://evil.example/",
+    });
+    g.window = win;
+    expect(raw).toEqual([]);
+    win.__tynd__.os_call("app", "getInfo", {});
+    expect(raw.length).toBe(1);
+    expect(raw[0]?.startsWith(`${TOKEN}{`)).toBe(true);
   });
 });

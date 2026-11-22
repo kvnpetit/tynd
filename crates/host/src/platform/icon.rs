@@ -3,7 +3,7 @@
 
 use image::GenericImageView;
 
-fn load_rgba(path: &str) -> Result<(Vec<u8>, u32, u32), String> {
+pub(crate) fn load_rgba(path: &str) -> Result<(Vec<u8>, u32, u32), String> {
     // Gate every icon path through the fs allow-list. Without this, frontend
     // JS calling `window.setIcon` / `tray.setIcon` could pass an arbitrary
     // path (`/etc/shadow`, UNC `\\attacker\share\..`) and the host would

@@ -85,10 +85,17 @@ dpi       = "0.1"
 
 # OS integration
 rfd         = "0.18.0"
+# Window-handle traits for parenting `rfd` file dialogs to a native window.
+raw-window-handle = "0.6"
+# Window materials (`window.setEffects`): Mica / Acrylic / Tabbed / blur on
+# Windows, NSVisualEffectView vibrancy on macOS.
+window-vibrancy = "0.8"
 arboard     = "3.7.0"
 open        = { version = "5.4.5", features = [ "shellexecute-on-windows" ] }
 notify-rust = "4.19.0"
 image       = { version = "0.25.10", default-features = false, features = [ "png", "ico", "bmp" ] }
+# Drag files out of a window into other apps (`win.startDrag`, Tauri team).
+drag        = "2.1.1"
 
 # HTTP + binary encoding. `json` dropped — we parse via serde_json directly.
 #
@@ -97,7 +104,10 @@ image       = { version = "0.25.10", default-features = false, features = [ "png
 # `ureq::Error`; we set `http_status_as_error = false` so 4xx/5xx flow
 # through the normal response path (the Bun fetch bridge needs to
 # forward error bodies to JS, not turn them into `Err`).
-ureq   = { version = "3.5", default-features = false, features = [ "rustls", "gzip", "brotli", "json" ] }
+ureq   = { version = "3.5", default-features = false, features = [ "rustls", "gzip", "brotli", "json", "socks-proxy" ] }
+# In-memory cookie jars of `http` (`cookies` option). No public-suffix list:
+# jars are per app and every host still goes through the `security` rules.
+cookie_store = { version = "0.22", default-features = false }
 base64 = "0.23"
 
 # Refcounted child handle that can be waited on AND killed concurrently —
@@ -167,11 +177,18 @@ user-idle = "0.6"
 gtk = "0.18"
 
 # Platform-specific notification backends with action callbacks — notify-rust
-# only surfaces them on Linux. Windows: tauri-winrt-notification adds WinRT
-# toasts + on_activated. macOS: mac-notification-sys adds action buttons +
-# blocking send() whose return value tells us which button was clicked.
-tauri-winrt-notification = "0.8.1"
+# only surfaces them on Linux. Windows: WinRT toasts through the `windows`
+# crate (toast XML, activation / dismissal events, notification history).
+# macOS: mac-notification-sys adds action buttons + blocking send() whose
+# return value tells us which button was clicked.
+windows = { version = "0.62", default-features = false, features = [ "std", "Data_Xml_Dom", "Foundation", "Foundation_Collections", "UI_Notifications" ] }
 mac-notification-sys     = "0.6"
+
+# Raw WebView2 calls wry does not wrap (`webview::session`: PDF export, page
+# capture, audio mute). Same versions as wry's own WebView2 bindings, so no
+# extra crate enters the graph.
+webview2-com = "0.39"
+windows-core = { version = "0.62", default-features = false, features = [ "std" ] }
 
 # Launch-at-boot — registry on Windows, Launch Agents on macOS, autostart
 # .desktop on Linux.
@@ -367,6 +384,9 @@ dark-light = { version = "3", default-features = false }
 # BCP-47 locale via `GetUserDefaultLocaleName` (Win),
 # `[NSLocale currentLocale]` (macOS), and `LC_*` env (Linux).
 sys-locale = "0.3"
+# IANA time zone name (`os.timezone`): `/etc/localtime` (Linux),
+# `CFTimeZone` (macOS), WinRT `Calendar` (Windows).
+iana-time-zone = "0.1"
 
 # Debounced FS watcher — collapses multi-event renames + tracks paths
 # across moves. Sits on top of `notify` and keeps the same OS backend.

@@ -402,3 +402,114 @@ mod acl {
         ));
     }
 }
+
+#[test]
+fn silent_printing_always_needs_an_explicit_grant() {
+    let silent = json!({ "silent": true });
+    // Undeclared `window:` namespace, app content: dialog printing stays open...
+    assert!(native_call_allowed(
+        "window",
+        "printPage",
+        is_sensitive_call_form("window", "printPage", &json!({}), "main"),
+        false,
+        false,
+        false,
+        || panic!("policy must not be consulted")
+    ));
+    assert!(native_call_allowed(
+        "window",
+        "printPage",
+        is_sensitive_call_form("window", "printPage", &json!({ "silent": false }), "main"),
+        false,
+        false,
+        false,
+        || panic!("policy must not be consulted")
+    ));
+    // ...but the silent form is denied without a `window:printPage` grant.
+    assert!(!native_call_allowed(
+        "window",
+        "printPage",
+        is_sensitive_call_form("window", "printPage", &silent, "main"),
+        false,
+        false,
+        false,
+        || false
+    ));
+    assert!(native_call_allowed(
+        "window",
+        "printPage",
+        is_sensitive_call_form("window", "printPage", &silent, "main"),
+        false,
+        false,
+        false,
+        || true
+    ));
+    // A fail-closed authority denies it even with a grant.
+    assert!(!native_call_allowed(
+        "window",
+        "printPage",
+        is_sensitive_call_form("window", "printPage", &silent, "main"),
+        true,
+        false,
+        false,
+        || true
+    ));
+    // Other APIs and methods are not affected by a `silent` argument.
+    assert!(native_call_allowed(
+        "window",
+        "setTitle",
+        is_sensitive_call_form("window", "setTitle", &silent, "main"),
+        false,
+        false,
+        false,
+        || panic!("policy must not be consulted")
+    ));
+    assert!(!is_sensitive_call_form(
+        "tray",
+        "printPage",
+        &silent,
+        "main"
+    ));
+}
+
+#[test]
+fn session_commands_on_another_webview_need_an_explicit_grant() {
+    let other = json!({ "label": "secondary" });
+    for method in ["capturePage", "printToPdf", "setAudioMuted", "isAudioMuted"] {
+        assert!(
+            is_sensitive_call_form("window", method, &other, "main"),
+            "{method}"
+        );
+        // App content with an undeclared `window:` namespace and no grant: denied.
+        assert!(!native_call_allowed(
+            "window",
+            method,
+            is_sensitive_call_form("window", method, &other, "main"),
+            false,
+            false,
+            false,
+            || false
+        ));
+        // An explicit grant opens it.
+        assert!(native_call_allowed(
+            "window",
+            method,
+            is_sensitive_call_form("window", method, &other, "main"),
+            false,
+            false,
+            false,
+            || true
+        ));
+        // Targeting itself (explicitly or by default) stays default-open.
+        for args in [json!({ "label": "main" }), json!({})] {
+            assert!(
+                !is_sensitive_call_form("window", method, &args, "main"),
+                "{method}"
+            );
+        }
+    }
+    // Non-session window commands ignore `label`.
+    assert!(!is_sensitive_call_form(
+        "window", "setTitle", &other, "main"
+    ));
+}

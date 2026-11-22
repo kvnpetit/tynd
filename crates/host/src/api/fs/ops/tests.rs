@@ -1,6 +1,6 @@
 //! Unit tests for the capability-confined FS operations. Every test works
-//! inside a fresh `tempfile::tempdir()` (the OS temp dir is a default
-//! capability root) and the security policy stays unconfigured, so only the
+//! inside a fresh directory under the default `<temp>/<app>`
+//! capability root and the security policy stays unconfigured, so only the
 //! cap-std root confinement is exercised.
 
 use std::path::{Path, PathBuf};
@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use super::*;
 
 fn tmp() -> tempfile::TempDir {
-    tempfile::tempdir().expect("tempdir")
+    crate::security::path_scope::scoped_tempdir()
 }
 
 fn p(base: &Path, rel: &str) -> String {

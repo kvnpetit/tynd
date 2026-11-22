@@ -5,7 +5,11 @@
 use serde_json::{json, Value};
 
 use crate::api::HostApi;
+use crate::app_dirs::{ensure_app_dir, AppDir};
 use crate::tynd;
+
+mod media_access;
+mod regional;
 
 /// Stateless dispatch marker.
 #[derive(Debug, Default)]
@@ -31,6 +35,43 @@ impl OsInfoApi {
     /// (macOS), and `LC_*` env vars (Linux).
     pub fn locale() -> Value {
         locale_impl()
+    }
+
+    /// Region the user picked in the OS settings (ISO 3166 code such as
+    /// `"FR"`, or a UN M.49 area code such as `"419"`). `null` when unknown.
+    pub fn region() -> Option<String> {
+        regional::region()
+    }
+
+    /// Preferred UI languages as BCP-47 tags, most preferred first.
+    pub fn languages() -> Vec<String> {
+        regional::languages()
+    }
+
+    /// IANA time zone name (`"Europe/Paris"`), `null` when unknown.
+    pub fn timezone() -> Option<String> {
+        regional::timezone()
+    }
+
+    /// Whether the user's time format is 24-hour (`null` when unknown).
+    pub fn uses_24_hour_clock() -> Option<bool> {
+        regional::uses_24_hour_clock()
+    }
+
+    /// Permission state of `"camera"`, `"microphone"` or `"screen"`:
+    /// `"not-determined"`, `"granted"`, `"denied"`, `"restricted"` or
+    /// `"unknown"`.
+    pub fn get_media_access_status(kind: String) -> Result<&'static str, String> {
+        let kind = media_access::parse_kind("getMediaAccessStatus", &kind)?;
+        Ok(media_access::status(kind))
+    }
+
+    /// Show the macOS permission prompt for `kind` when the user has not
+    /// decided yet and return whether access is granted. Rejected on
+    /// Windows and Linux, which have no such prompt for desktop apps.
+    pub fn ask_for_media_access(kind: String) -> Result<bool, String> {
+        let kind = media_access::parse_kind("askForMediaAccess", &kind)?;
+        media_access::ask(kind)
     }
 
     /// Snapshot the system color scheme as a single boolean — full
@@ -70,6 +111,33 @@ impl OsInfoApi {
     /// XDG / Known Folder cache directory.
     pub fn cache_dir() -> Value {
         path_or_null(dirs::cache_dir())
+    }
+
+    /// `<data dir>/<app>`, `<app>` being the app identifier
+    /// (`crate::app_dirs`). Created if missing. Inside the default fs scope.
+    pub fn app_data_dir() -> Result<String, String> {
+        app_dir_string(AppDir::Data)
+    }
+
+    /// `<config dir>/<app>`. Created if missing. Inside the default fs scope.
+    pub fn app_config_dir() -> Result<String, String> {
+        app_dir_string(AppDir::Config)
+    }
+
+    /// `<cache dir>/<app>`. Created if missing. Inside the default fs scope.
+    pub fn app_cache_dir() -> Result<String, String> {
+        app_dir_string(AppDir::Cache)
+    }
+
+    /// `<temp dir>/<app>`. Created if missing. Inside the default fs scope.
+    pub fn app_temp_dir() -> Result<String, String> {
+        app_dir_string(AppDir::Temp)
+    }
+
+    /// Directory of the default `log` file (`<cache dir>/<app>/logs`).
+    /// Created if missing. Inside the default fs scope.
+    pub fn app_log_dir() -> Result<String, String> {
+        app_dir_string(AppDir::Log)
     }
 
     /// User desktop directory.
@@ -171,6 +239,10 @@ fn is_dark_mode_impl() -> bool {
     )
 }
 
+fn app_dir_string(kind: AppDir) -> Result<String, String> {
+    ensure_app_dir(kind).map(|dir| dir.to_string_lossy().into_owned())
+}
+
 fn path_or_null(p: Option<std::path::PathBuf>) -> Value {
     p.map_or(Value::Null, |p| path_to_value(&p))
 }
@@ -199,5 +271,42 @@ fn os_version() -> Value {
     match info.version() {
         os_info::Version::Unknown => Value::Null,
         v => Value::String(v.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_dirs_are_created_and_named_after_the_app() {
+        let dirs = [
+            OsInfoApi::app_data_dir(),
+            OsInfoApi::app_config_dir(),
+            OsInfoApi::app_cache_dir(),
+            OsInfoApi::app_temp_dir(),
+            OsInfoApi::app_log_dir(),
+        ];
+        for dir in dirs {
+            let dir = std::path::PathBuf::from(dir.expect("app dir"));
+            assert!(dir.is_dir(), "{}", dir.display());
+            assert!(dir
+                .components()
+                .any(|part| part.as_os_str() == crate::app_dirs::name()));
+        }
+    }
+
+    #[test]
+    fn app_dirs_dispatch_under_their_wire_names() {
+        for method in [
+            "appDataDir",
+            "appConfigDir",
+            "appCacheDir",
+            "appTempDir",
+            "appLogDir",
+        ] {
+            let value = dispatch(method, &Value::Null).expect(method);
+            assert!(value.is_string(), "{method}: {value}");
+        }
     }
 }

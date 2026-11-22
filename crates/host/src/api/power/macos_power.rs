@@ -1,15 +1,20 @@
-//! `NSWorkspace.notificationCenter` observer blocks bridged into
-//! `crate::ipc::events::emit`. Observer tokens remain on their owner thread and
+//! `NSWorkspace.notificationCenter` (sleep / wake / session) and
+//! `NSNotificationCenter.defaultCenter` (thermal state) observer blocks
+//! bridged into `crate::ipc::events::emit`. Observer tokens remain on their owner thread and
 //! are explicitly removed during central host shutdown.
 use std::sync::mpsc;
 
+use objc2::{rc::Retained, runtime::AnyObject};
 use objc2_app_kit::{
-    objc2::{rc::Retained, runtime::AnyObject},
     NSWorkspace, NSWorkspaceDidWakeNotification, NSWorkspaceSessionDidBecomeActiveNotification,
-    NSWorkspaceSessionDidResignActiveNotification, NSWorkspaceWillSleepNotification,
+    NSWorkspaceSessionDidResignActiveNotification, NSWorkspaceWillPowerOffNotification,
+    NSWorkspaceWillSleepNotification,
 };
-use objc2_foundation::{NSNotification, NSNotificationCenter, NSNotificationName};
-use serde_json::json;
+use objc2_foundation::{
+    NSNotification, NSNotificationCenter, NSNotificationName,
+    NSProcessInfoThermalStateDidChangeNotification,
+};
+use serde_json::{json, Value};
 
 use super::{join_workers, MONITOR_START_TIMEOUT};
 use crate::ipc::events;
@@ -62,19 +67,47 @@ fn run(stop: mpsc::Receiver<()>, ready: mpsc::SyncSender<()>) {
     // objc2. All observer tokens stay on this worker thread.
     let workspace = NSWorkspace::sharedWorkspace();
     let center = workspace.notificationCenter();
+    let default_center = NSNotificationCenter::defaultCenter();
+    // SAFETY: documented notification constant on the process-wide center.
+    let thermal = unsafe {
+        register(
+            &default_center,
+            NSProcessInfoThermalStateDidChangeNotification,
+            "power:thermal-change",
+            || json!({ "state": super::thermal_state() }),
+        )
+    };
     let tokens = unsafe {
         vec![
-            register(&center, NSWorkspaceWillSleepNotification, "power:suspend"),
-            register(&center, NSWorkspaceDidWakeNotification, "power:resume"),
+            register(
+                &center,
+                NSWorkspaceWillSleepNotification,
+                "power:suspend",
+                empty,
+            ),
+            register(
+                &center,
+                NSWorkspaceDidWakeNotification,
+                "power:resume",
+                empty,
+            ),
+            register(
+                &center,
+                NSWorkspaceWillPowerOffNotification,
+                "power:shutdown",
+                empty,
+            ),
             register(
                 &center,
                 NSWorkspaceSessionDidResignActiveNotification,
                 "power:lock",
+                empty,
             ),
             register(
                 &center,
                 NSWorkspaceSessionDidBecomeActiveNotification,
                 "power:unlock",
+                empty,
             ),
         ]
     };
@@ -88,6 +121,12 @@ fn run(stop: mpsc::Receiver<()>, ready: mpsc::SyncSender<()>) {
         // and is removed before its final retained reference is dropped.
         unsafe { center.removeObserver(token) };
     }
+    // SAFETY: same contract, for the default-center observer.
+    unsafe { default_center.removeObserver(&thermal) };
+}
+
+fn empty() -> Value {
+    json!({})
 }
 
 /// # Safety
@@ -98,9 +137,10 @@ unsafe fn register(
     center: &NSNotificationCenter,
     name: &NSNotificationName,
     event: &'static str,
+    payload: fn() -> Value,
 ) -> Retained<AnyObject> {
     let block = block2::RcBlock::new(move |_notification: std::ptr::NonNull<NSNotification>| {
-        events::emit(event, &json!({}));
+        events::emit(event, &payload());
     });
     let token = unsafe {
         center.addObserverForName_object_queue_usingBlock(Some(name), None, None, &block)

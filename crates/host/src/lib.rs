@@ -13,6 +13,7 @@ compile_error!("tynd host only supports little-endian targets");
 
 pub(crate) mod api;
 pub(crate) mod app;
+pub mod app_dirs;
 pub(crate) mod cleanup;
 #[cfg(feature = "debug-protocol")]
 pub(crate) mod debug;
@@ -45,17 +46,34 @@ pub use tracing as __tracing;
 pub(crate) use tynd_host_macros as tynd;
 
 // The public surface: what `tynd-runtime`, the generated custom-host
-// `main.rs` and native plugins call, beside the `pub` items of `embed`,
-// `observability` and `plugins` and the `tynd_*!` log macros. Every other
+// `main.rs` and native plugins call, beside the `pub` items of `app_dirs`,
+// `embed`, `observability` and `plugins` and the `tynd_*!` log macros. Every other
 // module is crate-private, so the dead-code lint sees the whole crate.
 
 /// Run one host API call (`api` and `method` are wire names) on behalf of the
 /// backend, outside the renderer capability checks.
 pub use api::dispatch as dispatch_api;
+pub use api::window_cmd::dispatch_backend as dispatch_backend_window;
 /// Build the window and run the event loop until the app exits.
 pub use app::run_app;
 /// Serve frontend assets from disk on every request (`tynd dev`).
 pub use webview::scheme::set_dev_mode;
+
+/// Answer a webview request forwarded to a backend `app.protocol(...)`
+/// handler (`id` from the `protocol` frame; unknown ids are ignored).
+pub fn resolve_backend_protocol(
+    id: &str,
+    status: u16,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+) {
+    webview::protocols::resolve_backend_protocol(id, status, headers, body);
+}
+
+/// Fail a forwarded backend protocol request with a 502 carrying `message`.
+pub fn fail_backend_protocol(id: &str, message: &str) {
+    webview::protocols::fail_backend_protocol(id, message);
+}
 
 /// Early-exit checks to run first in `main`, before any window or IPC setup.
 ///

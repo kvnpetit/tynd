@@ -6,6 +6,7 @@
 
 export type {
   AppConfig,
+  AssetsConfig,
   Capability,
   DownloadPolicy,
   Emitter,
@@ -13,7 +14,9 @@ export type {
   GpuPreference,
   MenuAction,
   MenuCheckbox,
+  MenuIcon,
   MenuItem,
+  MenuNativeIcon,
   MenuRadio,
   MenuRole,
   MenuSeparator,
@@ -24,14 +27,17 @@ export type {
   SecurityScope,
   TrayConfig,
   TrayMenuItem,
+  WebPermissions,
   WindowConfig,
 } from "./types";
 
 import * as v from "valibot";
+import { crashReporter, onRenderProcessGone, type RenderProcessGoneEvent } from "./crash-reporter";
 import { getEmitFn, lifecycleFlags, onCloseFns, onReadyFns, runHandler } from "./lifecycle";
 import { tynd } from "./logger";
 import { startBun } from "./runtime/bun";
 import { type Middleware, useMiddleware } from "./runtime/middleware";
+import { type ProtocolHandler, registerProtocol } from "./runtime/protocol";
 import {
   type AppConfig,
   AppConfigSchema,
@@ -40,6 +46,18 @@ import {
   type EmitterMap,
 } from "./types";
 
+export {
+  type AllowPathOptions,
+  capabilities,
+  type PathGrant,
+  type ScopeGrants,
+} from "./capabilities";
+export type {
+  CrashReport,
+  CrashReporterOptions,
+  RenderProcessGoneEvent,
+  RenderProcessGoneReason,
+} from "./crash-reporter";
 export { TyndIpcError, type TyndIpcErrorCode } from "./errors";
 export { clearFrontendListeners, onFrontendEmit } from "./frontend-events";
 export { hostCall } from "./host";
@@ -50,6 +68,7 @@ export {
   type PluginHooks,
   type PluginMethod,
 } from "./plugin";
+export type { Channel } from "./runtime/channel";
 export { type CallContext, getCallContext } from "./runtime/context";
 export type { Middleware, MiddlewareContext } from "./runtime/middleware";
 /**
@@ -57,6 +76,8 @@ export type { Middleware, MiddlewareContext } from "./runtime/middleware";
  * plugin in `tynd.config.ts::plugins`); apps and plugins never call it.
  */
 export { registerPlugin } from "./runtime/plugin-registry";
+export type { ProtocolContext, ProtocolHandler } from "./runtime/protocol";
+export { getWindow, type StartDragOptions, type TyndWindow } from "./windows";
 export { type BunWorkerHandle, bunWorkers } from "./workers";
 
 /**
@@ -141,6 +162,50 @@ export const app = {
    */
   use(mw: Middleware): void {
     useMiddleware(mw);
+  },
+
+  /**
+   * Serve the custom scheme `name://` from the backend: every webview request
+   * to it (`<img>`, `<video>`, `fetch`…) runs `handler` and gets its
+   * `Response`. Only app pages can reach it, never remote ones. Register
+   * before `app.start()`; build URLs with `protocolUrl(name, path)` from
+   * `@tynd/core/client`. Request and response bodies are capped at 4 MiB
+   * (serve large local files with `assets` + `convertFileSrc`).
+   * @example
+   * app.protocol("thumbs", async (request) => {
+   *   const id = new URL(request.url).pathname.slice(1)
+   *   return new Response(await renderThumbnail(id), { headers: { "content-type": "image/png" } })
+   * })
+   */
+  protocol(name: string, handler: ProtocolHandler): void {
+    if (_started) {
+      throw new Error(
+        `app.protocol("${name}") must be called before app.start(): webviews register their schemes when they are created`,
+      );
+    }
+    registerProtocol(name, handler);
+  },
+
+  /**
+   * Local crash reports: host panics, backend exits and renderer losses
+   * become JSON files the app reads on its next start. Nothing is uploaded.
+   */
+  crashReporter,
+
+  /**
+   * Subscribe to an app event; returns the unsubscribe function.
+   * `render-process-gone`: a webview's renderer process died (Windows,
+   * macOS). `event.reload()` reloads its window.
+   * @example
+   * app.on("render-process-gone", (event) => {
+   *   if (event.reason !== "browser-exited") void event.reload()
+   * })
+   */
+  on(event: "render-process-gone", handler: (event: RenderProcessGoneEvent) => void): () => void {
+    if (event !== "render-process-gone") {
+      throw new Error(`app.on: unknown event "${String(event)}" (expected "render-process-gone")`);
+    }
+    return onRenderProcessGone(handler);
   },
 
   /** Fires when the WebView window is ready (page fully loaded) */

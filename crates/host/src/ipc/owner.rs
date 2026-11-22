@@ -54,6 +54,11 @@ impl Owner {
         &self.label
     }
 
+    /// Effective origin of the calling frame; `None` for app-local content.
+    pub(crate) fn origin(&self) -> Option<&str> {
+        self.origin.as_deref()
+    }
+
     /// Whether the label is still on the document generation this identity was
     /// captured in.
     pub(crate) fn is_current(&self) -> bool {

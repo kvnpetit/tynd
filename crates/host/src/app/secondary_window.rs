@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 use tao::{
-    dpi::LogicalSize,
     event_loop::EventLoopWindowTarget,
     window::{Window, WindowBuilder},
 };
@@ -22,6 +21,7 @@ use crate::webview::{
     handlers::{apply_webview_policy, WebviewPolicy},
     navigation::{check_navigation_target, configure_webview_navigation},
 };
+use crate::window::{apply_initial_state, validate_window_config, window_builder, WindowConfig};
 use tynd_protocol::runtime::BackendCall;
 #[cfg(target_os = "windows")]
 fn with_parent_window(wb: WindowBuilder, parent: &Window) -> WindowBuilder {
@@ -41,23 +41,12 @@ fn with_parent_window(wb: WindowBuilder, parent: &Window) -> WindowBuilder {
     wb.with_transient_for(parent.gtk_window())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct SecondaryWindowAppearance {
-    pub(super) resizable: bool,
-    pub(super) decorations: bool,
-    pub(super) always_on_top: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(super) struct SecondaryWindowRequest {
     pub(super) label: String,
-    pub(super) title: String,
-    pub(super) width: f64,
-    pub(super) height: f64,
-    pub(super) appearance: SecondaryWindowAppearance,
+    /// Native-window options, the same set as `app.start({ window })`.
+    pub(super) window: WindowConfig,
     pub(super) modal_to: Option<String>,
-    pub(super) user_agent: Option<String>,
-    pub(super) incognito: bool,
     pub(super) data_partition: Option<String>,
     pub(super) custom_url: Option<String>,
     pub(super) allow_load_html: bool,
@@ -77,8 +66,8 @@ pub(super) fn parse_secondary_window_request(
         return Err("create: missing 'label'".into());
     }
     tynd_capabilities::WindowLabel::try_new(label.as_str()).map_err(|_| {
-        "create: label must start with a letter and contain at most 64 ASCII letters, digits, '_' \
-         or '-'"
+        "create: label must start with a letter and contain at most 64 ASCII letters, \
+         digits, '_' or '-'"
             .to_string()
     })?;
     if label == PRIMARY_LABEL {
@@ -88,20 +77,21 @@ pub(super) fn parse_secondary_window_request(
         return Err(format!("create: window '{label}' already exists"));
     }
 
+    let mut window: WindowConfig = serde_json::from_value(args.clone())
+        .map_err(|error| format!("create: invalid window options: {error}"))?;
+    validate_window_config(&window).map_err(|error| format!("create: {error}"))?;
+    window.title.get_or_insert_with(|| label.clone());
+
     let custom_url = args.get("url").and_then(Value::as_str).map(str::to_string);
     if let Some(url) = custom_url.as_deref() {
         check_navigation_target(url).map_err(|error| format!("window.create: {error}"))?;
     }
-    let incognito = args
-        .get("incognito")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
     let data_partition = args
         .get("dataPartition")
         .and_then(Value::as_str)
         .map(|value| validate_data_partition(value).map_err(|error| format!("create: {error}")))
         .transpose()?;
-    if incognito && data_partition.is_some() {
+    if window.incognito.unwrap_or(false) && data_partition.is_some() {
         return Err("create: incognito and dataPartition are mutually exclusive".into());
     }
 
@@ -109,36 +99,11 @@ pub(super) fn parse_secondary_window_request(
 
     Ok(SecondaryWindowRequest {
         policy,
-        title: args
-            .get("title")
-            .and_then(Value::as_str)
-            .unwrap_or(&label)
-            .to_string(),
-        width: args.get("width").and_then(Value::as_f64).unwrap_or(800.0),
-        height: args.get("height").and_then(Value::as_f64).unwrap_or(600.0),
-        appearance: SecondaryWindowAppearance {
-            resizable: args
-                .get("resizable")
-                .and_then(Value::as_bool)
-                .unwrap_or(true),
-            decorations: args
-                .get("decorations")
-                .and_then(Value::as_bool)
-                .unwrap_or(true),
-            always_on_top: args
-                .get("alwaysOnTop")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-        },
+        window,
         modal_to: args
             .get("modalTo")
             .and_then(Value::as_str)
             .map(str::to_string),
-        user_agent: args
-            .get("userAgent")
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        incognito,
         data_partition,
         allow_load_html: args
             .get("allowLoadHtml")
@@ -177,15 +142,7 @@ fn build_secondary_window(
     primary: &Window,
     secondaries: &HashMap<String, SecondaryEntry>,
 ) -> Result<Window, String> {
-    let mut builder = WindowBuilder::new()
-        .with_title(&request.title)
-        .with_inner_size(LogicalSize::new(request.width, request.height))
-        .with_resizable(request.appearance.resizable)
-        .with_decorations(request.appearance.decorations)
-        .with_visible(true);
-    if request.appearance.always_on_top {
-        builder = builder.with_always_on_top(true);
-    }
+    let mut builder = window_builder(&request.window, (800, 600));
 
     // Modal / owned child window: Linux uses GTK transient-for.
     if let Some(parent_label) = request.modal_to.as_deref() {
@@ -199,9 +156,11 @@ fn build_secondary_window(
         };
         builder = with_parent_window(builder, parent);
     }
-    builder
+    let window = builder
         .build(target)
-        .map_err(|error| format!("build window: {error}"))
+        .map_err(|error| format!("build window: {error}"))?;
+    apply_initial_state(&window, &request.window);
+    Ok(window)
 }
 
 fn configure_secondary_navigation<'a>(
@@ -307,10 +266,11 @@ fn configure_secondary_webview<'a>(
 
     builder = builder
         .with_id(protocol_id)
-        .with_incognito(request.incognito);
+        .with_incognito(request.window.incognito.unwrap_or(false))
+        .with_transparent(request.window.transparent.unwrap_or(false));
     builder = with_tynd_runtime(builder, label, label, call_tx, proxy);
 
-    if let Some(user_agent) = request.user_agent.as_deref() {
+    if let Some(user_agent) = request.window.user_agent.as_deref() {
         builder = builder.with_user_agent(user_agent);
     }
     builder = apply_webview_policy(
@@ -399,6 +359,10 @@ fn create_secondary_with_context(
     #[cfg(target_os = "linux")]
     let webview_result = webview_container.build_root(wvb);
     let webview = webview_result.map_err(|e| format!("build webview: {e}"))?;
+    crate::webview::process_failed::watch(&webview, &label);
+    if request.window.visible.unwrap_or(true) {
+        window.set_visible(true);
+    }
     let state = WindowState::capture(&window);
     Ok((
         label,
@@ -407,10 +371,71 @@ fn create_secondary_with_context(
             _web_context: web_context,
             #[cfg(target_os = "linux")]
             webview_container,
+            menu: crate::api::menu::WindowMenu::default(),
             window,
             data_partition: request.data_partition,
             state,
             allow_load_html: request.allow_load_html,
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn parse(args: &Value) -> Result<SecondaryWindowRequest, String> {
+        parse_secondary_window_request(args, |label| label == "taken")
+    }
+
+    #[test]
+    fn accepts_the_main_window_option_set() {
+        let request = parse(&json!({
+            "label": "settings",
+            "x": 10, "y": -20, "minWidth": 300, "minHeight": 200,
+            "visible": false, "transparent": true, "fullscreen": false,
+            "maximized": true, "center": true, "theme": "dark", "skipTaskbar": true,
+            "backgroundColor": { "r": 0, "g": 0, "b": 0, "a": 0 },
+            "kiosk": false, "titleBarStyle": "overlay", "alwaysOnTop": true,
+            "modalTo": "main", "hideOnEscape": true
+        }))
+        .unwrap();
+        let window = &request.window;
+        assert_eq!(window.title.as_deref(), Some("settings"));
+        assert_eq!((window.x, window.y), (Some(10.0), Some(-20.0)));
+        assert_eq!(window.visible, Some(false));
+        assert_eq!(window.skip_taskbar, Some(true));
+        assert_eq!(request.modal_to.as_deref(), Some("main"));
+    }
+
+    #[test]
+    fn rejects_invalid_labels_and_options() {
+        for (args, needle) in [
+            (json!({}), "missing 'label'"),
+            (json!({ "label": "main" }), "reserved"),
+            (json!({ "label": "taken" }), "already exists"),
+            (
+                json!({ "label": "1bad" }),
+                "64 ASCII letters, digits, '_' or '-'",
+            ),
+            (json!({ "label": "w", "width": 0 }), "'width'"),
+            (
+                json!({ "label": "w", "width": -5 }),
+                "invalid window options",
+            ),
+            (
+                json!({ "label": "w", "theme": "sepia" }),
+                "invalid window options",
+            ),
+            (
+                json!({ "label": "w", "incognito": true, "dataPartition": "a" }),
+                "mutually exclusive",
+            ),
+        ] {
+            let error = parse(&args).unwrap_err();
+            assert!(error.contains(needle), "{args}: {error}");
+        }
+    }
 }

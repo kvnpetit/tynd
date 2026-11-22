@@ -12,6 +12,7 @@ use wry::{
 use super::{
     handlers::{is_app_local_url, is_app_local_webview},
     navigation::ipc_origin,
+    protocols::{request_from_local_content, request_page_origin},
 };
 use crate::plugins::setup;
 
@@ -19,26 +20,6 @@ use crate::plugins::setup;
 /// `None` means bundled or dev-server content.
 fn initial_content_is_local(initial_url: Option<&str>) -> bool {
     initial_url.is_none_or(is_app_local_url)
-}
-
-/// `Origin` header of a request, else the origin of its `Referer`, in the
-/// `scheme://host[:port]` form `ipc_origin` expects.
-fn request_page_origin(request: &Request<Vec<u8>>) -> Option<String> {
-    let header = |name: &str| {
-        request
-            .headers()
-            .get(name)
-            .and_then(|value| value.to_str().ok())
-    };
-    if let Some(origin) = header("origin").filter(|origin| *origin != "null") {
-        return Some(origin.to_owned());
-    }
-    let referer = url::Url::parse(header("referer")?).ok()?;
-    let host = referer.host_str()?;
-    Some(match referer.port() {
-        Some(port) => format!("{}://{host}:{port}", referer.scheme()),
-        None => format!("{}://{host}", referer.scheme()),
-    })
 }
 
 fn uri_scheme_request(
@@ -91,20 +72,6 @@ fn uri_scheme_forbidden() -> Response<Cow<'static, [u8]>> {
     let mut response = Response::new(Cow::Borrowed(&b"forbidden"[..]));
     *response.status_mut() = StatusCode::FORBIDDEN;
     response
-}
-
-/// Whether a request comes from app-local content. Navigation tracking only
-/// follows the main frame, so a third-party iframe inside an app page leaves
-/// the webview "local"; its `no-referrer` subresource requests carry neither
-/// `Origin` nor `Referer`. Such a request is only trusted when the browser says
-/// it is same-origin (or user-initiated: `none`) via `Sec-Fetch-Site`.
-fn request_from_local_content(page_origin: Option<&str>, fetch_site: Option<&str>) -> bool {
-    match page_origin {
-        Some(origin) => is_app_local_url(origin),
-        None => fetch_site.is_some_and(|site| {
-            site.eq_ignore_ascii_case("same-origin") || site.eq_ignore_ascii_case("none")
-        }),
-    }
 }
 
 /// A plugin scheme may serve a request when the plugin opted in to remote
@@ -369,26 +336,6 @@ mod tests {
             Some("tynd://localhost"),
             None
         ));
-    }
-
-    #[test]
-    fn page_origin_comes_from_origin_then_referer() {
-        let origin = request_with_headers(&[
-            ("origin", "https://a.test"),
-            ("referer", "https://b.test/x"),
-        ]);
-        assert_eq!(
-            request_page_origin(&origin).as_deref(),
-            Some("https://a.test")
-        );
-        let referer = request_with_headers(&[("referer", "https://b.test:8443/x?y")]);
-        assert_eq!(
-            request_page_origin(&referer).as_deref(),
-            Some("https://b.test:8443")
-        );
-        let opaque = request_with_headers(&[("origin", "null")]);
-        assert_eq!(request_page_origin(&opaque), None);
-        assert_eq!(request_page_origin(&request_with_headers(&[])), None);
     }
 
     #[test]

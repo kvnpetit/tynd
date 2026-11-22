@@ -93,7 +93,6 @@ pub fn finalize_sidecars(pending: &[(String, PathBuf)]) {
                 // extract pass re-creates a usable binary.
                 crate::tynd_error!(
                     "sidecar chmod failed for {name} ({path}): {e}; removing partial cache",
-                    name,
                     path = path.display()
                 );
                 let _ = fs::remove_file(path);

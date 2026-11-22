@@ -39,6 +39,12 @@ pub(crate) fn set_dev_origin(dev_url: Option<&str>) {
         .and_then(|raw| url::Url::parse(raw).ok())
         .filter(|parsed| matches!(parsed.scheme(), "http" | "https"))
         .map(|parsed| parsed.origin().ascii_serialization());
+    if let Some(origin) = &origin {
+        tracing::warn!(
+            target: "tynd",
+            "dev server {origin}: Tynd applies no Content-Security-Policy to dev-server pages;              the default CSP applies to the bundled build only"
+        );
+    }
     *DEV_ORIGIN.write() = origin;
 }
 
@@ -49,7 +55,7 @@ pub(crate) fn dev_origin() -> Option<String> {
 /// Origin reported for a caller that must not match any capability: opaque
 /// frames and unparsable URLs. It is not a parsable URL, so no remote pattern
 /// matches it.
-const OPAQUE_ORIGIN: &str = "null";
+pub(crate) const OPAQUE_ORIGIN: &str = "null";
 
 /// Trust a document URL earns the webview that shows it.
 #[derive(Debug, PartialEq, Eq)]
@@ -228,11 +234,11 @@ fn classify_frame(
 /// An app-local frame URL can never promote a caller: the main-frame
 /// navigation tracking decides.
 ///
-/// Limit: on Linux (WebKitGTK) wry cannot report the frame URL and passes the
-/// main-frame URL, so a cross-origin iframe inside local content still
-/// inherits local trust there; the fixed `frame-src 'none'` CSP of `tynd://`
-/// content is the mitigation (dev-server and `loadHtml` content have no such
-/// CSP).
+/// On Linux (WebKitGTK) wry cannot report the frame URL and passes the
+/// main-frame URL. A cross-origin iframe still cannot post as the main frame:
+/// the IPC handler drops any message without a per-webview token, and only
+/// the app-token holder (an app document in the main frame) gets app trust
+/// (see [`super::builder::with_tynd_runtime`]).
 pub(crate) fn ipc_request_origin(
     headers: &wry::http::HeaderMap,
     uri: &wry::http::Uri,

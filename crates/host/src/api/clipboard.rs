@@ -17,6 +17,8 @@ use serde_json::{json, Value};
 
 use crate::ipc::error::IpcError;
 
+mod formats;
+
 use super::watch_refs::{WatchRefs, BACKEND_OWNER};
 use crate::api::HostApi;
 use crate::ipc::events;
@@ -81,13 +83,12 @@ impl ClipboardApi {
         optional_files(cb.get().file_list())
     }
 
-    /// Write file references to the clipboard.
+    /// Write file references to the clipboard. Every path goes through the
+    /// filesystem policy and capability roots (as `window.startDrag` does);
+    /// the authorized, canonical path is what gets written.
     pub fn write_files(paths: Vec<String>) -> Result<(), String> {
         validate_file_list(&paths)?;
-        let paths = paths
-            .iter()
-            .map(std::path::PathBuf::from)
-            .collect::<Vec<_>>();
+        let paths = authorize_file_list(&paths, crate::security::policy::authorize_fs_path)?;
         let mut cb = new_cb()?;
         cb.set()
             .file_list(&paths)
@@ -103,6 +104,48 @@ impl ClipboardApi {
     /// Write a base64-encoded PNG to the clipboard.
     pub fn write_image(png: String) -> Result<(), String> {
         write_image_impl(&png)
+    }
+
+    /// Read RTF from the clipboard. Returns `null` when there is none.
+    /// Windows and macOS; rejects on Linux.
+    pub fn read_rtf() -> Result<Value, String> {
+        Ok(
+            formats::read_format(formats::RTF, "readRtf")?.map_or(Value::Null, |bytes| {
+                Value::String(String::from_utf8_lossy(&bytes).into_owned())
+            }),
+        )
+    }
+
+    /// Replace the clipboard with RTF and an optional plain-text fallback.
+    /// Windows and macOS; rejects on Linux.
+    pub fn write_rtf(rtf: String, alt: Option<String>) -> Result<(), String> {
+        let mut items = vec![(formats::RTF.to_owned(), rtf.into_bytes())];
+        if let Some(alt) = alt {
+            items.push(("text/plain".to_owned(), alt.into_bytes()));
+        }
+        formats::write_formats(&items, "writeRtf")
+    }
+
+    /// Formats on the clipboard: MIME types where one is known (`text/plain`,
+    /// `text/rtf`, `text/html`, `image/png`...), native names otherwise.
+    /// Windows and macOS; rejects on Linux.
+    pub fn available_formats() -> Result<Vec<String>, String> {
+        formats::available_formats()
+    }
+
+    /// Read one format (MIME type, Windows format name or macOS UTI) as
+    /// base64 bytes. Returns `null` when the clipboard does not hold it.
+    pub fn read_format(format: String) -> Result<Value, String> {
+        formats::validate_format(&format, "readFormat")?;
+        Ok(formats::read_format(&format, "readFormat")?
+            .map_or(Value::Null, |bytes| Value::String(STANDARD.encode(bytes))))
+    }
+
+    /// Replace the clipboard with one or more formats at once
+    /// (`[{ format, data }]`, `data` base64).
+    pub fn write_formats(items: Vec<FormatItem>) -> Result<(), String> {
+        let items = decode_format_items(items)?;
+        formats::write_formats(&items, "writeFormats")
     }
 
     /// Empty the clipboard.
@@ -125,6 +168,48 @@ impl ClipboardApi {
     pub fn stop_monitoring() {
         stop_monitoring_impl(BACKEND_OWNER);
     }
+}
+
+/// One entry of `writeFormats`.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct FormatItem {
+    format: String,
+    /// Base64 bytes.
+    data: String,
+}
+
+/// Most formats one `writeFormats` call may set.
+const MAX_FORMAT_ITEMS: usize = 32;
+
+/// Validate and decode `writeFormats` items.
+fn decode_format_items(items: Vec<FormatItem>) -> Result<Vec<(String, Vec<u8>)>, String> {
+    if items.is_empty() || items.len() > MAX_FORMAT_ITEMS {
+        return Err(format!(
+            "clipboard.writeFormats: pass 1 to {MAX_FORMAT_ITEMS} items, got {}",
+            items.len()
+        ));
+    }
+    let mut total = 0_usize;
+    items
+        .into_iter()
+        .map(|item| {
+            formats::validate_writable_format(&item.format, "writeFormats")?;
+            let bytes = STANDARD.decode(item.data.as_bytes()).map_err(|e| {
+                format!(
+                    "clipboard.writeFormats: '{}' data is not valid base64: {e}",
+                    item.format
+                )
+            })?;
+            total += bytes.len();
+            if total > formats::MAX_FORMAT_BYTES {
+                return Err(format!(
+                    "clipboard.writeFormats: payload exceeds the {}-byte cap",
+                    formats::MAX_FORMAT_BYTES
+                ));
+            }
+            Ok((item.format, bytes))
+        })
+        .collect()
 }
 
 /// Renderer-originated `startMonitoring` / `stopMonitoring`, attributed to
@@ -201,6 +286,21 @@ fn optional_files(
 
 const MAX_CLIPBOARD_FILES: usize = 1_024;
 const MAX_CLIPBOARD_PATH_BYTES: usize = 32 * 1_024;
+
+/// Resolve every `writeFiles` path through `authorize` (the filesystem
+/// policy); the first refusal fails the whole call.
+fn authorize_file_list(
+    paths: &[String],
+    authorize: impl Fn(&str) -> Result<std::path::PathBuf, String>,
+) -> Result<Vec<std::path::PathBuf>, String> {
+    paths
+        .iter()
+        .map(|path| {
+            authorize(path)
+                .map_err(|error| IpcError::new("clipboard", "writeFiles", error).into_string())
+        })
+        .collect()
+}
 
 fn validate_file_list(paths: &[String]) -> Result<(), String> {
     if paths.is_empty() {
@@ -465,6 +565,52 @@ fn hash(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn item(format: &str, data: &str) -> FormatItem {
+        FormatItem {
+            format: format.to_owned(),
+            data: data.to_owned(),
+        }
+    }
+
+    #[test]
+    fn write_format_items_are_validated() {
+        let decoded = decode_format_items(vec![item("text/rtf", "e1xydGYxfQ==")]).unwrap();
+        assert_eq!(decoded, vec![("text/rtf".to_owned(), b"{\\rtf1}".to_vec())]);
+        let e = decode_format_items(Vec::new()).unwrap_err();
+        assert!(e.contains("pass 1 to 32 items"), "{e}");
+        let e = decode_format_items(vec![item("x", "!!")]).unwrap_err();
+        assert!(e.contains("not valid base64"), "{e}");
+        let e = decode_format_items(vec![item("text/html", "")]).unwrap_err();
+        assert!(e.contains("writeHtml"), "{e}");
+        let many = (0..33).map(|i| item(&format!("f{i}"), "")).collect();
+        assert!(decode_format_items(many).is_err());
+    }
+
+    #[test]
+    fn write_files_paths_go_through_the_fs_policy() {
+        let paths = vec!["/allowed/a.txt".to_owned(), "/secret/b.txt".to_owned()];
+        let deny_secret = |path: &str| {
+            if path.starts_with("/secret") {
+                Err(format!("fs: '{path}' is outside the fs scope"))
+            } else {
+                Ok(std::path::PathBuf::from(path))
+            }
+        };
+        let e = authorize_file_list(&paths, deny_secret).unwrap_err();
+        assert!(
+            e.contains("writeFiles") && e.contains("outside the fs scope"),
+            "{e}"
+        );
+        let ok = authorize_file_list(&paths[..1], deny_secret).unwrap();
+        assert_eq!(ok, vec![std::path::PathBuf::from("/allowed/a.txt")]);
+    }
+
+    #[test]
+    fn file_reference_formats_are_refused_by_write_formats() {
+        let e = decode_format_items(vec![item("CF_HDROP", "")]).unwrap_err();
+        assert!(e.contains("use writeFiles"), "{e}");
+    }
 
     #[test]
     fn monitor_refs_are_accounted_per_webview() {

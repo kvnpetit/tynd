@@ -22,7 +22,7 @@ pub fn set_dev_mode(on: bool) {
     DEV_MODE.store(on, Ordering::Release);
 }
 
-fn dev_mode() -> bool {
+pub(crate) fn dev_mode() -> bool {
     DEV_MODE.load(Ordering::Acquire)
 }
 
@@ -265,6 +265,23 @@ fn asset_response(mime: &str, cache_control: &str, body: Vec<u8>) -> Response<Co
 /// spelled `%2e%2e`), and on Windows `:` (drive / alternate-data-stream
 /// syntax). Decoding happens exactly once, so `%252e` stays a literal `%2e`.
 fn decode_asset_path(raw: &str) -> Option<String> {
+    let decoded = percent_decode_once(raw)?;
+    if decoded.contains(['\0', '\\']) {
+        return None;
+    }
+    let trimmed = decoded.trim_start_matches('/');
+    if trimmed
+        .split('/')
+        .any(|segment| segment == ".." || (cfg!(windows) && segment.contains(':')))
+    {
+        return None;
+    }
+    Some(trimmed.to_owned())
+}
+
+/// Decode `%XX` escapes exactly once (`+` stays a plus), refusing malformed
+/// escapes and invalid UTF-8.
+pub(crate) fn percent_decode_once(raw: &str) -> Option<String> {
     let bytes = raw.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -279,18 +296,7 @@ fn decode_asset_path(raw: &str) -> Option<String> {
             i += 1;
         }
     }
-    let decoded = String::from_utf8(out).ok()?;
-    if decoded.contains(['\0', '\\']) {
-        return None;
-    }
-    let trimmed = decoded.trim_start_matches('/');
-    if trimmed
-        .split('/')
-        .any(|segment| segment == ".." || (cfg!(windows) && segment.contains(':')))
-    {
-        return None;
-    }
-    Some(trimmed.to_owned())
+    String::from_utf8(out).ok()
 }
 
 fn hex_value(byte: u8) -> Option<u8> {
@@ -370,8 +376,8 @@ fn internal_error() -> Response<Cow<'static, [u8]>> {
         .expect("scheme: 500 response body uses static status and header values")
 }
 
-/// Baseline CSP for every HTML response served via `tynd://`. Apps that need
-/// to override should set a `<meta http-equiv="Content-Security-Policy">`.
+/// Baseline CSP for every HTML response served via `tynd://`. A page
+/// `<meta http-equiv="Content-Security-Policy">` can only tighten it.
 ///
 /// The `style-src 'unsafe-inline'` grant is deliberate — Vite's HMR
 /// shim and Tailwind's JIT runtime both inject `<style>` tags whose
@@ -380,12 +386,79 @@ fn internal_error() -> Response<Cow<'static, [u8]>> {
 /// alone breaks every app on first page load. The `script-src` side
 /// stays strict (`'self' tynd:` only) so the `<script>` half of the
 /// XSS surface is unaffected.
+///
+/// The `asset://` and backend protocol schemes the app enabled join the
+/// default, fetch, image, media and font sources (never `script-src`). They
+/// are configured before any webview exists, so the policy is built once.
 fn default_csp() -> &'static str {
-    "default-src 'self' tynd: tynd-bin:; img-src 'self' tynd: tynd-bin: data: blob:; media-src \
-     'self' tynd: tynd-bin: data: blob:; script-src 'self' tynd:; style-src 'self' tynd: \
-     'unsafe-inline'; font-src 'self' tynd: data:; connect-src 'self' tynd: tynd-bin: \
-     http://tynd-bin.localhost ipc: https: wss:; worker-src 'self' tynd: blob:; frame-src 'none'; \
-     object-src 'none'; base-uri 'self'; form-action 'self'"
+    static CSP: OnceLock<String> = OnceLock::new();
+    CSP.get_or_init(|| build_csp(&super::protocols::csp_sources()))
+}
+
+fn build_csp(extra: &str) -> String {
+    build_csp_for("'self' tynd:", extra)
+}
+
+/// The baseline policy with `app` as the app-content sources of each fetch
+/// directive (`'self' tynd:` for documents served by `tynd://`).
+fn build_csp_for(app: &str, extra: &str) -> String {
+    let extra = if extra.is_empty() {
+        String::new()
+    } else {
+        format!(" {extra}")
+    };
+    format!(
+        "default-src {app} tynd-bin:{extra}; img-src {app} tynd-bin: data: blob:{extra}; \
+         media-src {app} tynd-bin: data: blob:{extra}; script-src {app}; style-src {app} \
+         'unsafe-inline'; font-src {app} data:{extra}; connect-src {app} tynd-bin: \
+         http://tynd-bin.localhost ipc: https: wss:{extra}; worker-src {app} blob:; frame-src \
+         'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    )
+}
+
+/// Baseline CSP for `loadHtml` documents. They commit as `about:blank`, whose
+/// `'self'` names no app content, so the bundled origin is listed explicitly
+/// (WebView2 serves `tynd://` as `http://tynd.localhost`).
+fn load_html_csp() -> &'static str {
+    static CSP: OnceLock<String> = OnceLock::new();
+    CSP.get_or_init(|| {
+        let app = if cfg!(target_os = "windows") {
+            "'self' tynd: http://tynd.localhost"
+        } else {
+            "'self' tynd:"
+        };
+        build_csp_for(app, &super::protocols::csp_sources())
+    })
+}
+
+/// `html` with the baseline CSP as its first element, for `loadHtml`.
+///
+/// A `loadHtml` document is trusted app content but no scheme handler serves
+/// it (WebView2 `NavigateToString` cannot set headers), so the policy rides as
+/// a `<meta http-equiv>`. It goes before any author markup, after a leading
+/// doctype so the document keeps standards mode: the parser opens the implied
+/// `<head>` for it, a later author `<html>` / `<head>` tag merges into the
+/// implied elements, and no comment, script or text can come first. A policy
+/// the page adds can only tighten this one. `frame-ancestors` and `sandbox`
+/// are ignored in a meta policy; the baseline uses neither.
+pub(crate) fn with_load_html_csp(html: &str) -> String {
+    let meta = format!(
+        "<meta http-equiv=\"Content-Security-Policy\" content=\"{}\">",
+        load_html_csp()
+    );
+    let rest = html.trim_start_matches(['\u{feff}', ' ', '\t', '\n', '\r', '\u{c}']);
+    let is_doctype = rest
+        .get(..9)
+        .is_some_and(|head| head.eq_ignore_ascii_case("<!doctype"));
+    // The tokenizer ends a doctype at its first `>`, quoted identifiers
+    // included. An unterminated doctype would swallow the meta: go first.
+    let split = if is_doctype {
+        rest.find('>').map_or(0, |end| end + 1)
+    } else {
+        0
+    };
+    let (doctype, body) = rest.split_at(split);
+    format!("{doctype}{meta}{body}")
 }
 
 /// MIME resolution with optional content sniffing.
@@ -443,6 +516,84 @@ mod tests {
         // Scripts stay strict: no blob: in script-src.
         assert!(csp.contains("script-src 'self' tynd:;"));
         assert!(csp.contains("frame-src 'none'"));
+    }
+
+    #[test]
+    fn csp_adds_enabled_protocol_sources_outside_script_src() {
+        let base = build_csp("");
+        assert!(base.contains("media-src 'self' tynd: tynd-bin: data: blob:;"));
+        let csp = build_csp("asset: http://asset.localhost");
+        for directive in ["img-src", "media-src", "font-src", "default-src"] {
+            let value = csp
+                .split(';')
+                .find(|part| part.trim_start().starts_with(directive))
+                .unwrap();
+            assert!(value.ends_with(" asset: http://asset.localhost"), "{value}");
+        }
+        assert!(csp.contains("wss: asset: http://asset.localhost;"));
+        assert!(csp.contains("script-src 'self' tynd:;"));
+    }
+
+    #[test]
+    fn default_csp_is_the_tynd_flavor_of_the_shared_builder() {
+        let csp = build_csp("");
+        assert!(csp.starts_with("default-src 'self' tynd: tynd-bin:; img-src"));
+        assert!(csp.contains("style-src 'self' tynd: 'unsafe-inline';"));
+        assert!(csp.contains("connect-src 'self' tynd: tynd-bin: http://tynd-bin.localhost"));
+        assert!(csp
+            .ends_with("frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"));
+    }
+
+    #[test]
+    fn load_html_csp_names_the_app_origin_and_forbids_frames() {
+        let csp = load_html_csp();
+        assert!(csp.contains("frame-src 'none'"));
+        assert!(csp.contains("object-src 'none'"));
+        assert!(!csp.contains('"'));
+        let script_src = csp
+            .split(';')
+            .find(|part| part.trim_start().starts_with("script-src"))
+            .unwrap();
+        assert!(!script_src.contains("unsafe"), "{script_src}");
+        assert_eq!(
+            script_src.contains("http://tynd.localhost"),
+            cfg!(target_os = "windows")
+        );
+    }
+
+    #[test]
+    fn load_html_meta_csp_is_the_first_element() {
+        let meta = format!(
+            "<meta http-equiv=\"Content-Security-Policy\" content=\"{}\">",
+            load_html_csp()
+        );
+        assert_eq!(
+            with_load_html_csp("<h1>Hi</h1>"),
+            format!("{meta}<h1>Hi</h1>")
+        );
+        assert_eq!(with_load_html_csp(""), meta);
+        // Leading whitespace and a BOM are dropped, a doctype stays first.
+        assert_eq!(
+            with_load_html_csp("\u{feff}\n <!DOCTYPE html><html><head></head></html>"),
+            format!("<!DOCTYPE html>{meta}<html><head></head></html>")
+        );
+        assert_eq!(
+            with_load_html_csp("<!doctype html public \"x\"><p>a"),
+            format!("<!doctype html public \"x\">{meta}<p>a")
+        );
+        // Comments, scripts and author heads never precede the policy.
+        for html in [
+            "<!-- <head> --><script>alert(1)</script>",
+            "<script>x()</script><head></head>",
+            "<HTML><HEAD><title>t</title></HEAD>",
+        ] {
+            assert_eq!(with_load_html_csp(html), format!("{meta}{html}"));
+        }
+        // An unterminated doctype would swallow the meta, so the meta goes first.
+        assert_eq!(
+            with_load_html_csp("<!doctype html"),
+            format!("{meta}<!doctype html")
+        );
     }
 
     #[test]

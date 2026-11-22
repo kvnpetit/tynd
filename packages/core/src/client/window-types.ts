@@ -1,3 +1,5 @@
+import type { WindowConfig } from "../types";
+
 /** Anchor preset accepted by `tyndWindow.positionAt`. */
 export type WindowPreset =
   | "topLeft"
@@ -26,6 +28,16 @@ export interface WindowPosition {
   y: number;
 }
 
+/**
+ * Band for `setAlwaysOnTop(true, { level })`. macOS maps them to the
+ * floating, status and screen-saver window levels (`"screen-saver"` stays above
+ * fullscreen apps); Windows and Linux have a single topmost band.
+ */
+export type AlwaysOnTopLevel = "floating" | "status" | "screen-saver";
+
+/** How insistently `requestAttention` asks for the user's attention. */
+export type AttentionKind = "informational" | "critical";
+
 /** Event passed to `onCloseRequested` handlers. */
 export interface CloseRequestedEvent {
   /** Cancel the pending close. Must be called synchronously inside the handler. */
@@ -34,6 +46,23 @@ export interface CloseRequestedEvent {
 
 // Defined once next to the window config schema; re-exported for the window client.
 export type { DownloadPolicy, NewWindowPolicy } from "../types";
+
+/**
+ * Native-window options shared by `app.start({ window })` and
+ * `multiwindow.create()`. The GPU knobs are app-wide (one GPU process) and
+ * are set on the primary window only.
+ */
+export type WindowOptions = Omit<
+  WindowConfig,
+  | "webgpu"
+  | "hardwareAcceleration"
+  | "preferredFps"
+  | "contextLostRecovery"
+  | "colorSpace"
+  | "hdr"
+  | "vrr"
+  | "gpu"
+>;
 
 /** Event passed to `onNavigation` handlers. */
 export interface NavigationEvent extends WindowEventBase {

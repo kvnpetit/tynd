@@ -89,6 +89,37 @@ impl ShellApi {
             .ok_or_else(|| shell_err("revealInFolder", "resolved path is not valid UTF-8"))?;
         reveal(resolved)
     }
+
+    /// Play the OS alert sound (Windows default beep, macOS `NSBeep`, GDK
+    /// display bell on Linux). Returns at once; the sound plays async.
+    pub fn beep() {
+        beep();
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn beep() {
+    use windows_sys::Win32::{
+        System::Diagnostics::Debug::MessageBeep, UI::WindowsAndMessaging::MB_OK,
+    };
+    // SAFETY: no pointers; plays the "default beep" system sound async.
+    unsafe { MessageBeep(MB_OK) };
+}
+
+#[cfg(target_os = "macos")]
+fn beep() {
+    // AppKit is main-thread-only; IPC calls run on pool threads.
+    dispatch2::run_on_main(|_| objc2_app_kit::NSBeep());
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn beep() {
+    // GDK is main-thread-only; IPC calls run on pool threads.
+    gtk::glib::MainContext::default().invoke(|| {
+        if let Some(display) = gtk::gdk::Display::default() {
+            display.beep();
+        }
+    });
 }
 
 /// Open the OS file manager with `path` selected / highlighted. Uses the

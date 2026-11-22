@@ -845,3 +845,171 @@ fn env_denylist_covers_dotnet_bash_func_and_config_redirection() {
     assert!(!env_key_denied("FOO"));
     assert!(!env_key_denied("HOMEBREW_NO_AUTO_UPDATE_X1"));
 }
+
+#[test]
+fn fs_allow_list_denies_by_default_and_matches_globs() {
+    let empty = Scope::try_new(Vec::new(), Vec::new()).unwrap();
+    assert!(empty.check_fs_allow_list("/media/a.mp4", "assets").is_err());
+
+    let (pattern, inside, sibling) = if cfg!(windows) {
+        ("C:/Media/**", r"c:\media\clip.MP4", r"C:\Other\clip.mp4")
+    } else {
+        ("/media/**", "/media/clip.mp4", "/other/clip.mp4")
+    };
+    let scope = Scope::try_new(s(&[pattern]), Vec::new()).unwrap();
+    assert!(scope.check_fs_allow_list(inside, "assets").is_ok());
+    let error = scope.check_fs_allow_list(sibling, "assets").unwrap_err();
+    assert!(
+        error.starts_with("assets: no allow rule matches"),
+        "{error}"
+    );
+}
+
+#[test]
+fn fs_not_denied_applies_only_the_deny_rules() {
+    let (secret, other) = if cfg!(windows) {
+        ("C:/secret/**", "C:/media/a.mp4")
+    } else {
+        ("/secret/**", "/media/a.mp4")
+    };
+    let p = policy(&["/nowhere/**"], &[secret], &[], &[], true);
+    assert!(p
+        .check_fs_not_denied(&secret.replace("**", "key.pem"))
+        .is_err());
+    // Outside `fs.allow` but not denied: the deny-only check passes.
+    assert!(p.check_fs_not_denied(other).is_ok());
+}
+
+#[test]
+fn denies_fs_matches_deny_rules_only() {
+    let root = if cfg!(windows) { "C:" } else { "" };
+    let scope = Scope::new(
+        vec![format!("{root}/allowed/**")],
+        vec![
+            literal_glob(&format!("{root}/home/u/.ssh")),
+            literal_subtree_glob(&format!("{root}/home/u/.ssh")),
+        ],
+    );
+    assert!(scope.denies_fs(&format!("{root}/home/u/.ssh")));
+    assert!(scope.denies_fs(&format!("{root}/home/u/.ssh/id_ed25519")));
+    assert!(scope.denies_fs(&format!("{root}/home/u/x/../.ssh/config")));
+    assert!(!scope.denies_fs(&format!("{root}/home/u/.sshx")));
+    assert!(!scope.denies_fs(&format!("{root}/allowed/x")));
+}
+
+#[test]
+fn literal_glob_escapes_metacharacters() {
+    let glob = literal_glob("/weird[1]/*file");
+    assert!(matches_pattern(&glob, "/weird[1]/*file"));
+    assert!(!matches_pattern(&glob, "/weird1/xfile"));
+}
+
+#[test]
+fn wildcard_led_allow_rules_never_reach_outside_the_roots() {
+    let root = if cfg!(windows) { "C:" } else { "" };
+    let p = policy(
+        &["**/*.pdf", "*.txt", &format!("{root}/projects/**")],
+        &[],
+        &[],
+        &[],
+        false,
+    );
+    for outside in [
+        format!("{root}/home/u/secret.pdf"),
+        format!("{root}/etc/notes.txt"),
+    ] {
+        assert!(!p.fs_allow_rule_matches(&outside), "{outside}");
+        assert!(p
+            .check_fs_with_grants(&outside, &Grants::default(), FsAccess::Read, false)
+            .is_err());
+    }
+    // Inside the roots the wildcard rule still filters.
+    assert!(p
+        .check_fs_with_grants(
+            &format!("{root}/home/u/secret.pdf"),
+            &Grants::default(),
+            FsAccess::Read,
+            true
+        )
+        .is_ok());
+    // An absolute-anchored rule extends the scope, under its anchor only.
+    assert!(p.fs_allow_rule_matches(&format!("{root}/projects/a/b.rs")));
+    assert!(!p.fs_allow_rule_matches(&format!("{root}/projectsx/a")));
+}
+
+#[test]
+fn allow_rules_without_absolute_anchor_are_reported() {
+    let root = if cfg!(windows) { "C:" } else { "" };
+    assert!(fs_allow_rule_warning("**/*.pdf")
+        .is_some_and(|w| w.contains("no absolute leading directory")));
+    assert!(fs_allow_rule_warning("projects/**").is_some_and(|w| w.contains("relative")));
+    assert!(fs_allow_rule_warning(&format!("{root}/projects/**")).is_none());
+    assert!(fs_allow_rule_warning(&format!("{root}/docs/readme.md")).is_none());
+}
+
+#[test]
+fn deny_rules_ignore_case_where_the_filesystem_does() {
+    let root = if cfg!(windows) { "C:" } else { "" };
+    let scope = Scope::new(
+        Vec::new(),
+        vec![literal_subtree_glob(&format!("{root}/home/u/.ssh"))],
+    );
+    let folded = scope.denies_fs(&format!("{root}/home/u/.SSH/id_ed25519"));
+    assert_eq!(
+        folded,
+        cfg!(any(target_os = "windows", target_os = "macos"))
+    );
+    let p = policy(&[], &[&format!("{root}/Secret/**")], &[], &[], false);
+    assert_eq!(
+        p.check_fs_not_denied(&format!("{root}/SECRET/key"))
+            .is_err(),
+        cfg!(any(target_os = "windows", target_os = "macos"))
+    );
+}
+
+#[test]
+fn win32_segment_suffixes_are_stripped() {
+    for (input, expected) in [
+        (
+            "c:/data/security./grants.json",
+            "c:/data/security/grants.json",
+        ),
+        ("c:/u/.ssh. . /id", "c:/u/.ssh/id"),
+        (
+            "c:/data/security/grants.json::$DATA",
+            "c:/data/security/grants.json",
+        ),
+        ("c:/u/.ssh:$I30:$INDEX_ALLOCATION/id", "c:/u/.ssh/id"),
+        ("c:/a/../b/./c", "c:/a/../b/./c"),
+        ("c:/a/.../b", "c:/a/b"),
+        ("c:", "c:"),
+        ("c:foo.", "c:foo"),
+        ("//?/c:/x./y", "//?/c:/x/y"),
+        ("//server/share/x ", "//server/share/x"),
+        ("/home/u/x", "/home/u/x"),
+    ] {
+        assert_eq!(strip_win32_segment_suffixes(input), expected, "{input}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_deny_sees_through_trailing_dots_spaces_and_streams() {
+    let scope = Scope::new(
+        Vec::new(),
+        vec![
+            literal_glob("C:/data/app/security"),
+            literal_subtree_glob("C:/data/app/security"),
+        ],
+    );
+    for spelling in [
+        r"C:\data\app\security.\grants.json",
+        r"C:\data\app\Security \grants.json",
+        r"C:\data\app\security\grants.json::$DATA",
+        r"C:\data\app\security::$INDEX_ALLOCATION\grants.json",
+        r"C:\data\app\security...",
+    ] {
+        assert!(scope.denies_fs(spelling), "{spelling}");
+    }
+    assert!(!scope.denies_fs(r"C:\data\app\securityx\grants.json"));
+}

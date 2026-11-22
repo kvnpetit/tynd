@@ -139,6 +139,8 @@ fn backend_call_id(call: &BackendCall) -> Option<String> {
     match call {
         BackendCall::Typed { id, .. } => Some(id.clone()),
         BackendCall::Raw(body) => extract_raw_call_id(body).map(str::to_string),
+        // The host answers the webview request with a 503 on a `Return` error.
+        BackendCall::Protocol(request) => Some(request.id.clone()),
         _ => None,
     }
 }

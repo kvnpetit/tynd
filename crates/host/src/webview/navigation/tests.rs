@@ -132,9 +132,14 @@ fn opaque_frames_never_inherit_local_trust() {
         frame("blob:https://evil.test/1b2c"),
         FrameOrigin::Remote("https://evil.test".into())
     );
+    // `http://tynd.localhost` is the app origin only under WebView2's rewrite.
     assert_eq!(
         frame("blob:http://tynd.localhost/1b2c"),
-        FrameOrigin::Inherit
+        if cfg!(target_os = "windows") {
+            FrameOrigin::Inherit
+        } else {
+            FrameOrigin::Remote("http://tynd.localhost".into())
+        }
     );
     // `about:blank` is only acceptable as the committed main document.
     assert_eq!(

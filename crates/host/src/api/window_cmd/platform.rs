@@ -1,6 +1,3 @@
-#[cfg(target_os = "windows")]
-use std::mem::size_of;
-
 #[cfg(target_os = "macos")]
 use dpi::LogicalPosition;
 use serde_json::Value;
@@ -32,9 +29,8 @@ pub(super) fn dispatch_platform(win: &Window, method: &str, args: &Value) -> Dis
             set_traffic_light_inset(win, x, y);
             Some(Ok(Value::Null))
         },
-        "setSystemBackdrop" => {
-            let kind = args.get("kind").and_then(Value::as_str).unwrap_or("auto");
-            Some(set_system_backdrop(win, kind).map(|()| Value::Null))
+        "setEffects" => {
+            Some(crate::platform::window_effects::set_effects(win, args).map(|()| Value::Null))
         },
         "setWindowIcon" => Some(set_window_icon(win, args)),
         _ => None,
@@ -76,7 +72,7 @@ fn set_skip_taskbar(_win: &Window, _skip: bool) -> Result<Value, String> {
     Ok(Value::Null)
 }
 
-// Unsupported-platform rule (same as `setSystemBackdrop`): a call that
+// Unsupported-platform rule (same as `setEffects`): a call that
 // cannot have any visible effect rejects, so callers can feature-detect
 // instead of believing a no-op worked.
 
@@ -102,10 +98,14 @@ fn set_badge(win: &Window, label: Option<&str>, count: Option<i64>) -> Result<()
     Ok(())
 }
 
+/// Windows draws `label` (up to 3 characters) or `count` into a taskbar
+/// overlay icon.
 #[cfg(target_os = "windows")]
-fn set_badge(_win: &Window, _label: Option<&str>, _count: Option<i64>) -> Result<(), String> {
-    // Windows uses taskbar overlay icons instead — not wired yet.
-    Err("setBadge: not supported on Windows".to_string())
+fn set_badge(win: &Window, label: Option<&str>, count: Option<i64>) -> Result<(), String> {
+    use crate::platform::taskbar_badge;
+    use tao::platform::windows::WindowExtWindows as _;
+    let text = taskbar_badge::badge_text(label, count)?;
+    taskbar_badge::set_overlay(win.hwnd() as _, text.as_deref())
 }
 
 #[cfg(target_os = "windows")]
@@ -129,10 +129,17 @@ fn set_has_shadow(win: &Window, enabled: bool) {
     win.set_has_shadow(enabled);
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows: the DWM shadow of an undecorated window (decorated windows
+/// always keep theirs).
+#[cfg(target_os = "windows")]
+fn set_has_shadow(win: &Window, enabled: bool) {
+    use tao::platform::windows::WindowExtWindows;
+    win.set_undecorated_shadow(enabled);
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
 fn set_has_shadow(_win: &Window, _enabled: bool) {
-    // Windows / Linux: no runtime API to toggle the native drop shadow.
-    // Callers control this via the `decorations` flag at build time.
+    // Linux: the window manager / compositor owns the shadow.
 }
 
 #[cfg(target_os = "macos")]
@@ -158,49 +165,3 @@ fn set_traffic_light_inset(win: &Window, x: f64, y: f64) {
 }
 #[cfg(not(target_os = "macos"))]
 fn set_traffic_light_inset(_win: &Window, _x: f64, _y: f64) {}
-
-#[cfg(target_os = "windows")]
-fn set_system_backdrop(win: &Window, kind: &str) -> Result<(), String> {
-    // DWMWA_SYSTEMBACKDROP_TYPE = 38 (Windows 11 22000+).
-    // Values: 0 Auto, 1 None, 2 Mainwindow (Mica), 3 TransientWindow
-    // (Acrylic / background blur), 4 TabbedWindow (Tabbed).
-    use tao::platform::windows::WindowExtWindows as _;
-    use windows_sys::Win32::{Foundation::HWND, Graphics::Dwm::DwmSetWindowAttribute};
-
-    const DWMWA_SYSTEMBACKDROP_TYPE: u32 = 38;
-    let value: i32 = match kind {
-        "none" => 1,
-        "mica" => 2,
-        "acrylic" => 3,
-        "tabbed" => 4,
-        _ => 0,
-    };
-    let hwnd = win.hwnd() as HWND;
-    let value_ptr = std::ptr::addr_of!(value).cast();
-    // SAFETY: `DwmSetWindowAttribute` takes a `*const c_void` pointing
-    // at `DWORD`-sized data; `addr_of!(value)` yields a properly-aligned
-    // pointer to an `i32` local that outlives the call (function returns
-    // after `hr` is computed). `hwnd` is a valid HWND owned by `win`.
-    let hr = unsafe {
-        DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_SYSTEMBACKDROP_TYPE,
-            value_ptr,
-            size_of::<i32>() as u32,
-        )
-    };
-    if hr < 0 {
-        return Err(format!(
-            "setSystemBackdrop: DwmSetWindowAttribute hr=0x{hr:x}"
-        ));
-    }
-    Ok(())
-}
-
-#[cfg(not(target_os = "windows"))]
-fn set_system_backdrop(_win: &Window, _kind: &str) -> Result<(), String> {
-    // Silent `Ok(())` would let JS callers think the visual change took
-    // effect when nothing happened. Surface it as an error so the caller
-    // can feature-detect or fall back to its own styling.
-    Err("setSystemBackdrop: only supported on Windows".to_string())
-}

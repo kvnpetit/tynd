@@ -1,24 +1,12 @@
 use std::sync::Arc;
 
-#[cfg(feature = "debug-protocol")]
 use crossbeam_channel::Sender;
-#[cfg(any(
-    feature = "api-menu",
-    feature = "api-tray",
-    feature = "api-single-instance"
-))]
+#[cfg(feature = "api-single-instance")]
 use serde_json::json;
-#[cfg(any(
-    feature = "debug-protocol",
-    feature = "api-tray",
-    feature = "api-single-instance"
-))]
 use serde_json::Value;
 use tao::{event_loop::EventLoopProxy, window::Window};
 
-#[cfg(feature = "debug-protocol")]
-use tynd_protocol::runtime::BackendCall;
-use tynd_protocol::runtime::{BackendConfig, BackendEvent};
+use tynd_protocol::runtime::{forwards_os_event, BackendCall, BackendConfig, BackendEvent};
 
 use crate::webview::shim;
 use crate::{
@@ -53,13 +41,27 @@ pub(super) fn configure_startup_security(config: &BackendConfig) {
     }
 }
 
+/// Window events also go to the backend, where `getWindow(label).on*`
+/// handlers subscribe to them.
+fn forward_to_backend(call_tx: &Sender<BackendCall>, name: &str, data: &Value) {
+    if forwards_os_event(name) {
+        let _ = call_tx.send(BackendCall::OsEvent {
+            name: name.to_owned(),
+            data: data.clone(),
+        });
+    }
+}
+
 pub(super) fn install_os_event_emitter(
     queue: &Arc<OsEventQueue>,
     proxy: &EventLoopProxy<UserEvent>,
+    call_tx: &Sender<BackendCall>,
 ) {
     let emitter_queue = Arc::clone(queue);
     let emitter_proxy = proxy.clone();
+    let emitter_call_tx = call_tx.clone();
     crate::ipc::events::set_emitter(Box::new(move |name, data| {
+        forward_to_backend(&emitter_call_tx, name, data);
         let script = shim::eval_os_event(name, data);
         if emitter_queue.enqueue(name, script)
             && emitter_proxy.send_event(UserEvent::FlushOsEvents).is_err()
@@ -70,7 +72,9 @@ pub(super) fn install_os_event_emitter(
     .expect("event emitter must only be registered once");
     let scoped_queue = Arc::clone(queue);
     let scoped_proxy = proxy.clone();
+    let scoped_call_tx = call_tx.clone();
     crate::ipc::events::set_scoped_emitter(Box::new(move |name, data, scope| {
+        forward_to_backend(&scoped_call_tx, name, data);
         let script = shim::eval_os_event(name, data);
         if scoped_queue.enqueue_scoped(name, script, scope)
             && scoped_proxy.send_event(UserEvent::FlushOsEvents).is_err()
@@ -86,6 +90,26 @@ pub(super) fn install_host_integrations(proxy: &EventLoopProxy<UserEvent>) {
     crate::cleanup::set_shutdown_hook(move || {
         let _ = shutdown_proxy.send_event(UserEvent::ForceExit);
     });
+
+    let monitor_proxy = proxy.clone();
+    api::window_cmd::set_monitor_change_hook(Box::new(move || {
+        let _ = monitor_proxy.send_event(UserEvent::MonitorsChanged);
+    }));
+
+    let window_proxy = proxy.clone();
+    api::window_cmd::set_backend_window_hook(Box::new(move |method, args| {
+        let (reply, answer) = crossbeam_channel::bounded(1);
+        window_proxy
+            .send_event(UserEvent::BackendWindowCmd {
+                method: method.to_owned(),
+                args,
+                reply,
+            })
+            .map_err(|_| format!("window.{method}: the event loop has stopped"))?;
+        answer
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|_| format!("window.{method}: no answer from the event loop within 30s"))?
+    }));
 
     #[cfg(feature = "plugins")]
     crate::plugins::install_default_emit();
@@ -185,8 +209,36 @@ pub(super) fn warm_frontend_assets(frontend_dir: Option<&str>) {
 fn install_menu_event_handler() {
     muda::MenuEvent::set_event_handler(Some(move |event: muda::MenuEvent| {
         let id = event.id().0.clone();
-        crate::ipc::events::emit("menu:action", &json!({ "id": id }));
+        let (mut payload, menu_claims) = menu::action_payload(&id);
+        // A tray menu item also names its tray (and keeps its radio group exclusive).
+        let trays = tray::on_menu_activated(&id);
+        if menu_claims + trays.len() > 1 {
+            warn_ambiguous_menu_id(&id);
+        }
+        if let (Some(tray), Some(fields)) = (trays.into_iter().next(), payload.as_object_mut()) {
+            fields.insert("tray".into(), tray.into());
+        }
+        crate::ipc::events::emit("menu:action", &payload);
     }));
+}
+
+/// muda reports a click by id only: a plain item id present in several menus
+/// (application bar, window bars, Dock, trays, context menu) cannot be
+/// attributed to the menu it came from. Warn once per id.
+#[cfg(any(feature = "api-menu", feature = "api-tray"))]
+fn warn_ambiguous_menu_id(id: &str) {
+    thread_local! {
+        static WARNED: std::cell::RefCell<std::collections::HashSet<String>> =
+            std::cell::RefCell::new(std::collections::HashSet::new());
+    }
+    let first = WARNED
+        .try_with(|warned| warned.borrow_mut().insert(id.to_owned()))
+        .unwrap_or(false);
+    if first {
+        crate::tynd_warn!(
+            "menu item id '{id}' exists in several menus; its clicks cannot be told apart              (`tray` names the first tray holding it). Give every item an id unique across              the application bar, window bars, the Dock, trays and context menus."
+        );
+    }
 }
 
 #[cfg(feature = "api-menu")]
@@ -222,25 +274,24 @@ pub(super) fn build_app_menu(
     None
 }
 
+/// The tray handle (with the configured `main` icon, if any). Icons can also
+/// be created at runtime, so the handle exists whenever `api-tray` is built.
 #[cfg(feature = "api-tray")]
-pub(super) fn build_system_tray(config: &BackendConfig) -> Option<tray::SystemTray> {
-    let tray_config = config.tray.as_ref()?;
-    match tray::build(tray_config) {
-        Ok(tray) => {
-            tray_icon::TrayIconEvent::set_event_handler(Some(handle_tray_event));
-            Some(tray)
-        },
-        Err(error) => {
-            crate::tynd_warn!("System tray failed: {error}");
-            None
-        },
-    }
+pub(super) fn build_system_tray(
+    config: &BackendConfig,
+    proxy: &EventLoopProxy<UserEvent>,
+) -> Option<tray::SystemTray> {
+    Some(tray::init(config.tray.as_ref(), proxy))
 }
 
 /// Without `api-tray` no tray is created; a configured `tray` already failed
 /// startup in [`ensure_static_apis_compiled`].
 #[cfg(not(feature = "api-tray"))]
-pub(super) fn build_system_tray(_config: &BackendConfig) -> Option<tray::SystemTray> {
+pub(super) fn build_system_tray(
+    config: &BackendConfig,
+    proxy: &EventLoopProxy<UserEvent>,
+) -> Option<tray::SystemTray> {
+    tray::init(config.tray.as_ref(), proxy);
     None
 }
 
@@ -257,50 +308,6 @@ fn require_compiled(api: &str, configured: bool, compiled: bool) -> Result<(), S
         return Err(format!("`{api}` is configured: {}", api::api_disabled(api)));
     }
     Ok(())
-}
-
-/// Event name for a tray click. The tray emits one `Click` for the press and
-/// one for the release, so only the release counts: otherwise a single click
-/// fires `tray:click` twice and an app toggling its window on it flickers.
-#[cfg(feature = "api-tray")]
-fn tray_click_name(
-    button: tray_icon::MouseButton,
-    state: tray_icon::MouseButtonState,
-) -> Option<&'static str> {
-    if state != tray_icon::MouseButtonState::Up {
-        return None;
-    }
-    match button {
-        tray_icon::MouseButton::Left => Some("tray:click"),
-        tray_icon::MouseButton::Right => Some("tray:right-click"),
-        tray_icon::MouseButton::Middle => None,
-    }
-}
-
-#[cfg(feature = "api-tray")]
-fn handle_tray_event(event: tray_icon::TrayIconEvent) {
-    let (name, data) = match event {
-        tray_icon::TrayIconEvent::Click {
-            button,
-            button_state,
-            ..
-        } => match tray_click_name(button, button_state) {
-            Some(name) => (name, Value::Null),
-            None => return,
-        },
-        tray_icon::TrayIconEvent::DoubleClick { .. } => ("tray:double-click", Value::Null),
-        tray_icon::TrayIconEvent::Enter { position, .. } => {
-            ("tray:enter", json!({ "x": position.x, "y": position.y }))
-        },
-        tray_icon::TrayIconEvent::Move { position, .. } => {
-            ("tray:move", json!({ "x": position.x, "y": position.y }))
-        },
-        tray_icon::TrayIconEvent::Leave { position, .. } => {
-            ("tray:leave", json!({ "x": position.x, "y": position.y }))
-        },
-        _ => return,
-    };
-    crate::ipc::events::emit(name, &data);
 }
 
 pub(super) fn schedule_smoke_exit(
@@ -320,38 +327,6 @@ pub(super) fn schedule_smoke_exit(
         let _ = proxy.send_event(UserEvent::ForceExit);
     }) {
         let _ = fallback_proxy.send_event(UserEvent::ForceExit);
-    }
-}
-
-#[cfg(test)]
-#[cfg(feature = "api-tray")]
-mod tray_tests {
-    use tray_icon::{MouseButton, MouseButtonState};
-
-    use super::tray_click_name;
-
-    #[test]
-    fn tray_click_fires_once_on_button_up() {
-        assert_eq!(
-            tray_click_name(MouseButton::Left, MouseButtonState::Up),
-            Some("tray:click")
-        );
-        assert_eq!(
-            tray_click_name(MouseButton::Right, MouseButtonState::Up),
-            Some("tray:right-click")
-        );
-        assert_eq!(
-            tray_click_name(MouseButton::Left, MouseButtonState::Down),
-            None
-        );
-        assert_eq!(
-            tray_click_name(MouseButton::Right, MouseButtonState::Down),
-            None
-        );
-        assert_eq!(
-            tray_click_name(MouseButton::Middle, MouseButtonState::Up),
-            None
-        );
     }
 }
 

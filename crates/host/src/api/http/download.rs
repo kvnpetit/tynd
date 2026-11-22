@@ -11,8 +11,9 @@ use serde_json::{json, Value};
 use crate::ipc::error::IpcError;
 
 use super::{
-    build_download_agent, check_url_scheme, header_str, string_headers, DownloadArgs,
-    ProgressEmitter,
+    check_url_scheme, header_str, string_headers,
+    transport::{execute_watched, AbortHandle, AbortRead, Net, Outgoing},
+    DownloadArgs, ProgressEmitter, DEFAULT_CONNECT_TIMEOUT, DOWNLOAD_IDLE_TIMEOUT,
 };
 
 const MAX_DOWNLOAD: u64 = 10 * 1024 * 1024 * 1024;
@@ -23,19 +24,33 @@ fn download_error(msg: impl Display) -> String {
 }
 
 pub(super) fn download(args: Value) -> Result<Value, String> {
-    let a: DownloadArgs = serde_json::from_value(args)
+    let mut a: DownloadArgs = serde_json::from_value(args)
         .map_err(|e| download_error(format!("invalid arguments: {e}")))?;
     let url = a.url.as_str();
     check_url_scheme(url, "download")?;
     crate::security::policy::check_http(url)?;
     let dest = a.dest.as_str();
     crate::security::policy::check_fs(dest)?;
+    let parsed = url::Url::parse(url).map_err(|e| download_error(format!("invalid URL: {e}")))?;
 
-    let agent = build_download_agent(a.timeout_ms);
-    let mut resp = string_headers(a.headers.as_ref())
-        .fold(agent.get(url), |req, (name, value)| req.header(name, value))
-        .call()
-        .map_err(|e| download_error(format!("({url}): {e}")))?;
+    // No overall deadline by default (a large file streams for as long as
+    // bytes keep coming); without `timeoutMs`, connecting is still bounded.
+    let mut net = Net::parse(&a.net, "download", None)?;
+    if net.timeout.is_none() && net.connect_timeout.is_none() {
+        net.connect_timeout = Some(DEFAULT_CONNECT_TIMEOUT);
+    }
+    let abort = AbortHandle::register(a.net.abort_id.take(), "download")?;
+    let agent = net.agent(Some(DOWNLOAD_IDLE_TIMEOUT));
+    let outgoing = Outgoing {
+        method: "GET".to_owned(),
+        url: parsed,
+        headers: string_headers(a.headers.as_ref())
+            .map(|(name, value)| (name.to_owned(), value.to_owned()))
+            .collect(),
+        body: None,
+        progress_id: None,
+    };
+    let mut resp = execute_watched(agent, outgoing, net, &abort, None, "download")?.response;
 
     // A non-2xx body is an error page, not the requested file: fail
     // before touching the destination.
@@ -56,9 +71,19 @@ pub(super) fn download(args: Value) -> Result<Value, String> {
     }
 
     let (cap_dir, rel) = crate::api::fs::resolve(dest)?;
-    let mut reader = resp.body_mut().as_reader().take(MAX_DOWNLOAD + 1);
+    let mut reader = AbortRead {
+        inner: resp.body_mut().as_reader(),
+        flag: abort.flag(),
+    }
+    .take(MAX_DOWNLOAD + 1);
     let mut emitter = ProgressEmitter::new(a.progress_id, "download", total);
-    let written = write_atomically(cap_dir, &rel, &mut reader, &mut emitter)?;
+    let written = write_atomically(cap_dir, &rel, &mut reader, &mut emitter).map_err(|e| {
+        if abort.is_aborted() {
+            download_error("aborted")
+        } else {
+            e
+        }
+    })?;
     Ok(json!({ "path": dest, "bytes": written }))
 }
 

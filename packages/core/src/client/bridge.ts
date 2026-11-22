@@ -25,3 +25,5 @@ export {
   osDeadline,
   osOn,
 } from "./_internal";
+/** Window handles for plugins that target other windows (`@tynd/plugin-multiwindow`). */
+export { createWindowHandle, type WindowTransport } from "./window";

@@ -10,6 +10,13 @@ use globset::{GlobSet, GlobSetBuilder};
 use serde::Deserialize;
 use specta::Type;
 
+mod grants;
+
+pub use grants::{
+    validate_url_pattern, FsAccess, Grants, GrantsSnapshot, PathGrant, MAX_PATH_GRANTS,
+    MAX_URL_GRANTS,
+};
+
 #[derive(Debug, Default, Deserialize, Type)]
 pub struct PolicyInput {
     #[serde(default)]
@@ -24,6 +31,10 @@ pub struct PolicyInput {
     pub process_allowed_binaries: Option<Vec<String>>,
     #[serde(default, rename = "allowedSensitiveCapabilities")]
     pub allowed_sensitive_capabilities: Vec<String>,
+    /// Keep runtime scope grants across restarts (stored in the app data
+    /// directory and re-validated on load).
+    #[serde(default, rename = "persistGrants")]
+    pub persist_grants: bool,
 }
 
 #[derive(Debug, Default, Deserialize, Type)]
@@ -76,7 +87,7 @@ impl Scope {
 
     fn build_lenient(kind: PatternKind, allow: Vec<String>, deny: Vec<String>) -> Self {
         let allow_set = compile_kind_lenient(kind, &allow, false);
-        let deny_set = compile_kind_lenient(kind, &deny, kind == PatternKind::Http);
+        let deny_set = compile_kind_lenient(kind, &deny, deny_case_insensitive(kind));
         Self {
             allow,
             deny,
@@ -91,7 +102,7 @@ impl Scope {
         deny: Vec<String>,
     ) -> Result<Self, String> {
         let allow_set = try_compile_kind(kind, &allow, false)?;
-        let deny_set = try_compile_kind(kind, &deny, kind == PatternKind::Http)?;
+        let deny_set = try_compile_kind(kind, &deny, deny_case_insensitive(kind))?;
         Ok(Self {
             allow,
             deny,
@@ -100,8 +111,22 @@ impl Scope {
         })
     }
 
+    /// Deny-by-default filesystem check for an allow-list that must name every
+    /// reachable path (the `asset://` scope). `path` must already be
+    /// kernel-resolved by the caller; an empty allow list denies everything.
+    pub fn check_fs_allow_list(&self, path: &str, kind: &str) -> Result<(), String> {
+        self.check(&canonicalize_fs(path), true, kind)
+    }
+
     fn check(&self, candidate: &str, default_deny: bool, kind: &str) -> Result<(), String> {
         self.check_any(&[candidate], default_deny, kind)
+    }
+
+    /// Whether a deny rule matches `path` (canonicalized as a filesystem
+    /// path first). The allow rules play no part.
+    #[must_use]
+    pub fn denies_fs(&self, path: &str) -> bool {
+        self.deny_set.is_match(canonicalize_fs(path))
     }
 
     /// `candidates[0]` is the primary (reported) form. A deny rule matching
@@ -158,6 +183,11 @@ impl SecurityPolicy {
         fs_allow: Vec<String>,
         http_allow: Vec<String>,
     ) -> Result<Self, String> {
+        for rule in &fs_allow {
+            if let Some(warning) = fs_allow_rule_warning(rule) {
+                tracing::warn!(target: "tynd::security", "{warning}");
+            }
+        }
         Ok(Self {
             fs: Scope::try_new(fs_allow, input.fs.deny)?,
             http: Scope::try_new_http(http_allow, input.http.deny)?,
@@ -185,6 +215,49 @@ impl SecurityPolicy {
         }
         let canonical = canonicalize_fs(path);
         self.fs.check(&canonical, self.default_deny, "fs")
+    }
+
+    /// Only the `fs.deny` rules: a resolved path another allow-list admitted
+    /// (the `asset://` scope) still cannot reach what the fs policy denies.
+    pub fn check_fs_not_denied(&self, path: &str) -> Result<(), String> {
+        let canonical = canonicalize_fs(path);
+        if self.fs.deny_set.is_match(&canonical) {
+            return Err(format!("fs: denied by security policy - '{canonical}'"));
+        }
+        Ok(())
+    }
+
+    /// Whether an explicit `fs.allow` rule anchored at an absolute directory
+    /// names `path`, and `path` sits under that directory. Unlike
+    /// [`Self::check_fs_resolved`], an empty allow list admits nothing: only
+    /// a rule the deployer wrote can reach past the host's capability roots.
+    /// A rule without a fixed absolute leading directory (`**/*.pdf`) never
+    /// matches here: it only filters inside the roots and the grants. Deny
+    /// rules are not consulted here.
+    #[must_use]
+    pub fn fs_allow_rule_matches(&self, path: &str) -> bool {
+        self.fs_allow_anchor(path).is_some()
+    }
+
+    /// The directory an `fs.allow` rule matching `path` is anchored at: the
+    /// longest wildcard-free leading directory of the rule (the parent, for a
+    /// rule naming a single path). Among several matching rules the deepest
+    /// anchor wins. `None` when no rule matches or the matching rules start
+    /// with a wildcard (`**/*.txt`), which only filters inside the roots.
+    #[must_use]
+    pub fn fs_allow_anchor(&self, path: &str) -> Option<String> {
+        if !self.configured {
+            return None;
+        }
+        let canonical = canonicalize_fs(path);
+        self.fs
+            .allow_set
+            .matches(&canonical)
+            .into_iter()
+            .filter_map(|index| self.fs.allow.get(index))
+            .filter_map(|rule| literal_anchor(rule))
+            .filter(|anchor| is_under(&canonical, &canonicalize_fs(anchor)))
+            .max_by_key(String::len)
     }
 
     pub fn check_fs_configured(&self, path: &str) -> Result<(), String> {
@@ -357,6 +430,16 @@ fn compile_kind_lenient(kind: PatternKind, patterns: &[String], case_insensitive
     })
 }
 
+/// Deny rules ignore case where the default filesystem does: Windows (NTFS)
+/// and macOS (APFS / HFS+), so `~/.SSH` cannot slip past a `~/.ssh` rule.
+/// HTTP deny rules always ignore case.
+fn deny_case_insensitive(kind: PatternKind) -> bool {
+    match kind {
+        PatternKind::Fs => cfg!(any(target_os = "windows", target_os = "macos")),
+        PatternKind::Http => true,
+    }
+}
+
 /// Case folding applied to Windows paths and path patterns. Every pattern and
 /// candidate goes through this one helper (Unicode-aware) so both sides of a
 /// match always fold identically.
@@ -399,6 +482,79 @@ fn try_compile_kind(
 
 pub fn validate_glob_pattern(pattern: &str) -> Result<(), String> {
     try_compile_kind(PatternKind::Fs, &[pattern.to_string()], false).map(|_| ())
+}
+
+/// Wildcard-free leading directory of an absolute filesystem glob, in the
+/// rule's own spelling (forward slashes). A rule without metacharacters
+/// names one path; its anchor is the parent directory.
+fn literal_anchor(rule: &str) -> Option<String> {
+    let unified = if cfg!(target_os = "windows") {
+        rule.replace('\\', "/")
+    } else {
+        rule.to_string()
+    };
+    let is_meta = |segment: &str| {
+        segment.contains(['*', '?', '[', ']', '{', '}'])
+            || (!cfg!(target_os = "windows") && segment.contains('\\'))
+    };
+    let segments: Vec<&str> = unified.split('/').collect();
+    let literal = segments
+        .iter()
+        .position(|segment| is_meta(segment))
+        .unwrap_or_else(|| segments.len().saturating_sub(1));
+    let anchor = segments.get(..literal)?.join("/");
+    let anchor = if anchor.is_empty() && unified.starts_with('/') {
+        "/".to_string()
+    } else if cfg!(target_os = "windows") && anchor.len() == 2 && anchor.ends_with(':') {
+        format!("{anchor}/")
+    } else {
+        anchor
+    };
+    std::path::Path::new(&anchor)
+        .is_absolute()
+        .then_some(anchor)
+}
+
+/// `path` equals `dir` or lies under it (both canonical, forward slashes).
+fn is_under(path: &str, dir: &str) -> bool {
+    path == dir
+        || path
+            .strip_prefix(dir)
+            .is_some_and(|rest| dir.ends_with('/') || rest.starts_with('/'))
+}
+
+/// Why an `fs.allow` rule cannot reach outside the capability roots, if it
+/// cannot. Only a rule whose wildcard-free leading part is an absolute
+/// directory extends the scope; any other rule only filters the paths the
+/// default scope or a runtime grant already admits.
+#[must_use]
+pub fn fs_allow_rule_warning(rule: &str) -> Option<String> {
+    if literal_anchor(rule).is_some() {
+        return None;
+    }
+    let unified = rule.replace('\\', "/");
+    let wildcard_led = unified
+        .split('/')
+        .next()
+        .is_some_and(|first| first.contains(['*', '?', '[', '{']));
+    Some(if wildcard_led {
+        format!(
+            "security: fs.allow rule '{rule}' has no absolute leading directory: it only filters \
+             paths inside the app's own directories and runtime grants, and reaches nothing \
+             outside them"
+        )
+    } else {
+        format!(
+            "security: fs.allow rule '{rule}' is relative and matches no path (paths are matched \
+             in absolute form); start it with an absolute directory"
+        )
+    })
+}
+
+/// Escape a literal path so a glob matches exactly that path.
+#[must_use]
+pub fn literal_glob(path: &str) -> String {
+    globset::escape(path.trim_end_matches('/'))
 }
 
 /// Convert a literal directory path to a recursive glob without interpreting
@@ -708,7 +864,11 @@ pub fn canonicalize_process_binary(binary: &str) -> String {
 }
 
 pub fn canonicalize_fs(path: &str) -> String {
-    let cleaned = lex_clean_str(path);
+    let cleaned = if cfg!(target_os = "windows") {
+        lex_clean_str(&strip_win32_segment_suffixes(&path.replace('\\', "/")))
+    } else {
+        lex_clean_str(path)
+    };
     let absolute = {
         let p = std::path::Path::new(&cleaned);
         let already_rooted = p.is_absolute()
@@ -730,6 +890,46 @@ pub fn canonicalize_fs(path: &str) -> String {
     } else {
         normalized
     }
+}
+
+/// Win32 path normalization, applied before matching on Windows: every
+/// segment loses its alternate data stream suffix (`grants.json::$DATA`,
+/// `.ssh:$I30:$INDEX_ALLOCATION`) and its trailing dots and spaces
+/// (`security.\grants.json` and `.ssh ` open `security\grants.json` and
+/// `.ssh`). A segment left empty is dropped; `.`, `..` and drive prefixes
+/// (`C:`, `\\?\C:`) are kept. Expects forward slashes.
+#[must_use]
+pub fn strip_win32_segment_suffixes(path: &str) -> String {
+    let segments: Vec<&str> = path.split('/').collect();
+    let device_prefix = segments.len() > 3
+        && segments.first().is_some_and(|s| s.is_empty())
+        && segments.get(1).is_some_and(|s| s.is_empty())
+        && segments.get(2).is_some_and(|s| *s == "?" || *s == ".");
+    let mut out: Vec<String> = Vec::with_capacity(segments.len());
+    for (index, segment) in segments.iter().enumerate() {
+        if segment.is_empty() || *segment == "." || *segment == ".." || (device_prefix && index < 3)
+        {
+            out.push((*segment).to_string());
+            continue;
+        }
+        let may_hold_drive = index == 0 || (device_prefix && index == 3);
+        let bytes = segment.as_bytes();
+        let (drive, rest) = if may_hold_drive
+            && bytes.first().is_some_and(u8::is_ascii_alphabetic)
+            && bytes.get(1) == Some(&b':')
+        {
+            segment.split_at(2)
+        } else {
+            ("", *segment)
+        };
+        let stream_free = rest.split(':').next().unwrap_or_default();
+        let trimmed = stream_free.trim_end_matches(['.', ' ']);
+        if trimmed.is_empty() && drive.is_empty() {
+            continue;
+        }
+        out.push(format!("{drive}{trimmed}"));
+    }
+    out.join("/")
 }
 
 pub fn lex_clean_str(path: &str) -> String {

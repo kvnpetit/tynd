@@ -1,6 +1,6 @@
 //! Vault encrypt/decrypt round-trip, tamper detection, argument mapping and
-//! path confinement. Each test works in its own `tempfile::tempdir()`
-//! (inside the OS temp capability root). Cocoon's KDF is deliberately slow,
+//! path confinement. Each test works in its own directory under the default
+//! `<temp>/<app>` capability root. Cocoon's KDF is deliberately slow,
 //! so tests keep the number of encrypt/decrypt calls small.
 
 use std::path::Path;
@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use super::*;
 
 fn tmp() -> tempfile::TempDir {
-    tempfile::tempdir().expect("tempdir")
+    crate::security::path_scope::scoped_tempdir()
 }
 
 fn p(base: &Path, rel: &str) -> String {

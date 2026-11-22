@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { parse } from "devalue";
 import { resolveHostCall, setHostCallTransport } from "../host";
-import { lifecycleFlags, onCloseFns, onReadyFns } from "../lifecycle";
+import { lifecycleFlags, onCloseFns, onReadyFns, setEmitFn } from "../lifecycle";
 import {
   fireBeforeStartBounded,
   handleParsedMsg,
@@ -15,7 +15,9 @@ import { registerPlugin, resetPluginRegistry } from "./plugin-registry";
 import { encode } from "./wire";
 
 const ENTRY = new URL("./bun.fixture.ts", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-const CTX = { window: "main", webview: "child", origin: "tynd://app" };
+const CTX = { window: "main", webview: "child", origin: null };
+/** What a handler sees for `CTX`, minus the signal. */
+const SEEN = { ...CTX, isAppContent: true, aborted: false };
 
 interface Frame {
   type: string;
@@ -68,7 +70,7 @@ const errorOf = (id: string): string => {
 describe("call context over the wire", () => {
   test("handler sees msg.ctx across awaits", async () => {
     await call("1", "whoCalled", [], CTX);
-    expect(result("1")).toEqual(CTX);
+    expect(result("1")).toEqual(SEEN);
   });
 
   test("ctx absent gives undefined", async () => {
@@ -97,12 +99,13 @@ describe("call context over the wire", () => {
       methods: {
         who: async () => {
           await Promise.resolve();
-          return getCallContext();
+          const { signal: _signal, ...rest } = getCallContext() ?? ({} as never);
+          return { ...rest, aborted: false };
         },
       },
     });
     await call("6", "$plugin$ctxp$who", [], CTX);
-    expect(result("6")).toEqual(CTX);
+    expect(result("6")).toEqual(SEEN);
   });
 });
 
@@ -110,7 +113,8 @@ describe("middleware over the wire", () => {
   test("wraps user functions with fn, args and caller, in registration order", async () => {
     const seen: unknown[] = [];
     useMiddleware(async (ctx, next) => {
-      seen.push(["a", ctx.fn, ctx.args, ctx.caller, ctx.plugin]);
+      const { signal: _signal, ...caller } = ctx.caller ?? ({} as never);
+      seen.push(["a", ctx.fn, ctx.args, { ...caller, aborted: false }, ctx.plugin]);
       return next();
     });
     useMiddleware(async (_ctx, next) => {
@@ -119,7 +123,7 @@ describe("middleware over the wire", () => {
     });
     await call("7", "add", [2, 3], CTX);
     expect(result("7")).toBe(5);
-    expect(seen).toEqual([["a", "add", [2, 3], CTX, undefined], "b"]);
+    expect(seen).toEqual([["a", "add", [2, 3], SEEN, undefined], "b"]);
   });
 
   test("wraps JS plugin methods and reports the plugin name", async () => {
@@ -291,6 +295,64 @@ describe("plugin hooks over the wire", () => {
     } finally {
       exit.mockRestore();
     }
+  });
+});
+
+describe("cancelling an ordinary call", () => {
+  test("aborts ctx.signal with an AbortError and drops the late result", async () => {
+    const { aborts } = await import("./bun.fixture");
+    aborts.length = 0;
+    const running = call("abort-1", "waitForAbort", [], CTX);
+    await Bun.sleep(5);
+    await send({ type: "cancel", id: "abort-1" });
+    await running;
+    expect(aborts.length).toBe(1);
+    const reason = aborts[0]?.reason as DOMException;
+    expect(reason.name).toBe("AbortError");
+    expect(frames.filter((f) => f.id === "abort-1")).toEqual([]);
+  });
+
+  test("a remote caller is not app content", async () => {
+    await call("remote-1", "whoCalled", [], { ...CTX, origin: "https://remote.test" });
+    expect(result("remote-1")).toEqual({
+      ...SEEN,
+      origin: "https://remote.test",
+      isAppContent: false,
+    });
+  });
+});
+
+describe("host OS events", () => {
+  test("a tynd:os_event frame reaches backend window handles", async () => {
+    const { getWindow } = await import("../windows");
+    const seen: unknown[] = [];
+    const off = getWindow("main").onMoved((e) => seen.push(e));
+    await send({
+      type: "tynd:os_event",
+      name: "window:moved",
+      data: { label: "main", x: 1, y: 2 },
+    });
+    off();
+    expect(seen).toEqual([{ label: "main", x: 1, y: 2 }]);
+  });
+});
+
+describe("Channel arguments", () => {
+  test("a placeholder becomes a channel that pushes to the calling webview only", async () => {
+    const emitted: unknown[] = [];
+    setEmitFn((name, payload, to) => emitted.push([name, payload, to]));
+    await call("ch-1", "pushTwice", ["a", { __tynd_channel__: "c1" }], CTX);
+    expect(result("ch-1")).toBe("closed");
+    expect(emitted).toEqual([
+      ["__tynd_ch__:c1", { m: "a-1" }, "child"],
+      ["__tynd_ch__:c1", { m: "a-2" }, "child"],
+      ["__tynd_ch__:c1", { end: true }, "child"],
+    ]);
+  });
+
+  test("an object with extra keys is left alone", async () => {
+    await call("ch-2", "pushTwice", ["a", { __tynd_channel__: "c1", x: 1 }], CTX);
+    expect(errorOf("ch-2")).toContain("HANDLER_THREW");
   });
 });
 

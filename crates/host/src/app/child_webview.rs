@@ -325,6 +325,7 @@ pub(super) fn build_child_webview(
     let webview_result = parent.container.build_child(builder);
     let webview =
         webview_result.map_err(|error| format!("createWebview: build child webview: {error}"))?;
+    crate::webview::process_failed::watch(&webview, &request.label);
     navigation::register_webview_window(&request.label, &request.parent_label);
     if request.display.focused {
         webview

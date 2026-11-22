@@ -1,7 +1,8 @@
-//! `http` OS API: `request`, `download` and `upload` over ureq, gated by the
-//! URL scheme check and the `security` HTTP / filesystem allow-lists.
+//! `http` OS API: `request`, `stream`, `download` and `upload` over ureq,
+//! gated by the URL scheme check and the `security` HTTP / filesystem
+//! allow-lists (re-checked on every redirect hop, see `transport`).
 
-use std::{io::Read, time::Duration};
+use std::time::Duration;
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -14,10 +15,12 @@ use super::progress::ProgressEmitter as SharedProgressEmitter;
 mod download;
 mod idle;
 mod request;
+mod transport;
 mod upload;
 
 use download::download;
-use request::request;
+use request::{request, stream};
+use transport::NetArgs;
 use upload::upload;
 
 // Typed argument shapes — one `#[derive(Deserialize)]` per endpoint.
@@ -32,10 +35,16 @@ struct RequestArgs {
     url: String,
     #[serde(default)]
     method: Option<String>,
-    #[serde(default)]
-    timeout_ms: Option<u64>,
+    #[serde(flatten)]
+    net: NetArgs,
     #[serde(default)]
     progress_id: Option<String>,
+    /// `http.stream` only: id carried by the `http:stream` events.
+    #[serde(default)]
+    stream_id: Option<String>,
+    /// `http.stream` only: longest wait for the next body byte.
+    #[serde(default)]
+    idle_timeout_ms: Option<u64>,
     #[serde(default)]
     headers: Option<Value>,
     #[serde(default)]
@@ -49,8 +58,8 @@ struct RequestArgs {
 struct DownloadArgs {
     url: String,
     dest: String,
-    #[serde(default)]
-    timeout_ms: Option<u64>,
+    #[serde(flatten)]
+    net: NetArgs,
     #[serde(default)]
     progress_id: Option<String>,
     #[serde(default)]
@@ -80,30 +89,46 @@ pub(crate) const API: HostApi = HostApi::new("http", dispatch);
 pub(crate) fn dispatch(method: &str, args: Value) -> Result<Value, String> {
     match method {
         "request" => request(args),
+        "stream" => stream(args),
         "download" => download(args),
         "upload" => upload(args),
+        "abort" => abort(&args),
+        "clearCookies" => clear_cookies(&args),
         _ => Err(IpcError::unknown_method("http", method).into_string()),
     }
 }
 
-/// Build a ureq 3 `Agent` with our standard timeout + status-code policy.
-///
-/// `http_status_as_error = false` keeps 4xx/5xx responses flowing through
-/// the normal `Ok(response)` path so the IPC layer can surface the body
-/// to JS the same way as a 200 (the client contract's "still iterable on
-/// error status" branch relies on it).
-///
-/// SECURITY: `max_redirects(0)` disables ureq's automatic redirect
-/// follower so a hostile `Location: file:///etc/passwd` (or a server
-/// in an allowlisted origin redirecting to a disallowed origin) cannot
-/// smuggle past `crate::security::policy::check_http(...)`, which only ran on
-/// the original URL. Callers that need redirect support MUST follow
-/// them manually and re-validate every hop's `Location` URL through
-/// `check_http`. The 30x response surfaces to JS the same way a 200
-/// would — `headers["location"]` carries the next hop, the body is
-/// the server's redirect HTML.
+/// `http.abort { id }`: abort the call started with `abortId: id`.
+fn abort(args: &Value) -> Result<Value, String> {
+    let id = args
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| IpcError::new("http", "abort", "missing string 'id'").into_string())?;
+    transport::abort(id).map(Value::Bool)
+}
+
+/// `http.clearCookies { jar? }`: empty one cookie jar, or all of them.
+fn clear_cookies(args: &Value) -> Result<Value, String> {
+    match args.get("jar") {
+        None | Some(Value::Null) => transport::clear_cookies(None),
+        Some(Value::String(jar)) => {
+            transport::validate_jar_name(jar, "clearCookies")?;
+            transport::clear_cookies(Some(jar));
+        },
+        Some(_) => {
+            return Err(IpcError::new("http", "clearCookies", "jar must be a string").into_string())
+        },
+    }
+    Ok(Value::Null)
+}
+
+/// Default overall deadline of `request` / `stream` / `upload`.
+pub(super) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// ureq agent for `http.upload`: overall deadline, no redirect following
+/// (a 3xx is returned; replaying a streamed file is not supported).
 pub(super) fn build_agent(timeout_ms: Option<u64>) -> ureq::Agent {
-    let timeout = timeout_ms.map_or(Duration::from_secs(60), Duration::from_millis);
+    let timeout = timeout_ms.map_or(DEFAULT_TIMEOUT, Duration::from_millis);
     ureq::Agent::config_builder()
         .http_status_as_error(false)
         .max_redirects(0)
@@ -112,32 +137,21 @@ pub(super) fn build_agent(timeout_ms: Option<u64>) -> ureq::Agent {
         .new_agent()
 }
 
-/// Longest a download may go without receiving a single byte.
-const DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+/// Default `idleTimeoutMs` of `http.stream`: longest a stream may go
+/// without receiving a single byte (long enough for server-sent-event
+/// heartbeats).
+pub(super) const DEFAULT_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 
-/// Agent for `http.download`. A download of any size must not hit an implicit
-/// whole-call deadline, so without a caller `timeoutMs` there is no overall
-/// deadline: the body streams for as long as the server keeps sending. A
-/// stalled connection (no bytes for `DOWNLOAD_IDLE_TIMEOUT`) still fails, so a
-/// half-open TCP connection cannot block the worker for ever.
-pub(super) fn build_download_agent(timeout_ms: Option<u64>) -> ureq::Agent {
-    let builder = ureq::Agent::config_builder()
-        .http_status_as_error(false)
-        .max_redirects(0);
-    let builder = match timeout_ms {
-        Some(ms) => builder.timeout_global(Some(Duration::from_millis(ms))),
-        None => builder.timeout_connect(Some(Duration::from_secs(30))),
-    };
-    idle::apply(builder, DOWNLOAD_IDLE_TIMEOUT)
-        .build()
-        .new_agent()
-}
+/// Longest a download may go without receiving a single byte.
+pub(super) const DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Connect deadline of a call without any overall deadline (`download`,
+/// `stream`) and without `connectTimeoutMs`.
+pub(super) const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Reject any URL whose scheme is not `http(s)://` or `ws(s)://` before
-/// the request reaches ureq. Pairs with `max_redirects(0)` so a
-/// malicious `Location: file:///…` from a redirect can't slip through
-/// either: the first hop is checked here, and there is no second hop
-/// without an explicit caller-side re-validation.
+/// the request reaches ureq. Redirect hops go through
+/// `transport::check_redirect_target` instead (http/https only).
 pub(super) fn check_url_scheme(url: &str, op: &str) -> Result<(), String> {
     let parsed = url::Url::parse(url).map_err(|e| {
         IpcError::new("http", op, format!("invalid URL '{url}': {e}")).into_string()
@@ -179,23 +193,6 @@ impl ProgressEmitter {
 
     pub(super) fn advance(&mut self, delta: usize, force: bool) {
         self.0.advance(delta, force);
-    }
-}
-
-pub(super) struct ProgressReader {
-    pub(super) inner: std::io::Cursor<Vec<u8>>,
-    pub(super) emitter: ProgressEmitter,
-}
-
-impl Read for ProgressReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.inner.read(buf)?;
-        if n == 0 {
-            self.emitter.advance(0, true);
-        } else {
-            self.emitter.advance(n, false);
-        }
-        Ok(n)
     }
 }
 

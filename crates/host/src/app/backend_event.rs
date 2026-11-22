@@ -50,6 +50,12 @@ impl BackendEventContext<'_> {
         if crate::debug::complete_ipc_replay(&id, &payload) {
             return;
         }
+        // An `app.protocol(...)` request the runtime could not deliver.
+        if let BackendReturnPayload::Err(error) = &payload {
+            if crate::webview::protocols::fail_backend_protocol(&id, error) {
+                return;
+            }
+        }
         match classify_return_id(&id) {
             ReturnId::CloseAck => {
                 if self.backend.begin_exit() {

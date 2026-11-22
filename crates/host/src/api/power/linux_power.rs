@@ -101,6 +101,9 @@ fn supervise(stopping: Arc<AtomicBool>, ready: mpsc::SyncSender<Result<(), Strin
     }
 }
 
+/// Signal workers per generation: sleep, shutdown, lock, unlock.
+const WORKERS: usize = 4;
+
 fn run_generation(
     stopping: &Arc<AtomicBool>,
     startup: &mut Option<mpsc::SyncSender<Result<(), String>>>,
@@ -112,53 +115,22 @@ fn run_generation(
         return Ok(GenerationEnd::Stopped);
     }
 
-    let (worker_ready_tx, worker_ready_rx) = mpsc::sync_channel(3);
-    let mut joins = Vec::with_capacity(3);
+    let (worker_ready_tx, worker_ready_rx) = mpsc::sync_channel(WORKERS);
+    let mut joins = Vec::with_capacity(WORKERS);
 
-    let sleep_connection = connection.clone();
-    spawn_worker(
+    if let Err(error) = spawn_generation_workers(
+        &connection,
+        session_path,
+        stopping,
         &mut joins,
-        "tynd-power-linux-sleep",
-        Arc::clone(stopping),
-        worker_ready_tx.clone(),
-        move |ready| run_sleep(sleep_connection, ready),
-    )?;
-
-    let lock_connection = connection.clone();
-    let lock_path = session_path.clone();
-    if let Err(error) = spawn_worker(
-        &mut joins,
-        "tynd-power-linux-lock",
-        Arc::clone(stopping),
-        worker_ready_tx.clone(),
-        move |ready| run_session_signal(lock_connection, lock_path, "Lock", "power:lock", ready),
-    ) {
-        close_generation(connection, stopping, joins);
-        return Err(error);
-    }
-
-    let unlock_connection = connection.clone();
-    if let Err(error) = spawn_worker(
-        &mut joins,
-        "tynd-power-linux-unlock",
-        Arc::clone(stopping),
         worker_ready_tx,
-        move |ready| {
-            run_session_signal(
-                unlock_connection,
-                session_path,
-                "Unlock",
-                "power:unlock",
-                ready,
-            )
-        },
     ) {
         close_generation(connection, stopping, joins);
         return Err(error);
     }
 
     let deadline = Instant::now() + MONITOR_START_TIMEOUT;
-    for _ in 0..3 {
+    for _ in 0..WORKERS {
         let remaining = deadline.saturating_duration_since(Instant::now());
         match worker_ready_rx.recv_timeout(remaining) {
             Ok(Ok(())) => {},
@@ -189,6 +161,77 @@ fn run_generation(
     } else {
         GenerationEnd::Stopped
     })
+}
+
+/// Spawn the four signal workers of one generation. On error, the workers
+/// already spawned stay in `joins` so the caller can close the generation.
+fn spawn_generation_workers(
+    connection: &Connection,
+    session_path: OwnedObjectPath,
+    stopping: &Arc<AtomicBool>,
+    joins: &mut Vec<std::thread::JoinHandle<()>>,
+    worker_ready_tx: mpsc::SyncSender<Result<(), String>>,
+) -> Result<(), String> {
+    let sleep_connection = connection.clone();
+    spawn_worker(
+        joins,
+        "tynd-power-linux-sleep",
+        Arc::clone(stopping),
+        worker_ready_tx.clone(),
+        move |ready| {
+            run_manager_signal(
+                sleep_connection,
+                "PrepareForSleep",
+                "power:suspend",
+                Some("power:resume"),
+                ready,
+            )
+        },
+    )?;
+
+    let shutdown_connection = connection.clone();
+    spawn_worker(
+        joins,
+        "tynd-power-linux-shutdown",
+        Arc::clone(stopping),
+        worker_ready_tx.clone(),
+        move |ready| {
+            run_manager_signal(
+                shutdown_connection,
+                "PrepareForShutdown",
+                "power:shutdown",
+                None,
+                ready,
+            )
+        },
+    )?;
+
+    let lock_connection = connection.clone();
+    let lock_path = session_path.clone();
+    spawn_worker(
+        joins,
+        "tynd-power-linux-lock",
+        Arc::clone(stopping),
+        worker_ready_tx.clone(),
+        move |ready| run_session_signal(lock_connection, lock_path, "Lock", "power:lock", ready),
+    )?;
+
+    let unlock_connection = connection.clone();
+    spawn_worker(
+        joins,
+        "tynd-power-linux-unlock",
+        Arc::clone(stopping),
+        worker_ready_tx,
+        move |ready| {
+            run_session_signal(
+                unlock_connection,
+                session_path,
+                "Unlock",
+                "power:unlock",
+                ready,
+            )
+        },
+    )
 }
 
 fn spawn_worker<F>(
@@ -251,8 +294,13 @@ fn resolve_session(connection: &Connection) -> Result<OwnedObjectPath, String> {
         .map_err(|error| format!("GetSessionByPID({pid}): {error}"))
 }
 
-fn run_sleep(
+/// logind `Manager` signal carrying a `bool` (`true` = about to happen,
+/// `false` = done): emits `on_true` / `on_false`.
+fn run_manager_signal(
     connection: Connection,
+    signal: &'static str,
+    on_true: &'static str,
+    on_false: Option<&'static str>,
     ready: &mpsc::SyncSender<Result<(), String>>,
 ) -> Result<(), String> {
     let proxy = Proxy::new(
@@ -263,17 +311,21 @@ fn run_sleep(
     )
     .map_err(|error| format!("Manager proxy: {error}"))?;
     let signals = proxy
-        .receive_signal("PrepareForSleep")
-        .map_err(|error| format!("receive_signal PrepareForSleep: {error}"))?;
+        .receive_signal(signal)
+        .map_err(|error| format!("receive_signal {signal}: {error}"))?;
     ready
         .send(Ok(()))
-        .map_err(|_| "PrepareForSleep readiness receiver closed".to_string())?;
+        .map_err(|_| format!("{signal} readiness receiver closed"))?;
     for message in signals {
         match message.body().deserialize::<bool>() {
-            Ok(true) => events::emit("power:suspend", &json!({})),
-            Ok(false) => events::emit("power:resume", &json!({})),
+            Ok(true) => events::emit(on_true, &json!({})),
+            Ok(false) => {
+                if let Some(event) = on_false {
+                    events::emit(event, &json!({}));
+                }
+            },
             Err(error) => {
-                crate::tynd_warn!("power[linux]: PrepareForSleep body: {error}");
+                crate::tynd_warn!("power[linux]: {signal} body: {error}");
             },
         }
     }

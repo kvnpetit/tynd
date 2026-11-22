@@ -1,4 +1,4 @@
-import { currentWebviewLabel, currentWindowLabel, osCall } from "./_internal";
+import { base64ToBytes, currentWebviewLabel, currentWindowLabel, osCall } from "./_internal";
 
 /** A cookie as seen by the webview's cookie store. */
 export interface WebviewCookie {
@@ -70,6 +70,69 @@ export interface WebviewNewWindowEvent {
   action: "deny" | "external" | "allow";
 }
 
+/** Webview targeted by a session call. */
+export interface WebviewTarget {
+  /**
+   * Webview to act on. Defaults to the caller's webview. Naming another
+   * webview needs a caller that shows app content.
+   */
+  label?: string;
+}
+
+/** Named paper sizes accepted by `printToPdf`. */
+export type WebviewPageSize = "A3" | "A4" | "A5" | "Letter" | "Legal" | "Tabloid";
+
+/** Options of `tyndWebview.printToPdf`. Lengths are inches. */
+export interface WebviewPdfOptions extends WebviewTarget {
+  /** Defaults to `false` (portrait). */
+  landscape?: boolean;
+  /** Print CSS backgrounds. Defaults to `false`. */
+  printBackground?: boolean;
+  /** `0.1`..`2`, defaults to `1`. */
+  scale?: number;
+  /** A named size or `{ width, height }` (1..100 in). Defaults to Letter. */
+  pageSize?: WebviewPageSize | { width: number; height: number };
+  /** One value for every side, or per side (0..10 in, unset sides = 0). */
+  margins?: number | { top?: number; right?: number; bottom?: number; left?: number };
+}
+
+/**
+ * Options of `tyndWebview.clearData`. With no category selected (or
+ * `all: true`) every kind of data the engine stores is removed, history and
+ * autofill included.
+ */
+export interface WebviewClearDataOptions extends WebviewTarget {
+  cookies?: boolean;
+  /** HTTP disk/memory cache and Cache API storage. */
+  cache?: boolean;
+  localStorage?: boolean;
+  indexedDb?: boolean;
+  serviceWorkers?: boolean;
+  /** Remove everything; overrides the categories. */
+  all?: boolean;
+}
+
+/** Options of `tyndWebview.print`. */
+export interface WebviewPrintOptions extends WebviewTarget {
+  /**
+   * Print without the OS dialog (Windows, Linux). Only app content may print
+   * silently. Defaults to `false`.
+   */
+  silent?: boolean;
+  /** Printer of a silent print (see `getPrinters`). Defaults to the OS default printer. */
+  printer?: string;
+}
+
+/** An installed printer, as reported by `tyndWebview.getPrinters`. */
+export interface WebviewPrinter {
+  name: string;
+  isDefault: boolean;
+}
+
+function targetArgs(target: WebviewTarget): { label?: string } {
+  return target.label === undefined ? {} : { label: target.label };
+}
+
 function cookieArgs(target: WebviewCookieTarget): { label: string; url?: string } {
   const args: { label: string; url?: string } = {
     label: target.label ?? currentWebviewLabel(),
@@ -135,6 +198,64 @@ export const tyndWebview = {
       offStarted();
       offCompleted();
     };
+  },
+  /**
+   * Evaluate a JavaScript expression in a webview and resolve to its
+   * JSON-serializable result (`undefined` becomes `null`; a returned Promise
+   * is not awaited). Wrap statements in an IIFE. A thrown error rejects.
+   * Always needs an explicit `window:evaluateScript` capability grant.
+   */
+  evaluate<T = unknown>(script: string, target: WebviewTarget = {}): Promise<T> {
+    return osCall("window", "evaluateScript", { ...targetArgs(target), script });
+  },
+  /**
+   * Delete browsing data of the webview's data store and resolve once the
+   * engine is done. Pass categories to clear only those; with none, every
+   * cookie, cache entry and storage is removed. Always needs an explicit
+   * `window:clearBrowsingData` capability grant.
+   */
+  clearData(options: WebviewClearDataOptions = {}): Promise<void> {
+    const { label, ...kinds } = options;
+    return osCall("window", "clearBrowsingData", { ...targetArgs({ label }), ...kinds });
+  },
+  /**
+   * Render the page to PDF and resolve to its bytes. On macOS the whole page
+   * becomes one continuous PDF page and the layout options do not apply; on
+   * Linux CSS backgrounds are always printed.
+   */
+  async printToPdf(options: WebviewPdfOptions = {}): Promise<Uint8Array> {
+    const { label, ...pdf } = options;
+    const data = await osCall<string>("window", "printToPdf", {
+      ...targetArgs({ label }),
+      options: pdf,
+    });
+    return base64ToBytes(data);
+  },
+  /** Capture the visible page as PNG bytes. */
+  async capturePage(target: WebviewTarget = {}): Promise<Uint8Array> {
+    const data = await osCall<string>("window", "capturePage", targetArgs(target));
+    return base64ToBytes(data);
+  },
+  /** Mute or unmute every sound the page plays. Windows and Linux. */
+  setAudioMuted(muted: boolean, target: WebviewTarget = {}): Promise<void> {
+    return osCall("window", "setAudioMuted", { ...targetArgs(target), muted });
+  },
+  /** Whether the page's audio is muted. Windows and Linux. */
+  isAudioMuted(target: WebviewTarget = {}): Promise<boolean> {
+    return osCall("window", "isAudioMuted", targetArgs(target));
+  },
+  /**
+   * Print the page: the OS print dialog by default, or straight to a
+   * printer with `silent: true` (Windows, Linux; resolves once the job is
+   * spooled).
+   */
+  print(options: WebviewPrintOptions = {}): Promise<void> {
+    const { label, ...print } = options;
+    return osCall("window", "printPage", { ...targetArgs({ label }), ...print });
+  },
+  /** Installed printers, the default one flagged. Windows only. */
+  getPrinters(): Promise<WebviewPrinter[]> {
+    return osCall("window", "getPrinters");
   },
   /** Observe `window.open()` / `target="_blank"` requests and the policy decision. */
   onNewWindow(handler: (event: WebviewNewWindowEvent) => void): () => void {

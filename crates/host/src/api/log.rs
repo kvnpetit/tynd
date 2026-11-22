@@ -105,15 +105,12 @@ static STATE: LazyLock<Mutex<LoggerState>> = LazyLock::new(|| {
     })
 });
 
+/// `<app log dir>/app.log` (`crate::app_dirs`, the folder `os.appLogDir`
+/// reports).
 fn default_path() -> PathBuf {
-    let name = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-        .unwrap_or_else(|| "tynd".into());
-    let base = dirs::cache_dir()
-        .or_else(dirs::data_dir)
-        .unwrap_or_else(std::env::temp_dir);
-    base.join(&name).join("app.log")
+    crate::app_dirs::app_dir(crate::app_dirs::AppDir::Log)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("app.log")
 }
 
 /// Dispatch marker — logger state lives in `STATE`.

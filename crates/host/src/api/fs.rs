@@ -59,6 +59,29 @@ pub(crate) const API: HostApi = HostApi {
 /// `"fs.<method>: <message>"`. Frontend handlers parse the prefix.
 pub(crate) fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
     let _admission = admit_dispatch()?;
+    // Read-only grants (`security.allowPath`, dialog `grantAccess`) only admit
+    // the methods that never modify the filesystem.
+    let access = if is_read_only(method, args) {
+        tynd_security_policy::FsAccess::Read
+    } else {
+        tynd_security_policy::FsAccess::Write
+    };
+    crate::security::policy::with_fs_access(access, || dispatch_method(method, args))
+}
+
+/// Methods that only read. `open` reads when it asks for no write, append,
+/// create or truncate.
+fn is_read_only(method: &str, args: &Value) -> bool {
+    match method {
+        "readText" | "exists" | "stat" | "readDir" | "readlink" | "watch" => true,
+        "open" => ["write", "append", "create", "truncate"]
+            .iter()
+            .all(|flag| args.get(*flag).and_then(Value::as_bool) != Some(true)),
+        _ => false,
+    }
+}
+
+fn dispatch_method(method: &str, args: &Value) -> Result<Value, String> {
     match method {
         "readText" => ops::read_text(args),
         "writeText" => ops::write_text(args),

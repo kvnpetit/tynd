@@ -30,6 +30,7 @@ dpi.workspace                = true
 serde.workspace              = true
 serde_json.workspace         = true
 image.workspace              = true
+drag.workspace               = true
 muda                         = { workspace = true, optional = true }
 tray-icon                    = { workspace = true, optional = true }
 dirs.workspace               = true
@@ -76,6 +77,7 @@ hostname.workspace   = true
 os_info.workspace    = true
 dark-light.workspace = true
 sys-locale.workspace = true
+iana-time-zone.workspace = true
 
 # Always-on perf primitives.
 # `bytes` / `smallvec` are used throughout the IPC + scheme handlers
@@ -90,6 +92,7 @@ rfd                   = { workspace = true, optional = true }
 arboard               = { workspace = true, optional = true }
 open                  = { workspace = true, optional = true }
 ureq                  = { workspace = true, optional = true }
+cookie_store          = { workspace = true, optional = true }
 fslock                = { workspace = true, optional = true }
 interprocess          = { workspace = true, optional = true }
 notify-debouncer-full = { workspace = true, optional = true }
@@ -290,34 +293,34 @@ api-autolaunch      = [ "dep:auto-launch" ]
 api-biometric       = [ "dep:robius-authentication" ]
 api-clipboard       = [ "dep:arboard", "dep:ahash", "dep:base64" ]
 api-compute         = [ "dep:base64", "dep:sha2", "dep:blake3" ]
-api-dialog          = [ "dep:rfd" ]
+api-dialog          = [ "dep:rfd", "dep:raw-window-handle" ]
 api-fs              = [ "dep:camino", "dep:notify-debouncer-full", "dep:trash", "dep:ahash", "dep:base64" ]
-api-http            = [ "dep:ureq", "dep:base64", "api-fs" ]
+api-http            = [ "dep:ureq", "dep:cookie_store", "dep:base64", "api-fs" ]
 # `zeroize` here wipes the inbound password buffer on drop — same
 # rationale as `api-vault`, so a freed allocation can't leak the
 # cleartext to a later allocator handout.
 api-keyring         = [ "dep:keyring", "dep:zeroize" ]
 # Native menus: application menu bar, popup context menus (`menu.*`,
-# `window.showContextMenu`). Pulls `muda`.
-api-menu            = [ "dep:muda" ]
+# `window.showContextMenu`). Pulls `muda` (and `base64` for inline item icons).
+api-menu            = [ "dep:muda", "dep:base64" ]
 # Secondary windows (`window.create` / `close` / `all`) and child webviews
 # (`webview.*`). Pure logic over wry/tao — no extra dependency, the gate
 # narrows the renderer-facing surface.
 api-multiwindow     = [  ]
 # System tray icon + tray menu (`tray.*`). Pulls `tray-icon` (libappindicator
 # on Linux) and `muda` for the tray menu items.
-api-tray            = [ "dep:tray-icon", "dep:muda" ]
+api-tray            = [ "dep:tray-icon", "dep:muda", "dep:base64" ]
 api-network         = [ "dep:if-addrs", "dep:ahash" ]
-api-notification    = [ "dep:notify-rust", "dep:tauri-winrt-notification", "dep:mac-notification-sys", "dep:ahash" ]
+api-notification    = [ "dep:notify-rust", "dep:zbus", "dep:mac-notification-sys", "dep:ahash" ]
 api-power           = [ "dep:user-idle", "dep:starship-battery", "power-events-mac", "power-events-linux" ]
 # Internal helper sub-features — let the per-target dep tables flip the
 # matching crates on without leaking them on the wrong OS. `Cargo` skips
 # `target.'cfg(...)'.dependencies` entries automatically when their
 # `optional = true` deps aren't enabled, so `dep:zbus` resolves to a
-# no-op on Windows / Linux respectively. `objc2` itself is not pulled
-# directly — `objc2-app-kit` already re-exports the umbrella `objc2`
-# crate as `objc2_app_kit::objc2`, so we save one optional-dep entry.
-power-events-mac    = [ "dep:objc2-foundation", "dep:objc2-app-kit", "dep:block2" ]
+# no-op on Windows / Linux respectively. `power-events-mac` pulls
+# nothing: the AppKit crates it uses are always on for macOS (see the
+# macOS dependency table); it only gates the NSWorkspace observers.
+power-events-mac    = [  ]
 power-events-linux  = [ "dep:zbus" ]
 api-process         = [ "dep:shared_child", "dep:base64" ]
 api-screenshot      = [ "dep:xcap", "dep:base64" ]
@@ -397,14 +400,25 @@ arboard       = { version = "3", features = [ "wayland-data-control" ], optional
 # Secret Service store (kwallet/gnome-keyring expose the same DBus surface).
 keyring       = { workspace = true, features = [ "v1" ], optional = true }
 gtk.workspace = true
+# WebKitGTK session calls (snapshot, print, mute, data removal). Same pinned
+# version and feature level as wry's own dependency.
+webkit2gtk = { version = "=2.0.2", features = [ "v2_38" ] }
 # systemd-logind DBus signals (PrepareForSleep, Session.Lock/Unlock) for
 # the `api::power` watcher. `default-features = false` + `blocking-api`
 # keeps the async-io runtime out of the dep graph — the watcher runs on
 # its own dedicated `std::thread`.
 zbus = { version = "5.19", default-features = false, features = [ "blocking-api" ], optional = true }
 
+# Window materials for `window.setEffects` (Windows + macOS; Linux has none).
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+window-vibrancy.workspace = true
+
 [target.'cfg(target_os = "windows")'.dependencies]
-tauri-winrt-notification = { workspace = true, optional = true }
+# WinRT toast notifications (`api::notification`) and the shell jump list
+# (`app.setJumpList`: ICustomDestinationList / IShellLinkW). Always on:
+# webview2-com already compiles this crate; the shell features only add
+# bindings.
+windows                  = { workspace = true, features = [ "Win32_Foundation", "Win32_Storage_EnhancedStorage", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_Shell_PropertiesSystem" ] }
 # Windows Hello backend. The upstream Linux implementation is incomplete
 # and currently does not compile, so this dependency stays target-scoped.
 robius-authentication    = { workspace = true, optional = true }
@@ -417,6 +431,9 @@ keyring                  = { workspace = true, features = [ "v1" ], optional = t
 # builds skip the dep entirely. `windows-registry` replaces the
 # unmaintained `winreg` crate with the typed wrapper from microsoft/windows-rs.
 windows-registry = { workspace = true, optional = true }
+# WebView2 interfaces wry does not wrap (`webview::session`).
+webview2-com     = { workspace = true }
+windows-core     = { workspace = true }
 # Direct Win32 access for runtime-only features tao doesn't surface: DWM
 # system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
 # 0.61 introduces `windows-link` (raw-dylib resolution) which drops the
@@ -429,7 +446,7 @@ windows-registry = { workspace = true, optional = true }
 # (suspend/resume) and `WM_WTSSESSION_CHANGE` (lock/unlock) get pumped
 # into the host event bus. `WNDCLASSEXW` references `HBRUSH` (Gdi) and
 # `GetModuleHandleW` lives in `LibraryLoader`.
-windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Storage_Xps", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_System_Power", "Win32_System_RemoteDesktop", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Security", "Win32_Security_Authorization" ] }
+windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps", "Win32_UI_Controls", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_ApplicationInstallationAndServicing", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Diagnostics_Debug", "Win32_Globalization", "Win32_System_Memory", "Win32_System_Power", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_RemoteDesktop", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Security", "Win32_Security_Authorization" ] }
 # Wide-string helpers for the Windows SDDL plumbing in `platform::win_security`.
 # `interprocess::os::windows::security_descriptor::SecurityDescriptor::deserialize`
 # takes a `&U16CStr`, so we lean on the same crate it expects rather than
@@ -438,6 +455,9 @@ windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphi
 # Optional: `platform::win_security` only exists with `api-single-instance` /
 # `api-deep-link`, which enable it.
 widestring = { version = "1", optional = true }
+# Owner window of `rfd` file dialogs (`dialog.*` `parent` option). Only
+# consumed on Windows; pulled with `api-dialog`.
+raw-window-handle = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # WKWebView proxy support for `window.proxy` / `webview.proxy` (links the
@@ -460,12 +480,27 @@ keyring              = { workspace = true, features = [ "v1" ], optional = true 
 # builds skip it entirely. The `appleScript` table row is gated on
 # `target_os = "macos"` too, so other platforms report the API disabled.
 osakit               = { workspace = true, optional = true }
-# NSWorkspace.notificationCenter observers for the `api::power` watcher
-# (sleep/wake + session active/inactive). Only pulled with `api-power`
-# so non-power builds stay free of objc2-app-kit's generated bindings.
-# The umbrella `objc2` crate is reached via `objc2_app_kit::objc2` /
-# `objc2_foundation::objc2`, so we don't declare it directly.
-objc2-foundation = { version = "0.3", default-features = false, features = [ "std", "NSString", "NSNotification", "NSOperation", "block2" ], optional = true }
-objc2-app-kit = { version = "0.3", default-features = false, features = [ "std", "NSWorkspace" ], optional = true }
-block2 = { version = "0.6", optional = true }
+# AppKit bindings: NSWorkspace.notificationCenter observers for the
+# `api::power` watcher, NSAlert for `dialog.message`, NSDocumentController
+# for `app.addRecentDocument`, NSBeep for `shell.beep`. Always on: wry and
+# tao already compile these crates on macOS, so only the listed bindings
+# are added.
+objc2-foundation = { version = "0.3", default-features = false, features = [ "std", "NSString", "NSNotification", "NSOperation", "NSURL", "NSData", "NSArray", "NSProcessInfo", "NSDate", "NSDictionary", "NSError", "NSSet", "NSLocale", "NSDateFormatter", "NSFormatter", "block2" ] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [ "std", "block2", "NSAccessibility", "NSAlert", "NSApplication", "NSBitmapImageRep", "NSImageRep", "NSButton", "NSCell", "NSColor", "NSColorSpace", "NSControl", "NSDocumentController", "NSGraphics", "NSImage", "NSResponder", "NSRunningApplication", "NSPasteboard", "NSScreen", "NSView", "NSWindow", "NSWorkspace" ] }
+# Main-queue dispatch (`run_on_main`) for the AppKit calls above, which
+# must run on the main thread while IPC calls arrive on pool threads.
+dispatch2 = { version = "0.3", default-features = false, features = [ "std", "objc2" ] }
+# WKWebView session calls (PDF, snapshot, website-data removal) in
+# `webview::session`. Same version wry compiles; only these bindings are added.
+objc2-web-kit = { version = "0.3.2", default-features = false, features = [ "std", "block2", "objc2-app-kit", "objc2-core-foundation", "WKWebView", "WKWebViewConfiguration", "WKWebsiteDataStore", "WKWebsiteDataRecord", "WKPDFConfiguration", "WKSnapshotConfiguration" ] }
+block2 = "0.6"
+# Camera / microphone permission (`os.getMediaAccessStatus`,
+# `os.askForMediaAccess`) and the screen-recording preflight. Same versions
+# xcap and wry already compile on macOS.
+objc2-av-foundation = { version = "0.3", default-features = false, features = [ "std", "block2", "AVCaptureDevice", "AVMediaFormat" ] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = [ "std", "CGWindow" ] }
+# Raw `NSWindow` messages (level, alpha, aspect ratio, movable) for the
+# window frame controls in `api::window_cmd::frame`. Already compiled by
+# tao/wry on macOS.
+objc2 = "0.6"
 

@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { encodeIpcError, type TyndIpcErrorCode } from "../errors";
 import { dispatchFrontendEmit, FRONTEND_EMIT_FN } from "../frontend-events";
 import { hostCall, resolveHostCall, setHostCallTransport } from "../host";
+import { dispatchHostEvent } from "../host-events";
 import {
   BEFORE_QUIT_TIMEOUT_MS,
   fireBeforeQuit,
@@ -12,12 +13,14 @@ import {
 } from "../lifecycle";
 import { tynd } from "../logger";
 import type { AppConfig } from "../types";
+import { reviveChannels } from "./channel";
 import { redirectConsoleToStderr } from "./console";
 import { type CallContext, parseCallContext, runWithCallContext } from "./context";
 import { sanitizedMessage } from "./error";
 import { fireHook } from "./hooks";
 import { type MiddlewareContext, runMiddleware } from "./middleware";
 import { getPluginMethod, parsePluginCall } from "./plugin-registry";
+import { handleProtocolMsg, ProtocolMsgSchema, protocolNames } from "./protocol";
 import { decodeArgs, encode as encodeWire } from "./wire";
 
 /**
@@ -58,6 +61,12 @@ const WindowMsgSchema = v.object({
   event: v.union([v.literal("created"), v.literal("closed")]),
   label: v.string(),
 });
+// Native window/webview events forwarded by the host (`getWindow(label).on*`).
+const OsEventMsgSchema = v.object({
+  type: v.literal("tynd:os_event"),
+  name: v.string(),
+  data: v.unknown(),
+});
 const HostResultMsgSchema = v.object({
   type: v.literal("host_result"),
   id: v.string(),
@@ -71,6 +80,8 @@ const IpcMsgSchema = v.union([
   LifecycleMsgSchema,
   WindowMsgSchema,
   HostResultMsgSchema,
+  OsEventMsgSchema,
+  ProtocolMsgSchema,
 ]);
 
 /** Per-stream credit cap. Must match ACK_CHUNK on the shim so replenishment beats starvation. */
@@ -86,8 +97,12 @@ interface StreamState {
 
 const _activeStreams = new Map<string, StreamState>();
 
-/** Ids of calls between `call` and their return/stream end — lets a `cancel` that races ahead of stream registration be remembered. */
-const _inflightCalls = new Set<string>();
+/**
+ * Abort controller of every call between `call` and its return/stream end.
+ * `cancel` aborts it (the handler sees `getCallContext().signal`), and its
+ * presence lets a `cancel` that races ahead of stream registration be remembered.
+ */
+const _inflightCalls = new Map<string, AbortController>();
 /** Ids cancelled before their stream was registered; consumed by `streamIterable`. */
 const _cancelledEarly = new Set<string>();
 
@@ -230,6 +245,10 @@ function bootBun(config: AppConfig, entry: string): void {
     // relying only on host initialization.
     capabilities: config.capabilities ?? [],
     quitOnLastWindowClosed: config.quitOnLastWindowClosed ?? false,
+    assets: config.assets ?? null,
+    // `app.protocol(...)` schemes: the host registers them before it builds
+    // the first webview.
+    protocols: protocolNames(),
   });
   sendHostTrust();
 
@@ -344,6 +363,22 @@ async function handleLine(line: string, entryPath: string): Promise<void> {
   return handleParsedMsg(raw, entryPath);
 }
 
+/** Credit a stream with `n` consumed chunks and wake its producer. */
+function ackStream(id: string, n: number): void {
+  const stream = _activeStreams.get(id);
+  if (!stream) return;
+  // Cap credit at STREAM_CREDIT — a buggy / hostile host sending a huge
+  // ack value could otherwise grow credit without bound and defeat the
+  // back-pressure cap. Floor `n` at 0 so a negative ack can't drive
+  // credit below zero and deadlock the next step.
+  stream.credit = Math.min(stream.credit + Math.max(0, n), STREAM_CREDIT);
+  if (stream.waiter) {
+    const wake = stream.waiter;
+    stream.waiter = null;
+    wake();
+  }
+}
+
 /** @internal exported for tests. Dispatch a parsed IPC message: `raw` comes
  *  from `JSON.parse` and is validated against the valibot schema before the
  *  switch dispatch. */
@@ -364,21 +399,9 @@ export async function handleParsedMsg(raw: unknown, entryPath: string): Promise<
     case "cancel":
       cancelCall(m.id);
       return;
-    case "ack": {
-      const stream = _activeStreams.get(m.id);
-      if (!stream) return;
-      // Cap credit at STREAM_CREDIT — a buggy / hostile host sending a huge
-      // ack value could otherwise grow credit without bound and defeat the
-      // back-pressure cap. Floor `m.n` at 0 so a negative ack can't drive
-      // credit below zero and deadlock the next step.
-      stream.credit = Math.min(stream.credit + Math.max(0, m.n), STREAM_CREDIT);
-      if (stream.waiter) {
-        const wake = stream.waiter;
-        stream.waiter = null;
-        wake();
-      }
+    case "ack":
+      ackStream(m.id, m.n);
       return;
-    }
     case "tynd:ready":
       await fireReady();
       return;
@@ -394,6 +417,12 @@ export async function handleParsedMsg(raw: unknown, entryPath: string): Promise<
     case "host_result":
       resolveHostCall(m.id, m.ok, m.value);
       return;
+    case "tynd:os_event":
+      dispatchHostEvent(m.name, m.data);
+      return;
+    case "protocol":
+      await handleProtocolMsg(m, writeIpcFrame);
+      return;
     default: {
       const _exhaustive: never = m;
       void _exhaustive;
@@ -403,6 +432,10 @@ export async function handleParsedMsg(raw: unknown, entryPath: string): Promise<
 
 /** Stop a streaming call, or remember the cancel when it raced ahead of the stream registration. */
 function cancelCall(id: string): void {
+  const controller = _inflightCalls.get(id);
+  if (controller && !controller.signal.aborted) {
+    controller.abort(new DOMException("call cancelled", "AbortError"));
+  }
   const stream = _activeStreams.get(id);
   if (!stream) {
     // Not streaming (yet): the handler / middleware may still be running.
@@ -528,10 +561,13 @@ async function handleCall(
   entryPath: string,
 ): Promise<void> {
   const { id, fn } = msg;
-  const args = decodeCallArgs(msg);
-  if (!args) return;
-  const caller = parseCallContext(msg.ctx);
-  _inflightCalls.add(id);
+  const decoded = decodeCallArgs(msg);
+  if (!decoded) return;
+  const controller = new AbortController();
+  const caller = parseCallContext(msg.ctx, controller.signal);
+  // `Channel` arguments arrive as placeholders bound to the calling webview.
+  const args = reviveChannels(decoded, caller);
+  _inflightCalls.set(id, controller);
 
   // The whole call (handler, middleware, plugin hooks and stream iteration)
   // runs inside the caller's AsyncLocalStorage scope for `getCallContext()`.
@@ -539,9 +575,16 @@ async function handleCall(
     try {
       if (handleFrontendEmit(id, fn, args)) return;
       const resolved = await resolveCall(fn, args, entryPath, caller);
+      // A cancelled call was already settled by the client and forgotten by
+      // the host: its result has nowhere to go.
+      if (controller.signal.aborted) {
+        await discardResult(resolved);
+        return;
+      }
       await writeResolvedCall(id, fn, resolved);
     } catch (error) {
       _activeStreams.delete(id);
+      if (controller.signal.aborted) return;
       const message = sanitizedMessage(error);
       writeIpcError(id, callErrorCode(error, message), message, fn);
     } finally {
@@ -549,6 +592,13 @@ async function handleCall(
       _cancelledEarly.delete(id);
     }
   });
+}
+
+/** Close a stream the client no longer wants (it was cancelled before its first chunk). */
+async function discardResult(resolved: unknown): Promise<void> {
+  if (_isAsyncIterable(resolved)) {
+    await closeStreamIterator(resolved[Symbol.asyncIterator](), false);
+  }
 }
 
 /**

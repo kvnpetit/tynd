@@ -1,8 +1,10 @@
-//! System color-scheme detection + change events.
+//! System color-scheme + appearance preferences detection and change events.
 //!
 //! `dark-light` has no native subscribe on every OS; we poll every 1 s (cheap XDG/Reg/
-//! CFPrefs query) and emit `theme:change` on transitions. Opt-in via
-//! `os.theme.startWatch()`.
+//! CFPrefs query) and emit `theme:change` on light/dark transitions and
+//! `theme:preferences-change` when any field of [`ThemeApi::preferences`]
+//! changes (accent color, high contrast, reduced motion / transparency).
+//! Opt-in via `os.theme.startWatch()`.
 //!
 //! The host exposes `current()` and `startWatch`/`stopWatch`; CSS swap
 //! lives in the TS client.
@@ -26,6 +28,8 @@ use crate::api::HostApi;
 use crate::ipc::events;
 use crate::tynd;
 
+mod preferences;
+
 /// Dispatch marker — watcher state lives in `WATCHER`.
 #[derive(Debug, Default)]
 pub(crate) struct ThemeApi;
@@ -48,8 +52,17 @@ impl ThemeApi {
         current_mode()
     }
 
+    /// Appearance snapshot: `{ mode, accentColor, highContrast,
+    /// reducedMotion, reducedTransparency }`. `accentColor` is `"#rrggbb"`;
+    /// every field other than `mode` is `null` where the OS does not expose
+    /// it (Linux).
+    pub fn preferences() -> Value {
+        preferences::read().to_json(&current_mode())
+    }
+
     /// Start the 1 s polling watcher and emit `theme:change` whenever
-    /// the system mode flips. Reference-counted: repeated calls return the
+    /// the system mode flips, `theme:preferences-change` whenever the
+    /// [`Self::preferences`] snapshot changes. Reference-counted: repeated calls return the
     /// same `{ watching: true }` payload without spawning a second thread,
     /// and each call must be balanced by a [`Self::stop_watch`].
     pub fn start_watch() -> Result<Value, String> {
@@ -140,6 +153,7 @@ fn start_watch_impl(owner: &str) -> Result<Value, String> {
             let detect_every = Duration::from_secs(1);
             let tick = Duration::from_millis(250);
             let mut last = current_mode();
+            let mut last_prefs = preferences::read();
             let mut since = Duration::ZERO;
             while r.load(Ordering::Acquire) {
                 std::thread::sleep(tick);
@@ -149,9 +163,15 @@ fn start_watch_impl(owner: &str) -> Result<Value, String> {
                 }
                 since = Duration::ZERO;
                 let now = current_mode();
-                if now != last {
+                let prefs = preferences::read();
+                let mode_changed = now != last;
+                if mode_changed {
                     last.clone_from(&now);
                     events::emit("theme:change", &json!({ "mode": now }));
+                }
+                if mode_changed || prefs != last_prefs {
+                    last_prefs = prefs;
+                    events::emit("theme:preferences-change", &prefs.to_json(&now));
                 }
             }
         })

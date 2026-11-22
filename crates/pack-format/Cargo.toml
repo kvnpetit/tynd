@@ -19,5 +19,9 @@ name    = "tynd_pack_format"
 path    = "src/lib.rs"
 doctest = false
 
+[dependencies]
+# Pack integrity digest (`integrity.blake3` entry).
+blake3.workspace = true
+
 [lints]
 workspace = true

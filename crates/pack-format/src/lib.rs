@@ -17,6 +17,18 @@ pub const WEBVIEW2_RUNTIME_PATH_ENTRY: &str = "webview2.runtime-path";
 /// protocol allowed (`tynd build --debug-protocol`). Absent means disabled, so
 /// packs written before the flag existed read as `false`.
 pub const DEBUG_FLAG_ENTRY: &str = "debug.flag";
+/// Reserved pack entry carrying the app identifier (`bundle.identifier`, for
+/// example `com.example.app`), fixed at build time. The host names the app's
+/// own data, config, cache and temp directories after it.
+pub const APP_IDENTIFIER_ENTRY: &str = "app.identifier";
+/// Longest accepted app identifier, in bytes.
+pub const MAX_APP_IDENTIFIER_LEN: usize = 255;
+/// Reserved first pack entry: lowercase hex BLAKE3 digest of every entry that
+/// follows it (see [`IntegrityHasher`]). Written by `tynd-bundler pack`; a
+/// runtime that knows it verifies the pack before trusting any extracted file.
+pub const INTEGRITY_ENTRY: &str = "integrity.blake3";
+/// Length of the [`INTEGRITY_ENTRY`] payload (hex BLAKE3).
+pub const INTEGRITY_HEX_LEN: usize = 64;
 /// Maximum size of small boot metadata entries.
 pub const MAX_BOOT_METADATA_BYTES: u64 = 4096;
 
@@ -429,6 +441,63 @@ where
     Ok(section_size)
 }
 
+/// Streaming BLAKE3 digest over pack entries, in wire order.
+///
+/// Each entry contributes its wire bytes: `path_len` (u16 LE), path,
+/// `data_len` (u32 LE), data. The writer hashes every entry after
+/// [`INTEGRITY_ENTRY`]; a reader feeds each header with
+/// [`IntegrityHasher::entry_header`] and its payload with
+/// [`IntegrityHasher::update`] while extracting, then compares
+/// [`IntegrityHasher::finalize_hex`] with the stored digest.
+#[derive(Debug, Clone, Default)]
+pub struct IntegrityHasher(blake3::Hasher);
+
+impl IntegrityHasher {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Hash an entry header. Lengths beyond the wire limits cannot be written
+    /// by [`write_section_and_trailer`], so they are hashed saturated.
+    pub fn entry_header(&mut self, rel: &str, data_len: u64) {
+        let path_len = u16::try_from(rel.len()).unwrap_or(u16::MAX);
+        let data_len = u32::try_from(data_len).unwrap_or(u32::MAX);
+        self.0.update(&path_len.to_le_bytes());
+        self.0.update(rel.as_bytes());
+        self.0.update(&data_len.to_le_bytes());
+    }
+
+    /// Hash (part of) the current entry payload.
+    pub fn update(&mut self, data: &[u8]) {
+        self.0.update(data);
+    }
+
+    pub fn finalize_hex(&self) -> String {
+        self.0.finalize().to_hex().to_string()
+    }
+}
+
+/// Digest stored in the [`INTEGRITY_ENTRY`] for `entries` (the entries written
+/// after it, in order).
+pub fn integrity_digest(entries: &[PackEntry<'_>]) -> String {
+    let mut hasher = IntegrityHasher::new();
+    for entry in entries {
+        hasher.entry_header(entry.rel, entry.data.len() as u64);
+        hasher.update(entry.data);
+    }
+    hasher.finalize_hex()
+}
+
+/// Compare a stored [`INTEGRITY_ENTRY`] payload with a computed digest.
+/// Case-insensitive, surrounding whitespace ignored; a malformed payload never
+/// matches.
+pub fn integrity_matches(stored: &[u8], computed: &str) -> bool {
+    let stored = stored.trim_ascii();
+    stored.len() == INTEGRITY_HEX_LEN
+        && stored.iter().all(u8::is_ascii_hexdigit)
+        && stored.eq_ignore_ascii_case(computed.as_bytes())
+}
+
 /// Payload of the [`DEBUG_FLAG_ENTRY`] entry when the flag is on.
 pub const DEBUG_FLAG_ON: &[u8] = b"1";
 
@@ -442,6 +511,24 @@ pub fn debug_flag_entry(enabled: bool) -> Option<PackEntry<'static>> {
 /// (surrounding whitespace ignored) reads as off, so a damaged flag fails closed.
 pub fn parse_debug_flag(data: &[u8]) -> bool {
     data.trim_ascii() == DEBUG_FLAG_ON
+}
+
+/// Whether `identifier` can name the app's directories: dot-separated,
+/// non-empty segments of ASCII letters, digits, `-` and `_`, starting with a
+/// letter or digit, at most [`MAX_APP_IDENTIFIER_LEN`] bytes. Rules out path
+/// separators, `.`/`..` and names Windows trims (a trailing dot).
+pub fn is_valid_app_identifier(identifier: &str) -> bool {
+    identifier.len() <= MAX_APP_IDENTIFIER_LEN
+        && identifier
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphanumeric)
+        && identifier.split('.').all(|segment| {
+            !segment.is_empty()
+                && segment
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        })
 }
 
 /// Validate a path segment carried after `frontend/` or `sidecar/`.

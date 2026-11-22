@@ -20,6 +20,7 @@
 
 mod args;
 mod bun;
+mod crash;
 mod embed;
 mod observability;
 
@@ -40,10 +41,13 @@ static mut __TYND_BUNDLE_TYPE: &str = "__TAURI_BUNDLE_TYPE_VAR_UNK";
 /// to the dev args (`--backend-entry <path>`).
 pub fn run() -> ! {
     tynd_host::init_tracing();
+    crash::install_panic_hook();
     let outcome: std::thread::Result<()> =
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> () { run_inner() }));
     match outcome {
         Err(payload) => {
+            // Local crash report (`app.crashReporter`), when the app started it.
+            crash::write_escaped_panic(payload.as_ref());
             // The panic hook only logs: it also runs for plugin panics that
             // are intentionally caught. Cleanup belongs at this outermost
             // application boundary, where the panic is genuinely escaping.

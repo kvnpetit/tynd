@@ -10,7 +10,7 @@ use wry::{WebView, WebViewBuilder, WebViewBuilderExtUnix};
 /// live in the overlaid `GtkFixed`, which gives Wry mutable bounds on both X11
 /// and Wayland.
 pub(super) struct LinuxWebviewContainer {
-    _overlay: gtk::Overlay,
+    overlay: gtk::Overlay,
     children: gtk::Fixed,
 }
 
@@ -33,14 +33,11 @@ impl LinuxWebviewContainer {
         children.show();
         overlay.show();
 
-        Ok(Self {
-            _overlay: overlay,
-            children,
-        })
+        Ok(Self { overlay, children })
     }
 
     pub(super) fn build_root<'a>(&'a self, builder: WebViewBuilder<'a>) -> wry::Result<WebView> {
-        builder.build_gtk(&self._overlay)
+        builder.build_gtk(&self.overlay)
     }
 
     pub(super) fn build_child<'a>(&'a self, builder: WebViewBuilder<'a>) -> wry::Result<WebView> {

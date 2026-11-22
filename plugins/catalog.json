@@ -469,7 +469,7 @@
     "apis": [],
     "importName": "llm",
     "importPath": "@tynd/plugin-llm/client",
-    "description": "AI helper",
+    "description": "Native local LLM inference (GGUF)",
     "maturity": "experimental",
     "permissions": ["network", "secrets"],
     "estimatedSizeKb": 260,

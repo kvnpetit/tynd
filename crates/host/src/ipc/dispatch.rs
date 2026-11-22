@@ -45,6 +45,23 @@ fn take_string(v: &mut Value, key: &str) -> String {
 pub(crate) static CALL_LABELS: LazyLock<DashMap<String, CompactString>> =
     LazyLock::new(DashMap::default);
 
+/// Cancel every backend call issued by the webview `label`, streaming or not:
+/// its window closed or its document went away (navigation, reload), so no
+/// page is left to receive the answer. The backend aborts the handler's
+/// `getCallContext().signal` and drops its result.
+pub(crate) fn cancel_calls_for_label(label: &str, call_tx: &mpsc::Sender<BackendCall>) {
+    // Inline-4 covers the typical 0-2 in-flight calls per webview without a
+    // heap alloc; spills transparently for higher fan-out.
+    let orphaned: smallvec::SmallVec<[String; 4]> = CALL_LABELS
+        .iter()
+        .filter_map(|entry| (entry.value() == label).then(|| entry.key().clone()))
+        .collect();
+    for id in orphaned {
+        CALL_LABELS.remove(&id);
+        let _ = call_tx.send(BackendCall::Cancel { id });
+    }
+}
+
 /// Best-effort ID recovery for an oversized frame that cannot safely be
 /// parsed. Never use this raw scan for authorization, routing an accepted
 /// call, or backend dispatch.
@@ -234,13 +251,17 @@ fn denied_backend_command(fn_name: &str, context: &IpcContext<'_>) -> Option<Str
     (!allowed).then_some(command)
 }
 
-/// Window commands that expose HttpOnly cookies / session tokens. These always
-/// need an explicit grant, exactly like the 29 gated OS APIs.
+/// Window commands that expose HttpOnly cookies / session tokens or run code in
+/// a webview. These always need an explicit grant, exactly like the 29 gated
+/// OS APIs.
 const SENSITIVE_WINDOW_COMMANDS: &[&str] = &[
     "getWebviewCookies",
     "setWebviewCookie",
     "deleteWebviewCookie",
     "clearWebviewCookies",
+    // Runs code in, or wipes the storage of, a webview (possibly another one).
+    "evaluateScript",
+    "clearBrowsingData",
 ];
 
 /// Whether `<api>:<method>` needs an explicit grant. Window, tray and menu
@@ -264,14 +285,67 @@ fn native_access_allowed(
     (!declares_namespace && !sensitive && !remote_origin) || is_allowed()
 }
 
-/// Returns the denied `<api>:<method>` command for a renderer `window.*`,
-/// `tray.*` or `menu.*` call.
-fn denied_native_command(api: &str, method: &str, context: &IpcContext<'_>) -> Option<String> {
-    let authority = crate::security::acl::authority();
-    let command = format!("{api}:{method}");
-    let allowed = native_access_allowed(
+/// A form of an otherwise default-open command that always needs an explicit
+/// grant of that command:
+/// - `window:printPage` with `silent: true` spools a job to a printer without
+///   the user ever seeing a dialog;
+/// - any webview session command (`capturePage`, `printToPdf`...) whose
+///   `label` targets another webview than the caller (`caller_webview`): it
+///   reads or drives that webview's content, which may be another origin.
+fn is_sensitive_call_form(api: &str, method: &str, args: &Value, caller_webview: &str) -> bool {
+    if api != "window" {
+        return false;
+    }
+    if method == "printPage" && args.get("silent").and_then(Value::as_bool) == Some(true) {
+        return true;
+    }
+    crate::webview::session::is_session_method(method)
+        && args
+            .get("label")
+            .and_then(Value::as_str)
+            .is_some_and(|label| label != caller_webview)
+}
+
+/// [`native_access_allowed`] plus the argument-dependent sensitive forms
+/// (`sensitive_form`, from [`is_sensitive_call_form`]). Each flag is a
+/// separate policy fact, kept as plain arguments so tests read as a table.
+#[allow(clippy::fn_params_excessive_bools)]
+fn native_call_allowed(
+    api: &str,
+    method: &str,
+    sensitive_form: bool,
+    fail_closed: bool,
+    declares_namespace: bool,
+    remote_origin: bool,
+    is_allowed: impl FnOnce() -> bool,
+) -> bool {
+    if sensitive_form {
+        return !fail_closed && is_allowed();
+    }
+    native_access_allowed(
         api,
         method,
+        fail_closed,
+        declares_namespace,
+        remote_origin,
+        is_allowed,
+    )
+}
+
+/// Returns the denied `<api>:<method>` command for a renderer `window.*`,
+/// `tray.*` or `menu.*` call.
+fn denied_native_command(
+    api: &str,
+    method: &str,
+    args: &Value,
+    context: &IpcContext<'_>,
+) -> Option<String> {
+    let authority = crate::security::acl::authority();
+    let command = format!("{api}:{method}");
+    let allowed = native_call_allowed(
+        api,
+        method,
+        is_sensitive_call_form(api, method, args, context.webview_label),
         authority.is_fail_closed(),
         authority.declares_command_prefix(&format!("{api}:")),
         context.origin.is_some(),
@@ -577,7 +651,7 @@ fn handle_os_call(mut value: Value, context: &IpcContext<'_>) {
     let args = value.get_mut("args").map_or(Value::Null, std::mem::take);
 
     if matches!(api.as_str(), "window" | "tray" | "menu") {
-        if let Some(command) = denied_native_command(&api, &method, context) {
+        if let Some(command) = denied_native_command(&api, &method, &args, context) {
             reject_denied_os_call(id, &command, context);
             return;
         }
@@ -602,6 +676,7 @@ fn handle_os_call(mut value: Value, context: &IpcContext<'_>) {
                 id,
                 method,
                 args,
+                origin: context.origin.map(str::to_owned),
             },
             "TrayCmd",
         ),

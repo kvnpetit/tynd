@@ -45,6 +45,15 @@ pub(crate) enum UserEvent {
         id: String,
         method: String,
         args: Value,
+        /// Effective origin of the calling frame; `None` for app-local content.
+        origin: Option<String>,
+    },
+    /// Left click on tray icon `tray`: toggle its attached window next to
+    /// `anchor` (icon bounds or click point: x, y, width, height, physical).
+    #[cfg_attr(not(feature = "api-tray"), allow(dead_code))]
+    TrayToggleWindow {
+        tray: String,
+        anchor: [f64; 4],
     },
     /// Menu-bar mutations (`menu.update`, `menu.setItemEnabled`, ...). Routed
     /// through the event loop because muda's items are `!Send` on
@@ -57,12 +66,18 @@ pub(crate) enum UserEvent {
     },
     /// Sent by a timeout thread when on_close takes too long.
     ForceExit,
-    /// Sent 500ms after CloseRequested if `cancelClose()` wasn't called.
-    ProceedClose,
+    /// Sent 500ms after a close request on window `label`; the window
+    /// closes unless a handler called `cancelClose()` for it meanwhile.
+    ProceedClose {
+        label: String,
+    },
     /// Sent by the single-instance listener when a duplicate launch forwards
     /// its argv: we bring the primary window to the front.
     #[cfg_attr(not(feature = "api-single-instance"), allow(dead_code))]
     FocusPrimary,
+    /// Sent by a display watcher (`monitors.onChange`): re-read the monitor
+    /// list and emit `monitor:change` when it differs.
+    MonitorsChanged,
     /// Sent 10ms after the first buffered yield (or synchronously when the
     /// buffer exceeds `YIELD_BATCH_MAX`) to flush pending chunks to every
     /// webview in one `evaluate_script` per window.
@@ -77,6 +92,13 @@ pub(crate) enum UserEvent {
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     ContextLost {
         label: String,
+    },
+    /// A window command from the trusted backend (`getWindow(label)` in Bun).
+    /// `args.window` names the target window (default: the primary one).
+    BackendWindowCmd {
+        method: String,
+        args: Value,
+        reply: crossbeam_channel::Sender<Result<Value, String>>,
     },
     /// Debug protocol asks the host to evaluate JS in a webview and ship the
     /// result back through `reply`. Routed through the event loop because

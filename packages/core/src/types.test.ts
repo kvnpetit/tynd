@@ -6,6 +6,7 @@ import {
   NEW_WINDOW_POLICIES,
   type ObservabilityConfig,
   PROXY_URL_PATTERN,
+  WEB_PERMISSION_DECISIONS,
   type WindowConfig,
 } from "./types";
 
@@ -19,6 +20,33 @@ describe("window.downloads", () => {
     }
     expect(parse({ downloads: "ask" }).success).toBe(false);
     expect(parse({}).success).toBe(true);
+  });
+});
+
+describe("window.permissions", () => {
+  test("accepts a decision per known kind", () => {
+    expect([...WEB_PERMISSION_DECISIONS]).toEqual(["allow", "deny", "prompt"]);
+    expect(
+      parse({ permissions: { camera: "allow", microphone: "prompt", geolocation: "deny" } })
+        .success,
+    ).toBe(true);
+    expect(parse({ permissions: {} }).success).toBe(true);
+  });
+
+  test("rejects unknown kinds and decisions", () => {
+    expect(parse({ permissions: { webcam: "allow" } }).success).toBe(false);
+    expect(parse({ permissions: { camera: "always" } }).success).toBe(false);
+  });
+});
+
+describe("window.visible / kiosk / titleBarStyle", () => {
+  test("accept booleans and the three macOS title bar styles", () => {
+    expect(parse({ visible: false, kiosk: true }).success).toBe(true);
+    for (const style of ["visible", "transparent", "overlay"]) {
+      expect(parse({ titleBarStyle: style }).success).toBe(true);
+    }
+    expect(parse({ titleBarStyle: "hiddenInset" }).success).toBe(false);
+    expect(parse({ visible: "no" }).success).toBe(false);
   });
 });
 

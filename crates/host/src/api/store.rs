@@ -32,6 +32,7 @@ use parking_lot::{Mutex, MutexGuard};
 use serde_json::{Map, Value};
 
 use crate::api::HostApi;
+use crate::app_dirs::{app_dir, AppDir};
 use crate::ipc::error::IpcError;
 use crate::tynd;
 
@@ -389,37 +390,22 @@ fn validate_namespace_uncached(namespace: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn store_base_dir() -> Result<PathBuf, String> {
-    dirs::config_dir()
-        .or_else(dirs::data_dir)
+/// `<config>/<app>` (`<data>/<app>` when the OS has no config dir), the
+/// app's own directory from `crate::app_dirs`.
+fn store_app_dir() -> Result<PathBuf, String> {
+    app_dir(AppDir::Config)
+        .or_else(|| app_dir(AppDir::Data))
         .ok_or_else(|| store_err("*", "no config/data directory available"))
 }
 
-/// Per-app directory name: the executable's file stem, the same scoping the
-/// log and updater-state files use.
-fn app_dir_name() -> &'static str {
-    static NAME: LazyLock<String> = LazyLock::new(|| {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-            .filter(|s| !s.is_empty() && !s.starts_with('.'))
-            .unwrap_or_else(|| "tynd-app".to_string())
-    });
-    NAME.as_str()
-}
-
-/// `<base>/<app>/<ns>/store.json`.
-fn store_path_under(base: &Path, app: &str, namespace: &str) -> PathBuf {
-    base.join(app).join(namespace).join("store.json")
+/// `<app dir>/<ns>/store.json`.
+fn store_path_under(dir: &Path, namespace: &str) -> PathBuf {
+    dir.join(namespace).join("store.json")
 }
 
 fn store_path(namespace: &str) -> Result<PathBuf, String> {
     validate_namespace(namespace)?;
-    Ok(store_path_under(
-        &store_base_dir()?,
-        app_dir_name(),
-        namespace,
-    ))
+    Ok(store_path_under(&store_app_dir()?, namespace))
 }
 
 fn load_if_needed(namespace: &str) -> Result<(), String> {
@@ -638,19 +624,13 @@ mod tests {
     }
 
     #[test]
-    fn path_includes_app_segment() {
-        let base = Path::new("cfg");
-        let p = store_path_under(base, "my-app", "settings");
-        assert_eq!(p, base.join("my-app").join("settings").join("store.json"));
-    }
-
-    #[test]
-    fn two_apps_do_not_share_a_namespace_file() {
-        let base = Path::new("cfg");
-        assert_ne!(
-            store_path_under(base, "app-a", "settings"),
-            store_path_under(base, "app-b", "settings")
+    fn path_is_inside_the_app_config_dir() {
+        let app = app_dir(AppDir::Config).expect("config dir");
+        assert_eq!(
+            store_path("settings").unwrap(),
+            app.join("settings").join("store.json")
         );
+        assert!(app.ends_with(crate::app_dirs::name()));
     }
 
     #[test]
@@ -666,7 +646,7 @@ mod tests {
     #[test]
     fn write_then_read_round_trip() {
         let dir = tempfile::tempdir().unwrap();
-        let path = store_path_under(dir.path(), "app", "ns");
+        let path = store_path_under(dir.path(), "ns");
         write_store_file(&path, &sample()).unwrap();
         assert_eq!(read_store_file("ns", &path).unwrap(), sample());
     }
@@ -674,14 +654,14 @@ mod tests {
     #[test]
     fn missing_file_reads_as_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let path = store_path_under(dir.path(), "app", "ns");
+        let path = store_path_under(dir.path(), "ns");
         assert!(read_store_file("ns", &path).unwrap().is_empty());
     }
 
     #[test]
     fn corrupt_file_is_refused() {
         let dir = tempfile::tempdir().unwrap();
-        let path = store_path_under(dir.path(), "app", "ns");
+        let path = store_path_under(dir.path(), "ns");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, "{ not json").unwrap();
         assert!(read_store_file("ns", &path).is_err());

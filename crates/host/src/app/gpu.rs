@@ -24,9 +24,9 @@
 //! The single-call-site contract: `run_app` invokes Phase 1 immediately after
 //! reading the backend config, and Phase 2 just before `WebViewBuilder::new`.
 
-#[cfg(target_os = "windows")]
-use crate::window::ColorSpace;
 use crate::window::{GpuPreference, HardwareAcceleration, PreferredFps, WindowConfig};
+#[cfg(target_os = "windows")]
+use tynd_protocol::window::ColorSpace;
 
 /// Phase 1 — process-wide env vars consumed by Chromium / WebKitGTK at boot.
 /// Call once. Uses `std::env::set_var`, which is `unsafe` on Unix: a concurrent

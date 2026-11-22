@@ -41,6 +41,24 @@ impl ChildSlot {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// Exit code of a child that is exiting on its own, waiting up to
+    /// `timeout`. `None` when it was killed by a signal or is still running
+    /// (it is left in the slot for `terminate`).
+    fn wait_exit_code(&self, timeout: std::time::Duration) -> Option<i32> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            match self.lock().as_mut()?.try_wait() {
+                Ok(Some(status)) => return status.code(),
+                Ok(None) => {},
+                Err(_) => return None,
+            }
+            if std::time::Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
     /// Kill and reap the current child, if any.
     fn terminate(&self) {
         if let Some(mut child) = self.lock().take() {

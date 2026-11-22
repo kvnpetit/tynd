@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { getCallContext, parseCallContext, runWithCallContext } from "./context";
 
-const ctx = { window: "main", webview: "main", origin: "tynd://app" };
+const signal = new AbortController().signal;
+const ctx = {
+  window: "main",
+  webview: "main",
+  origin: "https://remote.test",
+  isAppContent: false,
+  signal,
+};
+const wire = { window: "main", webview: "main", origin: "https://remote.test" };
 
 describe("call context", () => {
   test("is undefined outside a call", () => {
@@ -44,12 +52,22 @@ describe("call context", () => {
   });
 
   test("parseCallContext accepts the documented shape and rejects the rest", () => {
-    expect(parseCallContext(ctx)).toEqual(ctx);
-    expect(parseCallContext({ ...ctx, origin: null })).toEqual({ ...ctx, origin: null });
-    expect(parseCallContext(undefined)).toBeUndefined();
-    expect(parseCallContext(null)).toBeUndefined();
-    expect(parseCallContext("main")).toBeUndefined();
-    expect(parseCallContext({ window: "main" })).toBeUndefined();
-    expect(parseCallContext({ ...ctx, webview: 1 })).toBeUndefined();
+    expect(parseCallContext(wire, signal)).toEqual(ctx);
+    expect(parseCallContext({ ...wire, origin: null }, signal)).toEqual({
+      ...ctx,
+      origin: null,
+      isAppContent: true,
+    });
+    expect(parseCallContext(undefined, signal)).toBeUndefined();
+    expect(parseCallContext(null, signal)).toBeUndefined();
+    expect(parseCallContext("main", signal)).toBeUndefined();
+    expect(parseCallContext({ window: "main" }, signal)).toBeUndefined();
+    expect(parseCallContext({ ...wire, webview: 1 }, signal)).toBeUndefined();
+  });
+
+  test("a host-sent isAppContent or signal never overrides the runtime's", () => {
+    const parsed = parseCallContext({ ...wire, isAppContent: true, signal: "x" }, signal);
+    expect(parsed?.isAppContent).toBe(false);
+    expect(parsed?.signal).toBe(signal);
   });
 });

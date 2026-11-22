@@ -624,6 +624,12 @@ mod tests {
             // Future mutation methods are denied by default.
             ("security", "setPolicy"),
             ("acl", "grant"),
+            // Runtime scope grants are backend only.
+            ("security", "allowPath"),
+            ("security", "allowUrl"),
+            ("security", "revokePath"),
+            ("security", "revokeUrl"),
+            ("security", "listGrants"),
         ] {
             assert!(
                 deny_privileged_mutation(api, method).is_err(),

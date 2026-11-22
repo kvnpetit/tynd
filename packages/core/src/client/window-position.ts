@@ -1,5 +1,4 @@
 import { tynd } from "../logger";
-import { osCall } from "./_internal";
 import type { Monitor } from "./monitor";
 import type { WindowPreset, WindowSize } from "./window-types";
 
@@ -109,14 +108,18 @@ function warnAboutApproximateTrayPosition(preset: WindowPreset, scale: number): 
   );
 }
 
-export async function positionWindowAt(preset: WindowPreset, padding = 20): Promise<void> {
+export async function positionWindowAt(
+  call: <T>(method: string, args?: Record<string, unknown>) => Promise<T>,
+  preset: WindowPreset,
+  padding = 20,
+): Promise<void> {
   const [monitor, windowSize] = await Promise.all([
-    osCall<Monitor | null>("window", "currentMonitor"),
-    osCall<WindowSize>("window", "getOuterSize"),
+    call<Monitor | null>("currentMonitor"),
+    call<WindowSize>("getOuterSize"),
   ]);
   if (!monitor) return;
 
   warnAboutApproximateTrayPosition(preset, monitor.scale || 1);
   const position = POSITIONERS[preset](toWindowFrame(monitor, windowSize), padding);
-  await osCall("window", "setPosition", position);
+  await call("setPosition", { ...position });
 }

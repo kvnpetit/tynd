@@ -146,3 +146,90 @@ describe("tyndWebview.onNewWindow", () => {
     expect(seen).toHaveLength(1);
   });
 });
+
+describe("tyndWebview session calls", () => {
+  test("evaluate targets the caller unless a label is given", async () => {
+    nextResult = { title: "Docs" };
+    expect(await tyndWebview.evaluate("({ title: document.title })")).toEqual({ title: "Docs" });
+    await tyndWebview.evaluate("1", { label: "preview" });
+    expect(calls).toEqual([
+      {
+        api: "window",
+        method: "evaluateScript",
+        args: { script: "({ title: document.title })" },
+      },
+      { api: "window", method: "evaluateScript", args: { label: "preview", script: "1" } },
+    ]);
+  });
+
+  test("clearData and audio mute forward the target", async () => {
+    await tyndWebview.clearData({ label: "preview" });
+    await tyndWebview.setAudioMuted(true);
+    nextResult = true;
+    expect(await tyndWebview.isAudioMuted({ label: "preview" })).toBe(true);
+    expect(calls).toEqual([
+      { api: "window", method: "clearBrowsingData", args: { label: "preview" } },
+      { api: "window", method: "setAudioMuted", args: { muted: true } },
+      { api: "window", method: "isAudioMuted", args: { label: "preview" } },
+    ]);
+  });
+
+  test("clearData flattens the selected categories next to the target", async () => {
+    await tyndWebview.clearData({ cookies: true, indexedDb: true });
+    await tyndWebview.clearData({ label: "preview", all: true });
+    expect(calls).toEqual([
+      {
+        api: "window",
+        method: "clearBrowsingData",
+        args: { cookies: true, indexedDb: true },
+      },
+      { api: "window", method: "clearBrowsingData", args: { label: "preview", all: true } },
+    ]);
+  });
+
+  test("printToPdf splits the label from the options and decodes bytes", async () => {
+    nextResult = btoa("%PDF");
+    const bytes = await tyndWebview.printToPdf({
+      label: "preview",
+      landscape: true,
+      pageSize: "A4",
+      margins: 0.5,
+    });
+    expect(new TextDecoder().decode(bytes)).toBe("%PDF");
+    expect(calls).toEqual([
+      {
+        api: "window",
+        method: "printToPdf",
+        args: { label: "preview", options: { landscape: true, pageSize: "A4", margins: 0.5 } },
+      },
+    ]);
+  });
+
+  test("capturePage decodes the PNG bytes", async () => {
+    nextResult = btoa("\x89PNG");
+    const bytes = await tyndWebview.capturePage();
+    expect(Array.from(bytes.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(calls).toEqual([{ api: "window", method: "capturePage", args: {} }]);
+  });
+});
+
+describe("tyndWebview printing", () => {
+  test("print opens the dialog by default and forwards silent options", async () => {
+    await tyndWebview.print();
+    await tyndWebview.print({ label: "preview", silent: true, printer: "Office" });
+    expect(calls).toEqual([
+      { api: "window", method: "printPage", args: {} },
+      {
+        api: "window",
+        method: "printPage",
+        args: { label: "preview", silent: true, printer: "Office" },
+      },
+    ]);
+  });
+
+  test("getPrinters resolves the host list", async () => {
+    nextResult = [{ name: "Office", isDefault: true }];
+    expect(await tyndWebview.getPrinters()).toEqual([{ name: "Office", isDefault: true }]);
+    expect(calls).toEqual([{ api: "window", method: "getPrinters", args: null }]);
+  });
+});

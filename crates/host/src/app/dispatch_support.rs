@@ -55,27 +55,6 @@ pub(super) fn debug_window_info(label: &str, window: &Window) -> Value {
     }
 }
 
-/// Cancel every active streaming call whose origin window just closed. Looks
-/// up ids in `dispatch::CALL_LABELS` and sends `BackendCall::Cancel` for
-/// each match. Without this, a closed secondary window leaves its async
-/// generators running forever on the backend.
-pub(super) fn cancel_streams_for_label(
-    label: &str,
-    call_tx: &crossbeam_channel::Sender<BackendCall>,
-) {
-    let labels = &dispatch::CALL_LABELS;
-    // Inline-4 covers the typical 0-2 in-flight streams per window without a
-    // heap alloc; spills transparently for higher fan-out.
-    let orphaned: SmallVec<[String; 4]> = labels
-        .iter()
-        .filter_map(|e| (e.value() == label).then(|| e.key().clone()))
-        .collect();
-    for id in orphaned {
-        labels.remove(&id);
-        let _ = call_tx.send(BackendCall::Cancel { id });
-    }
-}
-
 pub(super) fn remove_child_webviews_for_parent(
     parent_label: &str,
     child_webviews: &mut HashMap<String, ChildWebviewEntry>,
@@ -90,7 +69,7 @@ pub(super) fn remove_child_webviews_for_parent(
         if let Some(entry) = child_webviews.remove(&label) {
             let parent = entry.parent_label.clone();
             drop(entry);
-            cancel_streams_for_label(&label, call_tx);
+            dispatch::cancel_calls_for_label(&label, call_tx);
             navigation::clear_remote_origin(&label);
             crate::ipc::events::emit(
                 "webview:closed",

@@ -1,8 +1,9 @@
 //! Persisted per-install updater state: the runtime-selected release channel
 //! and the random install id used for staged-rollout bucketing.
 //!
-//! Stored as JSON at `<data_dir>/<exe_stem>/updater-state.json`. Without a
-//! data directory the state still works in memory for the process lifetime.
+//! Stored as JSON at `<data_dir>/<app>/updater-state.json` (`crate::app_dirs`).
+//! Without a data directory the state still works in memory for the process
+//! lifetime.
 
 use std::{
     fs,
@@ -32,11 +33,7 @@ static STATE: LazyLock<Mutex<UpdaterState>> =
     LazyLock::new(|| Mutex::new(UpdaterState::load(default_path())));
 
 fn default_path() -> Option<PathBuf> {
-    let stem = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-        .unwrap_or_else(|| "tynd-app".to_string());
-    Some(dirs::data_dir()?.join(stem).join("updater-state.json"))
+    Some(crate::app_dirs::app_dir(crate::app_dirs::AppDir::Data)?.join("updater-state.json"))
 }
 
 /// Runtime channel override, if the app ever called `setChannel`.

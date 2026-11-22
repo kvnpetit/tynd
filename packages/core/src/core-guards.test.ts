@@ -162,6 +162,22 @@ describe("app.start nested options", () => {
       'menu.0.items.0.type: Invalid type: Expected ("separator" | "item"',
     ],
     [
+      { menu: [{ type: "submenu", label: "File", items: [{ id: "x" }] }] },
+      "menu item needs a `label` (or a `role`)",
+    ],
+    [
+      {
+        menu: [
+          {
+            type: "submenu",
+            label: "File",
+            items: [{ label: "Open", icon: "open.png", nativeIcon: "folder" }],
+          },
+        ],
+      },
+      "set either `icon` or `nativeIcon`, not both",
+    ],
+    [
       { capabilities: [{ identifier: "main", remote: { url: [] } }] },
       'capabilities.0.remote.url: unknown option "url"; valid options: urls',
     ],
@@ -177,6 +193,27 @@ describe("app.start nested options", () => {
     const config = {
       capabilities: [
         { identifier: "main", permissions: [{ identifier: "fs", scope: { any: 1 } }] },
+      ],
+    };
+    expect(v.safeParse(AppConfigSchema, config).success).toBe(true);
+  });
+});
+
+describe("app.start menu items", () => {
+  test("menu roles need no label and items accept icons", () => {
+    const config = {
+      menu: [
+        {
+          type: "submenu",
+          id: "edit",
+          label: "Edit",
+          nativeIcon: "info",
+          items: [
+            { role: "hideOthers" },
+            { label: "Open", icon: { png: "iVBORw0KGgo=" } },
+            { label: "Raw", icon: { rgba: "AAAA/w==", width: 1, height: 1 } },
+          ],
+        },
       ],
     };
     expect(v.safeParse(AppConfigSchema, config).success).toBe(true);

@@ -10,7 +10,12 @@ use serde_json::Value;
 
 use crate::api::HostApi;
 use crate::ipc::error::IpcError;
+use crate::security::policy;
 use crate::tynd;
+
+mod dock;
+mod jump_list;
+mod recent_documents;
 
 // Empty string = "backend hasn't called `app.setInfo` yet" — getters fall
 // back to the process-derived default.
@@ -71,6 +76,109 @@ impl AppApi {
     /// before the first subscription (`{ paths: string[] }`).
     pub fn subscribe_open_files() -> Value {
         crate::app::subscribe_open_files()
+    }
+
+    /// Add a file to the OS recent-documents list: the app's jump list
+    /// "Recent" category on Windows (shown once the app is registered for
+    /// the file type), the "Open Recent" list on macOS. Rejected on Linux.
+    /// The path must pass the FS scope and name an existing file.
+    pub fn add_recent_document(path: String) -> Result<(), String> {
+        let app_err = |e: String| IpcError::new("app", "addRecentDocument", e).into_string();
+        let resolved = policy::authorize_fs_path(&path).map_err(app_err)?;
+        if !resolved.is_file() {
+            return Err(app_err(format!("'{path}' is not an existing file")));
+        }
+        recent_documents::add(&resolved).map_err(app_err)
+    }
+
+    /// Clear the app's recent-documents list (Windows jump list entries,
+    /// macOS "Open Recent"). Rejected on Linux.
+    pub fn clear_recent_documents() -> Result<(), String> {
+        recent_documents::clear()
+            .map_err(|e| IpcError::new("app", "clearRecentDocuments", e).into_string())
+    }
+
+    /// macOS activation policy: `"regular"` (Dock icon + menu bar),
+    /// `"accessory"` (no Dock icon, for menu-bar apps) or `"prohibited"`.
+    /// Rejected on Windows and Linux.
+    pub fn set_activation_policy(policy: String) -> Result<(), String> {
+        let policy = dock::parse_policy("setActivationPolicy", &policy)?;
+        dock::set_policy(policy)
+            .map_err(|e| IpcError::new("app", "setActivationPolicy", e).into_string())
+    }
+
+    /// Bounce the macOS Dock icon: `"informational"` (once, default) or
+    /// `"critical"` (until the app is activated). Returns the request id for
+    /// `dockCancelBounce` (`0` when the app is already active). Rejected on
+    /// Windows and Linux (use `window.requestAttention`).
+    pub fn dock_bounce(kind: Option<String>) -> Result<i64, String> {
+        let critical = dock::parse_bounce(kind.as_deref())?;
+        dock::bounce(critical).map_err(|e| IpcError::new("app", "dockBounce", e).into_string())
+    }
+
+    /// Stop a bounce started by `dockBounce`. Unknown ids are ignored.
+    pub fn dock_cancel_bounce(id: i64) -> Result<(), String> {
+        dock::cancel_bounce(id)
+            .map_err(|e| IpcError::new("app", "dockCancelBounce", e).into_string())
+    }
+
+    /// Replace the macOS Dock icon with the image at `path` (FS scope
+    /// applies); `null` restores the bundle icon. Rejected on Windows and
+    /// Linux (use `window.setWindowIcon`).
+    pub fn set_dock_icon(path: Option<String>) -> Result<(), String> {
+        let app_err = |e: String| IpcError::new("app", "setDockIcon", e).into_string();
+        let resolved = match path {
+            Some(path) => {
+                let resolved = policy::authorize_fs_path(&path).map_err(app_err)?;
+                if !resolved.is_file() {
+                    return Err(app_err(format!("'{path}' is not an existing file")));
+                }
+                Some(resolved)
+            },
+            None => None,
+        };
+        dock::set_icon(resolved).map_err(app_err)
+    }
+
+    /// Set the menu shown when the user right-clicks the macOS Dock icon
+    /// (same item shape as the application menu; clicks emit
+    /// `menu:action`). An empty array removes it. Rejected on Windows and
+    /// Linux.
+    /// Requires the `menu` API in the build.
+    pub fn set_dock_menu(items: Value) -> Result<(), String> {
+        let items = dock::parse_menu(items)?;
+        dock::set_menu(items).map_err(|e| IpcError::new("app", "setDockMenu", e).into_string())
+    }
+
+    /// Replace the Windows jump list: `tasks` (links in the "Tasks" section)
+    /// and `categories` (named sections), each item relaunching the app
+    /// executable with its `args` (forwarded to the running instance by the
+    /// single-instance API). `showRecent` (default `true`) keeps the OS
+    /// "Recent" category. Icon paths go through the FS scope. Rejected on
+    /// macOS (use `setDockMenu`) and Linux.
+    pub fn set_jump_list(
+        tasks: Option<Value>,
+        categories: Option<Value>,
+        show_recent: Option<bool>,
+    ) -> Result<(), String> {
+        let app_err = |e: String| IpcError::new("app", "setJumpList", e).into_string();
+        let authorize_icon = |path: &str| {
+            let resolved = policy::authorize_fs_path(path)?;
+            if resolved.is_file() {
+                Ok(resolved)
+            } else {
+                Err(format!("'{path}' is not an existing file"))
+            }
+        };
+        let list =
+            jump_list::parse(tasks, categories, show_recent, &authorize_icon).map_err(&app_err)?;
+        jump_list::apply(&list).map_err(app_err)
+    }
+
+    /// Remove the app's custom Windows jump list (tasks and categories).
+    /// Rejected on macOS and Linux.
+    pub fn clear_jump_list() -> Result<(), String> {
+        jump_list::clear().map_err(|e| IpcError::new("app", "clearJumpList", e).into_string())
     }
 
     /// Exit the host process with `code` (default `0`). Runs the

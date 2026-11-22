@@ -3,32 +3,27 @@
 
 use serde_json::Value;
 
+pub(crate) mod tokens;
+
 /// Devalue bundle (~8 KB) — exposes `globalThis.__tynd_dv__ = { parse,
 /// stringify }` so Date/Map/Set/BigInt/URL/Error/cyclic refs round-trip
 /// across IPC. Regenerate via `bun run build:devalue` in core.
 pub(crate) const JS_DEVALUE: &str = include_str!("shim/devalue.bundle.js");
+
+/// Frameless-window helpers: `data-tynd-drag` / `data-tynd-no-drag` drag
+/// regions (double-click maximizes), `data-tynd-resize` handles and the
+/// automatic resize border of frameless windows. Runs after [`JS_SHIM`].
+pub(crate) const JS_FRAME: &str = include_str!("shim/frame.js");
 
 /// Injected only in debug mode (`--debug` / `tynd dev`).
 /// Sets `window.__tynd_dev__ = true` so framework JS can prefix its own
 /// console messages with `[tynd]` without leaking the name in production.
 pub(crate) const JS_DEV_FLAG: &str = "window.__tynd_dev__ = true;";
 
-/// Fires the page-ready signal on DOMContentLoaded (skips the initial blank page).
-/// Rust intercepts this to show the window only after real content is rendered,
-/// eliminating the white-flash on startup.
-pub(crate) const JS_PAGE_READY: &str = r#"
-(function () {
-  document.addEventListener("DOMContentLoaded", function () {
-    var url = document.URL;
-    if (url && url !== "about:blank" && !url.startsWith("data:")) {
-      window.ipc.postMessage(JSON.stringify({ __tynd_page_ready: true }));
-    }
-  });
-})();
-"#;
-
-/// Core IPC shim — creates window.__tynd__ with call/on/off/os_call.
-/// Injected before any page script via with_initialization_script.
+/// Core IPC shim — creates window.__tynd__ with call/on/off/os_call and
+/// sends the page-ready signal. A template: [`ipc_shim`] fills in the
+/// webview's IPC token and the app origins a subframe must have to get the
+/// bridge. Injected before any page script via with_initialization_script.
 ///
 /// Wire format: every user payload (`call.args`, `return.value`,
 /// `yield.value`, `event.payload`) rides as a string. Producers encode
@@ -40,6 +35,83 @@ pub(crate) const JS_PAGE_READY: &str = r#"
 pub(crate) const JS_SHIM: &str = r#"
 (function () {
   "use strict";
+
+  // The bridge belongs to the top frame. A subframe gets it only when its own
+  // location is app content; any other frame (a remote iframe, an opaque
+  // `srcdoc` / `data:` frame) gets nothing. WebView2 runs init scripts in
+  // every frame; WebKit runs them in the top frame only.
+  var _appOrigins = [/*__TYND_APP_ORIGINS__*/];
+  var _loc = window.location;
+  function _isAppLocation(loc) {
+    return !!loc && (loc.protocol === "tynd:" || _appOrigins.indexOf(loc.origin) >= 0);
+  }
+  var _isTop = window.top === window;
+  if (!_isTop && !_isAppLocation(_loc)) return;
+  // App mode: this is the top document and it is app content (`about:blank`
+  // is the placeholder page or a `loadHtml` document). Decided once, here,
+  // before any page script runs; `location` cannot be spoofed.
+  var _appMode = _isTop && (_isAppLocation(_loc) || (!!_loc && _loc.href === "about:blank"));
+
+  // Every IPC message starts with one of this webview's two secret tokens:
+  // the host drops messages with neither.
+  // - The remote token is baked into this script, which every document of
+  //   the webview receives, remote ones included. It never earns more than
+  //   remote-origin privileges.
+  // - The app token is never part of this script. An app document asks the
+  //   host for it at start-up (a remote-token message `?<request id>`); the
+  //   host answers only while the main frame shows app content, by
+  //   evaluating `__tynd_os_result__(<request id>, true, <token>)` in the
+  //   main frame, so a remote document never holds it. Messages posted
+  //   before the answer are queued.
+  // Tokens live only in this closure, so a cross-origin frame that calls the
+  // raw platform message handler cannot forge a call. The sink and
+  // `Reflect.apply` are captured before any page script runs, so later page
+  // code cannot observe a token by patching them.
+  var _remoteToken = "__TYND_IPC_TOKEN__";
+  var _token = _appMode ? null : _remoteToken;
+  var _queue = [];
+  var _appTokenId = null;
+  if (_appMode) {
+    var _rand;
+    try { _rand = crypto.randomUUID(); } catch (e) { _rand = String(Date.now()) + "-" + String(Math.random()).slice(2); }
+    _appTokenId = "tynd-app-token:" + _rand;
+  }
+  var _apply = Reflect.apply;
+  var _sink = (function () {
+    var wk = window.webkit;
+    if (wk && wk.messageHandlers && wk.messageHandlers.ipc) return wk.messageHandlers.ipc;
+    var cw = window.chrome && window.chrome.webview;
+    if (cw && typeof cw.postMessage === "function") return cw;
+    return window.ipc;
+  })();
+  var _send = _sink && _sink.postMessage;
+  function _post(message) {
+    if (typeof _send !== "function") throw new Error("IPC channel unavailable");
+    if (_token === null) {
+      _queue.push(message);
+      return;
+    }
+    _apply(_send, _sink, [_token + message]);
+  }
+  function _receiveAppToken(token) {
+    if (_token !== null || typeof token !== "string" || token.length === 0) return;
+    _token = token;
+    var queued = _queue;
+    _queue = [];
+    for (var i = 0; i < queued.length; i++) _apply(_send, _sink, [_token + queued[i]]);
+  }
+
+  // Page-ready signal on DOMContentLoaded (skips the initial blank page).
+  // Rust intercepts it to show the window only after real content is
+  // rendered, eliminating the white flash on startup.
+  if (typeof document !== "undefined") {
+    document.addEventListener("DOMContentLoaded", function () {
+      var url = document.URL;
+      if (url && url !== "about:blank" && url.indexOf("data:") !== 0) {
+        _post(JSON.stringify({ __tynd_page_ready: true }));
+      }
+    });
+  }
 
   // Call IDs use `crypto.randomUUID()` (UUIDv4). Backend-side ids are v7
   // via `uuid::Uuid::now_v7`; swap the shim to v7 once a polyfill matures.
@@ -115,7 +187,7 @@ pub(crate) const JS_SHIM: &str = r#"
     p.consumed = (p.consumed | 0) + 1;
     if (p.consumed >= ACK_CHUNK) {
       try {
-        window.ipc.postMessage(JSON.stringify({ type: "ack", id: id, n: p.consumed }));
+        _post(JSON.stringify({ type: "ack", id: id, n: p.consumed }));
       } catch (e) {
         _log("ipc ack postMessage failed (window=" + (window.__TYND_WINDOW_LABEL__ || "?") + "): " + e);
       }
@@ -146,13 +218,25 @@ pub(crate) const JS_SHIM: &str = r#"
     }
   };
 
-  // Called by Rust: resolve/reject a pending OS API call promise
-  window.__tynd_os_result__ = function (id, ok, value) {
-    var p = _os_pending[id];
-    if (!p) return;
-    delete _os_pending[id];
-    if (ok) { p.resolve(value); } else { p.reject(new Error(String(value))); }
-  };
+  // Called by Rust: resolve/reject a pending OS API call promise, or hand
+  // this app document its app token. Not writable: a remote document must
+  // not be able to install its own receiver for a token answer that lands
+  // in it after a navigation.
+  Object.defineProperty(window, "__tynd_os_result__", {
+    value: function (id, ok, value) {
+      if (_appTokenId !== null && id === _appTokenId) {
+        if (ok) _receiveAppToken(value);
+        return;
+      }
+      var p = _os_pending[id];
+      if (!p) return;
+      delete _os_pending[id];
+      if (ok) { p.resolve(value); } else { p.reject(new Error(String(value))); }
+    },
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
 
   // Called by Rust when the Bun child dies unexpectedly. Rejects every
   // in-flight `__tynd__.call` and `os_call` so awaiting code sees a
@@ -208,7 +292,7 @@ pub(crate) const JS_SHIM: &str = r#"
     }
   };
 
-  window.__tynd__ = {
+  var bridge = {
     // Call a backend function — returns an awaitable+iterable handle.
     // `await call(...)` -> final return value (regular async handlers, or
     // the generator's `return` value for async-generators).
@@ -245,7 +329,7 @@ pub(crate) const JS_SHIM: &str = r#"
           if (!p.done && !p.cancelled) {
             p.cancelled = true;
             try {
-              window.ipc.postMessage(JSON.stringify({ type: "cancel", id: id }));
+              _post(JSON.stringify({ type: "cancel", id: id }));
             } catch (e) {
               _log("ipc cancel postMessage failed (window=" + (window.__TYND_WINDOW_LABEL__ || "?") + "): " + e);
             }
@@ -298,7 +382,7 @@ pub(crate) const JS_SHIM: &str = r#"
       // a string literal in the wire frame so the Rust shuttle can
       // forward it without parsing.
       try {
-        window.ipc.postMessage(
+        _post(
           JSON.stringify({ type: "call", id: id, fn: fn, a: _encode(args) })
         );
       } catch (e) {
@@ -344,7 +428,7 @@ pub(crate) const JS_SHIM: &str = r#"
           reject: function (e) { clearTimeout(timer); reject(e); },
         };
         try {
-          window.ipc.postMessage(
+          _post(
             JSON.stringify({ type: "os_call", id: id, api: api, method: method, args: args })
           );
         } catch (e) {
@@ -375,8 +459,93 @@ pub(crate) const JS_SHIM: &str = r#"
       if (idx >= 0) list.splice(idx, 1);
     },
   };
+
+  // The bridge cannot be replaced or patched by later page scripts: framework
+  // code (context menus, frame helpers) and plugins read this one object.
+  // Authorization never depends on it: the host checks the calling frame's
+  // origin on every IPC message.
+  Object.defineProperty(window, "__tynd__", {
+    value: Object.freeze(bridge),
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+
+  // Ask for the app token last, once `__tynd_os_result__` can receive it.
+  if (_appMode && typeof _send === "function") {
+    _apply(_send, _sink, [_remoteToken + "?" + _appTokenId]);
+  }
 })();
 "#;
+
+/// Quoted JS literal of the IPC token in [`JS_SHIM`].
+const TOKEN_PLACEHOLDER: &str = "\"__TYND_IPC_TOKEN__\"";
+/// Body of the app-origin array literal in [`JS_SHIM`].
+const APP_ORIGINS_PLACEHOLDER: &str = "/*__TYND_APP_ORIGINS__*/";
+
+/// Length in hex characters of a webview IPC token (256 random bits).
+const IPC_TOKEN_LEN: usize = 64;
+
+/// A fresh per-webview IPC token from the OS CSPRNG, hex-encoded.
+pub(crate) fn new_ipc_token() -> String {
+    use std::fmt::Write as _;
+    let mut bytes = [0u8; IPC_TOKEN_LEN / 2];
+    // OS CSPRNG failure is unrecoverable and practically unreachable.
+    getrandom::fill(&mut bytes).expect("OS CSPRNG unavailable");
+    bytes
+        .iter()
+        .fold(String::with_capacity(IPC_TOKEN_LEN), |mut out, byte| {
+            let _ = write!(out, "{byte:02x}");
+            out
+        })
+}
+
+/// JS string literals of the non-`tynd:` app origins a document may have:
+/// the WebView2 spelling of `tynd:` (Windows) and the dev server.
+fn app_origin_literals(dev_origin: Option<&str>) -> Vec<String> {
+    let mut origins = Vec::new();
+    if cfg!(target_os = "windows") {
+        origins.push(js_str("http://tynd.localhost"));
+    }
+    if let Some(origin) = dev_origin {
+        origins.push(js_str(origin));
+    }
+    origins
+}
+
+/// [`JS_SHIM`] for one webview: `remote_token` is the token baked into the
+/// script (see [`tokens`] for the app token), and a subframe installs the
+/// bridge only when its own origin is app content (`tynd:`, the WebView2
+/// spelling of it, or the dev server `dev_origin`).
+pub(crate) fn ipc_shim(remote_token: &str, dev_origin: Option<&str>) -> String {
+    JS_SHIM
+        .replace(TOKEN_PLACEHOLDER, &js_str(remote_token))
+        .replace(
+            APP_ORIGINS_PLACEHOLDER,
+            &app_origin_literals(dev_origin).join(","),
+        )
+}
+
+/// Strip the IPC token from the front of a message body. Returns `false`
+/// (leaving `body` untouched) when the body does not start with `token`: the
+/// message did not come from this webview's shim (a cross-origin frame calling
+/// the raw platform handler) and must be dropped.
+pub(crate) fn take_ipc_token(body: &mut String, token: &str) -> bool {
+    debug_assert!(!token.is_empty(), "the IPC token is never empty");
+    let Some(prefix) = body.as_bytes().get(..token.len()) else {
+        return false;
+    };
+    // Constant-time comparison: the mismatch position must not leak.
+    let diff = prefix
+        .iter()
+        .zip(token.as_bytes())
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b));
+    if token.is_empty() || diff != 0 {
+        return false;
+    }
+    body.drain(..token.len());
+    true
+}
 
 /// Replace U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH SEPARATOR) with
 /// their `\u` escapes inside an already-serialized JSON literal.
@@ -492,12 +661,33 @@ pub(crate) fn eval_dispatch(name: &str, payload: &str) -> String {
 
 /// Build the JS eval string that resolves/rejects a pending OS API call.
 #[inline]
+///
+/// The answer to an app-token request ([`tokens::APP_TOKEN_ID_PREFIX`]) is
+/// wrapped in a check of the main frame's own `location`, so it is a no-op in
+/// a remote document that replaced the requesting app document in between.
 pub(crate) fn eval_os_result(id: &str, ok: bool, value: &Value) -> String {
     let ok_js = if ok { "true" } else { "false" };
-    eval_call!(
+    let call = eval_call!(
         "__tynd_os_result__",
         format_args!("{},{ok_js},{}", js_str(id), js_val(value))
-    )
+    );
+    if id.starts_with(tokens::APP_TOKEN_ID_PREFIX) {
+        app_location_guard(&call, crate::webview::navigation::dev_origin().as_deref())
+    } else {
+        call
+    }
+}
+
+/// Run `script` only when the evaluating document is app content. Only
+/// strict comparisons on the unforgeable `window.location`: a remote page
+/// can patch `Array.prototype.indexOf`, not these.
+fn app_location_guard(script: &str, dev_origin: Option<&str>) -> String {
+    use std::fmt::Write as _;
+    let mut test = String::from("l.protocol===\"tynd:\"||l.href===\"about:blank\"");
+    for origin in app_origin_literals(dev_origin) {
+        let _ = write!(test, "||l.origin==={origin}");
+    }
+    format!("(function(l){{if(l&&({test})){{{script}}}}})(window.location)")
 }
 
 /// Build the JS eval string that fires a native OS event to subscribed handlers.

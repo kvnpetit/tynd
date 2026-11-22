@@ -1,6 +1,10 @@
 import { tynd } from "../logger";
+import type { Channel as BackendChannel } from "../runtime/channel";
 import type { Emitter } from "../types";
-import { createCallProxy } from "./_internal";
+import { type CallOptions, checkCallOptions, createCallProxy } from "./_internal";
+import type { Channel } from "./channel";
+
+export type { CallOptions } from "./_internal";
 
 type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
   k: infer I,
@@ -23,19 +27,32 @@ export type StreamCall<Y, R> = PromiseLike<Awaited<R>> &
     cancel(): Promise<IteratorResult<Y>>;
   };
 
+/** Backend `Channel<M>` parameters become frontend `Channel<M>` arguments. */
+type ClientArgs<A extends unknown[]> = {
+  [I in keyof A]: A[I] extends BackendChannel<infer M> ? Channel<M> : A[I];
+};
+
 type ModuleFunctions<T> = {
   [K in keyof T as T[K] extends (...args: infer _A) => infer _R ? K : never]: T[K] extends (
     ...args: infer A
   ) => AsyncGenerator<infer Y, infer R, unknown>
-    ? (...args: A) => StreamCall<Y, R>
+    ? (...args: ClientArgs<A>) => StreamCall<Y, R>
     : T[K] extends (...args: infer A) => AsyncIterable<infer Y>
-      ? (...args: A) => StreamCall<Y, void>
+      ? (...args: ClientArgs<A>) => StreamCall<Y, void>
       : T[K] extends (...args: infer A) => infer R
-        ? (...args: A) => Promise<Awaited<R>>
+        ? (...args: ClientArgs<A>) => Promise<Awaited<R>>
         : never;
 };
 
 export type BackendClient<T> = ModuleFunctions<T> & {
+  /**
+   * The same functions, with a cancel signal and/or a deadline applied to
+   * every call made through the returned object.
+   * @example
+   * const ac = new AbortController()
+   * const hits = await api.withOptions({ signal: ac.signal, timeout: 5_000 }).search("tynd")
+   */
+  withOptions(options: CallOptions): ModuleFunctions<T>;
   on<K extends keyof ModuleEvents<T> & string>(
     event: K,
     handler: (payload: ModuleEvents<T>[K]) => void,
@@ -60,6 +77,10 @@ export function createBackend<T>(): BackendClient<T> {
     // Subscription helpers (`on`/`once`) are not RPC calls — handled here
     // before the default `(...args) => window.__tynd__.call(...)` path runs.
     (prop) => {
+      if (prop === "withOptions") {
+        return (options: CallOptions) =>
+          createCallProxy<ModuleFunctions<T>>((name) => name, undefined, checkCallOptions(options));
+      }
       if (prop === "on") {
         return (event: string, handler: (p: unknown) => void) => window.__tynd__.on(event, handler);
       }

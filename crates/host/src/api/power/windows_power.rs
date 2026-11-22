@@ -1,13 +1,25 @@
-//! Hidden message-only window + private message pump for
-//! `WM_POWERBROADCAST` and `WM_WTSSESSION_CHANGE`. The watcher thread
-//! owns the HWND and stops on `WM_QUIT` during central host shutdown.
-use std::sync::mpsc;
+//! Hidden top-level window + private message pump for
+//! `WM_POWERBROADCAST`, `WM_WTSSESSION_CHANGE` and `WM_ENDSESSION`. The
+//! window is top-level (never shown, `WS_EX_TOOLWINDOW` keeps it off the
+//! taskbar) because message-only windows receive no broadcast messages,
+//! which is how Windows delivers suspend/resume and session end. The
+//! watcher thread owns the HWND and stops on `WM_QUIT` during central host
+//! shutdown.
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    mpsc,
+};
 
 use serde_json::json;
+use windows_sys::core::GUID;
 use windows_sys::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM},
     System::{
         LibraryLoader::GetModuleHandleW,
+        Power::{
+            RegisterPowerSettingNotification, UnregisterPowerSettingNotification, HPOWERNOTIFY,
+            POWERBROADCAST_SETTING,
+        },
         RemoteDesktop::{
             WTSRegisterSessionNotification, WTSUnRegisterSessionNotification,
             NOTIFY_FOR_THIS_SESSION,
@@ -16,9 +28,10 @@ use windows_sys::Win32::{
     },
     UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-        PeekMessageW, PostThreadMessageW, RegisterClassExW, TranslateMessage, HWND_MESSAGE, MSG,
-        PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND, PBT_APMSUSPEND, PM_NOREMOVE,
-        WM_POWERBROADCAST, WM_QUIT, WM_WTSSESSION_CHANGE, WNDCLASSEXW, WTS_SESSION_LOCK,
+        PeekMessageW, PostThreadMessageW, RegisterClassExW, TranslateMessage,
+        DEVICE_NOTIFY_WINDOW_HANDLE, MSG, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND,
+        PBT_APMSUSPEND, PBT_POWERSETTINGCHANGE, PM_NOREMOVE, WM_ENDSESSION, WM_POWERBROADCAST,
+        WM_QUIT, WM_WTSSESSION_CHANGE, WNDCLASSEXW, WS_EX_TOOLWINDOW, WTS_SESSION_LOCK,
         WTS_SESSION_UNLOCK,
     },
 };
@@ -46,6 +59,16 @@ const CLASS_NAME: &[u16] = &[
     b'r' as u16,
     0,
 ];
+
+/// `GUID_ACDC_POWER_SOURCE` (WinNT.h): data is a DWORD, 0 = AC,
+/// 1 = battery, 2 = short-term source (UPS).
+static GUID_ACDC_POWER_SOURCE: GUID = GUID::from_u128(0x5d3e_9a59_e9d5_4b00_a6bd_ff34_ff51_6548);
+
+/// Last reported power source, `SOURCE_UNKNOWN` until the first
+/// notification. Windows sends one right after registration; it only seeds
+/// the value so `power:source-change` fires on real transitions.
+static LAST_SOURCE: AtomicU8 = AtomicU8::new(SOURCE_UNKNOWN);
+const SOURCE_UNKNOWN: u8 = u8::MAX;
 
 pub(super) struct Monitor {
     thread_id: u32,
@@ -151,10 +174,11 @@ fn run(ready: &mpsc::SyncSender<Result<(), String>>) -> Result<(), String> {
     // registration is tolerated because CreateWindowExW resolves it.
     unsafe { RegisterClassExW(&raw const class) };
 
-    // SAFETY: HWND_MESSAGE creates a message-only, never-visible window.
+    // SAFETY: a top-level window without `WS_VISIBLE` is never shown;
+    // `WS_EX_TOOLWINDOW` keeps it out of the taskbar and Alt+Tab.
     let hwnd: HWND = unsafe {
         CreateWindowExW(
-            0,
+            WS_EX_TOOLWINDOW,
             CLASS_NAME.as_ptr(),
             CLASS_NAME.as_ptr(),
             0,
@@ -162,14 +186,14 @@ fn run(ready: &mpsc::SyncSender<Result<(), String>>) -> Result<(), String> {
             0,
             0,
             0,
-            HWND_MESSAGE,
+            std::ptr::null_mut(),
             std::ptr::null_mut(),
             hinstance,
             std::ptr::null(),
         )
     };
     if hwnd.is_null() {
-        return Err("power[win]: CreateWindowExW(HWND_MESSAGE) failed".into());
+        return Err("power[win]: CreateWindowExW failed".into());
     }
 
     // SAFETY: hwnd is owned by this thread and registration is scoped to
@@ -182,8 +206,28 @@ fn run(ready: &mpsc::SyncSender<Result<(), String>>) -> Result<(), String> {
         );
     }
 
+    LAST_SOURCE.store(SOURCE_UNKNOWN, Ordering::Release);
+    // SAFETY: hwnd is a valid window owned by this thread and the GUID is
+    // a static. A zero handle means registration failed.
+    let source = unsafe {
+        RegisterPowerSettingNotification(
+            hwnd,
+            &raw const GUID_ACDC_POWER_SOURCE,
+            DEVICE_NOTIFY_WINDOW_HANDLE,
+        )
+    };
+    if source == 0 {
+        crate::tynd_warn!(
+            "power[win]: RegisterPowerSettingNotification failed; power-source events disabled"
+        );
+    }
+    let handles = Registrations {
+        session: session_ok,
+        source,
+    };
+
     if ready.send(Ok(())).is_err() {
-        cleanup(hwnd, session_ok);
+        cleanup(hwnd, &handles);
         return Ok(());
     }
 
@@ -206,7 +250,7 @@ fn run(ready: &mpsc::SyncSender<Result<(), String>>) -> Result<(), String> {
         }
     }
 
-    cleanup(hwnd, session_ok);
+    cleanup(hwnd, &handles);
     if pump_failed {
         Err("power[win]: GetMessageW failed".into())
     } else {
@@ -214,8 +258,18 @@ fn run(ready: &mpsc::SyncSender<Result<(), String>>) -> Result<(), String> {
     }
 }
 
-fn cleanup(hwnd: HWND, session_ok: bool) {
-    if session_ok {
+/// Notification registrations to undo before the window is destroyed.
+struct Registrations {
+    session: bool,
+    source: HPOWERNOTIFY,
+}
+
+fn cleanup(hwnd: HWND, handles: &Registrations) {
+    if handles.source != 0 {
+        // SAFETY: handle from a successful registration, released once.
+        unsafe { UnregisterPowerSettingNotification(handles.source) };
+    }
+    if handles.session {
         // SAFETY: hwnd remains valid and registration succeeded.
         unsafe { WTSUnRegisterSessionNotification(hwnd) };
     }
@@ -237,9 +291,23 @@ unsafe extern "system" fn wnd_proc(
                 PBT_APMRESUMEAUTOMATIC | PBT_APMRESUMESUSPEND => {
                     events::emit("power:resume", &json!({}));
                 },
+                PBT_POWERSETTINGCHANGE => {
+                    // SAFETY: for PBT_POWERSETTINGCHANGE, lparam points at a
+                    // POWERBROADCAST_SETTING valid for the message.
+                    if let Some(source) = unsafe { read_power_source(lparam) } {
+                        report_power_source(source);
+                    }
+                },
                 _ => {},
             }
             1
+        },
+        WM_ENDSESSION => {
+            // wparam != 0: the session really ends (log off, restart, shut down).
+            if wparam != 0 {
+                events::emit("power:shutdown", &json!({}));
+            }
+            0
         },
         WM_WTSSESSION_CHANGE => {
             let code = wparam as u32;
@@ -252,5 +320,80 @@ unsafe extern "system" fn wnd_proc(
         },
         // SAFETY: standard forwarding for unhandled messages.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+/// Read the DWORD carried by a `GUID_ACDC_POWER_SOURCE` notification.
+///
+/// # Safety
+/// `lparam` must be the `POWERBROADCAST_SETTING` pointer of a
+/// `PBT_POWERSETTINGCHANGE` message.
+unsafe fn read_power_source(lparam: LPARAM) -> Option<u32> {
+    let setting = lparam as *const POWERBROADCAST_SETTING;
+    if setting.is_null() {
+        return None;
+    }
+    // SAFETY: caller guarantees the pointer; read unaligned because the
+    // struct ends in a variable-length byte array.
+    let header = unsafe { std::ptr::read_unaligned(setting) };
+    if !same_guid(&header.PowerSetting, &GUID_ACDC_POWER_SOURCE) || header.DataLength < 4 {
+        return None;
+    }
+    // SAFETY: DataLength >= 4, so a DWORD fits in the trailing buffer.
+    unsafe {
+        let data = std::ptr::addr_of!((*setting).Data).cast::<[u8; 4]>();
+        Some(u32::from_ne_bytes(std::ptr::read_unaligned(data)))
+    }
+}
+
+/// `windows_sys::core::GUID` has no `PartialEq`.
+fn same_guid(a: &GUID, b: &GUID) -> bool {
+    a.data1 == b.data1 && a.data2 == b.data2 && a.data3 == b.data3 && a.data4 == b.data4
+}
+
+/// Emit `power:source-change` when the AC/battery state actually flips.
+fn report_power_source(source: u32) {
+    let current = u8::from(source != 0);
+    let previous = LAST_SOURCE.swap(current, Ordering::AcqRel);
+    if previous != SOURCE_UNKNOWN && previous != current {
+        events::emit("power:source-change", &json!({ "onBattery": current == 1 }));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_power_source_notification_only_seeds() {
+        LAST_SOURCE.store(SOURCE_UNKNOWN, Ordering::Release);
+        report_power_source(0);
+        assert_eq!(LAST_SOURCE.load(Ordering::Acquire), 0);
+        // UPS (2) counts as battery.
+        report_power_source(2);
+        assert_eq!(LAST_SOURCE.load(Ordering::Acquire), 1);
+    }
+
+    #[test]
+    fn read_power_source_filters_by_guid() {
+        let mut setting = POWERBROADCAST_SETTING {
+            PowerSetting: GUID_ACDC_POWER_SOURCE,
+            DataLength: 1,
+            Data: [1],
+        };
+        // SAFETY: live struct; DataLength < 4 is rejected before reading Data.
+        assert_eq!(
+            unsafe { read_power_source(&raw mut setting as LPARAM) },
+            None
+        );
+        setting.PowerSetting = GUID::from_u128(1);
+        setting.DataLength = 4;
+        // SAFETY: the GUID check fails before the trailing buffer is read.
+        assert_eq!(
+            unsafe { read_power_source(&raw mut setting as LPARAM) },
+            None
+        );
+        // SAFETY: null is rejected up front.
+        assert_eq!(unsafe { read_power_source(0) }, None);
     }
 }

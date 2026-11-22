@@ -22,6 +22,7 @@ mod backend_event;
 mod bootstrap;
 mod child_webview;
 mod child_webview_commands;
+mod close_guard;
 mod dispatch_support;
 mod gpu;
 #[cfg(target_os = "linux")]
@@ -35,6 +36,7 @@ mod user_event;
 mod util;
 mod window_command;
 mod window_events;
+mod window_messages;
 mod window_state;
 mod yields;
 
@@ -50,8 +52,7 @@ use bootstrap::{
 #[cfg(feature = "debug-protocol")]
 use dispatch_support::debug_window_info;
 use dispatch_support::{
-    broadcast_script, broadcast_script_scoped, cancel_streams_for_label, dispatch_os_reply,
-    result_reply,
+    broadcast_script, broadcast_script_scoped, dispatch_os_reply, result_reply,
 };
 #[cfg(target_os = "linux")]
 use linux_webview::LinuxWebviewContainer;
@@ -63,7 +64,7 @@ use os_event_queue::OsEventQueue;
 pub(crate) use runtime::subscribe_open_files;
 pub(crate) use user_event::UserEvent;
 
-use window_command::{handle_window_command, WindowCommandContext};
+use window_command::{handle_window_command, run_backend_window_command, WindowCommandContext};
 use window_events::{window_closed, window_created};
 use window_state::WindowState;
 
@@ -79,6 +80,8 @@ struct SecondaryEntry {
     _web_context: Option<Box<wry::WebContext>>,
     #[cfg(target_os = "linux")]
     webview_container: LinuxWebviewContainer,
+    /// This window's own menu bar (`win.setMenu`, Windows / Linux).
+    menu: menu::WindowMenu,
     // Drop the WebView and its GTK composition widgets before the native
     // window that owns them.
     window: Window,
@@ -149,7 +152,7 @@ impl AppRuntime {
             Event::UserEvent(event) => self.handle_user_event(event, target, control_flow),
             Event::WindowEvent {
                 event, window_id, ..
-            } => self.handle_window_event(event, window_id, control_flow),
+            } => self.handle_window_event(event, window_id),
             // macOS only: LaunchServices file/URL hand-over and dock reopen.
             Event::Opened { urls } => runtime::handle_opened(&urls),
             Event::Reopen {
@@ -169,6 +172,9 @@ impl AppRuntime {
         match event {
             UserEvent::PageReady { label } => self.handle_page_ready(&label),
             UserEvent::FocusPrimary => self.focus_primary_window(),
+            UserEvent::MonitorsChanged => {
+                api::window_cmd::refresh_monitors(&self.windows.native_window);
+            },
             UserEvent::ForceExit => self.force_exit(control_flow),
             UserEvent::ContextLost { label } => self.handle_context_lost(&label),
             UserEvent::FlushYields => self.flush_yields(),
@@ -195,7 +201,11 @@ impl AppRuntime {
                 id,
                 method,
                 args,
-            } => self.dispatch_tray_command(&label, &id, &method, &args),
+                origin,
+            } => self.dispatch_tray_command(&label, &id, &method, &args, origin.as_deref()),
+            UserEvent::TrayToggleWindow { tray, anchor } => {
+                tray::toggle_attached(&tray, anchor, &|label| self.windows.window_for(label));
+            },
             UserEvent::MenuCmd {
                 label,
                 id,
@@ -215,7 +225,15 @@ impl AppRuntime {
                 params,
                 reply,
             } => self.handle_debug_window_manage(&action, &params, &reply, control_flow),
-            UserEvent::ProceedClose => self.proceed_close(),
+            UserEvent::ProceedClose { label } => self.proceed_close(&label, control_flow),
+            UserEvent::BackendWindowCmd {
+                method,
+                args,
+                reply,
+            } => {
+                let result = self.run_backend_window_command(target, &method, &args);
+                let _ = reply.send(result);
+            },
         }
     }
 
@@ -226,7 +244,9 @@ impl AppRuntime {
         if label != PRIMARY_LABEL {
             return;
         }
-        self.windows.native_window.set_visible(true);
+        if window::shows_on_page_ready(&self.config.window) {
+            self.windows.native_window.set_visible(true);
+        }
         if self.debug {
             // Dev runs (`tynd dev` passes `--debug`) announce readiness so the
             // terminal shows when the app is usable and what it loaded.
@@ -284,6 +304,7 @@ impl AppRuntime {
             return;
         };
         let _ = webview.evaluate_script(&emit_script);
+        crate::webview::process_failed::emit(label, "crashed");
         let _ = webview.evaluate_script("window.location.reload();");
         crate::tynd_warn!("webview '{label}' context lost — reloading to recover GPU state");
     }
@@ -343,11 +364,33 @@ impl AppRuntime {
         );
     }
 
+    fn run_backend_window_command(
+        &mut self,
+        target: &EventLoopWindowTarget<UserEvent>,
+        method: &str,
+        args: &Value,
+    ) -> Result<Value, String> {
+        run_backend_window_command(
+            WindowCommandContext {
+                caller_origin: None,
+                target,
+                debug: self.debug,
+                call_tx: self.backend.call_tx(),
+                proxy: self.backend.proxy(),
+                dev_url: self.config.dev_url.as_deref(),
+                frontend_dir: self.config.frontend_dir.as_deref(),
+                windows: &mut self.windows,
+            },
+            method,
+            args,
+        )
+    }
+
     fn close_child_webview(&mut self, label: String) {
         if let Some(entry) = self.windows.child_webviews.remove(&label) {
             let parent_label = entry.parent_label.clone();
             drop(entry);
-            cancel_streams_for_label(&label, self.backend.call_tx());
+            crate::ipc::dispatch::cancel_calls_for_label(&label, self.backend.call_tx());
             navigation::clear_remote_origin(&label);
             self.windows.zoom_levels.remove(&label);
             crate::ipc::events::emit(
@@ -369,7 +412,7 @@ impl AppRuntime {
         if !self.windows.secondaries.contains_key(label) {
             return false;
         }
-        cancel_streams_for_label(label, self.backend.call_tx());
+        crate::ipc::dispatch::cancel_calls_for_label(label, self.backend.call_tx());
         self.windows
             .remove_child_webviews_for_parent(label, self.backend.call_tx());
         if let Some(entry) = self.windows.secondaries.remove(label) {
@@ -401,9 +444,27 @@ impl AppRuntime {
         self.windows.remove_window_preferences(label);
     }
 
-    fn dispatch_tray_command(&self, label: &str, id: &str, method: &str, args: &Value) {
+    fn dispatch_tray_command(
+        &self,
+        label: &str,
+        id: &str,
+        method: &str,
+        args: &Value,
+        origin: Option<&str>,
+    ) {
+        // Child webviews drive the tray on behalf of their containing window.
+        let window_label = self
+            .windows
+            .child_webviews
+            .get(label)
+            .map_or(label, |entry| entry.parent_label.as_str());
+        let call = tray::TrayCall {
+            caller: window_label,
+            caller_origin: origin,
+            window_for: &|window| self.windows.window_for(window),
+        };
         let result = match self.windows.system_tray.as_ref() {
-            Some(tray) => tray::dispatch(tray, method, args),
+            Some(tray) => tray::dispatch(tray, &call, method, args),
             None => Err(tray::unavailable_error()),
         };
         self.send_result_reply(label, id, result);
@@ -411,7 +472,17 @@ impl AppRuntime {
 
     fn dispatch_menu_command(&self, label: &str, id: &str, method: &str, args: &Value) {
         // Menu mutations use the thread-local registry populated by build_bar.
-        self.send_result_reply(label, id, menu::dispatch(method, args));
+        // Child webviews pop context menus up on their containing window.
+        let window_label = self
+            .windows
+            .child_webviews
+            .get(label)
+            .map_or(label, |entry| entry.parent_label.as_str());
+        let target = menu::MenuTarget {
+            source: self.windows.window_for(window_label),
+            primary: self.windows.window_for(PRIMARY_LABEL),
+        };
+        self.send_result_reply(label, id, menu::dispatch(&target, method, args));
     }
 
     fn flush_os_events(&self) {
@@ -563,14 +634,9 @@ impl AppRuntime {
         }
     }
 
-    fn handle_window_event(
-        &mut self,
-        event: WindowEvent<'_>,
-        window_id: WindowId,
-        control_flow: &mut ControlFlow,
-    ) {
+    fn handle_window_event(&mut self, event: WindowEvent<'_>, window_id: WindowId) {
         match event {
-            WindowEvent::CloseRequested => self.handle_close_requested(window_id, control_flow),
+            WindowEvent::CloseRequested => self.handle_close_requested(window_id),
             WindowEvent::Resized(size) => self.handle_resized(window_id, size),
             WindowEvent::Moved(position) => self.handle_moved(window_id, position),
             WindowEvent::Focused(focused) => self.handle_focused(window_id, focused),
@@ -589,41 +655,42 @@ impl AppRuntime {
         }
     }
 
-    fn handle_close_requested(&mut self, window_id: WindowId, control_flow: &mut ControlFlow) {
+    fn handle_close_requested(&self, window_id: WindowId) {
         let Some(label) = self.windows.label_for(window_id) else {
             return;
         };
-        if window_id != self.windows.primary_id {
-            self.close_secondary_from_request(&label, control_flow);
+        self.request_close(label);
+    }
+
+    /// Every window's close is preventable: emit `window:close-requested`
+    /// (renderers and backend handlers), then close after a 500ms grace
+    /// period unless a handler called `cancelClose()` for this window.
+    fn request_close(&self, label: String) {
+        if !close_guard::begin(&label) {
             return;
         }
-        self.request_primary_close(label);
-    }
-
-    fn close_secondary_from_request(&mut self, label: &str, control_flow: &mut ControlFlow) {
-        // Secondary windows close immediately, without a cancel window.
-        self.teardown_secondary(label, control_flow);
-    }
-
-    fn request_primary_close(&self, label: String) {
-        api::window_cmd::reset_close_cancel();
         crate::ipc::events::emit("window:close-requested", &json!({ "label": label }));
 
-        let proxy_cancel = self.backend.proxy().clone();
-        let fallback_proxy = proxy_cancel.clone();
+        let proxy = self.backend.proxy().clone();
+        let fallback_proxy = proxy.clone();
+        let fallback_label = label.clone();
         if !spawn_background("tynd-close-grace", move || {
             std::thread::sleep(std::time::Duration::from_millis(500));
-            if api::window_cmd::close_cancelled() {
-                return;
-            }
-            let _ = proxy_cancel.send_event(UserEvent::ProceedClose);
+            let _ = proxy.send_event(UserEvent::ProceedClose { label });
         }) {
-            let _ = fallback_proxy.send_event(UserEvent::ProceedClose);
+            let _ = fallback_proxy.send_event(UserEvent::ProceedClose {
+                label: fallback_label,
+            });
         }
     }
 
-    fn proceed_close(&self) {
-        if api::window_cmd::close_cancelled() {
+    /// The grace period of `label` ended.
+    fn proceed_close(&mut self, label: &str, control_flow: &mut ControlFlow) {
+        if !close_guard::finish(label) {
+            return;
+        }
+        if label != PRIMARY_LABEL {
+            self.teardown_secondary(label, control_flow);
             return;
         }
         self.windows.native_window.set_visible(false);
@@ -703,6 +770,9 @@ impl AppRuntime {
                 entry.window.set_visible(false);
             }
         }
+        if !focused {
+            tray::on_window_blurred(&label, self.windows.window_for(&label));
+        }
     }
 
     fn handle_escape(&self, window_id: WindowId) {
@@ -738,6 +808,7 @@ impl AppRuntime {
     }
 
     fn handle_scale_factor_changed(&self, window_id: WindowId, scale_factor: f64) {
+        api::window_cmd::refresh_monitors(&self.windows.native_window);
         let Some(label) = self.windows.label_for(window_id) else {
             return;
         };
@@ -805,6 +876,9 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     }
     configure_startup_security(&config);
     navigation::set_dev_origin(config.dev_url.as_deref());
+    if let Err(error) = crate::webview::protocols::configure(&config, &call_tx) {
+        exit_startup_failure(&error);
+    }
 
     // Debug protocol — bind UDS / TCP loopback when enabled.
     #[cfg(feature = "debug-protocol")]
@@ -816,7 +890,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let proxy = event_loop.create_proxy();
     let os_event_queue = Arc::new(OsEventQueue::new());
 
-    install_os_event_emitter(&os_event_queue, &proxy);
+    install_os_event_emitter(&os_event_queue, &proxy, &call_tx);
     install_host_integrations(&proxy);
     #[cfg(feature = "debug-protocol")]
     install_debug_hooks(debug_protocol_enabled, &call_tx, &proxy);
@@ -834,7 +908,7 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     let native_window =
         window::build_window(&config.window, config.icon_path.as_deref(), &event_loop);
     let app_menu = build_app_menu(&config, &native_window);
-    let system_tray = build_system_tray(&config);
+    let system_tray = build_system_tray(&config, &proxy);
     let primary_webview = build_primary_webview(
         &config,
         &native_window,
@@ -845,9 +919,6 @@ pub fn run_app(bridge: BackendBridge, debug: bool) -> ! {
     )
     .unwrap_or_else(|error| exit_startup_failure(&error));
 
-    if config.window.center.unwrap_or(false) {
-        window::center_window(&native_window);
-    }
     schedule_smoke_exit(smoke_mode, &native_window, &proxy);
     gpu::warn_if_fps_above_monitor(&config.window, &native_window);
 

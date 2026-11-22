@@ -1,287 +1,141 @@
 //! Application menu-bar construction, registry-backed mutations, and OS initialization.
 
-use std::{cell::RefCell, collections::HashMap};
+use std::cell::RefCell;
 
 use serde_json::Value;
 
-use super::builder::{fill_with_registry, RegContainer, RegEntry, RegItem};
+use super::{
+    builder::{fill_with_registry, RegContainer},
+    registry::{MenuRegistry, Scope},
+};
 use tynd_protocol::runtime::MenuItemDef;
 
 use crate::ipc::error::IpcError;
-pub(crate) fn build_bar(items: &[MenuItemDef]) -> Result<muda::Menu, String> {
-    let menu = muda::Menu::new();
-    bar_registry_clear();
-    // Non-submenu top-level entries without a label are silently skipped.
-    for item in items {
-        let MenuItemDef::Submenu(sub_def) = item else {
-            continue;
-        };
-        let label = sub_def.label.as_deref().unwrap_or("");
-        let enabled = sub_def.enabled.unwrap_or(true);
-        let id_value = sub_def.id.as_deref().unwrap_or(label);
-        let sub = if sub_def.id.is_some() {
-            muda::Submenu::with_id(muda::MenuId::new(id_value), label, enabled)
-        } else {
-            muda::Submenu::new(label, enabled)
-        };
-        if let Some(id) = sub_def.id.as_deref() {
-            bar_registry_insert(
-                id.to_string(),
-                BarEntry {
-                    item: RegItem::Submenu(sub.clone()),
-                    parent: RegContainer::Root(menu.clone()),
-                    position: menu.items().len(),
-                    visible: true,
-                },
-            );
-        }
-        let container = RegContainer::Sub(sub.clone());
-        fill_with_registry(&container, &sub_def.items, &mut |id, e| {
-            bar_registry_insert(id, bar_entry_from_reg(e));
-        })?;
-        menu.append(&sub).map_err(|e| e.to_string())?;
-    }
-    Ok(menu)
-}
-
-/// Per-id metadata for bar items. Mirrors `tray::Entry` (same registry
-/// pattern) — `position` is the build-time index inside the parent so
-/// `setItemVisible(id, true)` can reinsert at the original slot.
-struct BarEntry {
-    item: RegItem,
-    parent: RegContainer,
-    position: usize,
-    visible: bool,
-}
 
 thread_local! {
-    /// Main-thread-only registry of menu-bar items, keyed by the user-supplied
-    /// `id`. The bar lives on the event-loop thread, the same as tray, so a
-    /// thread-local is enough — and keeps the `!Send` muda handles from
-    /// bleeding into global statics.
-    static BAR_REGISTRY: RefCell<HashMap<String, BarEntry>> = RefCell::new(HashMap::new());
+    /// The live application menu bar and its item registry (main thread, like
+    /// tray menus: the `!Send` muda handles never reach a global static). The
+    /// event loop also holds the root when the bar came from the config;
+    /// `setMenu` refills it in place.
+    static BAR: RefCell<Option<MenuRegistry>> = const { RefCell::new(None) };
 }
 
-fn bar_registry_clear() {
-    BAR_REGISTRY.with(|r| r.borrow_mut().clear());
-}
-
-fn bar_registry_insert(id: String, entry: BarEntry) {
-    BAR_REGISTRY.with(|r| {
-        r.borrow_mut().insert(id, entry);
-    });
-}
-
-fn bar_entry_from_reg(e: RegEntry) -> BarEntry {
-    BarEntry {
-        item: e.item,
-        parent: e.parent,
-        position: e.position,
-        visible: true,
-    }
-}
-
-fn with_bar_entry<F, T>(id: &str, f: F) -> Result<T, String>
-where
-    F: FnOnce(&mut BarEntry) -> Result<T, String>,
-{
-    BAR_REGISTRY.with(|r| {
-        let mut map = r.borrow_mut();
-        let entry = map
-            .get_mut(id)
-            .ok_or_else(|| format!("menu: item id '{id}' not found"))?;
-        f(entry)
-    })
-}
-
-impl RegItem {
-    fn as_is_menu_item(&self) -> &dyn muda::IsMenuItem {
-        match self {
-            RegItem::MenuItem(i) => i,
-            RegItem::Submenu(i) => i,
-            RegItem::Check(i) => i,
-            RegItem::Predefined(i) => i,
-        }
-    }
-}
-
-fn bar_set_enabled(item: &RegItem, enabled: bool) {
-    match item {
-        RegItem::MenuItem(i) => i.set_enabled(enabled),
-        RegItem::Submenu(i) => i.set_enabled(enabled),
-        RegItem::Check(i) => i.set_enabled(enabled),
-        // PredefinedMenuItem is OS-managed (e.g. quit, copy) — no setter.
-        RegItem::Predefined(_) => {},
-    }
-}
-
-fn bar_set_label(item: &RegItem, label: &str) {
-    match item {
-        RegItem::MenuItem(i) => i.set_text(label),
-        RegItem::Submenu(i) => i.set_text(label),
-        RegItem::Check(i) => i.set_text(label),
-        RegItem::Predefined(i) => i.set_text(label),
-    }
+/// Build the application menu bar from the config. Only submenus are valid
+/// top-level entries (macOS requires it); other entries are skipped.
+pub(crate) fn build_bar(items: &[MenuItemDef]) -> Result<muda::Menu, String> {
+    let submenus: Vec<MenuItemDef> = items
+        .iter()
+        .filter(|item| matches!(item, MenuItemDef::Submenu(_)))
+        .cloned()
+        .collect();
+    let registry = MenuRegistry::build(Scope::BAR, &submenus)?;
+    let root = registry.root().clone();
+    BAR.with(|bar| *bar.borrow_mut() = Some(registry));
+    Ok(root)
 }
 
 /// Runtime menu-bar mutations. Must run on the main thread — wired through
 /// `UserEvent::MenuCmd` so muda's `!Send` handles never leave the event-loop
 /// thread. Returns `Ok(Null)` on every successful mutation; the actual
-/// state lives in the registry + muda items.
-pub(crate) fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
-    match method {
-        "update" => {
-            let id = require_id(args, "update")?;
-            apply_partial(&id, args)?;
-            Ok(Value::Null)
-        },
-        "setItemEnabled" => {
-            let id = require_id(args, "setItemEnabled")?;
-            let enabled = args
-                .get("enabled")
-                .and_then(Value::as_bool)
-                .ok_or_else(|| "menu.setItemEnabled: missing 'enabled'".to_string())?;
-            with_bar_entry(&id, |entry| {
-                bar_set_enabled(&entry.item, enabled);
-                Ok(())
-            })?;
-            Ok(Value::Null)
-        },
-        "setItemLabel" => {
-            let id = require_id(args, "setItemLabel")?;
-            let label = args
-                .get("label")
-                .and_then(Value::as_str)
-                .ok_or_else(|| "menu.setItemLabel: missing 'label'".to_string())?
-                .to_string();
-            with_bar_entry(&id, |entry| {
-                bar_set_label(&entry.item, &label);
-                Ok(())
-            })?;
-            Ok(Value::Null)
-        },
-        "setItemChecked" => {
-            let id = require_id(args, "setItemChecked")?;
-            let checked = args
-                .get("checked")
-                .and_then(Value::as_bool)
-                .ok_or_else(|| "menu.setItemChecked: missing 'checked'".to_string())?;
-            with_bar_entry(&id, |entry| match &entry.item {
-                RegItem::Check(c) => {
-                    c.set_checked(checked);
-                    Ok(())
-                },
-                _ => Err(format!(
-                    "menu.setItemChecked: item '{id}' is not a checkbox/radio"
-                )),
-            })?;
-            Ok(Value::Null)
-        },
-        "setItemVisible" => {
-            let id = require_id(args, "setItemVisible")?;
-            let visible = args
-                .get("visible")
-                .and_then(Value::as_bool)
-                .ok_or_else(|| "menu.setItemVisible: missing 'visible'".to_string())?;
-            set_visible(&id, visible)?;
-            Ok(Value::Null)
-        },
-        _ => Err(IpcError::unknown_method("menu", method).into_string()),
+/// state lives in the registry + muda items. `primary` is the main window,
+/// used when `setMenu` has to attach a bar that did not exist yet.
+pub(crate) fn dispatch(
+    primary: Option<&tao::window::Window>,
+    method: &str,
+    args: &Value,
+) -> Result<Value, String> {
+    if method == "setMenu" {
+        set_menu(primary, args)?;
+        return Ok(Value::Null);
     }
+    BAR.with(|bar| {
+        let mut bar = bar.borrow_mut();
+        let result = match bar.as_mut() {
+            Some(registry) => registry.dispatch(method, args),
+            None => is_item_method(method).then(|| Err(no_bar_error(method))),
+        };
+        match result {
+            Some(result) => result.map(|()| Value::Null),
+            None => Err(IpcError::unknown_method("menu", method).into_string()),
+        }
+    })
 }
 
-fn require_id(args: &Value, op: &str) -> Result<String, String> {
-    args.get("id")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| format!("menu.{op}: missing 'id'"))
+fn is_item_method(method: &str) -> bool {
+    matches!(
+        method,
+        "update"
+            | "setItemEnabled"
+            | "setItemLabel"
+            | "setItemChecked"
+            | "setItemVisible"
+            | "setItemAccelerator"
+            | "setItemIcon"
+            | "append"
+            | "remove"
+    )
 }
 
-/// `update(id, partial)` core. Walks the partial object once and applies
-/// every present field — label, enabled, checked, visible — so callers
-/// can batch mutations in a single round trip. Each field falls back to
-/// the same per-field error path as the convenience setters so the user
-/// gets the precise reason ("not a checkbox/radio") rather than a generic
-/// "update failed".
-fn apply_partial(id: &str, args: &Value) -> Result<(), String> {
-    // The entire `args` shape is `{ id, partial: { label?, enabled?, checked?, visible? } }`.
-    let partial = args
-        .get("partial")
-        .filter(|partial| partial.is_object())
-        .ok_or_else(|| "menu.update: missing 'partial' object".to_string())?;
+fn no_bar_error(op: &str) -> String {
+    format!(
+        "menu.{op}: no application menu — set `menu` in app.start or call menu.setMenu(items) first"
+    )
+}
 
-    let checked = partial.get("checked").and_then(Value::as_bool);
-    if checked.is_some() {
-        with_bar_entry(id, |entry| match &entry.item {
-            RegItem::Check(_) => Ok(()),
-            _ => Err(format!(
-                "menu.update: item '{id}' is not a checkbox/radio (cannot set 'checked')"
-            )),
-        })?;
-    }
+/// Click hook (main thread, from muda's event handler): keeps the bar's radio
+/// groups exclusive. Returns whether the click came from the bar.
+pub(crate) fn on_item_activated(id: &str) -> bool {
+    BAR.try_with(|bar| {
+        // A click can be delivered while a popup runs inside a dispatch call
+        // (macOS menus are modal); never panic on a held borrow.
+        bar.try_borrow()
+            .ok()
+            .and_then(|bar| bar.as_ref().map(|registry| registry.on_activated(id)))
+            .unwrap_or(false)
+    })
+    .unwrap_or(false)
+}
 
-    // Visibility is the only fallible native mutation. Apply it before the
-    // infallible setters so an error cannot leave a partially-updated item.
-    if let Some(visible) = partial.get("visible").and_then(Value::as_bool) {
-        set_visible(id, visible)?;
-    }
-    if let Some(label) = partial.get("label").and_then(Value::as_str) {
-        with_bar_entry(id, |entry| {
-            bar_set_label(&entry.item, label);
-            Ok(())
-        })?;
-    }
-    if let Some(enabled) = partial.get("enabled").and_then(Value::as_bool) {
-        with_bar_entry(id, |entry| {
-            bar_set_enabled(&entry.item, enabled);
-            Ok(())
-        })?;
-    }
-    if let Some(checked) = checked {
-        with_bar_entry(id, |entry| {
-            let RegItem::Check(item) = &entry.item else {
-                unreachable!("checked item validated before mutations");
-            };
-            item.set_checked(checked);
-            Ok(())
-        })?;
-    }
+/// `setMenu({ items })`: replace the whole bar. Attaches a bar to the main
+/// window when the app started without one.
+fn set_menu(primary: Option<&tao::window::Window>, args: &Value) -> Result<(), String> {
+    let items = super::window_bar::parse_bar_items("menu.setMenu", args)?
+        .ok_or_else(|| "menu.setMenu: 'items' must be an array".to_string())?;
+    // Build a throwaway copy first so a bad icon or id leaves the live bar
+    // untouched.
+    let scratch = muda::Menu::new();
+    fill_with_registry(&RegContainer::Root(scratch), &items, &mut |_, _| {})
+        .map_err(|e| format!("menu.setMenu: {e}"))?;
+
+    let existing = BAR
+        .with(|bar| bar.borrow_mut().take())
+        .map(|bar| bar.root().clone());
+    let root = if let Some(root) = existing {
+        root
+    } else {
+        let window =
+            primary.ok_or_else(|| "menu.setMenu: the main window is not available".to_string())?;
+        let root = muda::Menu::new();
+        init_bar(&root, window);
+        root
+    };
+    while root.remove_at(0).is_some() {}
+    let registry =
+        MenuRegistry::fill(Scope::BAR, root, &items).map_err(|e| format!("menu.setMenu: {e}"))?;
+    BAR.with(|bar| *bar.borrow_mut() = Some(registry));
     Ok(())
 }
 
-fn set_visible(id: &str, visible: bool) -> Result<(), String> {
-    BAR_REGISTRY.with(|registry| {
-        let mut entries = registry.borrow_mut();
-        let (position, parent, already_visible) = entries
-            .get(id)
-            .map(|entry| (entry.position, entry.parent.clone(), entry.visible))
-            .ok_or_else(|| format!("menu: item id '{id}' not found"))?;
-        if already_visible == visible {
-            return Ok(());
-        }
-
-        let hidden_before = entries
-            .values()
-            .filter(|entry| {
-                !entry.visible && entry.position < position && entry.parent.same_as(&parent)
-            })
-            .count();
-        let entry = entries
-            .get_mut(id)
-            .expect("entry existence checked before sibling scan");
-        if visible {
-            let target = position.saturating_sub(hidden_before).min(parent.len());
-            parent
-                .insert(entry.item.as_is_menu_item(), target)
-                .map_err(|error| format!("menu.setItemVisible: {error}"))?;
-        } else {
-            parent
-                .remove(entry.item.as_is_menu_item())
-                .map_err(|error| format!("menu.setItemVisible: {error}"))?;
-        }
-        entry.visible = visible;
-        Ok(())
-    })
+/// Detach the application bar from the main window (`win.setMenu(null)`);
+/// a later `setMenu` attaches a fresh one.
+pub(super) fn remove_bar(primary: &tao::window::Window) {
+    let Some(registry) = BAR.with(|bar| bar.borrow_mut().take()) else {
+        return;
+    };
+    let root = registry.root();
+    #[cfg(target_os = "macos")]
+    root.remove_for_nsapp();
+    super::window_bar::detach(root, primary);
 }
 
 pub(crate) fn init_bar(menu: &muda::Menu, window: &tao::window::Window) {
@@ -315,5 +169,179 @@ pub(crate) fn init_bar(menu: &muda::Menu, window: &tao::window::Window) {
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         let _ = (menu, window);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn bar(items: Value) {
+        let items: Vec<MenuItemDef> = serde_json::from_value(items).unwrap();
+        build_bar(&items).unwrap();
+    }
+
+    fn with_bar<T>(f: impl FnOnce(&MenuRegistry) -> T) -> T {
+        BAR.with(|bar| f(bar.borrow().as_ref().expect("a bar is built")))
+    }
+
+    fn checked(id: &str) -> bool {
+        with_bar(|bar| bar.is_checked(id)).unwrap_or_else(|| panic!("{id} is not a check item"))
+    }
+
+    fn registered(id: &str) -> bool {
+        with_bar(|bar| bar.contains(id))
+    }
+
+    fn view_menu() -> Value {
+        json!([{
+            "type": "submenu", "id": "view", "label": "View",
+            "items": [
+                { "type": "radio", "id": "small", "label": "Small", "checked": true },
+                { "type": "radio", "id": "large", "label": "Large" },
+                { "type": "separator" },
+                { "type": "radio", "id": "light", "label": "Light", "checked": true },
+                { "type": "item", "id": "reload", "label": "Reload", "accelerator": "CmdOrCtrl+R" }
+            ]
+        }])
+    }
+
+    #[test]
+    fn radio_groups_stop_at_separators() {
+        bar(view_menu());
+        dispatch(
+            None,
+            "setItemChecked",
+            &json!({ "id": "large", "checked": true }),
+        )
+        .unwrap();
+        assert!(!checked("small"));
+        assert!(checked("large"));
+        assert!(checked("light"), "a separator ends the radio group");
+
+        with_bar(|bar| bar.click("small"));
+        assert!(checked("small"));
+        assert!(!checked("large"));
+    }
+
+    #[test]
+    fn append_insert_and_remove_items() {
+        bar(view_menu());
+        dispatch(
+            None,
+            "append",
+            &json!({ "parent": "view", "index": 0, "item": { "type": "item", "id": "zoom", "label": "Zoom" } }),
+        )
+        .unwrap();
+        assert!(registered("zoom"));
+
+        let duplicate = dispatch(
+            None,
+            "append",
+            &json!({ "parent": "view", "item": { "type": "item", "id": "zoom", "label": "Zoom" } }),
+        )
+        .unwrap_err();
+        assert!(duplicate.contains("already exists"), "{duplicate}");
+
+        let out_of_range = dispatch(
+            None,
+            "append",
+            &json!({ "parent": "view", "index": 99, "item": { "type": "item", "id": "z2", "label": "Z" } }),
+        )
+        .unwrap_err();
+        assert!(out_of_range.contains("out of range"), "{out_of_range}");
+
+        let top_level_item = dispatch(
+            None,
+            "append",
+            &json!({ "item": { "type": "item", "id": "z3", "label": "Z" } }),
+        )
+        .unwrap_err();
+        assert!(
+            top_level_item.contains("must be submenus"),
+            "{top_level_item}"
+        );
+
+        dispatch(None, "remove", &json!({ "id": "view" })).unwrap();
+        assert!(!registered("view"));
+        assert!(
+            !registered("zoom"),
+            "descendants are forgotten with their submenu"
+        );
+        assert!(!registered("small"));
+    }
+
+    #[test]
+    fn accelerator_and_icon_mutations() {
+        bar(view_menu());
+        let bad = dispatch(
+            None,
+            "setItemAccelerator",
+            &json!({ "id": "reload", "accelerator": "Ctrl+Nope+" }),
+        )
+        .unwrap_err();
+        assert!(bad.contains("invalid accelerator"), "{bad}");
+        dispatch(
+            None,
+            "setItemAccelerator",
+            &json!({ "id": "reload", "accelerator": "F5" }),
+        )
+        .unwrap();
+
+        dispatch(
+            None,
+            "setItemIcon",
+            &json!({ "id": "reload", "nativeIcon": "refresh" }),
+        )
+        .unwrap();
+        with_bar(|bar| {
+            assert!(bar.is_icon_item("reload"));
+            assert_eq!(bar.accelerator("reload"), Some("F5"));
+        });
+
+        let radio_icon = dispatch(
+            None,
+            "setItemIcon",
+            &json!({ "id": "small", "nativeIcon": "add" }),
+        )
+        .unwrap_err();
+        assert!(radio_icon.contains("cannot show an icon"), "{radio_icon}");
+    }
+
+    #[test]
+    fn set_menu_validates_before_replacing() {
+        bar(view_menu());
+        let error = dispatch(
+            None,
+            "setMenu",
+            &json!({ "items": [{ "type": "item", "id": "x", "label": "X" }] }),
+        )
+        .unwrap_err();
+        assert!(error.contains("must be a submenu"), "{error}");
+
+        let bad_icon = dispatch(
+            None,
+            "setMenu",
+            &json!({ "items": [{ "type": "submenu", "label": "F", "items": [
+                { "type": "item", "id": "x", "label": "X", "nativeIcon": "nope" }
+            ] }] }),
+        )
+        .unwrap_err();
+        assert!(bad_icon.contains("unknown native icon"), "{bad_icon}");
+        assert!(
+            registered("reload"),
+            "a failed setMenu leaves the bar untouched"
+        );
+
+        dispatch(
+            None,
+            "setMenu",
+            &json!({ "items": [{ "type": "submenu", "id": "file", "label": "File", "items": [] }] }),
+        )
+        .unwrap();
+        assert!(registered("file"));
+        assert!(!registered("reload"));
     }
 }

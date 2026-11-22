@@ -1,10 +1,11 @@
 use std::io::BufRead;
 
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tynd_host::tynd_info;
 use tynd_protocol::{
-    runtime::{BackendCall, BackendConfig, MenuItemDef, TrayConfig, WINDOW_EVENT_FN},
+    runtime::{AssetsConfig, BackendCall, BackendConfig, MenuItemDef, TrayConfig, WINDOW_EVENT_FN},
     window::WindowConfig,
     MAX_IPC_FRAME_BYTES,
 };
@@ -29,6 +30,8 @@ enum WireMsg<'a> {
     },
     #[serde(rename = "cancel")]
     Cancel { id: &'a str },
+    #[serde(rename = "tynd:os_event")]
+    OsEvent { name: &'a str, data: &'a Value },
     #[serde(rename = "ack")]
     Ack { id: &'a str, n: u32 },
     #[serde(rename = "host_result")]
@@ -36,6 +39,17 @@ enum WireMsg<'a> {
         id: &'a str,
         ok: bool,
         value: &'a Value,
+    },
+    /// Webview request to an `app.protocol(...)` handler. `body` is base64.
+    #[serde(rename = "protocol")]
+    Protocol {
+        id: &'a str,
+        scheme: &'a str,
+        method: &'a str,
+        url: &'a str,
+        headers: &'a [(String, String)],
+        body: Option<String>,
+        webview: &'a str,
     },
 }
 
@@ -74,6 +88,10 @@ pub(super) enum BunMsg {
         capabilities: Option<Value>,
         #[serde(default, rename = "quitOnLastWindowClosed")]
         quit_on_last_window_closed: bool,
+        #[serde(default)]
+        assets: Option<AssetsConfig>,
+        #[serde(default)]
+        protocols: Vec<String>,
     },
     #[serde(rename = "return")]
     Return {
@@ -108,6 +126,28 @@ pub(super) enum BunMsg {
         #[serde(default)]
         args: Value,
     },
+    /// Answer of an `app.protocol(...)` handler. `body` is base64.
+    #[serde(rename = "protocol_response")]
+    ProtocolResponse {
+        id: String,
+        status: u16,
+        #[serde(default)]
+        headers: Vec<(String, String)>,
+        #[serde(default)]
+        body: Option<String>,
+    },
+}
+
+/// Decode the base64 body of a `protocol_response` frame.
+pub(super) fn decode_protocol_body(body: Option<&str>) -> Result<Vec<u8>, String> {
+    body.map_or_else(
+        || Ok(Vec::new()),
+        |body| {
+            STANDARD
+                .decode(body)
+                .map_err(|error| format!("protocol_response body is not base64: {error}"))
+        },
+    )
 }
 
 /// Extract the compact shim-generated call id without parsing the full frame.
@@ -159,6 +199,15 @@ pub(super) fn push_call_line(out: &mut Vec<u8>, call: BackendCall) -> Result<(),
         BackendCall::Cancel { id } => {
             encode_wire_msg(out, &WireMsg::Cancel { id: &id })?;
         },
+        BackendCall::OsEvent { name, data } => {
+            encode_wire_msg(
+                out,
+                &WireMsg::OsEvent {
+                    name: &name,
+                    data: &data,
+                },
+            )?;
+        },
         BackendCall::Ack { id, n } => {
             encode_wire_msg(out, &WireMsg::Ack { id: &id, n })?;
         },
@@ -169,6 +218,21 @@ pub(super) fn push_call_line(out: &mut Vec<u8>, call: BackendCall) -> Result<(),
                     id: &id,
                     ok,
                     value: &value,
+                },
+            )?;
+        },
+        BackendCall::Protocol(request) => {
+            let body = (!request.body.is_empty()).then(|| STANDARD.encode(&request.body));
+            encode_wire_msg(
+                out,
+                &WireMsg::Protocol {
+                    id: &request.id,
+                    scheme: &request.scheme,
+                    method: &request.method,
+                    url: &request.url,
+                    headers: &request.headers,
+                    body,
+                    webview: &request.webview,
                 },
             )?;
         },
@@ -243,6 +307,8 @@ pub(super) fn read_config<R: BufRead>(reader: &mut R) -> Result<BackendConfig, S
             security,
             capabilities,
             quit_on_last_window_closed,
+            assets,
+            protocols,
         } => {
             let icon_path = std::env::var("TYND_ICON_PATH").ok();
             Ok(BackendConfig {
@@ -255,6 +321,8 @@ pub(super) fn read_config<R: BufRead>(reader: &mut R) -> Result<BackendConfig, S
                 security,
                 capabilities,
                 quit_on_last_window_closed,
+                assets,
+                protocols,
                 ..Default::default()
             })
         },
@@ -345,6 +413,23 @@ mod tests {
     }
 
     #[test]
+    fn os_event_frame_carries_name_and_data() {
+        let frame = encode_json(BackendCall::OsEvent {
+            name: "window:resized".into(),
+            data: json!({ "label": "main", "width": 800, "height": 600 }),
+        })
+        .unwrap();
+        assert_eq!(
+            frame,
+            json!({
+                "type": "tynd:os_event",
+                "name": "window:resized",
+                "data": { "label": "main", "width": 800, "height": 600 },
+            })
+        );
+    }
+
+    #[test]
     fn existing_lifecycle_frames_unchanged() {
         assert_eq!(
             encode_json(BackendCall::lifecycle("on_ready")).unwrap(),
@@ -354,5 +439,71 @@ mod tests {
             encode_json(BackendCall::lifecycle("on_close")).unwrap(),
             json!({ "type": "tynd:close" })
         );
+    }
+
+    #[test]
+    fn protocol_request_frame_carries_a_base64_body() {
+        let request = tynd_protocol::runtime::ProtocolRequest {
+            id: "p1".into(),
+            scheme: "media".into(),
+            method: "POST".into(),
+            url: "media://localhost/a?b=1".into(),
+            headers: vec![("content-type".into(), "text/plain".into())],
+            body: b"hi".to_vec(),
+            webview: "main".into(),
+        };
+        assert_eq!(
+            encode_json(BackendCall::Protocol(Box::new(request.clone()))).unwrap(),
+            json!({
+                "type": "protocol",
+                "id": "p1",
+                "scheme": "media",
+                "method": "POST",
+                "url": "media://localhost/a?b=1",
+                "headers": [["content-type", "text/plain"]],
+                "body": "aGk=",
+                "webview": "main",
+            })
+        );
+        let empty = tynd_protocol::runtime::ProtocolRequest {
+            body: Vec::new(),
+            ..request
+        };
+        let frame = encode_json(BackendCall::Protocol(Box::new(empty))).unwrap();
+        assert_eq!(frame["body"], Value::Null);
+    }
+
+    #[test]
+    fn protocol_response_frame_decodes() {
+        let msg = super::parse_bun_msg(
+            r#"{"type":"protocol_response","id":"p1","status":206,"headers":[["content-type","video/mp4"]],"body":"aGk="}"#,
+        )
+        .unwrap();
+        let super::BunMsg::ProtocolResponse {
+            id,
+            status,
+            headers,
+            body,
+        } = msg
+        else {
+            panic!("expected a protocol response");
+        };
+        assert_eq!((id.as_str(), status), ("p1", 206));
+        assert_eq!(headers, vec![("content-type".into(), "video/mp4".into())]);
+        assert_eq!(super::decode_protocol_body(body.as_deref()).unwrap(), b"hi");
+        assert!(super::decode_protocol_body(Some("%%")).is_err());
+        assert_eq!(super::decode_protocol_body(None).unwrap(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn config_frame_reads_assets_and_protocols() {
+        let mut reader = std::io::Cursor::new(
+            br#"{"type":"tynd:config","window":{},"assets":{"scope":["/media/**"]},"protocols":["media"]}
+"#
+            .to_vec(),
+        );
+        let config = super::read_config(&mut reader).unwrap();
+        assert_eq!(config.assets.unwrap().scope, vec!["/media/**".to_owned()]);
+        assert_eq!(config.protocols, vec!["media".to_owned()]);
     }
 }

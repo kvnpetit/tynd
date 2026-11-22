@@ -88,6 +88,8 @@ fn menu_role_serde_and_strum_agree() {
         (MenuRole::SelectAll, "selectAll"),
         (MenuRole::Separator, "separator"),
         (MenuRole::About, "about"),
+        (MenuRole::HideOthers, "hideOthers"),
+        (MenuRole::BringAllToFront, "bringAllToFront"),
     ];
     for (role, text) in cases {
         assert_eq!(serde_json::to_value(role).unwrap(), json!(text));
@@ -100,6 +102,25 @@ fn menu_role_serde_and_strum_agree() {
     }
     assert!(MenuRole::from_str("nope").is_err());
     assert!(serde_json::from_value::<MenuRole>(json!("nope")).is_err());
+}
+
+#[test]
+fn menu_icon_forms_deserialize() {
+    use crate::runtime::MenuIcon;
+    let parse = |value| serde_json::from_value::<MenuIcon>(value).unwrap();
+    assert_eq!(parse(json!("icon.png")), MenuIcon::Path("icon.png".into()));
+    assert_eq!(
+        parse(json!({ "png": "AA==" })),
+        MenuIcon::Png { png: "AA==".into() }
+    );
+    assert_eq!(
+        parse(json!({ "rgba": "AA==", "width": 1, "height": 1 })),
+        MenuIcon::Rgba {
+            rgba: "AA==".into(),
+            width: 1,
+            height: 1
+        }
+    );
 }
 
 #[test]
@@ -149,7 +170,30 @@ fn menu_item_def_tagged_round_trip() {
 #[test]
 fn menu_item_def_rejects_unknown_type() {
     assert!(serde_json::from_value::<MenuItemDef>(json!({ "type": "bogus" })).is_err());
-    assert!(serde_json::from_value::<MenuItemDef>(json!({ "id": "no-type" })).is_err());
+    assert!(serde_json::from_value::<MenuItemDef>(json!("item")).is_err());
+}
+
+#[test]
+fn menu_item_def_without_type_defaults_to_item_or_submenu() {
+    let items: Vec<MenuItemDef> = serde_json::from_value(json!([
+        { "id": "open", "label": "Open" },
+        { "role": "quit" },
+        { "label": "More", "items": [{ "id": "nested", "label": "Nested" }] }
+    ]))
+    .unwrap();
+    assert!(matches!(&items[0], MenuItemDef::Item(item) if item.id.as_deref() == Some("open")));
+    assert!(matches!(&items[1], MenuItemDef::Item(item) if item.role == Some(MenuRole::Quit)));
+    let MenuItemDef::Submenu(submenu) = &items[2] else {
+        panic!("an entry with `items` defaults to a submenu");
+    };
+    assert!(matches!(&submenu.items[0], MenuItemDef::Item(_)));
+
+    let tray: TrayConfig = serde_json::from_value(json!({
+        "icon": "tray.png",
+        "menu": [{ "id": "show", "label": "Show" }, { "type": "separator" }]
+    }))
+    .unwrap();
+    assert_eq!(tray.menu.map(|menu| menu.len()), Some(2));
 }
 
 #[test]
@@ -260,4 +304,16 @@ fn window_event_call_shape() {
         other => panic!("unexpected variant: {other:?}"),
     }
     assert_eq!(WindowEventKind::Created.as_str(), "created");
+}
+
+#[test]
+fn only_window_events_reach_the_backend() {
+    use crate::runtime::forwards_os_event;
+    assert!(forwards_os_event("window:resized"));
+    assert!(forwards_os_event("window:close-requested"));
+    assert!(forwards_os_event("window:closed"));
+    assert!(forwards_os_event("webview:page-load"));
+    assert!(!forwards_os_event("window:drag-over"));
+    assert!(!forwards_os_event("fs:change"));
+    assert!(!forwards_os_event("menu:action"));
 }

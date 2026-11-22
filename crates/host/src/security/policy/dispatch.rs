@@ -11,6 +11,11 @@ use super::{
 pub(crate) const API: HostApi = HostApi::new("security", |method, args| dispatch(method, &args));
 
 pub(crate) fn dispatch(method: &str, args: &Value) -> Result<Value, String> {
+    // Runtime scope grants. Backend only: none of these is in the renderer /
+    // plugin allow-list of `api::deny_privileged_mutation`.
+    if let Some(result) = crate::security::grants::dispatch(method, args) {
+        return result;
+    }
     match method {
         "configure" => configure(args),
         "isFsAllowed" => is_fs_allowed(args),
