@@ -1,0 +1,32 @@
+---
+title: tynd config show
+description: "Print the fully merged and resolved project configuration."
+---
+
+# `tynd config show`
+
+```bash
+tynd config show
+tynd config show --env production
+tynd config show --cwd apps/desktop --json
+```
+
+Loads the nearest [config file](/docs/v1.0/cli/config) from `--cwd`, applies `extends`, the environment variant and normalization, then prints the resolved value as pretty JSON on stdout. Without `--json`, the path of the loaded config file is also printed on stderr (`config: <path>`), so stdout stays valid JSON either way.
+
+The environment variant follows the global `--env <name>` flag, then `TYND_ENV`.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Start of the config search |
+| `--json` | false | Print only the JSON value, without the `config:` line |
+
+## What can go wrong
+
+- Any config load or validation error fails the command; run [`tynd validate`](/docs/v1.0/cli/validate) for the full project checks.
+
+## Related
+
+- [`tynd.config.ts`](/docs/v1.0/cli/config)
+- [`tynd validate`](/docs/v1.0/cli/validate)

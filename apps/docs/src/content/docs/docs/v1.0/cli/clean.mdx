@@ -1,0 +1,50 @@
+---
+title: tynd clean
+description: "Safely remove only Tynd-generated project artifacts."
+---
+
+# `tynd clean`
+
+```bash
+tynd clean --dry-run
+tynd clean --yes
+tynd clean --yes --cache
+```
+
+The command is deliberately non-interactive. Without `--yes` or `--dry-run`, it exits without deleting anything.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `-y, --yes` | Authorize removal |
+| `-n, --dry-run` | Print existing targets without removing them |
+| `--cache` | Also remove the shared host build cache used by every project on this machine |
+
+## Removed targets
+
+Only these project-root directories are eligible:
+
+- `.tynd/cache/` — backend bundles, generated bootstraps, frontend staging, and bundler config;
+- `.tynd/build/` — generated host sources, `Cargo.lock`, and the copied host binaries in `bin/` (the next `tynd dev` or `tynd build` regenerates them and reuses the shared host build cache);
+- `release/` — packed executables, installers, manifests, patches, and publication staging.
+
+Targets are resolved beneath the canonical project root. Linked/reparse or escaping targets are rejected.
+
+With `--cache`, the `host/` directory of the [shared host build cache](/docs/v1.0/concepts/build-pipeline#shared-host-build-cache) is removed as well. It is shared by every project, so the next host build of any project on the machine recompiles all dependencies.
+
+Tynd writes a `.tynd-cache` marker file into `host/` when it creates the cache. `tynd clean --cache` refuses to remove a `host/` directory without that marker (for example when `TYND_CACHE_DIR` points at unrelated data) and fails before deleting it; check `TYND_CACHE_DIR` or remove the directory by hand. With `--dry-run --cache`, the cache path is printed instead of removed.
+
+## Kept
+
+- application source and config;
+- `node_modules/`;
+- framework output such as `dist/` or `build/`;
+- `.bun-version`, `bun.lock`, and package manifests;
+- anything outside the three generated directories above, including the shared host build cache unless `--cache` is passed.
+
+## Related
+
+- [Build Pipeline](/docs/v1.0/concepts/build-pipeline).
+- [`tynd build`](/docs/v1.0/cli/build).

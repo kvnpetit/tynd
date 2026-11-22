@@ -1,0 +1,78 @@
+---
+title: tynd dev
+description: "Run frontend development tooling, the Bun backend, and the native host under one Rust supervisor."
+---
+
+# `tynd dev`
+
+```bash
+tynd dev
+tynd dev --inspect
+tynd dev --no-debug
+```
+
+`tynd dev` keeps application development TypeScript-first while the native Rust CLI supervises every process.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Run against another project directory |
+| `--inspect` | Enable the Bun inspector |
+| `--inspect-brk` | Enable the Bun inspector and wait before user code runs |
+| `--no-debug` | Do not expose the local authenticated debug socket used by `tynd-mcp` |
+| `--no-fix` | Disable automatic scaffold/editor setup repair |
+| `-y, --yes` | Apply supported development setup fixes before launch |
+
+The debug endpoint is private to your account. On Linux and macOS `tynd dev` creates it in a fresh `tynd-dev-*` directory with mode `0700` (under `$XDG_RUNTIME_DIR` when set, else the temp directory) and removes the directory when the host exits. On Windows it is a named pipe `\\.\pipe\tynd-<app>-<pid>-<random>` with an owner-only access list. An already set `TYND_DEBUG_SOCKET` is used as given. If the private directory cannot be created, `tynd dev` warns `debug socket disabled` and starts without it.
+
+Global flags include `--verbose`, `--quiet`, `--env`, `--log-format`, and `--log-file`.
+
+## Launch sequence
+
+1. Loads and validates config through the native Rust config loader.
+2. Detects Vite, Create React App, Angular, Parcel, Rsbuild, or Webpack.
+3. Starts the detected/configured frontend dev command and waits up to 30 seconds for `devUrl` to become reachable.
+4. Warns about every source file that imports an undeclared `@tynd/plugin-<api>` package (run `tynd add <api>`).
+5. Resolves the project's pinned Bun executable and generated backend bootstrap.
+6. Compiles the app's Rust host (core plus the declared plugins' APIs) with the Cargo `dev` profile under `.tynd/build`. The first build takes a few minutes and prints a notice; a later run whose inputs did not change skips Cargo.
+7. Starts the host and Bun backend. Frontend HMR remains owned by the frontend framework.
+
+Before spawning the frontend dev command, `tynd dev` fails if something already answers on `devUrl`, because the window would otherwise load that foreign page. If you start the dev server yourself, set `devCommandArgs: []` in `tynd.config.ts`: Tynd then neither spawns a dev command nor runs this check, and only waits for `devUrl` to become reachable.
+
+Relevant backend, plugin, config, and dotenv inputs are watched without following links. Backend-compatible changes send a reload request to the running host, so the native window stays open.
+
+A config change can alter compiled APIs, plugin crates, environment, or host arguments. In that case `tynd dev` stops with an explicit message to restart, allowing the host plan to be rebuilt safely.
+
+## Frontend overrides
+
+Use either a command string or an argument array:
+
+```ts title="tynd.config.ts"
+export default defineConfig({
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  devUrl: "http://localhost:4173",
+  devCommandArgs: ["bunx", "vite", "--port", "4173"],
+});
+```
+
+`devCommandArgs` avoids shell parsing. `devCommand` remains available for simple quoted command strings.
+
+## Stopping
+
+Ctrl+C terminates the host and frontend child process.
+
+## Common failures
+
+- Frontend process exits before readiness: run the project's install step and verify `devCommand`/`devUrl`.
+- Unsupported SSR framework: use its static SPA variant.
+- Config changed during development: restart `tynd dev` so native capabilities and host arguments are rebuilt.
+- `cargo`/`rustc` missing or older than 1.95: the command stops with a message pointing to https://rustup.rs. Tynd does not download a toolchain on demand.
+- Tynd host sources missing: run `bun add -d @tynd/host-src`.
+
+## Related
+
+- [`tynd start`](/docs/v1.0/cli/start) — cache-only production-shaped launch.
+- [`tynd build`](/docs/v1.0/cli/build) — explicit build and native pack step.
+- [Development Workflow](/docs/v1.0/getting-started/dev-workflow).

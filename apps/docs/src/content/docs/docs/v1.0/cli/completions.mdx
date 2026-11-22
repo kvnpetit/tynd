@@ -1,0 +1,21 @@
+---
+title: tynd completions
+description: "Print a shell completion script for tynd commands and flags."
+---
+
+# `tynd completions`
+
+```bash
+tynd completions bash > ~/.local/share/bash-completion/completions/tynd
+tynd completions zsh  > "${fpath[1]}/_tynd"
+tynd completions fish > ~/.config/fish/completions/tynd.fish
+tynd completions powershell >> $PROFILE
+```
+
+Prints a completion script on stdout. Accepted shells: `bash`, `zsh`, `fish`, `powershell`.
+
+The scripts are generated from the CLI definition and complete command names, subcommands and flags.
+
+## Related
+
+- [CLI Reference](/docs/v1.0/cli)

@@ -1,0 +1,98 @@
+---
+title: tynd-mcp
+description: "MCP server and diagnostic CLI that attaches to a running tynd dev app."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# `tynd-mcp`
+
+```bash
+bunx @tynd/mcp serve
+bunx @tynd/mcp --allow-eval --app-id com.example.myapp serve
+bunx @tynd/mcp call ipc.recent --args '{"n":20}'
+bunx @tynd/mcp tap
+```
+
+`@tynd/mcp` launches the native `tynd-mcp` binary. It discovers an app started by [`tynd dev`](/docs/v1.0/cli/dev) (not with `--no-debug`), or a build made with [`tynd build --debug-protocol`](/docs/v1.0/cli/build), and talks to its authenticated debug socket.
+
+MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "tynd": { "command": "bunx", "args": ["@tynd/mcp", "serve"] }
+  }
+}
+```
+
+## Subcommands
+
+| Subcommand | Effect |
+|---|---|
+| `serve` (default) | Serve MCP over stdio: tools, resources and prompts |
+| `call <method>` | Send one debug-bridge method to the newest app and print the JSON result |
+| `tap` | Print IPC frames as JSON lines until Ctrl+C |
+
+`call` accepts only the bridge methods `tynd-mcp` knows (`app.info`, `ipc.recent`, `webview.snapshot`, ...); any other name fails with `unknown tool`.
+
+## Flags
+
+These flags are accepted before or after the subcommand.
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--allow-eval` | false | Enable the `webview.evaluate` MCP tool |
+| `--allow-launch` | false | Enable the `app.launch` MCP tool, which runs `tynd dev` in an absolute project path |
+| `--auto-switch` | false | When a newer app appears, attach to it instead of staying on the current one |
+| `--allow-non-loopback-discovery` | false | Accept discovery entries whose endpoint is not a loopback address |
+| `--app-id <id>` | newest app | Only attach to apps whose discovery entry has this id |
+| `--rescan-interval-ms <ms>` | `5000` | Minimum delay between two discovery scans in `serve` |
+| `--connect-timeout-ms <ms>` | `5000` | Connection timeout to the debug socket |
+
+`call` options:
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--args <json>` | none | JSON object passed as the method arguments |
+| `--max-bytes <n>` | `4194304` | Fail when the encoded result is larger |
+| `--app-id <id>`, `--connect-timeout-ms <ms>` | as above | Same as the global flags |
+
+`tap` accepts `--app-id` and `--connect-timeout-ms`.
+
+<Aside type="caution">
+  `--allow-eval` gates `webview.evaluate` in both `serve` and `call`. `--allow-launch` gates the launch tools of `serve`.
+</Aside>
+
+## Discovery
+
+The app writes its discovery entry in:
+
+| OS | Directory |
+|---|---|
+| Windows | `%LOCALAPPDATA%\tynd\debug` |
+| macOS | `~/Library/Application Support/tynd/debug` |
+| Linux | `$XDG_RUNTIME_DIR/tynd`, else `<tmp>/tynd-<uid>` |
+
+Without `--app-id`, the most recently started app wins.
+
+## Environment
+
+| Variable | Effect |
+|---|---|
+| `TYND_BIN` | `tynd` binary used by `app.launch`. Must be absolute (and end in `.exe` on Windows). Otherwise the `tynd` next to `tynd-mcp` |
+
+The framework documents and plugin schemas served as MCP resources are compiled into `tynd-mcp`.
+
+Logs (warnings and errors) go to stderr; stdout carries the protocol or the command output.
+
+## What can go wrong
+
+- `... requires an attached app — start tynd dev`: no live app was found. Check that `tynd dev` runs without `--no-debug`, and that `--app-id` matches.
+- A packaged app built without `--debug-protocol` never starts its debug server.
+- `raw bridge result exceeds cap`: raise `--max-bytes` or request less data.
+
+## Related
+
+- [Debugging guide](/docs/v1.0/guides/debugging)
+- [Testing guide](/docs/v1.0/guides/testing)

@@ -1,0 +1,89 @@
+---
+title: CLI Reference
+description: "Native Rust CLI for project lifecycle, plugins, diagnostics, packaging, and signed releases."
+---
+
+# CLI Reference
+
+```bash
+bunx @tynd/cli <command> [options]
+# or, when installed in the project or globally
+tynd <command> [options]
+```
+
+`@tynd/cli` is a small npm launcher plus the dependency-free TypeScript config surface. The launcher resolves `tynd` from the matching `@tynd/tooling-<os>-<arch>` optional package; command parsing and execution happen in native Rust.
+
+Bun remains required for application TypeScript, frontend commands, config evaluation, and package management.
+
+## Global flags
+
+| Flag | Effect |
+|---|---|
+| `-v, --verbose` | Enable debug-level CLI logs |
+| `-q, --quiet` | Suppress non-error CLI log records |
+| `--no-color` | Disable ANSI colors |
+| `--env <name>` | Set `TYND_ENV` for config and application code |
+| `--log-format <human\|json>` | Select human logs or JSON lines |
+| `--log-file <path>` | Append a copy of CLI logs to a file |
+| `--help` | Show command help |
+| `--version` | Print CLI version |
+
+## Project lifecycle
+
+| Command | Purpose |
+|---|---|
+| `tynd create <name>` | Scaffold a Vite, Angular, or remote-template project |
+| `tynd init` | Add Tynd files, dependencies, scripts, and TypeScript editor types to an existing project |
+| `tynd add <capability-or-package>...` | Enable an API and install its plugin, or install/configure a plugin package; all or nothing |
+| `tynd remove <capability-or-package>...` | Remove a plugin from config and, unless `--no-uninstall`, from dependencies |
+| `tynd dev` | Start the frontend dev server, native host, and backend reload supervisor |
+| `tynd start` | Run the outputs of a previous `tynd build` (release host, backend bundle, frontend assets); never rebuild |
+| `tynd test` | Run end-to-end tests with `bun test`, prepared for `@tynd/test` |
+| `tynd build` | Build frontend/backend and pack a native executable under `release/<platform>-<arch>/` |
+| `tynd clean` | Remove `.tynd/cache`, `.tynd/build`, and `release`; with `--cache`, the shared host build cache |
+| `tynd validate` | Validate config and project/build inputs |
+| `tynd upgrade` | Upgrade Tynd packages and, with `--all`, configured plugins |
+
+## Inspection and repair
+
+| Command | Purpose |
+|---|---|
+| [`tynd config show`](/docs/v1.0/cli/config/show) | Print fully merged and resolved config |
+| `tynd info` | Print Tynd/Bun versions and resolved native binary paths |
+| `tynd explain [topic]` | Explain the runtime, the capabilities, or one native API |
+| `tynd size` | Report sizes for generated/release/frontend directories |
+| `tynd doctor` | With `--fix`, create missing scaffold files and normalize scripts/editor types first; check config, entries, host plan, Rust toolchain, host sources, shared cache, host, bundler, Bun, and optional generated state |
+| `tynd report` | Create a metadata-only diagnostic archive without project/config contents |
+| `tynd profile` | Run CPU, Bun-memory, or IPC profiling |
+
+## Plugins
+
+Plugins are added and removed with [`tynd add`](/docs/v1.0/cli/add) and [`tynd remove`](/docs/v1.0/cli/remove). Authoring and inspection live under `tynd plugin`:
+
+| Command | Purpose |
+|---|---|
+| [`tynd plugin new <path>`](/docs/v1.0/cli/plugin/new) | Scaffold a JavaScript or native Rust plugin in `<path>` |
+| [`tynd plugin check`](/docs/v1.0/cli/plugin/check) | Validate plugin package layout and declared entrypoints (`--cwd` selects the package) |
+| [`tynd plugin dev <plugin>`](/docs/v1.0/cli/plugin/dev) | Build against a scratch app; watch unless `--no-watch` |
+| [`tynd plugin list`](/docs/v1.0/cli/plugin/list) | List configured plugins |
+| [`tynd plugin types [plugin]`](/docs/v1.0/cli/plugin/types) | Generate or verify native-plugin TypeScript bindings |
+
+## Signed releases
+
+| Command | Purpose |
+|---|---|
+| [`tynd updater keygen`](/docs/v1.0/cli/updater/keygen) | Generate a generic Ed25519 updater keypair; with `--app-id [ID]`, an app-scoped key whose public key is added to config |
+| [`tynd updater sign <file>`](/docs/v1.0/cli/updater/sign) | Sign raw file bytes with an updater private key |
+| [`tynd updater publish <version>`](/docs/v1.0/cli/updater/publish) | Sign platform artifacts, create patches/manifest, upload or stage |
+| [`tynd updater release <version>`](/docs/v1.0/cli/updater/release) | Run CI validation, build, then publish |
+| [`tynd updater server`](/docs/v1.0/cli/updater/server) | Serve a published manifest locally or scaffold a provider template |
+
+## Shell
+
+| Command | Purpose |
+|---|---|
+| [`tynd completions <shell>`](/docs/v1.0/cli/completions) | Print shell completions |
+
+Run `tynd <command> --help` for authoritative command-specific flags.
+
+The MCP bridge for running apps is a separate binary, [`tynd-mcp`](/docs/v1.0/cli/mcp).

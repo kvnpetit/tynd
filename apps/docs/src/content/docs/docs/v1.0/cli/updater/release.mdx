@@ -1,0 +1,49 @@
+---
+title: tynd updater release
+description: "Run tynd validate --ci, tynd build, then tynd updater publish in one command."
+---
+
+# `tynd updater release`
+
+```bash
+tynd updater release 1.2.3 --dry-run
+tynd updater release 1.2.3 --bundle all
+tynd updater release 1.2.3 --target r2 --bucket updates --endpoint https://<account>.r2.cloudflarestorage.com
+```
+
+Runs three steps and stops at the first failure:
+
+1. [`tynd validate --ci`](/docs/v1.0/cli/validate);
+2. [`tynd build`](/docs/v1.0/cli/build), with `--bundle` when given (never with `--debug-protocol`);
+3. [`tynd updater publish <version>`](/docs/v1.0/cli/updater/publish) with every publish flag given.
+
+`updater release` accepts all [`tynd updater publish`](/docs/v1.0/cli/updater/publish) flags, with the same defaults, plus `--bundle` and `--dry-run`.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `<version>` | required | Release version, valid semver |
+| `--cwd <dir>` | `.` | Project directory |
+| `--bundle <formats>` | none | Passed to `tynd build --bundle` (`all` or a comma-separated list) |
+| `--target <target>` | `manifest-only` | `manifest-only`, `github-releases`, `s3` or `r2` |
+| `--key <path>` | `~/.tynd/keys/<app-id>.key` | Ed25519 private key |
+| `--public-base-url <url>` | relative URLs | Public prefix embedded in artifact URLs |
+| `--notes-file <path>` | none | Add release notes to the manifest |
+| `--patch-strategy <strategy>` | `same-major` | `same-major`, `last-n` or `all` |
+| `--max-diffs <n>` | `5` | Candidate count for `last-n` |
+| `--max-patches <n>` | `30` | Hard archived-version cap |
+| `--no-diffs` | false | Publish full payloads only |
+| `--channel <name>` | `TYND_PUBLISH_CHANNEL`, then `updater.channel`, then `stable` | Release channel written into the manifest |
+| `--rollout <0-100>` | none (everyone) | Staged rollout percentage |
+| `--bucket`, `--region`, `--endpoint` | provider-specific | S3/R2 upload settings |
+| `--dry-run` | false | Print the three steps and run nothing |
+
+`--dry-run` only prints the step list (`validate --ci`, `build [--bundle ...]`, `publish <version>`); it checks neither the version, the config nor the key.
+
+Upload credentials come from the environment, as for [`tynd updater publish`](/docs/v1.0/cli/updater/publish#upload-targets).
+
+## Related
+
+- [`tynd updater publish`](/docs/v1.0/cli/updater/publish)
+- [Auto-Updates guide](/docs/v1.0/guides/auto-updates)

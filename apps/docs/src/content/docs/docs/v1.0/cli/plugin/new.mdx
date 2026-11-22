@@ -1,0 +1,67 @@
+---
+title: tynd plugin new
+description: "Scaffold a TypeScript plugin by default, with an optional native Rust crate."
+---
+
+# `tynd plugin new`
+
+```bash
+tynd plugin new plugins/example
+tynd plugin new plugins/example --native
+tynd plugin new plugins/example --scope acme
+```
+
+`<path>` is the target directory; its last component names the plugin (`plugins/example` creates `plugins/example/` for the plugin `example`, package `plugin-example`). A bare name scaffolds into the current directory. Default output is a TypeScript/Bun plugin. Neither shape sets `tynd.kind`: that key is reserved for official plugins, and plugins without it are community plugins. `--native` adds the Rust crate and generated command catalog. There is no interactive type prompt and no `--js` flag.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--native` | Include `native/` Rust plugin crate and `<name>.gen.ts` |
+| `--scope <scope>` | Produce `@<scope>/plugin-<name>` package identity |
+| `-f, --force` | Replace an existing target directory; without it, an existing directory is an error |
+
+The name is validated before scaffolding. Native crate names are normalized and rejected if they would start with a digit, use an invalid Rust identifier, or collide with a Rust keyword.
+
+## TypeScript output
+
+```text
+plugins/example/
+├── package.json
+├── backend.ts
+├── client.ts
+└── README.md
+```
+
+`backend.ts` declares the Bun-side methods with `definePlugin` from `@tynd/core/plugin`. `client.ts` builds the typed frontend client with `createPluginClient<typeof backend>` from `@tynd/core/client`. The package exports `.` and `./client` to `client.ts` and `./backend` to `backend.ts`, declares `@tynd/core` as a peer, and marks `tynd.backend: true`.
+
+## Native output
+
+```text
+plugins/example/
+├── package.json
+├── client.ts
+├── example.gen.ts
+├── README.md
+└── native/
+    ├── Cargo.toml
+    └── src/
+        ├── lib.rs
+        └── bin/gen-types.rs
+```
+
+`client.ts` builds the typed client with `defineTypedPlugin<CommandsCatalog>` from `@tynd/plugin-sdk` over the generated catalog; `.` and `./client` export it. `tynd.native` points Tynd at the crate path/name. Like the official native plugins, `package.json` lists `@tynd/core` and `@tynd/plugin-sdk` as optional peer dependencies; `@tynd/plugin-sdk` is also a dev dependency so local typechecking and type generation resolve it. The starter command catalog and Rust implementation expose a `ping` example.
+
+Validate afterward:
+
+```bash
+tynd plugin check --cwd plugins/example
+tynd plugin dev plugins/example --no-watch
+```
+
+## Related
+
+- [Plugin authoring guide](/docs/v1.0/guides/plugin-authoring)
+- [Plugin SDK](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk#readme)
+- [`tynd add`](/docs/v1.0/cli/add)
+- [`tynd plugin check`](/docs/v1.0/cli/plugin/check)

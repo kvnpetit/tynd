@@ -1,0 +1,42 @@
+---
+title: tynd remove
+description: "Remove capabilities and plugins from the project config and uninstall their packages."
+---
+
+# `tynd remove`
+
+```bash
+tynd remove @acme/plugin-indexer
+tynd remove log
+tynd remove fs sqlite
+tynd remove @acme/plugin-indexer --no-uninstall
+```
+
+`tynd remove` is the inverse of [`tynd add`](/docs/v1.0/cli/add). Each argument is a capability alias or a plugin package name:
+
+- a host API (for example `log`) is removed from `apis`;
+- a plugin-backed capability (for example `fs` → `@tynd/plugin-fs`, or `sqlite` → `@tynd/plugin-sql`) leaves `apis` when it has a host API, and its plugin package is removed;
+- any other argument is a plugin package: its entry leaves `plugins` (string or object form).
+
+Each removed plugin package then goes through `bun remove <package>` in the project root. The command edits the same config formats as `tynd add` and keeps their key order, indentation, line endings and comments, except YAML comments, which are lost.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Project directory |
+| `--no-uninstall` | false | Edit the config only; keep the dependency in `package.json` |
+
+## What can go wrong
+
+- A package argument must be a package name (`@scope/plugin-name` or `plugin-name`); versions, paths and flags are refused before any change.
+- A package that is not in `plugins` is reported as `is not declared`; `bun remove` still runs unless `--no-uninstall` is set.
+- A capability that is not in `apis` is reported as `is not configured`.
+- Removing the last entry of `apis` or `plugins` drops the key, so `tynd remove` after `tynd add` leaves the config as it was.
+- An `apis` or `plugins` array with dynamic entries (spreads, variables) is refused: edit it manually.
+- The command is all or nothing: if any argument fails (an invalid name, `bun remove`), every project file it touched (the config, `package.json`, the lock file) is restored.
+
+## Related
+
+- [`tynd add`](/docs/v1.0/cli/add)
+- [`tynd plugin list`](/docs/v1.0/cli/plugin/list)

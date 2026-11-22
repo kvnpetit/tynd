@@ -1,0 +1,66 @@
+---
+title: tynd doctor
+description: "Check repairable project inputs and generated state without broad system preflights."
+---
+
+# `tynd doctor`
+
+```bash
+tynd doctor
+tynd doctor --json
+tynd doctor --fix
+tynd doctor --state
+tynd doctor --repair --dry-run
+tynd doctor --repair --yes
+```
+
+`doctor` checks inputs already needed by Tynd. A failed check produces a non-zero exit code.
+
+## Project checks
+
+Checks run in this order. A failing check prints the reason and a `fix:` line; a hint (`!`) is reported without failing the run.
+
+| Check | Pass condition |
+|---|---|
+| Configuration | A supported config loads, merges, and validates |
+| Backend entry | Resolved `backend` is a file |
+| Frontend assets | `frontendDir` is a directory. Before the first build (no `.tynd/cache/bundle.dist.js`) a missing directory is a hint |
+| Native host plan | `apis` and `plugins` resolve to a host plan; every listed plugin package is installed |
+| Rust toolchain | `cargo` and `rustc` are on `PATH` and `rustc` is 1.95 or newer (fix: install from https://rustup.rs or run `rustup update`). Probed from `.tynd/build` when it exists, so a `rust-toolchain.toml` override applies |
+| Shared host build cache | Informational: shows the path of the [shared host build cache](/docs/v1.0/concepts/build-pipeline#shared-host-build-cache) (override with `TYND_CACHE_DIR`, remove with `tynd clean --cache`). Hints when no cache directory can be resolved or, on Windows, when its target directories would exceed 80 characters; set `TYND_CACHE_DIR` to a short, writable directory |
+| Tynd host sources | `@tynd/host-src` is installed (fix: `bun add -d @tynd/host-src@<range>`) |
+| Native host | A compiled host binary exists at `.tynd/build/bin/release/<app>` or `.tynd/build/bin/debug/<app>`. Before the first `tynd dev`/`tynd build` this is a hint, not a failure |
+| Native bundler | `tynd-bundler` resolves |
+| Bun executable and version pin | Bun resolves and matches `.bun-version` when a pin exists |
+
+`doctor` runs `rustc --version --verbose` but never Cargo. It does not query the Windows registry, probe WebView availability, access the network, or inspect every packaging/signing tool. A command reports its own missing prerequisite when that path is used.
+
+## Repair modes
+
+- `--fix` runs the [`tynd init`](/docs/v1.0/cli/init) scaffold on the project root without `--force` before the checks: it creates `tynd.config.ts` and the app scaffold when no config exists, creates `package.json` when missing, and normalizes the Tynd scripts and TypeScript editor types. Existing scaffold files are kept. With `--dry-run`, it prints the planned changes (`would ...`) and writes nothing; script and editor-type normalization is always listed, even when nothing needs to change.
+- `--state` adds a report for `.tynd/cache`, `.tynd/build`, and `release`, including existence and byte size.
+- `--repair` removes rebuildable `.tynd/cache` and `.tynd/build`; it does not remove `release`.
+- `--repair` requires `--yes` or `--dry-run`.
+
+State mode does not parse application databases or rename corrupt files. It only validates generated paths and their readable size.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `--json` | Emit the complete report as JSON |
+| `--fix` | Apply project scaffold/editor repair |
+| `--state` | Add generated-state inspection |
+| `--repair` | Remove rebuildable cache/build state |
+| `--dry-run` | Preview `--fix` or `--repair`; invalid without one of them |
+| `-y, --yes` | Authorize generated-state repair |
+
+Use [`tynd validate --ci`](/docs/v1.0/cli/validate) for build/release gating.
+
+## Related
+
+- [`tynd init`](/docs/v1.0/cli/init).
+- [`tynd info`](/docs/v1.0/cli/info).
+- [`tynd validate`](/docs/v1.0/cli/validate).
+- [Troubleshooting](/docs/v1.0/troubleshooting).

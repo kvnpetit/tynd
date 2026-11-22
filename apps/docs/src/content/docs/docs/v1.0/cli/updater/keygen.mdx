@@ -1,0 +1,114 @@
+---
+title: tynd updater keygen
+description: "Generate an Ed25519 keypair for the auto-updater: a generic pair, or an app-scoped key added to config."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import Steps from '@/components/Steps.astro';
+
+# `tynd updater keygen`
+
+```bash
+tynd updater keygen                                 # generic pair: tynd-updater.{key,pub}
+tynd updater keygen --out release/updater.key       # generic pair: release/updater.{key,pub}
+tynd updater keygen --app-id                        # app-scoped key for bundle.identifier
+tynd updater keygen --app-id com.example.myapp --no-config-edit
+```
+
+Generates an Ed25519 keypair for signing auto-updater artifacts. Runs entirely in native Rust with operating-system randomness and `ed25519-dalek` — no OpenSSL or external signing tool is needed.
+
+The command has two modes:
+
+- **Generic pair** (no `--app-id`): writes the private key (default `tynd-updater.key`, the default of `tynd updater sign --key`) and the public key next to it with a `.pub` extension, and leaves the config alone.
+- **App-scoped key** (`--app-id [ID]`): writes one private key, by default `~/.tynd/keys/<app-id>.key`, prints its public key, and adds it to the project config. Without a value, the id is the config's `bundle.identifier`.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--app-id [ID]` | off | Generate the app-scoped key of this app id; `bundle.identifier` when no value is given |
+| `-o, --out <path>` | `tynd-updater.key` / `~/.tynd/keys/<app-id>.key` | Private-key path in both modes; the generic pair writes its public key to the same path with a `.pub` extension |
+| `--no-config-edit` | false | App-scoped only: do not add the public key to config |
+| `--cwd <dir>` | `.` | Project root, used by the app-scoped mode |
+| `-f, --force` | false | Replace existing key files; the old private key is backed up first |
+
+There is no confirmation/`--yes` flag.
+
+## Output
+
+- **`tynd-updater.key`** / **`<app-id>.key`** (or the `--out` path) — binary Ed25519 PKCS#8 private key, written with mode `0600` on Unix. When it lands inside a git work tree and no `.gitignore` line covers it, keygen prints a warning; `tynd init` adds `*.key` to `.gitignore`.
+  <Aside type="caution">
+    **Store offline. Never commit.** Compromise of this key lets an attacker ship malicious updates to every user of your app.
+  </Aside>
+- **`<name>.pub`** (generic pair only) — raw 32-byte public key (base64). The app-scoped mode prints the public key instead of writing a `.pub` file.
+
+With `--app-id` and without `--no-config-edit`, the command adds `updater.publicKeys` to the project config. It writes no `endpoints`: when the config names none, the command prints a reminder to set `updater.endpoints` to the URL of your update manifest, as the config does not validate without it. An existing `publicKeys` list is preserved; on rotation (`--force` over an existing key) the new public key is appended to it. The edit supports every documented format: `.ts`, `.mts`, `.cts`, `.js`, `.mjs`, `.cjs`, `.json`, `.jsonc`, `.toml`, `.yaml`, and `.yml`. Dynamic script objects fail closed and require a manual edit.
+
+## What can go wrong
+
+- `--app-id has no value and config has no bundle.identifier`: pass the id explicitly or set `bundle.identifier`.
+- `--no-config-edit` without `--app-id` is rejected.
+- Existing key files are not overwritten without `--force`.
+
+## Workflow (generic pair)
+
+<Steps>
+
+### Generate once
+
+```bash
+tynd updater keygen --out release/updater.key
+```
+
+### Commit only the pub
+
+```bash
+echo "*.key" >> .gitignore
+git add release/updater.pub
+```
+
+### Put the pubkey in the config
+
+Copy the content of `release/updater.pub` into `updater.publicKeys`. The host verifies signatures only with the keys of the backend-configured `updater` block; a key passed from the renderer is ignored.
+
+```ts title="tynd.config.ts"
+export default {
+  updater: {
+    endpoints: ["https://releases.example.com/manifest.json"],
+    publicKeys: ["cFpG...RVDv/RQ="],
+  },
+};
+```
+
+`tynd updater keygen --app-id` does this edit for you.
+
+### For each release, sign the artifact
+
+```bash
+tynd updater sign release/win32-x64/MyApp-1.2.3-setup.exe \
+  --key release/updater.key \
+  --out release/win32-x64/MyApp-1.2.3-setup.exe.sig
+```
+
+### Publish signature + manifest
+
+Upload the `.sig` alongside each artifact. Reference in the update manifest's `signature` field.
+
+</Steps>
+
+## Rotating the key
+
+Ed25519 keys don't expire, but if compromised:
+
+1. Generate a new keypair. With `tynd updater keygen --app-id --force`, the old private key is renamed to `<app-id>.bak-<unix-seconds>.key` next to it and the new public key is appended to `updater.publicKeys`, keeping the old one so already-installed apps still verify updates. The generic pair backs up its private key the same way, but you edit `publicKeys` yourself.
+2. Ship an update **signed with the old key** whose `updater.publicKeys` lists both keys.
+3. After that update rolls out, sign future updates only with the new key.
+
+Users who never install that update keep trusting only the old key — there's no remote revocation.
+
+## Related
+
+- [`tynd updater sign`](/docs/v1.0/cli/updater/sign) — sign files with the generated key.
+- [`tynd updater publish`](/docs/v1.0/cli/updater/publish)
+- [updater API](/docs/v1.0/api/plugins/updater) — runtime verification.
+- [Auto-Updates guide](/docs/v1.0/guides/auto-updates).

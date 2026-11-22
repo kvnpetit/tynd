@@ -1,0 +1,32 @@
+{
+  "title": "CLI Reference",
+  "pages": [
+    "index",
+    "config",
+    "create",
+    "init",
+    "add",
+    "remove",
+    "dev",
+    "start",
+    "test",
+    "build",
+    "clean",
+    "validate",
+    "---Inspection---",
+    "info",
+    "explain",
+    "size",
+    "doctor",
+    "report",
+    "profile",
+    "upgrade",
+    "completions",
+    "---Plugins---",
+    "plugin",
+    "---Updater---",
+    "updater",
+    "---MCP---",
+    "mcp"
+  ]
+}

@@ -1,0 +1,50 @@
+---
+title: tynd init
+description: "Add Tynd config, backend, scripts, dependencies, and editor types to an existing project."
+---
+
+# `tynd init`
+
+```bash
+bunx @tynd/cli init
+bunx @tynd/cli init --cwd ./my-app
+```
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory; defaults to current directory |
+| `-f, --force` | Replace scaffold files such as `tynd.config.ts` and `backend/main.ts` |
+
+Without `--force`, existing scaffold files are preserved.
+
+## What it does
+
+1. Reads `package.json` and detects Vite, Create React App, Angular, Parcel, Rsbuild, or Webpack.
+2. Rejects known server-rendered frameworks; Tynd requires static SPA output.
+3. Writes a minimal `tynd.config.ts` using the detected output directory.
+4. Writes `backend/main.ts`.
+5. When no frontend tool is detected and the project has no Tynd config yet, fails with `no frontend found` before writing any file. Scaffold a frontend first (e.g. `bun create vite@latest`) or start fresh with `tynd create <name> --framework react`.
+6. Moves existing non-Tynd `dev`/`build` scripts to `dev:ui`/`build:ui` when those names are free, then installs `dev`, `start`, and `build` Tynd scripts.
+7. Adds `@tynd/core` as a dependency, plus `@tynd/cli`, `@tynd/host-src` (the Rust sources the host is compiled from), and `@types/bun` as development dependencies unless already present at runtime.
+8. Ensures `.gitignore`, `.bun-version`, `tsconfig.json`, and `@tynd/core/env` editor typing.
+
+`init` edits manifests but does not run `bun install`. The `tynd` CLI binaries arrive through npm optional platform packages; the app host is compiled from `@tynd/host-src` by `tynd dev` and `tynd build`. There is no postinstall hook or command-time binary download.
+
+Like `create`, `init` ends by checking the Rust toolchain and warns when it is missing or older than Rust 1.95.
+
+## Example
+
+```bash
+cd my-existing-app
+bunx @tynd/cli init
+bun install
+bun run dev
+```
+
+## Related
+
+- [Frontend Frameworks](/docs/v1.0/guides/frontend-frameworks).
+- [`tynd create`](/docs/v1.0/cli/create).
+- [Project Structure](/docs/v1.0/getting-started/project-structure).

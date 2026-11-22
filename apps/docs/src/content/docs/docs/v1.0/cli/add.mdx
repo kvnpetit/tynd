@@ -1,0 +1,64 @@
+---
+title: tynd add
+description: "Enable native APIs or install and configure plugins in one command."
+---
+
+# `tynd add`
+
+```bash
+tynd add fs clipboard
+tynd add sqlite
+tynd add @acme/plugin-indexer --apis fs:readText,fs:readDir
+tynd add notifications --no-install
+```
+
+Each argument is handled in order:
+
+- **An API name or catalog alias** (case-insensitive). The names and aliases come from the plugin catalog, for example `fs` / `filesystem` / `files`, `notification` / `notifications`, `autolaunch` / `auto-launch`, `system-stats` / `stats`, `websocket` / `ws`, `sql` / `sqlite`. See [`tynd explain capabilities`](/docs/v1.0/cli/explain).
+  - A plugin-first API (every API except `acl` and `log`, for example `fs`, `clipboard`, `dialog`, `menu`, `multiwindow` or `tray`) is added to `apis`, then its `@tynd/plugin-<api>` package is installed and declared as described below. `tynd add fs` is enough before importing `@tynd/plugin-fs/client`.
+  - A catalog plugin without a host API of its own (for example `sql` → `@tynd/plugin-sql`) is only installed and declared.
+  - The core APIs `acl` and `log` only edit `apis` and install nothing.
+- **Anything else** is treated as a plugin package name: install, then add an entry to `plugins`.
+
+If the project has no config yet, `tynd add` first runs [`tynd init`](/docs/v1.0/cli/init). Unless `--no-install` is passed, it then installs `@tynd/host-src` as a devDependency when the project does not declare it yet.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Project directory |
+| `--no-install` | false | Edit the config without running `bun add` / `bun install` (for every plugin of the call and for `@tynd/host-src`) |
+| `--apis <csv>` | none | Store the comma-separated `api:method` selectors as the entry's `permissions` |
+
+`--apis` applies only to explicit plugin package arguments; a plugin added through an API name or alias gets no `permissions`.
+
+## Plugin entries
+
+If a plugin dependency is already declared but missing locally, the command runs `bun install`; if undeclared, it runs `bun add <package>`. A catalog plugin published only under an npm dist-tag (the `distTag` of `plugins/catalog.json`, for example `experimental` for `llm`, `screen-rec`, `wgpu` and `whisper`) is installed as `bun add <package>@<tag>`.
+
+Without `--apis`, the entry is a package string. With selectors, it is an object:
+
+```ts
+plugins: [{
+  pkg: "@acme/plugin-indexer",
+  permissions: ["fs:readText", "fs:readDir"],
+}]
+```
+
+All supported config formats are editable: TypeScript, JavaScript, JSON/JSONC, TOML, and YAML. Script configs must expose a literal default-exported object, `defineConfig({ ... })`, or their CommonJS equivalent. Edits keep key order, indentation and line endings, and existing entries are left unchanged. Comments survive in script, JSONC and TOML configs; YAML configs lose their comments when edited.
+
+Native package metadata is resolved later by the host plan; the next `tynd dev` or `tynd build` links a native plugin's Rust crate into the app host.
+
+## What can go wrong
+
+- The command is all or nothing: if any step fails (the `tynd init` scaffold, a `bun add`, the host sources install), the project files it touched (config, `package.json`, the lock file, scaffolded files) are restored and the command fails with `tynd add failed; project files restored`. Packages already written to `node_modules/` are not removed.
+- An API already listed is reported as `already configured`; a plugin already listed as `already declared`.
+- An unknown name that is not a valid package name (`@scope/plugin-name` or `plugin-name`; versions, paths and flags are refused) fails.
+- A selector passed to `--apis` that is not `api:method` fails.
+- A dynamic script config (factory, dynamic array entries) cannot be edited safely and fails; edit it by hand.
+
+## Related
+
+- [`tynd remove`](/docs/v1.0/cli/remove)
+- [`tynd plugin list`](/docs/v1.0/cli/plugin/list)
+- [Config reference](/docs/v1.0/cli/config)

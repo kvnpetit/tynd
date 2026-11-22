@@ -1,0 +1,49 @@
+---
+title: tynd plugin types
+description: "Generate or verify the TypeScript command catalog of native Rust plugins."
+---
+
+# `tynd plugin types`
+
+```bash
+tynd plugin types                 # every local native plugin
+tynd plugin types ./plugins/indexer
+tynd plugin types --check         # CI: fail when a catalog is stale
+```
+
+Runs each native plugin's type generator and writes its output to the plugin's `*.gen.ts` file. The file exports `CommandsCatalog` and `_commands`, which `defineTypedPlugin<CommandsCatalog>(name)` from `@tynd/plugin-sdk` consumes.
+
+## Which plugins
+
+- With `[plugin]`: that plugin, resolved like the argument of [`tynd plugin dev`](/docs/v1.0/cli/plugin/dev).
+- Without it: the package at `--cwd` and every `plugins/*` directory that holds a `package.json`.
+
+Only packages whose `package.json` has a `tynd.native` block count. The native crate lives in `tynd.native.path` (default `native`), which must stay inside the package and hold a `Cargo.toml`.
+
+## How it generates
+
+- The generator is the crate's single binary whose name contains `gen-types` or whose path ends in `/gen-types.rs`, or else `src/bin/gen-types.rs`.
+- It runs as `cargo run --release --quiet -p <crate> --bin <bin>` with a sanitized environment. Its stdout must contain `export type CommandsCatalog` and `_commands`.
+- The output file is the package's only `*.gen.ts`, or `<name>.gen.ts` when there is none (`<name>` is the package name without its scope and `plugin-` prefix).
+- A crate that uses `workspace = true` but is not part of a Cargo workspace is built in a temporary workspace that points to the native SDK of the installed `@tynd/plugin-sdk`.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `[plugin]` | all local native plugins | Plugin directory or package name |
+| `--cwd <dir>` | `.` | Search directory |
+| `--dry-run` | false | Print `would update <file>` instead of writing |
+| `--check` | false | Fail with `generated plugin types are stale` when a file differs |
+
+## What can go wrong
+
+- `no local native plugins found`: no package in scope has `tynd.native`.
+- `has no gen-types binary` or `has multiple gen-types binaries`: keep exactly one generator binary.
+- `has multiple *.gen.ts files`: keep one generated catalog per package.
+- Cargo must be on `PATH`, with a toolchain that meets the crate's `rust-version`.
+
+## Related
+
+- [`tynd plugin new`](/docs/v1.0/cli/plugin/new)
+- [`tynd plugin check`](/docs/v1.0/cli/plugin/check)

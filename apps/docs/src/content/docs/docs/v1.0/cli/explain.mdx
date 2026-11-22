@@ -1,0 +1,39 @@
+---
+title: tynd explain
+description: "Print a short explanation of the runtime, the native capabilities or an error code."
+---
+
+# `tynd explain`
+
+```bash
+tynd explain                 # same as `tynd explain runtime`
+tynd explain capabilities
+tynd explain fs --json
+tynd explain errors
+tynd explain BACKEND_DEAD
+```
+
+## Topics
+
+| Topic | Output |
+|---|---|
+| `runtime` (default) | Rust owns the CLI, MCP, host and bundling; Bun runs user TypeScript only |
+| `capabilities` | Every accepted `apis` value |
+| `errors` | Every error code in the catalog |
+| an API name or alias | One line saying the native API is compiled into the host when requested |
+| an error code | The catalog entry: title, symptom, cause, fix and, when there is one, the `tynd://docs/...` MCP resource |
+
+API names accept the same aliases as [`tynd add`](/docs/v1.0/cli/add). Error codes (`BACKEND_DEAD`, `PERMISSION_DENIED`, ...) match without regard to case; they come from the same catalog as the `tynd://errors/<CODE>` resources of [`tynd-mcp`](/docs/v1.0/cli/mcp). An unknown code fails with `unknown error code` and points to `tynd explain errors`; any other topic fails with `unknown explanation topic`.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Project directory (the topics do not depend on it) |
+| `--json` | false | Print `{ topic, summary }`, `{ topic, kind: "capability", summary }`, `{ topic, summary, values: [...] }` (`capabilities`, `errors`) or `{ topic, kind: "error", code, title, symptom, cause, fix, doc }` |
+
+## Related
+
+- [`tynd info`](/docs/v1.0/cli/info)
+- [`tynd size`](/docs/v1.0/cli/size)
+- [Config reference](/docs/v1.0/cli/config)

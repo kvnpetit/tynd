@@ -1,0 +1,49 @@
+---
+title: tynd plugin list
+description: "List plugin packages declared in the resolved project config."
+---
+
+# `tynd plugin list`
+
+```bash
+tynd plugin list
+tynd plugin list --json
+```
+
+The command reads the resolved `plugins` config and reports each package as:
+
+- `host` when its installed manifest declares `tynd.kind: "host"` (a plugin backed by host APIs);
+- `native` when its installed manifest declares `tynd.native`;
+- `js` when the manifest resolves without either;
+- `unresolved` when the package manifest cannot be found.
+
+The family comes from `package.json#tynd.kind`, otherwise `community` or `unresolved`.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `--json` | Emit machine-readable output |
+
+Human output contains one `kind package` line. JSON has the current bounded shape:
+
+```json
+{
+  "runtime": "bun",
+  "plugins": [
+    {
+      "pkg": "@acme/plugin-indexer",
+      "kind": "native",
+      "family": "community"
+    }
+  ]
+}
+```
+
+This command does not build plugins or infer maturity/effective feature sets. Use `tynd plugin check`, `tynd plugin types`, or `tynd plugin dev` for those workflows.
+
+## Related
+
+- [`tynd add`](/docs/v1.0/cli/add)
+- [`tynd plugin check`](/docs/v1.0/cli/plugin/check)

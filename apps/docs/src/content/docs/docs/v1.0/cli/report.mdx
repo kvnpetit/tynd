@@ -1,0 +1,31 @@
+---
+title: tynd report
+description: "Create a metadata-only diagnostic archive to attach to a bug report."
+---
+
+# `tynd report`
+
+```bash
+tynd report
+tynd report --out ./diagnostics --json
+```
+
+Writes `tynd-report-<unix-seconds>.zip` holding two files:
+
+- `project-summary.json`: which of `package.json`, `Cargo.toml` and the `tynd.config.*` files exist, and `"sourceContentsIncluded": false`;
+- `environment.json`: OS, architecture, Tynd version and the name of the project directory.
+
+No file contents, config values or environment variables are included. Add the output of [`tynd info`](/docs/v1.0/cli/info) or [`tynd doctor`](/docs/v1.0/cli/doctor) to the issue yourself if needed.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Start of the project-root search |
+| `--out <dir>` | `.tynd/reports` | Directory that receives the archive (created if missing) |
+| `--json` | false | Print `{ "path": "<archive>", "files": 2 }` |
+
+## Related
+
+- [`tynd info`](/docs/v1.0/cli/info)
+- [`tynd doctor`](/docs/v1.0/cli/doctor)

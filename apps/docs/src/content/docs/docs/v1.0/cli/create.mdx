@@ -1,0 +1,63 @@
+---
+title: tynd create
+description: "Scaffold a Tynd project with an explicit name, frontend, and install/Git choices."
+---
+
+# `tynd create`
+
+```bash
+bunx @tynd/cli create <name>
+```
+
+The project name is required and may contain letters, numbers, dots, underscores, and dashes. React is the default frontend.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--framework <name>` | `react` (default), `vue`, `svelte`, `solid`, `preact`, `lit`, or `angular`; a `-ts` suffix (`react-ts`) is accepted as an alias. Any other value fails with `unknown framework` |
+| `-t, --template <specifier>` | Scaffold a remote/local template through `bunx giget` |
+| `--no-install` | Skip final `bun install` |
+| `--no-git` | Skip `git init` |
+| `-f, --force` | Replace an existing real directory at the exact project target |
+
+Template scaffolding takes precedence over framework scaffolding when both are present.
+
+## Examples
+
+```bash
+bunx @tynd/cli create my-app
+bunx @tynd/cli create my-app --framework react
+bunx @tynd/cli create my-app --framework angular --no-install
+bunx @tynd/cli create my-app --template github:user/repo --no-git
+```
+
+## Scaffold paths
+
+- React, Vue, Svelte, Solid, Preact, and Lit: run `bun create vite@latest` with the matching TypeScript template.
+- Angular: runs `bunx @angular/cli@latest new` with SSR, Git, and install disabled before Tynd initialization.
+- `--template`: runs `bunx giget <specifier> <target> --force` before Tynd initialization.
+
+Then `tynd init` adds config/backend/editor setup, `git init` runs unless disabled, and `bun install` runs unless disabled. A failed `git init` is a warning; a failed `bun install` stops with an error but leaves the scaffold in place, with the command to rerun.
+
+`create` then checks the Rust toolchain the host is compiled with (Rust 1.95 or newer, see [Prerequisites](/docs/v1.0/getting-started/installation#install-rust)). A missing or too old toolchain is a warning, not an error: the project is created, but `tynd dev` and `tynd build` need Rust.
+
+## Next steps
+
+```bash
+cd my-app
+tynd dev      # frontend dev server + native window (the first run compiles the native host)
+tynd build    # packed executable under release/<platform>-<arch>/
+```
+
+Before the first build, [`tynd doctor`](/docs/v1.0/cli/doctor) reports `frontend assets` as missing because the frontend output does not exist yet. Installers (`tynd build --bundle ...`) also need a `bundle.identifier` in `tynd.config.ts`; see [Your First App](/docs/v1.0/getting-started/first-app#ship-it-as-an-installer).
+
+## Security
+
+`--force` refuses links, reparse points, and non-directory targets before replacement. A remote template and its package scripts are third-party code; review the source before installing dependencies.
+
+## Related
+
+- [`tynd init`](/docs/v1.0/cli/init).
+- [Frontend Frameworks](/docs/v1.0/guides/frontend-frameworks).
+- [Project Structure](/docs/v1.0/getting-started/project-structure).
