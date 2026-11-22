@@ -1,0 +1,61 @@
+[package]
+name         = "tynd-plugin-whisper"
+description  = "Local speech-to-text plugin (whisper.cpp via whisper-rs) for Tynd."
+publish.workspace       = true
+version                 = "1.0.0"
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest    = false
+
+[[bin]]
+name = "tynd-plugin-whisper-gen-types"
+path = "src/bin/gen-types.rs"
+
+[features]
+# Inference is opt-in. Without `inference`, the crate compiles without
+# pulling `whisper-rs` (which builds whisper.cpp natively, a 3-5 minute
+# first-time build that brings a heavy C++ toolchain dependency). Every
+# public method returns a "feature not enabled" error in the stub build
+# so apps can still link against the plugin during development without
+# paying the build cost.
+default     = []
+inference   = ["dep:whisper-rs"]
+# Backend-specific accelerators — opt-in on top of `inference`. Each
+# matches a native whisper.cpp build flag; pick the one that matches
+# the target machine's hardware. `coreml` is intentionally omitted —
+# the upstream `whisper-rs` binding does not expose a Core ML feature
+# (Metal already covers Apple Silicon GPU acceleration).
+cuda        = ["inference", "whisper-rs/cuda"]
+metal       = ["inference", "whisper-rs/metal"]
+vulkan      = ["inference", "whisper-rs/vulkan"]
+hipblas     = ["inference", "whisper-rs/hipblas"]
+openblas    = ["inference", "whisper-rs/openblas"]
+
+[dependencies]
+tynd-plugin-sdk    = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+base64             = { workspace = true }
+specta             = { workspace = true }
+tracing            = { workspace = true }
+
+# Real inference backend — gated behind the `inference` feature. Held at
+# 0.13: 0.14+ reworked segment/token access (`full_n_segments`,
+# `full_get_segment_*` ...) and the `inference` build needs cmake + libclang
+# (whisper.cpp), so the migration cannot be compile-verified on the dev/CI
+# check path. Migrate together with a build of the `inference` feature.
+whisper-rs  = { version = "0.13", optional = true }
+

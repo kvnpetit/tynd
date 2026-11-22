@@ -1,0 +1,23 @@
+@tynd/plugin-audio
+Copyright 2026 Kevin Petit (@kvnpetit)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+================================================================================
+THIRD-PARTY SOFTWARE INCLUDED
+================================================================================
+
+- cpal               (Apache-2.0               ) — https://github.com/RustAudio/cpal
+- hound              (Apache-2.0               ) — https://github.com/ruuda/hound
+- crossbeam-channel  (Apache-2.0 / MIT         ) — https://github.com/crossbeam-rs/crossbeam
+- parking_lot        (Apache-2.0 / MIT         ) — https://github.com/Amanieu/parking_lot
+- dashmap            (MIT                      ) — https://github.com/xacrimon/dashmap
+- anyhow             (Apache-2.0 / MIT         ) — https://github.com/dtolnay/anyhow
+- serde_json         (Apache-2.0 / MIT         ) — https://github.com/serde-rs/json
+
+cpal links system audio APIs at runtime — CoreAudio (macOS), WASAPI (Windows),
+ALSA (Linux). hound carries the WAV (RIFF) parser/encoder code.

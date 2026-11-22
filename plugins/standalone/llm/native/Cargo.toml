@@ -1,0 +1,67 @@
+[package]
+name         = "tynd-plugin-llm"
+description  = "Local LLM inference plugin (GGUF via llama.cpp) for Tynd."
+publish.workspace       = true
+version                 = "1.0.0"
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+
+# `llama-cpp-sys-2` is declared only to pin the version llama-cpp-2 links.
+[package.metadata.cargo-shear]
+ignored = ["llama-cpp-sys-2"]
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest    = false
+
+[[bin]]
+name = "tynd-plugin-llm-gen-types"
+path = "src/bin/gen-types.rs"
+
+[features]
+# Inference is opt-in. Without `inference`, the crate compiles without
+# pulling `llama-cpp-2` (which requires building llama.cpp natively, a
+# 5-15 minute first-time build that brings a heavy C++ toolchain
+# dependency). Every public method returns a "feature not enabled"
+# error in the stub build so apps can still link against the plugin
+# during development without paying the build cost.
+default     = []
+inference   = ["dep:llama-cpp-2", "dep:llama-cpp-sys-2", "dep:rand"]
+# Backend-specific accelerators — opt-in on top of `inference`. Each
+# matches a native llama.cpp build flag; pick the one that matches the
+# target machine's hardware.
+cuda        = ["inference", "llama-cpp-2/cuda"]
+metal       = ["inference", "llama-cpp-2/metal"]
+vulkan      = ["inference", "llama-cpp-2/vulkan"]
+
+[dependencies]
+tynd-plugin-sdk    = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+parking_lot        = { workspace = true }
+specta             = { workspace = true }
+bon                = { workspace = true }
+tracing            = { workspace = true }
+
+# Real inference backend — gated behind the `inference` feature. Held at
+# 0.1.152: llama-cpp-2 breaks its API between 0.1.x patch releases and
+# the `inference` build needs cmake + libclang (llama.cpp), so a newer patch
+# cannot be compile-verified on the dev/CI check path. Bump deliberately
+# together with a build of the `inference` feature.
+llama-cpp-2 = { version = "=0.1.152", optional = true }
+# Pin-only: llama-cpp-2 declares a caret range on its -sys crate, so a plain
+# `cargo update` would pair the =0.1.152 bindings with a newer llama.cpp FFI
+# build. Keep both at the same patch; bump them together.
+llama-cpp-sys-2 = { version = "=0.1.152", optional = true }
+rand        = { version = "0.10", optional = true }
+

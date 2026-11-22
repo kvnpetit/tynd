@@ -1,0 +1,112 @@
+[package]
+name         = "tynd-plugin-screen-rec"
+description  = "Cross-platform screen recording plugin for the Tynd framework — `scap` backend (ScreenCaptureKit / DXGI / PipeWire)."
+publish.workspace       = true
+version                 = "1.0.0"
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest    = false
+
+[[bin]]
+name = "tynd-plugin-screen-rec-gen-types"
+path = "src/bin/gen-types.rs"
+
+[dependencies]
+tynd-plugin-sdk    = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+parking_lot        = { workspace = true }
+specta             = { workspace = true }
+bon                = { workspace = true }
+# Structured logging — host apps route plugin diagnostics through
+# their own subscriber (file, JSON, OpenTelemetry, …) instead of
+# polluting stderr. Pulled in unconditionally because the cost is tiny
+# (~50 KB compiled, no native deps) and `tracing::error!` compiles to a
+# no-op when no subscriber is installed, so libraries can emit safely
+# without forcing a runtime on downstream consumers.
+tracing            = "0.1"
+
+# `scap` pulls ~10 MB of native deps (ScreenCaptureKit shim on macOS,
+# DXGI on Windows, PipeWire/X11 on Linux) and a hard dependency on
+# system codecs — opt-in only. Without the feature the plugin compiles
+# as a no-op stub that returns a clear "rebuild with --features capture"
+# error; this matches the LLM plugin's `inference` opt-in pattern.
+scap = { version = "0.0.8", optional = true }
+# JPEG encoder — pure Rust, used to encode each captured BGRA frame
+# into a JPEG sample for the MJPEG-in-MP4 pipeline. Pulling `image`
+# instead of a JPEG-only crate because the BGRA-to-RGB swizzle + the
+# `RgbImage` builder are already covered there.
+#
+# `default-features = false` strips PNG / GIF / TIFF / WebP encoders
+# we don't need; only `jpeg` is enabled. This keeps the dep tree
+# minimal (~1 MB compiled).
+image = { version = "0.25", default-features = false, features = ["jpeg"], optional = true }
+
+# === Hardware-accelerated H.264 / HEVC encoder (opt-in) ===
+#
+# `ffmpeg-next` wraps the system `ffmpeg` libraries (libavcodec /
+# libavformat / libswscale / …) and gives us cross-platform access to
+# the hardware encoders shipped by every modern GPU vendor:
+#
+# - NVIDIA  → `h264_nvenc` / `hevc_nvenc`
+# - Apple   → `h264_videotoolbox` / `hevc_videotoolbox`
+# - Intel   → `h264_qsv` / `hevc_qsv`
+# - AMD/Lin → `h264_vaapi` / `hevc_vaapi`
+# - CPU FB  → `libx264` / `libx265`
+#
+# This is **opt-in** behind the `gpu-encode` feature because pulling
+# ffmpeg adds 20–50 MB to the binary (when statically linked), requires
+# the system to have ffmpeg dev headers installed at build-time, and
+# carries a non-trivial codec patent surface most apps don't need.
+# Without the feature the plugin still defaults to MJPEG which has zero
+# system requirements.
+#
+# Build prerequisites:
+# - macOS   : `brew install ffmpeg`
+# - Linux   : `apt install libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libswscale-dev`
+# - Windows : `vcpkg install ffmpeg`, or download an `ffmpeg-shared` build
+#             and set `FFMPEG_DIR=<extracted dir>`.
+ffmpeg-next = { version = "7", optional = true, default-features = false, features = [
+    "codec",            # libavcodec — encoders / decoders
+    "format",           # libavformat — MP4 / MKV / MOV muxers
+    "filter",           # libavfilter — BGRA→YUV420 + scaling
+    "software-scaling", # libswscale — pixel format conversion
+] }
+
+# `scap 0.0.8` was authored against the five-argument
+# `windows-capture 1.4.0` Settings API but declares a caret range.
+# 1.5 changed that constructor incompatibly, so pin the transitive edge
+# until scap publishes a compatible release. Source enumeration also
+# uses this direct dependency to identify the primary Windows display.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-capture = { version = "=1.4.0", optional = true }
+
+[features]
+default = []
+# Backend feature — pulls `scap` *and* the JPEG encoder so the start /
+# stop / write_frame loop has everything it needs to produce a
+# playable MJPEG stream. Splitting them would force every consumer to
+# pick a separate encoder feature; keeping them together matches how
+# screen capture is consumed in practice (capture + encode, no
+# capture-only mode).
+capture = ["dep:scap", "dep:image", "dep:windows-capture"]
+# Hardware-accelerated H.264 / HEVC encoding via the system ffmpeg
+# libraries. Implies `capture` because there's nothing to encode
+# without frames coming in from `scap`. See the `ffmpeg-next` dep
+# comment above for build prerequisites — without ffmpeg installed on
+# the host system this feature won't compile.
+gpu-encode = ["capture", "dep:ffmpeg-next"]
+

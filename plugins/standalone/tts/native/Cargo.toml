@@ -1,0 +1,42 @@
+[package]
+name         = "tynd-plugin-tts"
+description  = "Text-to-speech (SAPI / AVSpeech / espeak) for the Tynd framework."
+publish.workspace       = true
+version                 = "1.0.0"
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest    = false
+
+[[bin]]
+name = "tynd-plugin-tts-gen-types"
+path = "src/bin/gen-types.rs"
+
+[dependencies]
+tynd-plugin-sdk    = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+parking_lot        = { workspace = true }
+specta             = { workspace = true }
+
+# `tts` wraps SAPI 5 (Windows), AVSpeechSynthesizer (macOS) and
+# espeak / speech-dispatcher (Linux). Behind a feature gate so the default
+# build doesn't pull system frameworks; downstreams enable it explicitly.
+tts             = { version = "0.26", optional = true }
+
+[features]
+default   = []
+synthesis = ["dep:tts"]
+
