@@ -1,0 +1,27 @@
+[package]
+name                    = "tynd-host-macros"
+description             = "Proc-macros for the Tynd native host (`#[tynd::handler]` typed dispatch)."
+publish.workspace       = true
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+readme                  = "README.md"
+
+# Proc-macro crates MUST be declared as such; the rustc plugin harness
+# only loads `proc-macro = true` libs.
+[lib]
+proc-macro = true
+doctest    = false
+
+[dependencies]
+syn          = { version = "3", features = ["full", "extra-traits"] }
+quote        = "1"
+proc-macro2  = "1"
+
+[lints]
+workspace = true

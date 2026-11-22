@@ -1,0 +1,190 @@
+//! Generate the rewritten `impl` block plus its sibling `dispatch(method, args)` function.
+//! Pure synthesis — analysis lives in [`crate::analyze`].
+
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::ItemImpl;
+
+use crate::analyze::{self, Handler, HandlerArg, HandlerReturn, Plan};
+
+/// Top-level entry: rewrite the `impl` block and emit the sibling dispatch function.
+pub(crate) fn expand(api_name: &str, mut item: ItemImpl) -> syn::Result<TokenStream> {
+    let plan = analyze::analyze_impl(&item.items)?;
+
+    // Strip `#[tynd::skip]` markers so rustc doesn't trip on the
+    // unknown attribute when re-emitting the original impl. The
+    // matching items aren't in the dispatch table, but they stay
+    // callable from Rust code under their original signature.
+    for impl_item in &mut item.items {
+        if let syn::ImplItem::Fn(f) = impl_item {
+            f.attrs.retain(|a| !analyze::is_skip_attr(a));
+        }
+    }
+
+    // In a handler `impl`, `pub` selects the methods routed over IPC; it is
+    // not their Rust visibility. The host keeps its API modules crate-private,
+    // where `unreachable_pub` would flag every handler.
+    item.attrs
+        .push(syn::parse_quote!(#[allow(unreachable_pub)]));
+
+    let self_ty = (*item.self_ty).clone();
+
+    let dispatch_fn = render_dispatch(api_name, &self_ty, &plan);
+
+    Ok(quote! {
+        #item
+
+        #dispatch_fn
+    })
+}
+
+/// Render `pub(crate) fn dispatch(method: &str, args: &Value) -> Result<Value, String>`.
+///
+/// Emits one `match` arm per handler. Argument extraction is per-arg:
+/// required args fail with `IpcError::missing_arg`, optional args
+/// (declared `Option<T>`) tolerate the field being absent and default
+/// to `None`.
+fn render_dispatch(api: &str, self_ty: &syn::Type, plan: &Plan) -> TokenStream {
+    let arms = plan.handlers.iter().map(|h| render_arm(api, self_ty, h));
+
+    quote! {
+        /// IPC payloads to the matching `impl` method, deserializing
+        /// each argument from the JSON object on the wire and
+        /// serializing the return value back. Errors carry the uniform
+        /// `<api>.<method>: <msg>` shape produced by `IpcError`.
+        ///
+        /// The function takes `&Value`; the module.s `api::HostApi` row
+        /// adapts it to the table.s owned-`Value` entry.
+        #[allow(clippy::too_many_lines, clippy::let_underscore_untyped)]
+        pub(crate) fn dispatch(
+            method: &str,
+            args: &::serde_json::Value,
+        ) -> ::core::result::Result<::serde_json::Value, ::std::string::String> {
+            match method {
+                #( #arms )*
+                _ => ::core::result::Result::Err(
+                    ::core::convert::Into::<::std::string::String>::into(
+                        crate::ipc::error::IpcError::unknown_method(#api, method)
+                    )
+                ),
+            }
+        }
+    }
+}
+
+/// Render one `match` arm: argument extraction + invocation + return mapping.
+fn render_arm(api: &str, self_ty: &syn::Type, h: &Handler) -> TokenStream {
+    let wire = &h.wire_name;
+    let ident = &h.ident;
+    let method_lit = h.wire_name.clone();
+
+    let arg_bindings = h
+        .args
+        .iter()
+        .map(|arg| render_arg_extract(api, &method_lit, arg));
+
+    let arg_idents = h.args.iter().map(|a| &a.ident);
+
+    let invocation = if h.has_receiver {
+        // Construct a unit-struct receiver on the fly. The `impl`'s
+        // `Self` type is required to be either a unit struct or
+        // constructible via `Self {}` — same constraint Tauri's
+        // `#[tauri::command]` imposes on State<T>-free handlers.
+        quote! {
+            <#self_ty as ::core::default::Default>::default().#ident( #( #arg_idents ),* )
+        }
+    } else {
+        quote! { <#self_ty>::#ident( #( #arg_idents ),* ) }
+    };
+
+    let mapped = render_return_mapping(&h.ret, invocation);
+
+    quote! {
+        #wire => {
+            #( #arg_bindings )*
+            #mapped
+        },
+    }
+}
+
+/// Render the per-argument extraction. Required args fail with
+/// `missing_arg`; optional args (`Option<T>`) default to `None`.
+/// Both paths share the same `from_value` shape so failures inside
+/// well-formed-but-wrong-shape JSON surface as the uniform
+/// `<api>.<method>: invalid '<key>': <serde error>` message the host
+/// has standardised on.
+fn render_arg_extract(api: &str, method: &str, arg: &HandlerArg) -> TokenStream {
+    let ident = &arg.ident;
+    let key = &arg.wire_key;
+    let ty = &arg.ty;
+
+    if arg.optional {
+        // `Option<T>` — absent field is `None`, present field is
+        // deserialized. Bad shape on a present field still errors so
+        // the caller learns about the typo.
+        quote! {
+            let #ident: #ty = match args.get(#key) {
+                ::core::option::Option::Some(v) => {
+                    ::serde_json::from_value(v.clone()).map_err(|e| {
+                        ::core::convert::Into::<::std::string::String>::into(
+                            crate::ipc::error::IpcError::new(
+                                #api,
+                                #method,
+                                ::std::format!("invalid '{}': {}", #key, e),
+                            )
+                        )
+                    })?
+                },
+                ::core::option::Option::None => ::core::option::Option::None,
+            };
+        }
+    } else {
+        quote! {
+            let #ident: #ty = {
+                let v = args.get(#key).ok_or_else(|| {
+                    ::core::convert::Into::<::std::string::String>::into(
+                        crate::ipc::error::IpcError::missing_arg(#api, #method, #key)
+                    )
+                })?;
+                ::serde_json::from_value(v.clone()).map_err(|e| {
+                    ::core::convert::Into::<::std::string::String>::into(
+                        crate::ipc::error::IpcError::new(
+                            #api,
+                            #method,
+                            ::std::format!("invalid '{}': {}", #key, e),
+                        )
+                    )
+                })?
+            };
+        }
+    }
+}
+
+/// Wrap the `invocation` token stream with the right return-mapping
+/// shape based on the method's declared return type.
+fn render_return_mapping(ret: &HandlerReturn, invocation: TokenStream) -> TokenStream {
+    match ret {
+        HandlerReturn::Unit => quote! {
+            #invocation;
+            ::core::result::Result::Ok(::serde_json::Value::Null)
+        },
+        HandlerReturn::Result => quote! {
+            match #invocation {
+                ::core::result::Result::Ok(v) => ::serde_json::to_value(v).map_err(|e| {
+                    ::core::convert::Into::<::std::string::String>::into(e.to_string())
+                }),
+                ::core::result::Result::Err(e) => ::core::result::Result::Err(
+                    ::core::convert::Into::<::std::string::String>::into(e),
+                ),
+            }
+        },
+        HandlerReturn::Plain => quote! {
+            ::serde_json::to_value(#invocation).map_err(|e| {
+                ::core::convert::Into::<::std::string::String>::into(e.to_string())
+            })
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests;

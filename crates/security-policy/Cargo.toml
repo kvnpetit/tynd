@@ -1,0 +1,30 @@
+[package]
+name                    = "tynd-security-policy"
+description             = "Pure FS, HTTP, process, shell, and environment security policy engine for Tynd"
+publish                 = false
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+readme                  = "README.md"
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+dirs.workspace    = true
+dunce.workspace   = true
+globset.workspace = true
+serde.workspace   = true
+specta.workspace  = true
+tracing.workspace = true
+url.workspace     = true
