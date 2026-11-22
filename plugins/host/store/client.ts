@@ -1,0 +1,74 @@
+import { osCall, osOn } from "@tynd/core/client/bridge";
+
+/** Payload of a `store:error` event: a background write of `namespace` failed. */
+export interface StoreErrorEvent {
+  namespace: string;
+  /** `"touch"` (debounced write), `"flush"` (explicit or reload) or `"shutdown"` (exit flush). */
+  phase: "touch" | "flush" | "shutdown";
+  /** `store.json` path, empty when it could not be resolved. */
+  path: string;
+  error: string;
+}
+
+/** Build a typed key-value store bound to the given disk namespace (`store.json` shard). */
+export function createStore(namespace: string) {
+  return {
+    get<T = unknown>(key: string): Promise<T | null> {
+      return osCall("store", "get", { namespace, key }) as Promise<T | null>;
+    },
+    set<T = unknown>(key: string, value: T): Promise<void> {
+      return osCall("store", "set", { namespace, key, value });
+    },
+    delete(key: string): Promise<void> {
+      return osCall("store", "delete", { namespace, key });
+    },
+    /** `true` when `key` is present, regardless of whether its value is `null`. */
+    has(key: string): Promise<boolean> {
+      return osCall("store", "has", { namespace, key }) as Promise<boolean>;
+    },
+    clear(): Promise<void> {
+      return osCall("store", "clear", { namespace });
+    },
+    keys(): Promise<string[]> {
+      return osCall("store", "keys", { namespace });
+    },
+    values<T = unknown>(): Promise<T[]> {
+      return osCall("store", "values", { namespace }) as Promise<T[]>;
+    },
+    /** `[key, value][]` pairs — feed straight into `Object.fromEntries`. */
+    entries<T = unknown>(): Promise<Array<[string, T]>> {
+      return osCall("store", "entries", { namespace }) as Promise<Array<[string, T]>>;
+    },
+    /** Number of keys currently stored. */
+    length(): Promise<number> {
+      return osCall("store", "length", { namespace }) as Promise<number>;
+    },
+    /**
+     * Drop the in-memory cache for this namespace and re-read `store.json`
+     * from disk. Useful when another process (a sibling app instance, a
+     * manual edit) mutated the file after this process started.
+     */
+    reload(): Promise<void> {
+      return osCall("store", "reload", { namespace });
+    },
+    /**
+     * Write pending changes to disk now and wait for the result. Rejects when
+     * the write fails or the background writer does not answer within 5 s.
+     */
+    flush(): Promise<void> {
+      return osCall("store", "flush", { namespace });
+    },
+    /**
+     * Called when a background write of this namespace fails (disk full,
+     * read-only profile, ...). `set` / `delete` / `clear` resolve before the
+     * write happens, so this is the only signal for those writes. The write is
+     * retried on the next change or `flush()`. Returns an unsubscribe function.
+     */
+    onError(handler: (event: StoreErrorEvent) => void): () => void {
+      return osOn("store:error", (raw) => {
+        const event = raw as StoreErrorEvent;
+        if (event.namespace === namespace) handler(event);
+      });
+    },
+  };
+}
