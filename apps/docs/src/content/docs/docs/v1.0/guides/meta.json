@@ -1,0 +1,27 @@
+{
+  "title": "Guides",
+  "pages": [
+    "frontend-frameworks",
+    "backend-rpc",
+    "streaming",
+    "multi-window",
+    "binary-data",
+    "sidecars",
+    "persistence",
+    "auto-updates",
+    "code-signing",
+    "bundling",
+    "single-instance",
+    "deep-linking",
+    "keyboard-shortcuts",
+    "icons-branding",
+    "i18n",
+    "accessibility",
+    "testing",
+    "performance",
+    "debugging",
+    "plugin-authoring",
+    "migrate-from-tauri",
+    "migrate-from-electron"
+  ]
+}

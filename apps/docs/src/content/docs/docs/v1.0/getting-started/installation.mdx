@@ -1,0 +1,164 @@
+---
+title: Installation
+description: "Install Bun, Rust, and the OS-level dependencies Tynd needs to build and run desktop apps on Windows, macOS, and Linux."
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+# Installation
+
+Tynd keeps application development TypeScript-first. The CLI and MCP server are native Rust executables; Bun runs application backends, frontend commands, and TypeScript config. Node.js is not a supported replacement for application code.
+
+Every app runs on a native host that `tynd dev` and `tynd build` compile with Cargo, so a project needs:
+
+- **Bun 1.3 or newer**;
+- **Rust 1.95 or newer** (`cargo` and `rustc` on `PATH`);
+- the platform build tools and WebView development packages listed below.
+
+You write no Rust: the host is generated and compiled for you.
+
+## Install Bun
+
+<Tabs>
+  <TabItem label="macOS / Linux">
+    ```bash
+    curl -fsSL https://bun.sh/install | bash
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```powershell
+    powershell -c "irm bun.sh/install.ps1 | iex"
+    ```
+  </TabItem>
+</Tabs>
+
+Verify:
+
+```bash
+bun --version
+```
+
+## Install Rust
+
+Install Rust with [rustup](https://rustup.rs):
+
+<Tabs>
+  <TabItem label="macOS / Linux">
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    Download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs).
+  </TabItem>
+</Tabs>
+
+Verify:
+
+```bash
+rustc --version   # 1.95.0 or newer
+```
+
+If `cargo` or `rustc` is missing, or `rustc` is older than 1.95, `tynd dev` and `tynd build` stop with a message pointing to https://rustup.rs. Run `rustup update` to upgrade an older toolchain.
+
+## Platform build tools
+
+<Tabs>
+  <TabItem label="Windows">
+    The **MSVC build tools**: install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload. `rustup-init.exe` offers to install them.
+  </TabItem>
+  <TabItem label="macOS">
+    The **Xcode command line tools**:
+
+    ```bash
+    xcode-select --install
+    ```
+  </TabItem>
+  <TabItem label="Linux">
+    A C toolchain (`build-essential` on Debian / Ubuntu) plus the WebKitGTK and GTK development packages listed in the next section.
+  </TabItem>
+</Tabs>
+
+## OS-level WebView dependencies
+
+Tynd uses the platform WebView — Edge WebView2 on Windows, WKWebView on macOS,
+and WebKitGTK 4.1 on Linux. The CLI does not query registry state or preflight
+WebView availability during ordinary project commands.
+
+<Tabs>
+  <TabItem label="Windows">
+    **WebView2** is available by default on current supported Windows releases.
+    Locked-down/older images can install Evergreen separately. For distribution,
+    choose `skip`, bootstrapper, offline-installer, or fixed-runtime behavior
+    explicitly under `bundle.windows`; see the
+    [Bundling guide](/docs/v1.0/guides/bundling#windows-webview2-distribution).
+  </TabItem>
+  <TabItem label="macOS">
+    **WKWebView** ships with macOS — nothing to install. Tynd apps require
+    macOS 14 (Sonoma) or later; `.app` bundles declare it as
+    `LSMinimumSystemVersion`.
+  </TabItem>
+  <TabItem label="Linux">
+    End-user runtime (for installed `.deb`/`.rpm`/`.AppImage`):
+
+    ```bash
+    # Debian / Ubuntu
+    sudo apt install libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libsoup-3.0-0
+    ```
+
+    Development (compiling the host):
+
+    ```bash
+    sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
+      libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+      libxdo-dev libxss-dev libpipewire-0.3-dev \
+      libgbm-dev libdrm-dev libclang-dev
+    ```
+
+    **Fedora / RHEL:**
+
+    ```bash
+    sudo dnf install gtk3-devel webkit2gtk4.1-devel libsoup3-devel
+    ```
+  </TabItem>
+</Tabs>
+
+## Install the CLI
+
+You don't have to install anything globally — use `bunx`:
+
+```bash
+bunx @tynd/cli create my-app
+```
+
+Or add it to a project:
+
+```bash
+bun add @tynd/core
+bun add -d @tynd/cli @tynd/host-src
+```
+
+`@tynd/host-src` holds the Rust sources the app host is compiled from; `tynd create` and `tynd add` add it as a dev dependency and `tynd upgrade` updates it. `@tynd/cli` resolves `tynd` and `tynd-bundler` from the matching `@tynd/tooling-<os>-<arch>` optional package. Neither runs a postinstall or downloads binaries at command time.
+
+The first `tynd dev` or `tynd build` compiles the host and takes a few minutes (the CLI prints a notice). Later runs are incremental.
+
+## Verify the install
+
+```bash
+bunx @tynd/cli info
+```
+
+Prints the native tooling version, project root, Bun version, and resolved host/bundler paths without probing WebView or registry state.
+
+<Aside type="note">
+  The host binary paths stay empty until the first `tynd dev` or `tynd build` has compiled the host.
+</Aside>
+
+## Editor setup
+
+Any TypeScript-capable editor works. `tynd init` creates/patches editor config for ES2022, bundler module resolution, `@tynd/core/env`, and the generated client-type path. No Tynd-specific language server is required.
+
+## Next
+
+- [Your First App](/docs/v1.0/getting-started/first-app)
+- [Development Workflow](/docs/v1.0/getting-started/dev-workflow)

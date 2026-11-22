@@ -1,0 +1,212 @@
+---
+title: Plugin authoring
+description: "Write a Tynd plugin in TypeScript or with a native Rust crate: scaffold, manifest, types, events, tests and publishing."
+---
+
+# Plugin authoring
+
+A plugin is an npm package that an app lists in `tynd.config` `plugins`. Write one when the same backend methods, client helpers or native code should be shared between apps, or when you need OS access that no [official plugin](/docs/v1.0/api/plugins) covers. Code that belongs to a single app stays in its own backend.
+
+| Shape | Use it for | Files |
+|---|---|---|
+| TypeScript | Logic that runs on Bun: wrappers, formatters, routers, state | `backend.ts` + `client.ts` |
+| Native | OS access not covered by Tynd, heavy CPU work, FFI | `client.ts` + `<name>.gen.ts` + `native/` Rust crate |
+
+A native plugin's crate is compiled into the app's host, so it adds Rust code to every app that installs it. A TypeScript plugin adds none.
+
+## 1. Scaffold
+
+```bash
+tynd plugin new plugins/echo                # TypeScript
+tynd plugin new plugins/echo --native       # TypeScript + Rust
+tynd plugin new plugins/echo --scope acme   # package @acme/plugin-echo
+```
+
+The last path component names the plugin: `plugins/echo` creates the package `plugin-echo` for the plugin `echo`. `-f, --force` replaces an existing directory. See [`tynd plugin new`](/docs/v1.0/cli/plugin/new) for the full output.
+
+### TypeScript plugin
+
+`backend.ts` holds the methods, which run on Bun:
+
+```ts
+import { definePlugin } from "@tynd/core/plugin"
+
+export const backend = definePlugin({
+  name: "echo",
+  methods: {
+    async ping(): Promise<string> {
+      return "pong"
+    },
+  },
+})
+export default backend
+```
+
+`client.ts` builds the typed frontend client from the backend's type:
+
+```ts
+import { createPluginClient } from "@tynd/core/client"
+import type backend from "./backend"
+
+export const plugin = createPluginClient<typeof backend>("echo")
+export default plugin
+```
+
+Calls, streaming generators and argument types work as in [backend RPC](/docs/v1.0/guides/backend-rpc).
+
+### Native plugin
+
+`client.ts` is a typed client over the generated command catalog:
+
+```ts
+import { defineTypedPlugin } from "@tynd/plugin-sdk"
+import type { CommandsCatalog } from "./echo.gen"
+
+export const plugin = defineTypedPlugin<CommandsCatalog>("echo")
+export default plugin
+```
+
+`native/src/lib.rs` implements the commands with the `tynd-plugin-sdk` proc-macros:
+
+```rust
+use tynd_plugin_sdk::{
+    tynd_plugin::{plugin, plugin_impl},
+    PluginResult,
+};
+
+#[plugin(name = "echo")]
+#[derive(Debug, Default)]
+pub struct Plugin;
+
+#[plugin_impl]
+impl Plugin {
+    #[command]
+    pub fn ping(&self) -> PluginResult<String> {
+        Ok("pong".to_owned())
+    }
+}
+```
+
+`native/src/bin/gen-types.rs` prints the TypeScript catalog (`gen_types_bin!`), and `echo.gen.ts` holds its output. Native commands are called from the webview only: the Bun backend cannot reach the crate. The [Plugin SDK README](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk#readme) documents command arguments, `PluginCx`, background work and capability permissions.
+
+## 2. The `tynd` manifest
+
+`package.json` exports `.` and `./client` to `client.ts`; a TypeScript plugin also exports `./backend`. Its `tynd` object accepts these keys only:
+
+| Key | Value |
+|---|---|
+| `backend` | `true` when the package exports `./backend`, which the app's backend loads |
+| `native` | `{ path, crateName, features? }`: the crate directory inside the package, its Cargo package name and optional Cargo features |
+| `apis` | Host APIs the plugin needs; they are compiled into the host of every app that lists the plugin |
+| `kind` | Reserved for official plugins (`"host"` or `"standalone"`); community plugins omit it |
+
+```json
+{
+  "tynd": {
+    "native": { "path": "./native", "crateName": "plugin-echo" },
+    "apis": ["fs"]
+  }
+}
+```
+
+## 3. Check, generate types and run
+
+```bash
+tynd plugin check --cwd plugins/echo   # manifest, exports and native crate layout
+tynd plugin types plugins/echo         # native: regenerate echo.gen.ts from Rust
+tynd plugin types --check              # CI: fail when a catalog is stale
+tynd plugin dev plugins/echo           # run the plugin in a scratch app
+```
+
+- [`tynd plugin check`](/docs/v1.0/cli/plugin/check) exits non-zero on a failed check; `--json` prints the issues.
+- [`tynd plugin types`](/docs/v1.0/cli/plugin/types) runs the crate's `gen-types` binary with cargo. Run it after changing a command's signature.
+- [`tynd plugin dev`](/docs/v1.0/cli/plugin/dev) generates an app under `~/.tynd/plugin-dev/<name>` that depends on the plugin, then starts `tynd dev` there. `--no-watch` builds it once instead; `--scratch <dir>` picks another directory.
+
+## 4. Events
+
+A native plugin emits events through its context (`cx.emit(name, payload)`). The client listens with `onHostEvent`, under the exact name emitted. Prefix event names with the plugin name.
+
+```ts
+import { onHostEvent } from "@tynd/plugin-sdk"
+
+const off = onHostEvent<{ n: number }>("echo:tick", (payload) => {
+  console.log(payload.n)
+})
+off() // unsubscribe
+```
+
+Outside a Tynd runtime, `onHostEvent` returns a no-op.
+
+## 5. Test
+
+Test a TypeScript plugin's methods directly with `bun test`; they need no host:
+
+```ts
+import { expect, test } from "bun:test"
+import backend from "./backend"
+
+test("ping", async () => {
+  expect(await backend.methods.ping()).toBe("pong")
+})
+```
+
+Test a client with `installTyndMock` from `@tynd/core/testing`. Native commands are OS calls on the `plugin` API, keyed `"plugin.<name>:<command>"`; `emitOs` delivers an event to `onHostEvent` listeners:
+
+```ts
+import { afterEach, beforeEach, expect, test } from "bun:test"
+import { installTyndMock, type TyndMock } from "@tynd/core/testing"
+import { onHostEvent } from "@tynd/plugin-sdk"
+import { plugin } from "./client"
+
+let bridge: TyndMock
+beforeEach(() => {
+  bridge = installTyndMock({ os: { "plugin.echo:ping": () => "pong" } })
+})
+afterEach(() => bridge.restore())
+
+test("ping", async () => {
+  expect(await plugin.ping(null)).toBe("pong")
+  expect(bridge.calls).toEqual([
+    { kind: "os", api: "plugin", method: "echo:ping", args: null },
+  ])
+})
+
+test("tick event", () => {
+  const seen: unknown[] = []
+  const off = onHostEvent("echo:tick", (payload) => seen.push(payload))
+  bridge.emitOs("echo:tick", { n: 1 })
+  off()
+  expect(seen).toEqual([{ n: 1 }])
+})
+```
+
+Test the Rust side with `PluginCx::test()` and `test_cx()` from `tynd-plugin-sdk` (see the SDK README's Testing section).
+
+## 6. Publish
+
+A plugin published by anyone other than the Tynd team is a community plugin.
+
+1. Remove `"private": true` from `package.json` (the scaffold sets it) and give the package a real `version`.
+2. Keep `files` complete: a native plugin ships `client.ts`, `<name>.gen.ts` and the `native/` sources, since apps compile the crate into their host.
+3. Run `tynd plugin check` and, for a native plugin, `tynd plugin types --check`.
+4. Publish to npm as usual.
+
+Apps install it by package name:
+
+```bash
+tynd add @acme/plugin-echo
+```
+
+`tynd add` installs the package and lists it in `plugins`. Community plugins are not in the [plugin catalog](/docs/v1.0/api/plugin-catalog).
+
+## What can go wrong
+
+- `tynd plugin check` fails on an unknown `tynd` key: only `kind`, `apis`, `native` and `backend` are allowed.
+- A native call rejects outside a Tynd webview: the client needs the host bridge. Mock it with `installTyndMock` in tests.
+- `generated plugin types are stale`: run `tynd plugin types` and commit the `.gen.ts` file.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [`@tynd/core/client/bridge`](/docs/v1.0/api/plugins/bridge)
+- [Plugin SDK README](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk#readme)

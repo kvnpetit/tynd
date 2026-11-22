@@ -1,0 +1,60 @@
+---
+title: Remember Window Size
+description: "Persist window size, position, maximized + fullscreen state across launches with the `windowState` API from `@tynd/plugin-window-state`."
+---
+
+# Remember Window Size
+
+The `windowState` API in `@tynd/plugin-window-state/client` handles persistence,
+debouncing, disk I/O and lifecycle hooks for you. There's nothing to
+hand-roll: `init()` once at boot, `restore()` to apply the previous
+geometry, `save()` from your close handler so the last drag survives
+the quit.
+
+Install the required plugin:
+
+```bash
+tynd add window-state
+```
+
+```ts
+import { windowState } from "@tynd/plugin-window-state/client";
+import { tyndWindow } from "@tynd/core/client";
+
+// At app boot, before showing the window. `init` is idempotent — safe
+// to await from multiple boot sites. It loads previously saved states
+// from disk, attaches resize / move / maximize / fullscreen listeners,
+// and starts auto-saving (debounced 500 ms by default).
+await windowState.init({ appId: "com.example.myapp" });
+
+// Re-apply the snapshot saved during the previous session, if any.
+// Returns `false` on cold-start (nothing on disk yet).
+await windowState.restore();
+
+// Force-flush the latest geometry just before the user actually quits,
+// bypassing the debounce so a final resize isn't lost.
+tyndWindow.onCloseRequested(async () => {
+  await windowState.save();
+});
+```
+
+That's the whole recipe. The on-disk JSON lives at
+`<dataDir>/<appId>/window-states.json` by default — pass
+`storagePath` to `init()` to override.
+
+## Tuning
+
+| Option | Default | When to change |
+|---|---|---|
+| `appId` | `"tynd-app"` | Always set this — keeps multiple apps from clobbering each other's state. |
+| `debounceMs` | `500` | Lower (e.g. `100`) for snappier persistence on tile-managers; higher for ultra-low-spec disks. |
+| `storagePath` | `<dataDir>/<appId>/window-states.json` | Set when you ship a portable app and want state alongside the binary. |
+
+## Multi-window apps
+
+`init()` attaches listeners for **every** window opened from this
+process. Each window's snapshot is keyed by its `tyndWindow.label()`,
+so child windows persist independently. Call `restore(label)` from
+inside each child window to apply its own saved geometry on open.
+
+**Related:** [tyndWindow API](/docs/v1.0/api/os/window) · [store API](/docs/v1.0/api/os/store) (use this for arbitrary k/v, not for window geometry).

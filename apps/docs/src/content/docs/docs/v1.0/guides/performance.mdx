@@ -1,0 +1,121 @@
+---
+title: Performance
+description: "Measure startup, IPC, memory, and release size with project evidence instead of fixed framework benchmarks."
+---
+
+# Performance
+
+Performance depends on the target WebView, enabled host features, frontend framework, Bun dependencies, and application data. Tynd does not promise universal startup, IPC, memory, or binary-size numbers. Measure the exact artifact and user flow you ship.
+
+## Startup path
+
+A packed launch performs these stages:
+
+1. the OS loads the native host;
+2. the Rust runtime validates the TYNDPKG trailer;
+3. the exact packaged Bun executable is integrity-checked and extracted only when its cache entry is absent/invalid;
+4. backend, frontend, icon, and sidecar entries are extracted under bounded paths;
+5. Bun starts `bundle.js` and returns trusted startup configuration;
+6. the host creates the window/WebView while frontend assets warm in the background.
+
+Useful application changes are usually simple:
+
+- keep backend and initial frontend chunks small;
+- defer non-critical disk/network work until the UI is visible;
+- lazy-load routes and large feature modules;
+- avoid synchronously serializing large objects during startup;
+- measure first useful interaction, not only process creation.
+
+Use `performance.mark()`/`performance.measure()` in frontend code and structured backend log timestamps around product milestones.
+
+## RPC and binary transport
+
+RPC crosses WebView → Rust → Bun and returns through Rust. The per-call cost is small but not free. Batch repeated work at the application boundary:
+
+```ts
+// Prefer one domain operation...
+await api.processFiles(files);
+
+// ...over a serialized call for every item.
+for (const file of files) {
+  await api.processFile(file);
+}
+```
+
+Use `Promise.all` only for genuinely independent calls and with bounded concurrency. For incremental results, expose an async-generator backend method. For large byte payloads, use the binary APIs (`fs.readBinary`, `fs.writeBinary`, `compute.hash`) instead of base64 JSON.
+
+The JSON IPC frame limit is 8 MiB. A request that approaches it is already a signal to batch differently, stream, or use the binary channel.
+
+## CPU-bound work
+
+Keep the backend event loop responsive:
+
+- move a stable hot path into an existing native API or focused native plugin when the complexity is justified;
+- use a Bun worker for application-owned CPU work;
+- split long operations and report progress through streaming RPC;
+- avoid adding a native layer for code that is not measured as a bottleneck.
+
+Profile before changing language boundaries. Serialization and deployment costs can outweigh a faster inner loop.
+
+## Memory
+
+Common growth sources are retained frontend listeners, abandoned streams, large UI state, unbounded application caches, and whole-table database reads.
+
+Every subscription helper returns an unsubscribe function. Cancel streams when their consumer disappears, bound caches, paginate large datasets, and inspect both the WebView and Bun processes because they have separate heaps.
+
+## Native profiling commands
+
+Exactly one mode is required:
+
+```bash
+tynd profile --memory
+tynd profile --memory --out profiles/backend.heapsnapshot
+tynd profile --ipc
+tynd profile --cpu --out profiles/host.svg
+```
+
+- `--memory` starts a development session with Bun heap profiling and verifies that the requested snapshot was written.
+- `--ipc` starts development with native IPC/debug tracing enabled.
+- `--cpu` invokes `cargo flamegraph` on the generated host workspace (`.tynd/build/Cargo.toml`, created by the first `tynd dev` or `tynd build`) or a repository host source checkout. It also needs `cargo flamegraph` installed.
+
+`--out` is valid for CPU and memory modes, not IPC mode. Stop the development session normally so profiling output can finalize.
+
+Frontend WebView DevTools remain useful for performance timelines, network records, layout, and heap inspection during `tynd dev`.
+
+## Release size
+
+```bash
+tynd size
+tynd size --json
+tynd build
+```
+
+Measure output under `release/<platform>-<arch>/`. The main contributors are the native host/features, compressed Bun runtime, frontend/backend assets, icon/resources, fixed WebView runtime when selected, and sidecars. Installer compression/metadata changes the outer artifact independently.
+
+Before adding another optimization dependency:
+
+- inspect large frontend chunks with the framework's own analyzer;
+- remove unused application dependencies;
+- avoid shipping duplicate runtimes/assets in sidecars;
+- compare raw executable and installer sizes;
+- keep updater patches enabled only when their real download savings justify storage/complexity.
+
+## Reproducible comparison
+
+When comparing changes, keep constant:
+
+- OS, architecture, WebView version, and hardware;
+- release/debug mode and host feature plan;
+- Bun pin and dependency lock data;
+- frontend dataset and navigation path;
+- cold/warm runtime-cache state;
+- signing and installer target.
+
+Record multiple runs and compare distributions, not a single best number.
+
+## Related
+
+- [TYNDPKG](/docs/v1.0/concepts/tyndpkg)
+- [Binary Data](/docs/v1.0/guides/binary-data)
+- [Streaming RPC](/docs/v1.0/guides/streaming)
+- [Debugging](/docs/v1.0/guides/debugging)

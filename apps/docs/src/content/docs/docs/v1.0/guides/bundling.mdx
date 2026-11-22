@@ -1,0 +1,169 @@
+---
+title: Bundling & Distribution
+description: "Create current-host installers with the native Rust bundler."
+---
+
+# Bundling & Distribution
+
+`tynd build` always packs a raw native executable. Add `--bundle <targets>` to create current-host installers:
+
+```bash
+tynd build --bundle all
+tynd build --bundle macos,dmg
+tynd build --bundle deb,rpm,appimage
+tynd build --bundle nsis,msi
+```
+
+`--bundle` requires `all` or a comma-separated value. Cross-platform/unknown/duplicate targets are rejected.
+
+## Output layout
+
+All output for one invocation shares a platform directory:
+
+```text
+release/<platform>-<arch>/
+├── <app>[.exe]          # raw TYNDPKG-packed executable
+└── <installer files>    # only with --bundle
+```
+
+Platform names use `windows`, `macos`, or `linux`; architectures use `x64` or `arm64`.
+
+## Required config
+
+Installer creation requires `bundle.identifier`:
+
+```ts title="tynd.config.ts"
+import { defineConfig } from "@tynd/cli";
+
+export default defineConfig({
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  icon: "assets/icon.svg",
+  bundle: {
+    identifier: "com.example.myapp",
+    displayName: "My App",
+    shortDescription: "A small desktop app",
+    categories: ["Utility"],
+    resources: ["LICENSE", "assets/manual"],
+  },
+});
+```
+
+`resources` entries are existing files or directories. Globs are not expanded. Relative entries must remain inside the project root; links/escaping paths are rejected.
+
+## Formats
+
+| Host | Target | Artifact |
+|---|---|---|
+| macOS | `macos` (`app` alias) | `.app` bundle |
+| macOS | `dmg` | disk image |
+| Linux | `deb` | Debian package |
+| Linux | `rpm` | RPM package |
+| Linux | `appimage` | AppImage |
+| Windows | `nsis` | NSIS setup executable |
+| Windows | `msi` | MSI package |
+
+The native `tynd-bundler` delegates installer construction to Rust packaging libraries and host tooling.
+
+A requested format may need a platform command (for example `rpmbuild`, `hdiutil`, signing tools, or installer utilities). Tynd reports that missing prerequisite when the format runs; ordinary `info`, `doctor`, `dev`, and `start` do not perform broad toolchain checks.
+
+## Linux metadata
+
+Fields currently forwarded to native packaging:
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  deb: {
+    depends: ["libwebkit2gtk-4.1-0"],
+    section: "utils",
+    priority: "optional",
+  },
+  rpm: {
+    requires: ["webkit2gtk4.1"],
+  },
+  appimage: {
+    bundleXdgOpen: true,
+  },
+}
+```
+
+## File associations and protocols
+
+```ts
+export default defineConfig({
+  protocols: ["myapp"],
+  bundle: {
+    identifier: "com.example.myapp",
+    fileAssociations: [{
+      ext: ["myapp"],
+      name: "My App Document",
+      role: "Editor",
+      mimeType: "application/x-myapp",
+      rank: "Owner",
+    }],
+    macos: {
+      urlSchemes: ["myapp"],
+    },
+  },
+});
+```
+
+A leading dot in `ext` is normalized away. macOS uses `bundle.macos.urlSchemes` when present, otherwise top-level `protocols`.
+
+## Windows WebView2 distribution
+
+Tynd does not query the registry or run WebView preflight logic before a build. Installer default is `skip`, so ordinary Windows builds neither download nor embed WebView2. Override it only when distribution policy requires another mode:
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  windows: {
+    webviewInstallMode: { type: "skip" },
+    minimumWebView2Version: "120.0.0.0",
+    allowDowngrades: false,
+  },
+}
+```
+
+Accepted modes:
+
+- `skip`;
+- `downloadBootstrapper` with optional `silent`;
+- `embedBootstrapper` with optional `silent`;
+- `offlineInstaller` with optional `silent`;
+- `fixedRuntime` with a required project-relative `path`.
+
+`fixedRuntime` is validated only when used on Windows. Its path cannot contain empty, current-directory, parent, or drive segments; the directory must contain `msedgewebview2.exe`. Tynd stages it beside the packed executable and includes it in installer resources.
+
+## Icons
+
+Set one explicit SVG, PNG, or ICO path with top-level `icon`. If omitted, the raw host keeps its embedded default and installer formats receive a generated fallback icon.
+
+Windows packing converts SVG/PNG input to ICO sizes and rejects SVG `<text>` nodes for reproducibility. No public-directory icon auto-discovery occurs.
+
+## Signing
+
+Signing is optional and configured under `bundle.sign`:
+
+- Windows: `signtool` found on `PATH` signs eligible `.exe`, `.msi`, and `.msix` files.
+- macOS: the Rust bundler signs from a PKCS#12 identity and can notarize/staple using an App Store Connect API-key JSON file.
+
+See [Code Signing](/docs/v1.0/guides/code-signing).
+
+## Reproducibility
+
+Commit `.bun-version` and package lock data, then run:
+
+```bash
+tynd validate --ci
+tynd build --bundle <targets>
+```
+
+The exact Bun executable/version is packed. Installer metadata and timestamped signatures can still make independently built installer bytes differ; publish checksums for the exact artifacts users download.
+
+## Next
+
+- [Build Pipeline](/docs/v1.0/concepts/build-pipeline)
+- [Code Signing](/docs/v1.0/guides/code-signing)
+- [Auto-Updates](/docs/v1.0/guides/auto-updates)

@@ -1,0 +1,67 @@
+---
+title: Getting Started
+description: "Scaffold your first Tynd app, run it with hot reload, and produce a release binary in under five minutes."
+---
+
+import { CardGrid } from '@astrojs/starlight/components';
+import DocCard from '@/components/DocCard.astro';
+import Steps from '@/components/Steps.astro';
+
+# Getting Started
+
+Build a native desktop app in TypeScript in under 5 minutes. By the end of this section you'll have:
+
+- a running dev window with HMR on both the frontend and the backend,
+- a typed RPC boundary — rename a function in `backend/main.ts` and the TypeScript compiler catches every stale frontend call,
+- a packed executable in `release/<platform>-<arch>/` that includes the compiled host, Bun, backend, and frontend.
+
+<Steps>
+
+### Install prerequisites
+
+[Bun](https://bun.sh) 1.3+ and [Rust](https://rustup.rs) 1.95+ are required, plus the platform build tools: the MSVC build tools on Windows, the Xcode command line tools on macOS (apps run on macOS 14+), the WebKitGTK/GTK dev packages on Linux. See [Installation](/docs/v1.0/getting-started/installation).
+
+### Scaffold a project
+
+```bash
+bunx @tynd/cli create my-app
+```
+
+The required name becomes the project directory. The frontend defaults to React; pass `--framework <name>` with `vue`, `svelte`, `solid`, `preact`, `lit`, or `angular` when needed. Bun is the backend runtime.
+
+### Run it
+
+```bash
+cd my-app
+tynd dev
+```
+
+The first run compiles the app's native host and takes a few minutes; later runs reuse it. A native window opens with your frontend + HMR. Save `backend/main.ts` — the backend hot-reloads without tearing down the window.
+
+### Ship it
+
+```bash
+tynd build            # raw binary
+tynd build --bundle all # + current-host installers (.app/.dmg, .deb/.rpm/.AppImage, NSIS/MSI)
+```
+
+Output lands in `release/<platform>-<arch>/`. Installers need a `bundle.identifier` in `tynd.config.ts` — see [Your First App](/docs/v1.0/getting-started/first-app#ship-it-as-an-installer).
+
+</Steps>
+
+## Keep reading
+
+<CardGrid>
+  <DocCard title="Installation" href="/docs/v1.0/getting-started/installation">
+    Bun, Rust, platform build tools, WebView deps per OS, verifying the setup.
+  </DocCard>
+  <DocCard title="Your First App" href="/docs/v1.0/getting-started/first-app">
+    Walk through the backend, the frontend, and the RPC boundary.
+  </DocCard>
+  <DocCard title="Project Structure" href="/docs/v1.0/getting-started/project-structure">
+    What each file does and where your code goes.
+  </DocCard>
+  <DocCard title="Development Workflow" href="/docs/v1.0/getting-started/dev-workflow">
+    `tynd dev` vs `tynd start`, caching, hot reload.
+  </DocCard>
+</CardGrid>

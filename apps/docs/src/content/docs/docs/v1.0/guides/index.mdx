@@ -1,0 +1,105 @@
+---
+title: Guides
+description: "Task-focused guides for real Tynd work — frontend frameworks, streaming RPC, multi-window, auto-updates, code signing, bundling, and more."
+---
+
+import { CardGrid } from '@astrojs/starlight/components';
+import DocCard from '@/components/DocCard.astro';
+
+# Guides
+
+Topic-oriented guides. Each one walks through a concept you'll hit while building a real app.
+
+## Core
+
+<CardGrid>
+  <DocCard title="Frontend Frameworks" href="/docs/v1.0/guides/frontend-frameworks">
+    React, Vue, Svelte, Solid, Preact, Lit, Angular — what's supported, HMR caveats, SSR frameworks that are blocked.
+  </DocCard>
+  <DocCard title="Backend RPC" href="/docs/v1.0/guides/backend-rpc">
+    Zero-codegen typed RPC. How arguments / returns / errors serialize, emitters, modularization.
+  </DocCard>
+  <DocCard title="Streaming RPC" href="/docs/v1.0/guides/streaming">
+    Async-generator handlers with flow control, cancellation, multi-window routing.
+  </DocCard>
+  <DocCard title="Multi-Window" href="/docs/v1.0/guides/multi-window">
+    Secondary windows, per-window events, cross-window coordination.
+  </DocCard>
+  <DocCard title="Binary Data" href="/docs/v1.0/guides/binary-data">
+    Zero-copy multi-MB payloads via the `tynd-bin://` channel.
+  </DocCard>
+  <DocCard title="Persistence" href="/docs/v1.0/guides/persistence">
+    Picking between `store`, `sql`, `keyring`, and `fs` for app state.
+  </DocCard>
+</CardGrid>
+
+## Desktop integration
+
+<CardGrid>
+  <DocCard title="Single Instance" href="/docs/v1.0/guides/single-instance">
+    Prevent duplicate launches, forward argv, auto-focus the primary.
+  </DocCard>
+  <DocCard title="Deep Linking" href="/docs/v1.0/guides/deep-linking">
+    Register `myapp://` URLs — registration, testing, validation.
+  </DocCard>
+  <DocCard title="Keyboard Shortcuts" href="/docs/v1.0/guides/keyboard-shortcuts">
+    System-wide hotkeys that fire even when the app is unfocused.
+  </DocCard>
+  <DocCard title="Sidecars" href="/docs/v1.0/guides/sidecars">
+    Bundle and execute a native CLI (ffmpeg, yt-dlp, …).
+  </DocCard>
+</CardGrid>
+
+## Release workflow
+
+<CardGrid>
+  <DocCard title="Bundling & Distribution" href="/docs/v1.0/guides/bundling">
+    `.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS, MSI — produce platform-native installers.
+  </DocCard>
+  <DocCard title="Code Signing" href="/docs/v1.0/guides/code-signing">
+    Windows `signtool`, native macOS P12 signing/notarization, and guidance for external Linux signing.
+  </DocCard>
+  <DocCard title="Auto-Updates" href="/docs/v1.0/guides/auto-updates">
+    Ed25519-signed updates with Tynd manifests, full artifacts, and optional patches.
+  </DocCard>
+  <DocCard title="Icons & Branding" href="/docs/v1.0/guides/icons-branding">
+    One explicit SVG, PNG, or ICO source for packed executables and installers.
+  </DocCard>
+</CardGrid>
+
+## Quality
+
+<CardGrid>
+  <DocCard title="Testing" href="/docs/v1.0/guides/testing">
+    Focused unit tests where valuable, native CLI validation, and manual platform QA.
+  </DocCard>
+  <DocCard title="Performance" href="/docs/v1.0/guides/performance">
+    Startup latency, IPC overhead, CPU-bound JS, memory.
+  </DocCard>
+  <DocCard title="Debugging" href="/docs/v1.0/guides/debugging">
+    DevTools, verbose logs, the backend inspector, common symptoms.
+  </DocCard>
+  <DocCard title="Accessibility" href="/docs/v1.0/guides/accessibility">
+    Screen readers, focus management, reduced motion, color contrast.
+  </DocCard>
+  <DocCard title="Internationalization" href="/docs/v1.0/guides/i18n">
+    Locale detection, string catalogs, RTL layouts.
+  </DocCard>
+</CardGrid>
+
+## Migration
+
+<CardGrid>
+  <DocCard title="Migrate from Tauri" href="/docs/v1.0/guides/migrate-from-tauri">
+    Port `#[tauri::command]`s to backend `export`s, then migrate packaging and update metadata.
+  </DocCard>
+  <DocCard title="Migrate from Electron" href="/docs/v1.0/guides/migrate-from-electron">
+    Replace `ipcMain.handle` with typed RPC and move from bundled Chromium to the system WebView.
+  </DocCard>
+</CardGrid>
+
+## Related
+
+- [API Reference](/docs/v1.0/api) — signatures for every surface the guides touch.
+- [Recipes](/docs/v1.0/recipes) — shorter self-contained snippets.
+- [Tutorials](/docs/v1.0/tutorials) — full app walkthroughs.

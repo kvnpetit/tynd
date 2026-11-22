@@ -1,0 +1,45 @@
+---
+title: Launch on System Boot
+description: "Register the app to start at login; pass `--minimized` so it lands in the tray."
+---
+
+# Launch on System Boot
+
+Install the required plugin:
+
+```bash
+tynd add autolaunch
+```
+
+```ts
+import { autolaunch } from "@tynd/plugin-autolaunch/client";
+
+export async function enableAutolaunch() {
+  await autolaunch.enable({ args: ["--minimized"] });
+}
+
+export async function disableAutolaunch() {
+  await autolaunch.disable();
+}
+
+export async function isAutolaunchEnabled() {
+  return autolaunch.isEnabled();
+}
+```
+
+Respect the flag at startup:
+
+```ts
+import { tyndWindow } from "@tynd/core/client";
+
+const minimized = /* parse argv for --minimized */ false;
+if (minimized) {
+  await tyndWindow.hide();   // land in tray
+}
+```
+
+Combine with [Minimize to Tray](/docs/v1.0/recipes/minimize-to-tray) so the window stays hidden on boot.
+
+**Platform storage:** Windows registry `Run` key, macOS `LaunchAgents`, Linux XDG autostart. All user-scoped — no UAC prompt.
+
+**Related:** [autolaunch API](/docs/v1.0/api/os/autolaunch).

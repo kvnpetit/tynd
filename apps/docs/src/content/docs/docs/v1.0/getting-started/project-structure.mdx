@@ -1,0 +1,127 @@
+---
+title: Project Structure
+description: "Source, config, generated staging, host build, and platform release directories in a current Tynd app."
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+# Project Structure
+
+A Vite/React scaffold (`tynd create my-app --framework react`) has this shape after development/build:
+
+<FileTree>
+
+- my-app
+  - tynd.config.ts
+  - package.json
+  - bun.lock
+  - .bun-version
+  - tsconfig.json
+  - vite.config.ts
+  - backend
+    - main.ts
+  - src
+    - main.tsx
+  - public/
+  - dist/
+  - .tynd
+    - cache/
+    - build/
+  - release
+    - win32-x64/
+
+</FileTree>
+
+Framework templates keep their standard source layout.
+
+## `tynd.config.ts`
+
+Application build/native metadata. Window/menu/tray settings belong to backend `app.start`, not this file.
+
+```ts title="tynd.config.ts"
+import { defineConfig } from "@tynd/cli";
+
+export default defineConfig({
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  icon: "assets/icon.svg",
+  bundle: {
+    identifier: "com.example.myapp",
+  },
+});
+```
+
+The public TypeScript type/`defineConfig` helper have no runtime dependency. Native Rust tooling evaluates/merges/validates config, then resolves relative paths from the config project root.
+
+## `package.json`
+
+`tynd init` adds `@tynd/core`, plus `@tynd/cli`, `@tynd/host-src`, and `@types/bun` as dev dependencies, then normalizes `dev`, `start`, and `build` scripts. Existing non-Tynd `dev`/`build` scripts are preserved as `dev:ui`/`build:ui` when possible.
+
+Native installer metadata reads available package name, version, homepage, author, and license; Tynd bundle fields can supply display name and descriptions.
+
+## `tsconfig.json` and `global.d.ts`
+
+`tynd init` creates or patches editor configuration for:
+
+- ES2022/ESNext with bundler module resolution;
+- strict TypeScript;
+- `@tynd/core/env` globals (in the referenced `tsconfig.app.json` of a Vite/Angular starter, otherwise in `tsconfig.json` plus a `global.d.ts` reference);
+- the backend: added to the root `include`, or, for a solution-style root (`files: []` + `references`), a generated `tsconfig.backend.json` reference.
+
+## `backend/`
+
+TypeScript executed by the packed/project Bun runtime. Exported functions/events form the typed frontend RPC surface; `app.start()` defines application/window behavior.
+
+During dev/build, Tynd generates a bootstrap that imports this entry, registers configured JavaScript plugins, and injects runtime/updater values.
+
+## Frontend source and output
+
+Frontend source remains owned by Vite, Angular, CRA, Parcel, Rsbuild, Webpack, or the configured command. Tynd detects standard production directories but respects an explicit `frontendDir`.
+
+A framework production build normally stays in its framework output such as `dist` or `build`.
+
+## `.tynd/cache/`
+
+Generated staging only, including:
+
+- backend bootstrap and `.tynd/cache/bundle.dist.js`;
+- staging of a `frontendDir` that no detected build tool produces;
+- JSON passed to native pack/bundle/sign operations.
+
+It is not a source-hash skip cache. `tynd build` performs required build steps every invocation. `tynd start` is the command that deliberately reuses existing outputs.
+
+## `.tynd/build/`
+
+Generated Rust host project (`Cargo.toml`, `src/main.rs`, `Cargo.lock`) and the compiled host binaries, copied to `bin/debug/` by `tynd dev` and to `bin/release/` by `tynd build`. Cargo itself compiles into the [shared host build cache](/docs/v1.0/concepts/build-pipeline#shared-host-build-cache) outside the project; in CI, cache the directory set in `TYND_CACHE_DIR`.
+
+## `release/`
+
+Platform/architecture output:
+
+```text
+release/<platform>-<arch>/<app>[.exe]
+```
+
+Optional installers, publish manifests, and patches share the release tree. macOS app bundles additionally produce `<binary>-<version>-macos.zip` for updater publication.
+
+## Cleanup and source control
+
+`tynd init` adds these defaults:
+
+```text
+.tynd/
+release/
+node_modules/
+dist/
+.env
+.env.local
+*.key
+```
+
+`tynd clean --yes` removes `.tynd/cache`, `.tynd/build`, and `release`; it keeps framework output such as `dist`. Add `--cache` to also remove the shared host build cache.
+
+## Next
+
+- [Config Reference](/docs/v1.0/cli/config)
+- [Development Workflow](/docs/v1.0/getting-started/dev-workflow)
+- [Build Pipeline](/docs/v1.0/concepts/build-pipeline)

@@ -1,0 +1,4 @@
+{
+  "title": "Comparisons",
+  "pages": ["index", "vs-tauri", "vs-electron", "vs-wails"]
+}
