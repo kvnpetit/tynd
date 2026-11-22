@@ -49,6 +49,9 @@ pub(crate) const SUBSYSTEM_WINDOWS_GUI: u16 = 2;
 const RT_ICON: u32 = 3;
 const RT_GROUP_ICON: u32 = 14;
 const RT_VERSION: u32 = 16;
+const RT_MANIFEST: u32 = 24;
+/// `CREATEPROCESS_MANIFEST_RESOURCE_ID`: the manifest the loader applies to an `.exe`.
+const PROCESS_MANIFEST_ID: u32 = 1;
 
 /// Each ICO directory entry becomes one `RT_ICON/<id>` resource (1-indexed);
 /// the `RT_GROUP_ICON` payload references them in order.
@@ -243,11 +246,37 @@ pub(crate) fn patch_subsystem_gui(bytes: &mut [u8]) -> Result<()> {
     Ok(())
 }
 
+/// Application manifest carrying only `requestedExecutionLevel` (UAC) and the
+/// Windows 10/11 `supportedOS` GUID. DPI awareness stays with the runtime, which
+/// sets it programmatically.
+pub(crate) fn application_manifest(level: &str) -> Vec<u8> {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="{level}" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}}"/>
+    </application>
+  </compatibility>
+</assembly>
+"#
+    )
+    .into_bytes()
+}
+
 /// Replaces (does not merge) the `.rsrc` section. Returns the new PE bytes.
 pub(crate) fn embed_icon_and_version(
     pe: Vec<u8>,
     ico_bytes: &[u8],
     version_block: Option<&[u8]>,
+    manifest: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
     let pe_size = pe.len();
     let ico_size = ico_bytes.len();
@@ -265,6 +294,9 @@ pub(crate) fn embed_icon_and_version(
     builder.add(RT_GROUP_ICON, 1, icons.group.clone());
     if let Some(v) = version_block {
         builder.add(RT_VERSION, 1, v.to_vec());
+    }
+    if let Some(manifest) = manifest {
+        builder.add(RT_MANIFEST, PROCESS_MANIFEST_ID, manifest.to_vec());
     }
     rebuild_pe_with_rsrc(pe, &builder)
         .map_err(|e| Report::new(PeContext::RebuildPe).attach(format!("source = {e:#}")))
@@ -548,4 +580,17 @@ fn build_rsrc_blob(builder: &ResourceBuilder, base_rva: u32) -> Vec<u8> {
     }
 
     buf
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn application_manifest_requests_the_level() {
+        let manifest = String::from_utf8(application_manifest("requireAdministrator")).unwrap();
+        assert!(manifest.contains(r#"<requestedExecutionLevel level="requireAdministrator""#));
+        assert!(manifest.contains("{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"));
+        assert!(manifest.starts_with("<?xml"));
+    }
 }

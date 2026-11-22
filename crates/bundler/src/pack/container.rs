@@ -52,6 +52,7 @@ pub(super) fn collect_entries(cfg: &PackConfig) -> Result<Vec<PackEntry>> {
     append_bun_entries(cfg, &mut entries)?;
     append_webview2_entry(cfg, &mut entries)?;
     append_observability_entry(cfg, &mut entries)?;
+    append_app_identifier_entry(cfg, &mut entries)?;
     if let Some(flag) = tynd_pack_format::debug_flag_entry(cfg.debug) {
         entries.push(PackEntry::raw(flag.rel, flag.data.to_vec()));
     }
@@ -184,6 +185,22 @@ fn append_observability_entry(cfg: &PackConfig, entries: &mut Vec<PackEntry>) ->
     Ok(())
 }
 
+fn append_app_identifier_entry(cfg: &PackConfig, entries: &mut Vec<PackEntry>) -> Result<()> {
+    let Some(identifier) = &cfg.app_identifier else {
+        return Ok(());
+    };
+    if !tynd_pack_format::is_valid_app_identifier(identifier) {
+        anyhow::bail!(
+            "app identifier {identifier:?} must be dot-separated ASCII letters, digits, `-` or `_`              (for example com.example.app)"
+        );
+    }
+    entries.push(PackEntry::raw(
+        tynd_pack_format::APP_IDENTIFIER_ENTRY,
+        identifier.as_bytes().to_vec(),
+    ));
+    Ok(())
+}
+
 fn append_frontend_entries(root: &Path, entries: &mut Vec<PackEntry>) -> Result<()> {
     // Forward-slash paths — host reader expects POSIX regardless of build OS.
     for (rel, abs) in collect_frontend_files(root)? {
@@ -264,14 +281,23 @@ pub(super) fn write_packed(out: &Path, host: &[u8], entries: &[PackEntry]) -> Re
     validate_prepared_sizes(&prepared)?;
 
     let out_disp = out.display().to_string();
-    let format_entries: Vec<_> = prepared
+    let payload: Vec<_> = prepared
         .iter()
         .map(|(rel, data)| tynd_pack_format::PackEntry::new(rel.as_str(), data.as_slice()))
         .collect();
+    // The integrity digest goes first so a runtime can verify every later
+    // entry while it streams them out.
+    let digest = tynd_pack_format::integrity_digest(&payload);
+    let mut format_entries = Vec::with_capacity(payload.len() + 1);
+    format_entries.push(tynd_pack_format::PackEntry::new(
+        tynd_pack_format::INTEGRITY_ENTRY,
+        digest.as_bytes(),
+    ));
+    format_entries.extend(payload);
     tynd_pack_format::validate_entries(&format_entries)
         .map_err(|error| map_pack_write_error(error, &out_disp))?;
 
-    let mut writer = create_packed_writer(out, &out_disp, host.len(), prepared.len())?;
+    let mut writer = create_packed_writer(out, &out_disp, host.len(), format_entries.len())?;
     writer.write_all(host).context("write host")?;
     tynd_pack_format::write_section_and_trailer(&mut writer, format_entries)
         .map_err(|error| map_pack_write_error(error, &out_disp))?;
@@ -461,6 +487,27 @@ mod tests {
     }
 
     #[test]
+    fn app_identifier_is_packed_when_valid() {
+        let mut cfg = config(None);
+        let mut entries = Vec::new();
+        append_app_identifier_entry(&cfg, &mut entries).unwrap();
+        assert!(entries.is_empty());
+
+        cfg.app_identifier = Some("com.example.demo".into());
+        append_app_identifier_entry(&cfg, &mut entries).unwrap();
+        assert_eq!(
+            raw_entries(&entries),
+            vec![(
+                tynd_pack_format::APP_IDENTIFIER_ENTRY,
+                b"com.example.demo".as_slice()
+            )]
+        );
+
+        cfg.app_identifier = Some("../evil".into());
+        assert!(append_app_identifier_entry(&cfg, &mut Vec::new()).is_err());
+    }
+
+    #[test]
     fn debug_flag_entry_is_packed_only_when_requested() {
         let mut cfg = config(None);
         let packed = |cfg: &PackConfig| {
@@ -475,5 +522,36 @@ mod tests {
         assert!(!packed(&cfg));
         cfg.debug = true;
         assert!(packed(&cfg));
+    }
+
+    #[test]
+    fn written_pack_starts_with_a_verifiable_integrity_digest() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("app.bin");
+        let entries = vec![
+            PackEntry::raw("bundle.js", b"console.log(1)".to_vec()),
+            PackEntry::raw("sidecar/tool", vec![7; 32]),
+        ];
+        write_packed(&out, b"HOST", &entries).unwrap();
+
+        let mut reader = tynd_pack_format::PackReader::open_path(&out).unwrap();
+        let (first, len) = reader.next_header().unwrap().unwrap();
+        assert_eq!(first, tynd_pack_format::INTEGRITY_ENTRY);
+        let mut stored = Vec::new();
+        reader.copy_entry_to(len, &mut stored).unwrap();
+        let mut hasher = tynd_pack_format::IntegrityHasher::new();
+        let mut names = Vec::new();
+        while let Some((rel, len)) = reader.next_header().unwrap() {
+            let mut data = Vec::new();
+            reader.copy_entry_to(len, &mut data).unwrap();
+            hasher.entry_header(&rel, len);
+            hasher.update(&data);
+            names.push(rel);
+        }
+        assert_eq!(names, ["bundle.js", "sidecar/tool"]);
+        assert!(tynd_pack_format::integrity_matches(
+            &stored,
+            &hasher.finalize_hex()
+        ));
     }
 }

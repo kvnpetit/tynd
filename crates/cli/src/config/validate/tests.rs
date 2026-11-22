@@ -297,3 +297,47 @@ fn updater_headers_need_a_fixed_endpoint_origin() {
     }}));
     assert!(found.is_empty(), "{found:?}");
 }
+
+#[test]
+fn bundle_metadata_is_validated() {
+    let valid = json!({ "bundle": {
+        "identifier": "com.example.app",
+        "licenseFile": "LICENSE",
+        "macos": { "minimumSystemVersion": "15", "entitlements": "app.plist" },
+        "windows": {
+            "installMode": "perMachine",
+            "requestedExecutionLevel": "highestAvailable",
+            "msix": {
+                "publisher": "CN=Example",
+                "minVersion": "10.0.19041.0",
+                "version": "1.2.3.0",
+            },
+        },
+        "deb": { "desktopTemplate": "app.desktop" },
+        "pkgbuild": { "depends": ["libayatana-appindicator"] },
+    }});
+    assert_eq!(issues(valid), [] as [String; 0]);
+
+    let invalid = issues(json!({ "bundle": {
+        "identifier": "com.example.app",
+        "macos": { "minimumSystemVersion": "13.6" },
+        "windows": { "msix": {
+            "publisher": "Example",
+            "minVersion": "10.0",
+            "version": "1.70000.0.0",
+        } },
+        "pkgbuild": { "depends": [""] },
+    }}));
+    assert!(has_issue(&invalid, "bundle.macos.minimumSystemVersion"));
+    assert!(has_issue(&invalid, "bundle.windows.msix.version"));
+    assert!(has_issue(&invalid, "bundle.pkgbuild.depends"));
+    assert!(has_issue(&invalid, "bundle.windows.msix.publisher"));
+    assert!(has_issue(&invalid, "bundle.windows.msix.minVersion"));
+    assert!(has_issue(
+        &issues(json!({ "bundle": {
+            "identifier": "com.example.app",
+            "macos": { "minimumSystemVersion": "14.0.0.1" },
+        }})),
+        "bundle.macos.minimumSystemVersion"
+    ));
+}

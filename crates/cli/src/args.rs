@@ -66,6 +66,8 @@ pub enum Command {
     Test(TestArgs),
     /// Build and package the app.
     Build(BuildArgs),
+    /// Generate every app icon (.ico, .icns, Linux PNGs, MSIX assets) from one PNG or SVG.
+    Icon(IconArgs),
     /// Remove generated build artifacts.
     Clean(CleanArgs),
     /// Upgrade Tynd packages and plugins.
@@ -265,6 +267,20 @@ pub struct BuildArgs {
     /// a packaged binary with `@tynd/test`; do not ship such a build.
     #[arg(long)]
     pub debug_protocol: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct IconArgs {
+    /// Square PNG (at least 512x512, 1024x1024 recommended) or SVG. Defaults to `icon` in
+    /// tynd.config.ts.
+    pub source: Option<PathBuf>,
+
+    #[arg(long, default_value = ".")]
+    pub cwd: PathBuf,
+
+    /// Output directory, relative to the project root.
+    #[arg(short = 'o', long, default_value = "icons")]
+    pub out: PathBuf,
 }
 
 #[derive(Debug, Args)]

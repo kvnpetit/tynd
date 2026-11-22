@@ -252,9 +252,24 @@ fn patch_pe_host(
     cfg: &PackConfig,
     ico_bytes: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
-    if cfg.windows.embed_icon {
-        if let Some(ico) = ico_bytes {
-            host_bytes = embed_host_icon_and_version(host_bytes, cfg, ico)?;
+    let manifest = cfg
+        .windows
+        .requested_execution_level
+        .map(|level| pe::application_manifest(level.as_str()));
+    if cfg.windows.embed_icon || manifest.is_some() {
+        // The `.rsrc` rewrite replaces the whole section, so a manifest without
+        // a configured icon still carries the default icon.
+        let default_ico;
+        let ico = match ico_bytes {
+            Some(ico) => Some(ico),
+            None if manifest.is_some() => {
+                default_ico = icons::default_ico_bytes()?;
+                Some(default_ico.as_slice())
+            },
+            None => None,
+        };
+        if let Some(ico) = ico {
+            host_bytes = embed_host_icon_and_version(host_bytes, cfg, ico, manifest.as_deref())?;
         }
     }
     if cfg.windows.patch_subsystem_gui {
@@ -267,6 +282,7 @@ fn embed_host_icon_and_version(
     host_bytes: Vec<u8>,
     cfg: &PackConfig,
     ico: &[u8],
+    manifest: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
     let version_block = pe::build_version_block(&cfg.app_name, &cfg.version, None);
     let host_disp = cfg.host_binary.display().to_string();
@@ -276,7 +292,7 @@ fn embed_host_icon_and_version(
         .map_or_else(|| "<none>".to_string(), |path| path.display().to_string());
     let ico_len = ico.len();
 
-    pe::embed_icon_and_version(host_bytes, ico, Some(&version_block))
+    pe::embed_icon_and_version(host_bytes, ico, Some(&version_block), manifest)
         .map_err(|error| {
             Report::new(PackContext::EmbedIconRsrc).attach(format!("source = {error:#}"))
         })

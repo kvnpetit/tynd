@@ -34,6 +34,20 @@ const fn is_false(value: &bool) -> bool {
     !*value
 }
 
+/// File-name-safe form of an app name: `[A-Za-z0-9._-]` kept, anything else
+/// becomes `-`. Names the packed binary and the MSIX package file.
+pub fn safe_file_stem(name: &str) -> String {
+    name.chars()
+        .map(|value| {
+            if value.is_ascii_alphanumeric() || matches!(value, '-' | '_' | '.') {
+                value
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 /// Request of `tynd-bundler bundle`: build installer artifacts.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -48,7 +62,12 @@ pub struct BundleConfig {
     pub license: Option<String>,
     pub copyright: Option<String>,
     pub category: Option<String>,
-    /// `msi`, `nsis`, `dmg`, `deb`, `rpm`, `appimage`.
+    /// License text shown by the NSIS/WiX installers and shipped by the Linux
+    /// packages.
+    #[serde(default)]
+    pub license_file: Option<PathBuf>,
+    /// `msi`, `nsis`, `msix`, `macos`, `dmg`, `deb`, `rpm`, `appimage`,
+    /// `flatpak`, `snap`, `pkgbuild`.
     pub targets: Vec<String>,
     pub project_root: PathBuf,
     /// Where installers and the artifact zip archive land.
@@ -141,6 +160,8 @@ pub struct LinuxConfig {
     pub rpm: RpmConfig,
     #[serde(default)]
     pub appimage: AppImageConfig,
+    #[serde(default)]
+    pub pkgbuild: PkgbuildConfig,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,6 +181,10 @@ pub struct DebConfig {
     pub priority: Option<String>,
     #[serde(default)]
     pub section: Option<String>,
+    /// Handlebars template replacing the generated `.desktop` entry (also used
+    /// by the AppImage).
+    #[serde(default)]
+    pub desktop_template: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,6 +196,18 @@ pub struct RpmConfig {
     pub release: Option<String>,
     #[serde(default)]
     pub epoch: Option<u32>,
+    /// Handlebars template replacing the generated `.desktop` entry.
+    #[serde(default)]
+    pub desktop_template: Option<PathBuf>,
+}
+
+/// Arch Linux `PKGBUILD`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PkgbuildConfig {
+    /// Arch package names added to the default `gtk3` and `webkit2gtk-4.1`.
+    #[serde(default)]
+    pub depends: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,6 +224,15 @@ pub struct MacOsConfig {
     /// for Launch Services to know the app accepts `<scheme>://...`.
     #[serde(default)]
     pub url_schemes: Vec<String>,
+    /// `LSMinimumSystemVersion`; never below [`MACOS_MINIMUM_SYSTEM_VERSION`].
+    #[serde(default)]
+    pub minimum_system_version: Option<String>,
+    /// Entitlements plist embedded when tauri-bundler signs the `.app`.
+    #[serde(default)]
+    pub entitlements: Option<PathBuf>,
+    /// Plist merged into the generated `Info.plist`.
+    #[serde(default)]
+    pub info_plist: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,6 +244,67 @@ pub struct WindowsConfig {
     pub minimum_webview2_version: Option<String>,
     #[serde(default)]
     pub allow_downgrades: Option<bool>,
+    /// NSIS install scope.
+    #[serde(default)]
+    pub install_mode: Option<NsisInstallMode>,
+    /// MSIX package identity; required by the `msix` target.
+    #[serde(default)]
+    pub msix: Option<MsixConfig>,
+    /// `requestedExecutionLevel` of the app executable; an elevating level
+    /// adds the `allowElevation` capability to the MSIX manifest.
+    #[serde(default)]
+    pub requested_execution_level: Option<ExecutionLevel>,
+}
+
+/// Who the NSIS installer installs for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NsisInstallMode {
+    /// `%LOCALAPPDATA%`, no elevation.
+    CurrentUser,
+    /// `Program Files`, elevates.
+    PerMachine,
+    /// Lets the user pick; elevates for a per-machine install.
+    Both,
+}
+
+/// Identity of the MSIX package. `publisher` must equal the subject of the
+/// signing certificate, or Windows refuses to install the package.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MsixConfig {
+    /// Distinguished name, for example `CN=Example Corp, O=Example Corp, C=US`.
+    pub publisher: String,
+    /// Shown by the App Installer; defaults to the first author or the app name.
+    #[serde(default)]
+    pub publisher_display_name: Option<String>,
+    /// `MinVersion` of `Windows.Desktop`; defaults to Windows 10 1809.
+    #[serde(default)]
+    pub min_version: Option<String>,
+    /// Four-part package version replacing the one derived from the app
+    /// version (whose prerelease and build suffixes are dropped).
+    #[serde(default)]
+    pub version: Option<String>,
+}
+
+/// `requestedExecutionLevel` of the embedded application manifest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ExecutionLevel {
+    AsInvoker,
+    HighestAvailable,
+    RequireAdministrator,
+}
+
+impl ExecutionLevel {
+    /// The manifest attribute value.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::AsInvoker => "asInvoker",
+            Self::HighestAvailable => "highestAvailable",
+            Self::RequireAdministrator => "requireAdministrator",
+        }
+    }
 }
 
 /// How the Windows installer provides the WebView2 runtime.
@@ -319,6 +426,11 @@ pub struct PackConfig {
     /// the app has no active telemetry pipeline.
     #[serde(default)]
     pub observability_json: Option<String>,
+    /// App identifier (`bundle.identifier`), packed as the `app.identifier`
+    /// entry. The packaged host names the app's own directories after it;
+    /// absent, it falls back to the executable name.
+    #[serde(default)]
+    pub app_identifier: Option<String>,
     /// Allow the debug protocol in the packaged app (`tynd build --debug-protocol`):
     /// packs a `debug.flag` entry. Off by default; a packaged host refuses to start
     /// its debug server without it.
@@ -345,6 +457,10 @@ pub struct WindowsPackOptions {
     /// Flip subsystem to IMAGE_SUBSYSTEM_WINDOWS_GUI=2 (no console window).
     #[serde(default = "default_true")]
     pub patch_subsystem_gui: bool,
+    /// Embed an application manifest requesting this execution level. Absent
+    /// means no manifest (Windows runs the app `asInvoker`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_execution_level: Option<ExecutionLevel>,
 }
 
 #[cfg(test)]

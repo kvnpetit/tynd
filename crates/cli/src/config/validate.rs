@@ -428,6 +428,8 @@ fn validate_bundle(bundle: &BundleConfig, issues: &mut Vec<String>) {
     {
         validate_protocol_syntax("bundle.macos.urlSchemes", schemes, issues);
     }
+    validate_optional_nonempty("bundle.licenseFile", bundle.license_file.as_deref(), issues);
+    validate_macos_bundle(bundle, issues);
     validate_bundle_signing(bundle, issues);
 }
 
@@ -473,6 +475,57 @@ fn validate_file_association(
     }
 }
 
+fn validate_macos_bundle(bundle: &BundleConfig, issues: &mut Vec<String>) {
+    let Some(macos) = &bundle.macos else {
+        return;
+    };
+    if let Some(version) = &macos.minimum_system_version {
+        if !macos_version_at_least_floor(version) {
+            issues.push(format!(
+                "bundle.macos.minimumSystemVersion must be a version like 14.0, not below {}",
+                tynd_bundle_contract::MACOS_MINIMUM_SYSTEM_VERSION
+            ));
+        }
+    }
+    validate_optional_nonempty(
+        "bundle.macos.entitlements",
+        macos.entitlements.as_deref(),
+        issues,
+    );
+    validate_optional_nonempty(
+        "bundle.macos.infoPlist",
+        macos.info_plist.as_deref(),
+        issues,
+    );
+}
+
+/// `major[.minor[.patch]]`, numerically at least the supported macOS floor.
+fn macos_version_at_least_floor(version: &str) -> bool {
+    let parse = |text: &str| {
+        text.split('.')
+            .map(|part| {
+                if part.is_empty() || !part.chars().all(|character| character.is_ascii_digit()) {
+                    return None;
+                }
+                part.parse::<u32>().ok()
+            })
+            .collect::<Option<Vec<_>>>()
+    };
+    let (Some(mut version), Some(mut floor)) = (
+        parse(version),
+        parse(tynd_bundle_contract::MACOS_MINIMUM_SYSTEM_VERSION),
+    ) else {
+        return false;
+    };
+    if version.len() > 3 {
+        return false;
+    }
+    let len = version.len().max(floor.len());
+    version.resize(len, 0);
+    floor.resize(len, 0);
+    version >= floor
+}
+
 fn validate_linux_bundle(bundle: &BundleConfig, issues: &mut Vec<String>) {
     if let Some(deb) = &bundle.deb {
         if let Some(depends) = &deb.depends {
@@ -483,6 +536,31 @@ fn validate_linux_bundle(bundle: &BundleConfig, issues: &mut Vec<String>) {
     }
     if let Some(requires) = bundle.rpm.as_ref().and_then(|rpm| rpm.requires.as_ref()) {
         validate_nonempty_items("bundle.rpm.requires", requires, issues);
+    }
+    if let Some(depends) = bundle
+        .pkgbuild
+        .as_ref()
+        .and_then(|pkgbuild| pkgbuild.depends.as_ref())
+    {
+        validate_nonempty_items("bundle.pkgbuild.depends", depends, issues);
+    }
+    for (label, template) in [
+        (
+            "bundle.deb.desktopTemplate",
+            bundle
+                .deb
+                .as_ref()
+                .and_then(|deb| deb.desktop_template.as_deref()),
+        ),
+        (
+            "bundle.rpm.desktopTemplate",
+            bundle
+                .rpm
+                .as_ref()
+                .and_then(|rpm| rpm.desktop_template.as_deref()),
+        ),
+    ] {
+        validate_optional_nonempty(label, template, issues);
     }
 }
 
@@ -505,6 +583,41 @@ fn validate_windows_bundle(bundle: &BundleConfig, issues: &mut Vec<String>) {
     }
     if let Some(WebView2InstallMode::FixedRuntime { path }) = &windows.webview_install_mode {
         validate_optional_nonempty("bundle.windows.webviewInstallMode.path", Some(path), issues);
+    }
+    if let Some(msix) = &windows.msix {
+        if msix.publisher.len() <= 3 || !msix.publisher.starts_with("CN=") {
+            issues.push(
+                "bundle.windows.msix.publisher must be the signing certificate subject, starting with CN= (for example CN=Example Corp)"
+                    .into(),
+            );
+        }
+        validate_optional_nonempty(
+            "bundle.windows.msix.publisherDisplayName",
+            msix.publisher_display_name.as_deref(),
+            issues,
+        );
+        if let Some(version) = &msix.min_version {
+            let parts = version.split('.').collect::<Vec<_>>();
+            if parts.len() != 4
+                || parts.iter().any(|part| {
+                    part.is_empty() || !part.chars().all(|character| character.is_ascii_digit())
+                })
+            {
+                issues.push(
+                    "bundle.windows.msix.minVersion must contain four numeric parts (for example 10.0.17763.0)"
+                        .into(),
+                );
+            }
+        }
+        if let Some(version) = &msix.version {
+            let parts = version.split('.').collect::<Vec<_>>();
+            if parts.len() != 4 || parts.iter().any(|part| part.parse::<u16>().is_err()) {
+                issues.push(
+                    "bundle.windows.msix.version must contain four numeric parts of at most 65535 (for example 1.2.3.0)"
+                        .into(),
+                );
+            }
+        }
     }
 }
 

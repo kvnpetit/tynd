@@ -83,11 +83,19 @@
           "pattern": "^[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z0-9-]+){2,}$",
           "type": "string"
         },
+        "licenseFile": {
+          "description": "Project-relative license file shown by the Windows installers and shipped by the Linux packages.",
+          "minLength": 1,
+          "type": "string"
+        },
         "longDescription": {
           "type": "string"
         },
         "macos": {
           "$ref": "#/$defs/MacosBundleConfig"
+        },
+        "pkgbuild": {
+          "$ref": "#/$defs/PkgbuildBundleConfig"
         },
         "resources": {
           "default": [],
@@ -135,6 +143,11 @@
           },
           "type": "array"
         },
+        "desktopTemplate": {
+          "description": "Project-relative Handlebars template replacing the generated `.desktop` entry (also used by the AppImage).",
+          "minLength": 1,
+          "type": "string"
+        },
         "priority": {
           "minLength": 1,
           "type": "string"
@@ -145,6 +158,10 @@
         }
       },
       "type": "object"
+    },
+    "ExecutionLevel": {
+      "enum": ["asInvoker", "highestAvailable", "requireAdministrator"],
+      "type": "string"
     },
     "ExportedFileType": {
       "additionalProperties": false,
@@ -218,6 +235,22 @@
     "MacosBundleConfig": {
       "additionalProperties": false,
       "properties": {
+        "entitlements": {
+          "description": "Project-relative entitlements plist used when the `.app` is signed.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "infoPlist": {
+          "description": "Project-relative plist merged into the generated `Info.plist`.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "minimumSystemVersion": {
+          "default": "14.0",
+          "description": "`LSMinimumSystemVersion` (default and floor `14.0`).",
+          "pattern": "^\\d+(?:\\.\\d+){0,2}$",
+          "type": "string"
+        },
         "urlSchemes": {
           "items": {
             "pattern": "^[a-zA-Z][a-zA-Z0-9+\\-.]*$",
@@ -259,6 +292,37 @@
       "required": ["identity"],
       "type": "object"
     },
+    "MsixBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "minVersion": {
+          "description": "`MinVersion` of `Windows.Desktop` (default `10.0.17763.0`, Windows 10 1809).",
+          "pattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$",
+          "type": "string"
+        },
+        "publisher": {
+          "description": "Publisher distinguished name; must equal the subject of the signing certificate (for example `CN=Example Corp, O=Example Corp, C=US`).",
+          "pattern": "^CN=",
+          "type": "string"
+        },
+        "publisherDisplayName": {
+          "description": "Defaults to the package author, else the app name.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "version": {
+          "description": "Four-part package version (each part at most 65535). Defaults to the app version cut to its numeric core, which maps `1.2.3-beta.1` and `1.2.3` to the same `1.2.3.0`. The Microsoft Store requires the fourth part to be 0.",
+          "pattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$",
+          "type": "string"
+        }
+      },
+      "required": ["publisher"],
+      "type": "object"
+    },
+    "NsisInstallMode": {
+      "enum": ["currentUser", "perMachine", "both"],
+      "type": "string"
+    },
     "ObservabilityConfig": {
       "additionalProperties": false,
       "description": "Opt-in production telemetry. Absent means disabled (no init, no cost). The host compiles `obs-sentry` / `obs-otel` in only for the pipelines you configure.",
@@ -288,6 +352,20 @@
         }
       },
       "required": ["endpoint"],
+      "type": "object"
+    },
+    "PkgbuildBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "depends": {
+          "description": "Arch package names added to the default `gtk3` and `webkit2gtk-4.1`.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
       "type": "object"
     },
     "PluginConfig": {
@@ -342,6 +420,11 @@
     "RpmBundleConfig": {
       "additionalProperties": false,
       "properties": {
+        "desktopTemplate": {
+          "description": "Project-relative Handlebars template replacing the generated `.desktop` entry.",
+          "minLength": 1,
+          "type": "string"
+        },
         "requires": {
           "items": {
             "minLength": 1,
@@ -588,9 +671,22 @@
         "allowDowngrades": {
           "type": "boolean"
         },
+        "installMode": {
+          "$ref": "#/$defs/NsisInstallMode",
+          "default": "currentUser",
+          "description": "NSIS install scope (default `currentUser`: no elevation)."
+        },
         "minimumWebView2Version": {
           "pattern": "^\\d+(?:\\.\\d+){3}$",
           "type": "string"
+        },
+        "msix": {
+          "$ref": "#/$defs/MsixBundleConfig",
+          "description": "MSIX package identity, required by the `msix` bundle target."
+        },
+        "requestedExecutionLevel": {
+          "$ref": "#/$defs/ExecutionLevel",
+          "description": "UAC level of the app executable, embedded as its application manifest. Unset means no manifest (`asInvoker`)."
         },
         "webviewInstallMode": {
           "$ref": "#/$defs/WebView2InstallMode",

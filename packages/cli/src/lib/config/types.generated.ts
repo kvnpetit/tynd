@@ -80,8 +80,14 @@ export interface BundleConfig {
   displayName?: string;
   fileAssociations?: FileAssociation[];
   identifier: string;
+  /**
+   * Project-relative license file shown by the Windows installers and shipped by the Linux
+   * packages.
+   */
+  licenseFile?: string;
   longDescription?: string;
   macos?: MacosBundleConfig;
+  pkgbuild?: PkgbuildBundleConfig;
   resources?: string[];
   rpm?: RpmBundleConfig;
   shortDescription?: string;
@@ -93,9 +99,16 @@ export type ByteSize = number | string;
 
 export interface DebBundleConfig {
   depends?: string[];
+  /**
+   * Project-relative Handlebars template replacing the generated `.desktop` entry (also used by the
+   * AppImage).
+   */
+  desktopTemplate?: string;
   priority?: string;
   section?: string;
 }
+
+export type ExecutionLevel = "asInvoker" | "highestAvailable" | "requireAdministrator";
 
 export interface ExportedFileType {
   conformsTo?: string[];
@@ -118,6 +131,15 @@ export type FileAssociationRank = "Default" | "Owner" | "Alternate" | "None";
 export type FileAssociationRole = "Editor" | "Viewer" | "Shell" | "QLGenerator" | "None";
 
 export interface MacosBundleConfig {
+  /** Project-relative entitlements plist used when the `.app` is signed. */
+  entitlements?: string;
+  /** Project-relative plist merged into the generated `Info.plist`. */
+  infoPlist?: string;
+  /**
+   * `LSMinimumSystemVersion` (default and floor `14.0`).
+   * @default "14.0"
+   */
+  minimumSystemVersion?: string;
   urlSchemes?: string[];
 }
 
@@ -131,6 +153,26 @@ export interface MacosSigningConfig {
   notarize?: MacosNotarizeConfig;
   password?: string;
 }
+
+export interface MsixBundleConfig {
+  /** `MinVersion` of `Windows.Desktop` (default `10.0.17763.0`, Windows 10 1809). */
+  minVersion?: string;
+  /**
+   * Publisher distinguished name; must equal the subject of the signing certificate (for example
+   * `CN=Example Corp, O=Example Corp, C=US`).
+   */
+  publisher: string;
+  /** Defaults to the package author, else the app name. */
+  publisherDisplayName?: string;
+  /**
+   * Four-part package version (each part at most 65535). Defaults to the app version cut to its
+   * numeric core, which maps `1.2.3-beta.1` and `1.2.3` to the same `1.2.3.0`. The Microsoft Store
+   * requires the fourth part to be 0.
+   */
+  version?: string;
+}
+
+export type NsisInstallMode = "currentUser" | "perMachine" | "both";
 
 /**
  * Opt-in production telemetry. Absent means disabled (no init, no cost). The host compiles
@@ -149,6 +191,11 @@ export interface OtelObservabilityConfig {
   serviceName?: string;
 }
 
+export interface PkgbuildBundleConfig {
+  /** Arch package names added to the default `gtk3` and `webkit2gtk-4.1`. */
+  depends?: string[];
+}
+
 export interface PluginConfig {
   apis?: ApiName[];
   features?: string[];
@@ -161,6 +208,8 @@ export type PluginEntry = string | PluginConfig;
 export type PromptStyle = "modal" | "tray" | "silent" | "manual";
 
 export interface RpmBundleConfig {
+  /** Project-relative Handlebars template replacing the generated `.desktop` entry. */
+  desktopTemplate?: string;
   requires?: string[];
 }
 
@@ -284,7 +333,19 @@ export type WebView2InstallMode =
 
 export interface WindowsBundleConfig {
   allowDowngrades?: boolean;
+  /**
+   * NSIS install scope (default `currentUser`: no elevation).
+   * @default "currentUser"
+   */
+  installMode?: NsisInstallMode;
   minimumWebView2Version?: string;
+  /** MSIX package identity, required by the `msix` bundle target. */
+  msix?: MsixBundleConfig;
+  /**
+   * UAC level of the app executable, embedded as its application manifest. Unset means no manifest
+   * (`asInvoker`).
+   */
+  requestedExecutionLevel?: ExecutionLevel;
   /** Defaults to `{ type: "skip" }`; no registry probe or runtime download is performed. */
   webviewInstallMode?: WebView2InstallMode;
 }

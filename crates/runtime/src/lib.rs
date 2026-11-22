@@ -18,6 +18,7 @@
 //! }
 //! ```
 
+mod app_identity;
 mod args;
 mod bun;
 mod crash;
@@ -82,6 +83,12 @@ fn run_inner() -> ! {
     // unless the app configured `observability`.
     observability::init(
         embedded.as_ref().and_then(|e| e.observability.clone()),
+        embedded.is_some(),
+    );
+    // Names the app's own directories; fixed before the Bun child (and any
+    // app code) starts.
+    app_identity::init(
+        embedded.as_ref().and_then(|e| e.app_identifier.clone()),
         embedded.is_some(),
     );
 

@@ -13,8 +13,9 @@ use tynd_bundle_contract as contract;
 use crate::{
     args::BuildArgs,
     config::{
-        self, DebBundleConfig, FileAssociation, FileAssociationRank, FileAssociationRole,
-        LoadedConfig, RpmBundleConfig, TyndConfig, WebView2InstallMode, WindowsBundleConfig,
+        self, BundleConfig, DebBundleConfig, ExecutionLevel, FileAssociation, FileAssociationRank,
+        FileAssociationRole, LoadedConfig, NsisInstallMode, RpmBundleConfig, TyndConfig,
+        WebView2InstallMode, WindowsBundleConfig,
     },
     fsx::{absolute, atomic_write, write_json_file},
     output::{display_path, success, warn, write_line},
@@ -25,9 +26,9 @@ use super::{
     lifecycle::resolve_backend_entry,
     plugin_imports::ensure_plugin_imports_declared,
     shared::{
-        copy_tree_strict, ensure_existing_path_is_unlinked, ensure_success, generated_path,
-        is_link_or_reparse, project_name, replace_generated_directory, resolve_bun_runtime,
-        with_project_environment,
+        app_id_from_config, copy_tree_strict, ensure_existing_path_is_unlinked, ensure_success,
+        generated_path, is_link_or_reparse, project_name, replace_generated_directory,
+        resolve_bun_runtime, with_project_environment,
     },
     signing::{
         archive_macos_apps, create_macos_dmgs, sign_macos_artifacts, sign_windows_artifacts,
@@ -99,10 +100,18 @@ pub(in crate::commands) fn build(args: &BuildArgs) -> Result<()> {
             .as_ref()
             .map(|runtime| runtime.relative.clone()),
         observability_json: config::resolve_observability_json(&loaded.config)?,
+        app_identifier: app_id_from_config(&loaded.config),
         debug: args.debug_protocol,
         windows: contract::WindowsPackOptions {
             embed_icon: true,
             patch_subsystem_gui: true,
+            requested_execution_level: loaded
+                .config
+                .bundle
+                .as_ref()
+                .and_then(|bundle| bundle.windows.as_ref())
+                .and_then(|windows| windows.requested_execution_level)
+                .map(execution_level),
         },
     };
     if args.debug_protocol {
@@ -354,17 +363,13 @@ fn native_bundle_config(
         .map(normalize_file_association)
         .collect();
     let windows = windows_bundle_section(bundle.windows.as_ref());
-    let linux = contract::LinuxConfig {
-        deb: normalize_deb(bundle.deb.as_ref()),
-        rpm: normalize_rpm(bundle.rpm.as_ref()),
-        appimage: contract::AppImageConfig {
-            bundle_xdg_open: bundle
-                .appimage
-                .as_ref()
-                .and_then(|appimage| appimage.bundle_xdg_open)
-                .unwrap_or(false),
-        },
+    let project_file = |value: Option<&String>| {
+        value
+            .map(|path| resolve_bundle_resource(&loaded.root, path))
+            .transpose()
     };
+    let linux = linux_bundle_section(bundle, &project_file)?;
+    let macos = bundle.macos.as_ref();
     let schemes = bundle
         .macos
         .as_ref()
@@ -385,6 +390,7 @@ fn native_bundle_config(
             .map(str::to_owned),
         copyright: bundle.copyright.clone(),
         category: bundle.categories.first().cloned(),
+        license_file: project_file(bundle.license_file.as_ref())?,
         targets,
         // WiX (candle/light) cannot open verbatim `\\?\` paths: hand the
         // bundler plain paths wherever they are representable.
@@ -402,6 +408,9 @@ fn native_bundle_config(
         linux,
         macos: contract::MacOsConfig {
             url_schemes: schemes,
+            minimum_system_version: macos.and_then(|macos| macos.minimum_system_version.clone()),
+            entitlements: project_file(macos.and_then(|macos| macos.entitlements.as_ref()))?,
+            info_plist: project_file(macos.and_then(|macos| macos.info_plist.as_ref()))?,
         },
         windows,
         custom_nsis_template: None,
@@ -439,6 +448,32 @@ fn windows_bundle_section(windows: Option<&WindowsBundleConfig>) -> contract::Wi
         minimum_webview2_version: windows
             .and_then(|windows| windows.minimum_web_view2_version.clone()),
         allow_downgrades: windows.and_then(|windows| windows.allow_downgrades),
+        install_mode: windows
+            .and_then(|windows| windows.install_mode)
+            .map(|mode| match mode {
+                NsisInstallMode::CurrentUser => contract::NsisInstallMode::CurrentUser,
+                NsisInstallMode::PerMachine => contract::NsisInstallMode::PerMachine,
+                NsisInstallMode::Both => contract::NsisInstallMode::Both,
+            }),
+        msix: windows
+            .and_then(|windows| windows.msix.as_ref())
+            .map(|msix| contract::MsixConfig {
+                publisher: msix.publisher.clone(),
+                publisher_display_name: msix.publisher_display_name.clone(),
+                min_version: msix.min_version.clone(),
+                version: msix.version.clone(),
+            }),
+        requested_execution_level: windows
+            .and_then(|windows| windows.requested_execution_level)
+            .map(execution_level),
+    }
+}
+
+const fn execution_level(level: ExecutionLevel) -> contract::ExecutionLevel {
+    match level {
+        ExecutionLevel::AsInvoker => contract::ExecutionLevel::AsInvoker,
+        ExecutionLevel::HighestAvailable => contract::ExecutionLevel::HighestAvailable,
+        ExecutionLevel::RequireAdministrator => contract::ExecutionLevel::RequireAdministrator,
     }
 }
 
@@ -502,6 +537,44 @@ fn normalize_file_association(association: &FileAssociation) -> contract::FileAs
             }
         }),
     }
+}
+
+fn linux_bundle_section(
+    bundle: &BundleConfig,
+    project_file: &impl Fn(Option<&String>) -> Result<Option<PathBuf>>,
+) -> Result<contract::LinuxConfig> {
+    let mut deb = normalize_deb(bundle.deb.as_ref());
+    deb.desktop_template = project_file(
+        bundle
+            .deb
+            .as_ref()
+            .and_then(|deb| deb.desktop_template.as_ref()),
+    )?;
+    let mut rpm = normalize_rpm(bundle.rpm.as_ref());
+    rpm.desktop_template = project_file(
+        bundle
+            .rpm
+            .as_ref()
+            .and_then(|rpm| rpm.desktop_template.as_ref()),
+    )?;
+    Ok(contract::LinuxConfig {
+        deb,
+        rpm,
+        appimage: contract::AppImageConfig {
+            bundle_xdg_open: bundle
+                .appimage
+                .as_ref()
+                .and_then(|appimage| appimage.bundle_xdg_open)
+                .unwrap_or(false),
+        },
+        pkgbuild: contract::PkgbuildConfig {
+            depends: bundle
+                .pkgbuild
+                .as_ref()
+                .and_then(|pkgbuild| pkgbuild.depends.clone())
+                .unwrap_or_default(),
+        },
+    })
 }
 
 fn normalize_deb(value: Option<&DebBundleConfig>) -> contract::DebConfig {
@@ -635,11 +708,11 @@ fn bundle_targets(value: &str) -> Result<Vec<String>> {
         "--bundle requires all or a comma-separated target list"
     );
     let supported: &[&str] = if cfg!(windows) {
-        &["msi", "nsis"]
+        &["msi", "nsis", "msix"]
     } else if cfg!(target_os = "macos") {
         &["macos", "dmg"]
     } else {
-        &["deb", "rpm", "appimage"]
+        &["deb", "rpm", "appimage", "flatpak", "snap", "pkgbuild"]
     };
     let mut unique = BTreeSet::new();
     for target in requested {
@@ -658,19 +731,41 @@ fn bundle_targets(value: &str) -> Result<Vec<String>> {
 }
 
 pub(super) fn platform_app_binary(name: &str) -> String {
-    let safe = name
-        .chars()
-        .map(|value| {
-            if value.is_ascii_alphanumeric() || matches!(value, '-' | '_' | '.') {
-                value
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>();
+    let safe = contract::safe_file_stem(name);
     if cfg!(windows) {
         format!("{safe}.exe")
     } else {
         safe
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_specific_package_targets_are_accepted_only_on_their_os() {
+        if cfg!(windows) {
+            assert_eq!(bundle_targets("msix,nsis").unwrap(), ["msix", "nsis"]);
+            assert!(bundle_targets("flatpak").is_err());
+        } else if cfg!(target_os = "linux") {
+            assert_eq!(
+                bundle_targets("snap,flatpak,pkgbuild").unwrap(),
+                ["flatpak", "pkgbuild", "snap"]
+            );
+            assert!(bundle_targets("msix").is_err());
+        }
+    }
+
+    #[test]
+    fn execution_levels_map_to_the_contract() {
+        assert_eq!(
+            execution_level(ExecutionLevel::RequireAdministrator),
+            contract::ExecutionLevel::RequireAdministrator
+        );
+        assert_eq!(
+            execution_level(ExecutionLevel::AsInvoker),
+            contract::ExecutionLevel::AsInvoker
+        );
     }
 }

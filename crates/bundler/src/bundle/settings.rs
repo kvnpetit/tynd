@@ -8,12 +8,12 @@ use error_stack::{Report, ResultExt as _};
 use rayon::prelude::*;
 use tauri_bundler::{
     AppCategory, AppImageSettings, BundleBinary, BundleSettings, DebianSettings, DmgSettings,
-    MacOsSettings, PackageSettings, PackageType, RpmSettings, Settings, SettingsBuilder,
-    WindowsSettings,
+    Entitlements, MacOsSettings, NsisSettings, PackageSettings, PackageType, PlistKind,
+    RpmSettings, Settings, SettingsBuilder, WindowsSettings,
 };
 use tauri_utils::config::{
     AssociationExt, BundleTypeRole, DeepLinkProtocol, ExportedFileAssociation, FileAssociation,
-    HandlerRank, WebviewInstallMode,
+    HandlerRank, NSISInstallerMode, WebviewInstallMode,
 };
 use tempfile::NamedTempFile;
 use tracing::info;
@@ -126,7 +126,7 @@ fn bundle_settings(
         },
         copyright: cfg.copyright.clone(),
         license: cfg.license.clone(),
-        license_file: None,
+        license_file: cfg.license_file.clone(),
         category: cfg.category.as_deref().and_then(parse_category),
         short_description: cfg.description.clone(),
         long_description: cfg.long_description.clone(),
@@ -145,15 +145,48 @@ fn bundle_settings(
         rpm: linux_rpm(&cfg.linux.rpm),
         appimage: linux_appimage(&cfg.linux.appimage),
         dmg: DmgSettings::default(),
-        macos: MacOsSettings {
-            minimum_system_version: Some(contract::MACOS_MINIMUM_SYSTEM_VERSION.to_owned()),
-            ..MacOsSettings::default()
-        },
+        macos: macos_settings(&cfg.macos)?,
         updater: None,
         windows,
         ..Default::default()
     };
     Ok((settings, generated_windows_icon))
+}
+
+fn macos_settings(cfg: &contract::MacOsConfig) -> Result<MacOsSettings> {
+    let minimum = match &cfg.minimum_system_version {
+        Some(version) => {
+            anyhow::ensure!(
+                version_at_least(version, contract::MACOS_MINIMUM_SYSTEM_VERSION),
+                "macos.minimum_system_version {version:?} is below the minimum Tynd supports ({}); raise it or leave it unset",
+                contract::MACOS_MINIMUM_SYSTEM_VERSION
+            );
+            version.clone()
+        },
+        None => contract::MACOS_MINIMUM_SYSTEM_VERSION.to_owned(),
+    };
+    Ok(MacOsSettings {
+        minimum_system_version: Some(minimum),
+        entitlements: cfg.entitlements.clone().map(Entitlements::Path),
+        info_plist: cfg.info_plist.clone().map(PlistKind::Path),
+        ..MacOsSettings::default()
+    })
+}
+
+/// Dotted numeric comparison; a malformed `version` never passes.
+fn version_at_least(version: &str, minimum: &str) -> bool {
+    let parse = |text: &str| {
+        text.split('.')
+            .map(|part| part.parse::<u32>().ok())
+            .collect::<Option<Vec<_>>>()
+    };
+    let (Some(mut version), Some(mut minimum)) = (parse(version), parse(minimum)) else {
+        return false;
+    };
+    let len = version.len().max(minimum.len());
+    version.resize(len, 0);
+    minimum.resize(len, 0);
+    version >= minimum
 }
 
 fn build_settings(
@@ -257,6 +290,16 @@ fn prepare_windows_settings(
     if let Some(allow) = cfg.windows.allow_downgrades {
         settings.allow_downgrades = allow;
     }
+    if let Some(mode) = cfg.windows.install_mode {
+        settings.nsis = Some(NsisSettings {
+            install_mode: match mode {
+                contract::NsisInstallMode::CurrentUser => NSISInstallerMode::CurrentUser,
+                contract::NsisInstallMode::PerMachine => NSISInstallerMode::PerMachine,
+                contract::NsisInstallMode::Both => NSISInstallerMode::Both,
+            },
+            ..NsisSettings::default()
+        });
+    }
     if !cfg
         .targets
         .iter()
@@ -339,6 +382,7 @@ fn linux_deb(cfg: &DebConfig) -> DebianSettings {
         replaces: option_vec(&cfg.replaces),
         priority: cfg.priority.clone(),
         section: cfg.section.clone(),
+        desktop_template: cfg.desktop_template.clone(),
         ..Default::default()
     }
 }
@@ -348,6 +392,7 @@ fn linux_rpm(cfg: &RpmConfig) -> RpmSettings {
         depends: option_vec(&cfg.depends),
         release: cfg.release.clone().unwrap_or_else(|| "1".into()),
         epoch: cfg.epoch.unwrap_or(0),
+        desktop_template: cfg.desktop_template.clone(),
         ..Default::default()
     }
 }
@@ -424,6 +469,80 @@ mod tests {
         assert_eq!(
             bundle.macos.minimum_system_version.as_deref(),
             Some(contract::MACOS_MINIMUM_SYSTEM_VERSION)
+        );
+    }
+
+    fn minimal_config(extra: serde_json::Value) -> BundleConfig {
+        let mut value = serde_json::json!({
+            "name": "Demo",
+            "version": "1.0.0",
+            "identifier": "dev.tynd.demo",
+            "targets": ["nsis"],
+            "project_root": "/project",
+            "out_dir": "/project/release",
+            "binary_path": "/project/release/demo",
+            "resources": [],
+            "icons": [],
+        });
+        if let (Some(target), Some(extra)) = (value.as_object_mut(), extra.as_object()) {
+            target.extend(extra.clone());
+        }
+        serde_json::from_value(value).expect("bundle config")
+    }
+
+    #[test]
+    fn macos_metadata_is_forwarded() {
+        let cfg = minimal_config(serde_json::json!({
+            "macos": {
+                "minimum_system_version": "15.1",
+                "entitlements": "app.entitlements",
+                "info_plist": "Extra.plist",
+            },
+            "license_file": "LICENSE",
+        }));
+        let (bundle, _) = bundle_settings(&cfg, &[]).expect("bundle settings");
+        assert_eq!(bundle.macos.minimum_system_version.as_deref(), Some("15.1"));
+        assert!(matches!(
+            bundle.macos.entitlements,
+            Some(Entitlements::Path(ref path)) if path == Path::new("app.entitlements")
+        ));
+        assert!(matches!(
+            bundle.macos.info_plist,
+            Some(PlistKind::Path(ref path)) if path == Path::new("Extra.plist")
+        ));
+        assert_eq!(bundle.license_file, Some(PathBuf::from("LICENSE")));
+    }
+
+    #[test]
+    fn macos_minimum_below_the_supported_floor_is_rejected() {
+        let cfg = minimal_config(serde_json::json!({
+            "macos": { "minimum_system_version": "13.6" },
+        }));
+        assert!(bundle_settings(&cfg, &[]).is_err());
+        assert!(version_at_least("14", "14.0"));
+        assert!(version_at_least("14.0.1", "14.0"));
+        assert!(!version_at_least("fourteen", "14.0"));
+    }
+
+    #[test]
+    fn nsis_install_mode_and_desktop_templates_are_forwarded() {
+        let cfg = minimal_config(serde_json::json!({
+            "windows": { "install_mode": "perMachine" },
+            "linux": {
+                "deb": { "desktop_template": "deb.desktop" },
+                "rpm": { "desktop_template": "rpm.desktop" },
+            },
+        }));
+        let (bundle, _) = bundle_settings(&cfg, &[]).expect("bundle settings");
+        let nsis = bundle.windows.nsis.expect("nsis settings");
+        assert_eq!(nsis.install_mode, NSISInstallerMode::PerMachine);
+        assert_eq!(
+            bundle.deb.desktop_template,
+            Some(PathBuf::from("deb.desktop"))
+        );
+        assert_eq!(
+            bundle.rpm.desktop_template,
+            Some(PathBuf::from("rpm.desktop"))
         );
     }
 }

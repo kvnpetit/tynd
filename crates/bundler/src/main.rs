@@ -20,6 +20,9 @@ use tracing::Level;
 mod bundle;
 mod codesign;
 mod dmg;
+mod icon_set;
+mod linux_packages;
+mod msix;
 mod pack;
 mod patch;
 mod pe;
@@ -121,6 +124,15 @@ enum Command {
     Pack {
         /// Config JSON path, or `-` for stdin.
         config: String,
+    },
+    /// Render one square PNG/SVG into `.ico`, `.icns`, hicolor PNGs and MSIX assets.
+    Icon {
+        /// Square PNG (at least 512x512) or SVG.
+        #[arg(long, value_name = "PATH")]
+        source: PathBuf,
+        /// Output directory; created when missing.
+        #[arg(long, value_name = "DIR")]
+        out_dir: PathBuf,
     },
 }
 
@@ -238,6 +250,12 @@ fn run() -> Result<()> {
         Command::Pack { config } => {
             let cfg: tynd_bundle_contract::PackConfig = read_config(&config)?;
             pack::run(&cfg)
+        },
+        Command::Icon { source, out_dir } => {
+            for path in icon_set::generate(&source, &out_dir)? {
+                println!("{}", path.display());
+            }
+            Ok(())
         },
     }
 }

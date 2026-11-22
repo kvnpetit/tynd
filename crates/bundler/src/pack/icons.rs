@@ -12,7 +12,7 @@ use super::{read_file_limited, PackContext, PackError};
 /// Windows picks per DPI: 16 for title bar, 32/48 for taskbar/Alt-Tab,
 /// 256 for Explorer.
 const ICO_SIZES: &[u32] = &[16, 32, 48, 256];
-pub(super) const MAX_ICON_BYTES: u64 = 32 * 1024 * 1024;
+pub(crate) const MAX_ICON_BYTES: u64 = 32 * 1024 * 1024;
 // Icon rendering
 
 /// Pass-through when the source already ends in `.ico`.
@@ -115,7 +115,7 @@ fn render_svg_to_ico(svg_path: &Path) -> Result<Vec<u8>> {
     assemble_ico_from_rgba(&raster)
 }
 
-fn reject_svg_text_nodes(svg_data: &[u8]) -> Result<()> {
+pub(crate) fn reject_svg_text_nodes(svg_data: &[u8]) -> Result<()> {
     let mut reader = Reader::from_reader(svg_data);
     let mut buffer = Vec::new();
     loop {
@@ -165,7 +165,7 @@ fn render_png_to_ico(png_path: &Path) -> Result<Vec<u8>> {
 
 /// `IconDirEntry::encode` auto-picks PNG payloads for entries 256+
 /// (natively supported on Vista+).
-fn assemble_ico_from_rgba(entries: &[(u32, Vec<u8>)]) -> Result<Vec<u8>> {
+pub(crate) fn assemble_ico_from_rgba(entries: &[(u32, Vec<u8>)]) -> Result<Vec<u8>> {
     let mut dir = IconDir::new(ResourceType::Icon);
     for (size, rgba) in entries {
         let img = IconImage::from_rgba_data(*size, *size, rgba.clone());

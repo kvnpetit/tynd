@@ -66,8 +66,8 @@ pub(crate) enum BundleError {
         code(tynd::bundler::unknown_target),
         url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
-            "valid targets: msi, nsis, dmg, app, deb, rpm, appimage. Check `targets` in your \
-             tynd.config.ts."
+            "valid targets: msi, nsis, msix, dmg, app, deb, rpm, appimage, flatpak, snap, \
+             pkgbuild. Check `targets` in your tynd.config.ts."
         )
     )]
     UnknownTarget { target: String },
@@ -173,8 +173,48 @@ pub(crate) fn run(cfg: &BundleConfig) -> Result<()> {
     )?;
     let _wix_defer = wix_tmp_path.as_ref().map(|p| RemoveFileOnDrop(p.clone()));
 
-    let (settings, _generated_windows_icon) = settings::build(cfg, &icons)?;
-    bundle_and_archive(cfg, &settings)
+    let (extra, tauri_targets) = split_targets(&cfg.targets);
+    let mut artifacts = Vec::new();
+    if !tauri_targets.is_empty() {
+        let tauri_cfg = BundleConfig {
+            targets: tauri_targets,
+            ..cfg.clone()
+        };
+        let (settings, _generated_windows_icon) = settings::build(&tauri_cfg, &icons)?;
+        artifacts = bundle_project(&tauri_cfg, &settings)?;
+    }
+    if extra.msix {
+        let path = crate::msix::build(cfg, &cfg.icons)?;
+        println!("{}", path.display());
+        artifacts.push(path);
+    }
+    for path in crate::linux_packages::build(cfg, &extra.linux, &cfg.icons)? {
+        println!("{}", path.display());
+        artifacts.push(path);
+    }
+    archive_artifacts(cfg, &artifacts)
+}
+
+/// Targets Tynd builds itself rather than through tauri-bundler.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ExtraTargets {
+    msix: bool,
+    linux: Vec<crate::linux_packages::LinuxPackage>,
+}
+
+fn split_targets(targets: &[String]) -> (ExtraTargets, Vec<String>) {
+    let mut extra = ExtraTargets::default();
+    let mut tauri = Vec::new();
+    for target in targets {
+        if target == "msix" {
+            extra.msix = true;
+        } else if let Some(package) = crate::linux_packages::LinuxPackage::parse(target) {
+            extra.linux.push(package);
+        } else {
+            tauri.push(target.clone());
+        }
+    }
+    (extra, tauri)
 }
 
 fn log_binary_arch(cfg: &BundleConfig) -> Result<()> {
@@ -237,7 +277,7 @@ fn render_template_file(
     Ok(path)
 }
 
-fn bundle_and_archive(cfg: &BundleConfig, settings: &Settings) -> Result<()> {
+fn bundle_project(cfg: &BundleConfig, settings: &Settings) -> Result<Vec<PathBuf>> {
     info!("bundling {} v{}", cfg.name, cfg.version);
     let bundles = tauri_bundler::bundle_project(settings)
         .map_err(|e| {
@@ -268,11 +308,14 @@ fn bundle_and_archive(cfg: &BundleConfig, settings: &Settings) -> Result<()> {
             artifact_paths.push(path.clone());
         }
     }
+    Ok(artifact_paths)
+}
 
+fn archive_artifacts(cfg: &BundleConfig, artifact_paths: &[PathBuf]) -> Result<()> {
     if !artifact_paths.is_empty() {
         let out_utf8 = util::to_utf8_path(&cfg.out_dir)?;
         let zip_path = out_utf8.join(format!("{}-{}-artifacts.zip", cfg.name, cfg.version));
-        match util::zip_artifacts(&artifact_paths, &zip_path) {
+        match util::zip_artifacts(artifact_paths, &zip_path) {
             Ok(()) => info!(
                 "artifact archive: {}",
                 util::display_path(zip_path.as_std_path())
@@ -354,5 +397,29 @@ fn exists_relaxed(p: &Path, root: &Path) -> bool {
         p.exists()
     } else {
         p.exists() || root.join(p).exists()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::linux_packages::LinuxPackage;
+
+    #[test]
+    fn tynd_built_targets_are_split_from_tauri_targets() {
+        let targets = ["nsis", "msix", "deb", "flatpak", "snap", "pkgbuild"].map(String::from);
+        let (extra, tauri) = split_targets(&targets);
+        assert_eq!(tauri, ["nsis", "deb"]);
+        assert_eq!(
+            extra,
+            ExtraTargets {
+                msix: true,
+                linux: vec![
+                    LinuxPackage::Flatpak,
+                    LinuxPackage::Snap,
+                    LinuxPackage::Pkgbuild
+                ],
+            }
+        );
     }
 }

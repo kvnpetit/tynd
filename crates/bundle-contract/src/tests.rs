@@ -23,6 +23,7 @@ fn bundle_config() -> BundleConfig {
         license: Some("Apache-2.0".into()),
         copyright: None,
         category: Some("Utility".into()),
+        license_file: Some(PathBuf::from("/project/LICENSE")),
         targets: vec!["nsis".into(), "msi".into()],
         project_root: PathBuf::from("/project"),
         out_dir: PathBuf::from("/project/release"),
@@ -52,13 +53,20 @@ fn bundle_config() -> BundleConfig {
                 depends: vec!["gtk3".into()],
                 release: Some("2".into()),
                 epoch: Some(1),
+                desktop_template: Some(PathBuf::from("app.desktop.hbs")),
             },
             appimage: AppImageConfig {
                 bundle_xdg_open: true,
             },
+            pkgbuild: PkgbuildConfig {
+                depends: vec!["libayatana-appindicator".into()],
+            },
         },
         macos: MacOsConfig {
             url_schemes: vec!["demo".into()],
+            minimum_system_version: Some("14.2".into()),
+            entitlements: Some(PathBuf::from("app.entitlements")),
+            info_plist: Some(PathBuf::from("Info.extra.plist")),
         },
         windows: WindowsConfig {
             webview_install_mode: Some(WebviewInstallMode::FixedRuntime {
@@ -66,6 +74,14 @@ fn bundle_config() -> BundleConfig {
             }),
             minimum_webview2_version: Some("120.0.0.0".into()),
             allow_downgrades: Some(false),
+            install_mode: Some(NsisInstallMode::PerMachine),
+            msix: Some(MsixConfig {
+                publisher: "CN=Demo".into(),
+                publisher_display_name: None,
+                min_version: Some("10.0.19041.0".into()),
+                version: Some("1.2.3.0".into()),
+            }),
+            requested_execution_level: Some(ExecutionLevel::RequireAdministrator),
         },
         custom_nsis_template: None,
         custom_wix_template: Some("<Wix/>".into()),
@@ -89,10 +105,12 @@ fn pack_config() -> PackConfig {
         bun_version: Some("1.3.14".into()),
         webview2_runtime_path: Some("webview2".into()),
         observability_json: Some("{}".into()),
+        app_identifier: Some("com.example.demo".into()),
         debug: true,
         windows: WindowsPackOptions {
             embed_icon: false,
             patch_subsystem_gui: true,
+            requested_execution_level: Some(ExecutionLevel::HighestAvailable),
         },
     }
 }
@@ -210,4 +228,27 @@ fn unknown_fields_are_rejected() {
     let mut bundle = serde_json::to_value(bundle_config()).expect("serialize");
     bundle["windows"]["surprise"] = json!(1);
     assert!(serde_json::from_value::<BundleConfig>(bundle).is_err());
+}
+
+#[test]
+fn windows_enums_use_camel_case_wire_names() {
+    assert_eq!(
+        serde_json::to_value(NsisInstallMode::CurrentUser).expect("serialize"),
+        json!("currentUser")
+    );
+    assert_eq!(
+        serde_json::to_value(ExecutionLevel::RequireAdministrator).expect("serialize"),
+        json!("requireAdministrator")
+    );
+    assert_eq!(
+        ExecutionLevel::RequireAdministrator.as_str(),
+        "requireAdministrator"
+    );
+}
+
+#[test]
+fn safe_file_stem_replaces_path_and_shell_characters() {
+    assert_eq!(safe_file_stem("My App"), "My-App");
+    assert_eq!(safe_file_stem("a/b\\c:d"), "a-b-c-d");
+    assert_eq!(safe_file_stem("v1.2_beta-x"), "v1.2_beta-x");
 }

@@ -53,6 +53,7 @@ fn dispatch(command: Command) -> Result<()> {
             project::warn_open_scopes(&args.cwd);
             project::build(&args)
         },
+        Command::Icon(args) => project::icon(&args),
         Command::Clean(args) => project::clean(&args),
         Command::Upgrade(args) => project::upgrade(&args),
         Command::Validate(args) => project::validate(&args),

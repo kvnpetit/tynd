@@ -653,6 +653,11 @@ fn host_spec(
     if let Some(json) = config::resolve_observability_json(config)? {
         spec = spec.env("TYND_OBSERVABILITY", json);
     }
+    // Same for the app identifier, which names the app's own directories; a
+    // packaged app reads it from its `app.identifier` pack entry instead.
+    if let Some(identifier) = app_id_from_config(config) {
+        spec = spec.env("TYND_APP_IDENTIFIER", identifier);
+    }
     Ok(spec)
 }
 
@@ -814,7 +819,8 @@ fn verify_private_dir(dir: &Path) -> Result<()> {
     ensure!(metadata.is_dir(), "{} is not a directory", dir.display());
     let mode = metadata.permissions().mode();
     ensure!(
-        mode & 0o077 == 0,
+        // No group/other bits set (low six bits of the mode are zero).
+        mode.trailing_zeros() >= 6,
         "{} must not be accessible by group/other (mode {:o})",
         dir.display(),
         mode & 0o777

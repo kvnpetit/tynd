@@ -181,12 +181,17 @@ pub(crate) struct BundleConfig {
     pub short_description: Option<String>,
     pub long_description: Option<String>,
     pub copyright: Option<String>,
+    /// Project-relative license file shown by the Windows installers and shipped by the
+    /// Linux packages.
+    #[schemars(length(min = 1))]
+    pub license_file: Option<String>,
     #[schemars(inner(length(min = 1)))]
     pub resources: Vec<String>,
     pub file_associations: Vec<FileAssociation>,
     pub deb: Option<DebBundleConfig>,
     pub rpm: Option<RpmBundleConfig>,
     pub appimage: Option<AppImageBundleConfig>,
+    pub pkgbuild: Option<PkgbuildBundleConfig>,
     pub windows: Option<WindowsBundleConfig>,
     pub macos: Option<MacosBundleConfig>,
     pub sign: Option<SigningConfig>,
@@ -260,6 +265,11 @@ pub(crate) struct DebBundleConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(length(min = 1))]
     pub priority: Option<String>,
+    /// Project-relative Handlebars template replacing the generated `.desktop` entry
+    /// (also used by the AppImage).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(length(min = 1))]
+    pub desktop_template: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
@@ -268,6 +278,19 @@ pub(crate) struct RpmBundleConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(inner(length(min = 1)))]
     pub requires: Option<Vec<String>>,
+    /// Project-relative Handlebars template replacing the generated `.desktop` entry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(length(min = 1))]
+    pub desktop_template: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PkgbuildBundleConfig {
+    /// Arch package names added to the default `gtk3` and `webkit2gtk-4.1`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(inner(length(min = 1)))]
+    pub depends: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
@@ -289,6 +312,56 @@ pub(crate) struct WindowsBundleConfig {
     pub minimum_web_view2_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_downgrades: Option<bool>,
+    /// NSIS install scope (default `currentUser`: no elevation).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "currentUser"))]
+    pub install_mode: Option<NsisInstallMode>,
+    /// UAC level of the app executable, embedded as its application manifest. Unset means
+    /// no manifest (`asInvoker`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requested_execution_level: Option<ExecutionLevel>,
+    /// MSIX package identity, required by the `msix` bundle target.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub msix: Option<MsixBundleConfig>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum NsisInstallMode {
+    CurrentUser,
+    PerMachine,
+    Both,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ExecutionLevel {
+    AsInvoker,
+    HighestAvailable,
+    RequireAdministrator,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct MsixBundleConfig {
+    /// Publisher distinguished name; must equal the subject of the signing certificate
+    /// (for example `CN=Example Corp, O=Example Corp, C=US`).
+    #[schemars(regex(pattern = r"^CN="))]
+    pub publisher: String,
+    /// Defaults to the package author, else the app name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(length(min = 1))]
+    pub publisher_display_name: Option<String>,
+    /// `MinVersion` of `Windows.Desktop` (default `10.0.17763.0`, Windows 10 1809).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(regex(pattern = r"^\d+\.\d+\.\d+\.\d+$"))]
+    pub min_version: Option<String>,
+    /// Four-part package version (each part at most 65535). Defaults to the app version
+    /// cut to its numeric core, which maps `1.2.3-beta.1` and `1.2.3` to the same
+    /// `1.2.3.0`. The Microsoft Store requires the fourth part to be 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(regex(pattern = r"^\d+\.\d+\.\d+\.\d+$"))]
+    pub version: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
@@ -319,6 +392,18 @@ pub(crate) struct MacosBundleConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(inner(regex(pattern = r"^[a-zA-Z][a-zA-Z0-9+\-.]*$")))]
     pub url_schemes: Option<Vec<String>>,
+    /// `LSMinimumSystemVersion` (default and floor `14.0`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(regex(pattern = r"^\d+(?:\.\d+){0,2}$"), extend("default" = "14.0"))]
+    pub minimum_system_version: Option<String>,
+    /// Project-relative entitlements plist used when the `.app` is signed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(length(min = 1))]
+    pub entitlements: Option<String>,
+    /// Project-relative plist merged into the generated `Info.plist`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(length(min = 1))]
+    pub info_plist: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
