@@ -1,26 +1,6 @@
-# Requires `cargo +nightly fmt`. Stable rustfmt rejects nightly options
-# below — toolchain is pinned in CI; locally `rustup toolchain install
-# nightly --component rustfmt --profile minimal` is enough (no nightly
-# build needed, only fmt).
-edition                    = "2021"
-max_width                  = 100
-tab_spaces                 = 4
-hard_tabs                  = false
+# Stable rustfmt configuration. Only non-default keys are listed; `cargo fmt`
+# takes the edition from each crate's Cargo.toml.
 newline_style              = "Unix"
-use_small_heuristics       = "Default"
-reorder_imports            = true
-reorder_modules            = true
-remove_nested_parens       = true
 match_block_trailing_comma = true
 use_field_init_shorthand   = true
 use_try_shorthand          = true
-force_explicit_abi         = true
-
-# Nightly-only — these are why we run nightly fmt at all. Match the parity
-# biome gives on the TS side (organize imports + comment/string wrap).
-imports_granularity = "Crate"
-group_imports       = "StdExternalCrate"
-wrap_comments       = true
-format_strings      = true
-comment_width       = 100
-condense_wildcard_suffixes = true

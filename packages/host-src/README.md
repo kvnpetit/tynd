@@ -1,31 +1,29 @@
 # @tynd/host-src
 
-Rust source tree of the Tynd host, packaged as an npm module.
+Generated Rust source mirror of the Tynd host, packaged as an npm module.
 
-This package exists so that apps on `runtime: "full-custom"` or `"lite-custom"` can
-build a trimmed-down host locally via `cargo`, picking exactly the `api-*`
-features they need. Preset runtimes (`full`, `lite`) never install this package —
-they pull the prebuilt binaries from `@tynd/host`.
+This package contains the self-contained Rust host, Bun runtime, and internal
+crate sources that `@tynd/cli` compiles with cargo into every app's host.
 
 ## Contents
 
-- `native/` — self-contained copy of `packages/host-rs/`, with every workspace
-  dependency reference flattened to an explicit version so the crate builds
-  standalone inside the workspace that the Tynd CLI generates at
-  `.tynd/build/`.
-- `scripts/sync.ts` — regenerates `native/` from `packages/host-rs/` + the
-  workspace `Cargo.toml`. Run via `bun run sync`. Also wired to
-  `prepublishOnly`.
+- `native/` — standalone Cargo workspace containing `tynd-host`,
+  `tynd-runtime`, and vendored internal crates. Workspace dependency references
+  are flattened to explicit versions or local paths.
+- `scripts/sync.ts` — regenerates `native/` from `crates/host/`,
+  `crates/runtime/`, the crates they depend on, and the workspace `Cargo.toml`.
 
-## How the CLI uses it
+## Maintenance
 
-At `tynd build` time, when `runtime` is `full-custom` or `lite-custom`:
+Run these commands from `packages/host-src`:
 
-1. CLI reads `package.json::tynd.hostSrc` to locate the sources.
-2. Copies (or symlinks) `native/` into `.tynd/build/host/`.
-3. Generates a `.tynd/build/Cargo.toml` workspace that pulls `host` as a path
-   dep with the chosen `api-*` features enabled and `default-features = false`.
-4. Runs `cargo build --release` — the resulting binary ships only the modules
-   the app actually uses.
+```bash
+bun run sync     # regenerate native/
+bun run lock     # regenerate native/Cargo.lock
+bun run prepack  # run the package's prepack sync
+```
 
-You do **not** need to install this package for preset builds.
+`tynd create` and `tynd init` add this package to the app's `devDependencies`
+(it is also a dependency of `@tynd/cli`). `tynd dev` and `tynd build` compile
+this source workspace with cargo into the app's host, with only the host APIs
+and native plugins the config selects.

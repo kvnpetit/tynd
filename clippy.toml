@@ -1,6 +1,6 @@
 # Minimum supported Rust — keeps `manual_let_else` etc. from suggesting
 # features newer than the toolchain we pin in Cargo.toml.
-msrv = "1.83"
+msrv = "1.95"
 
 # Pragmatic complexity ceilings — defaults are noisy on dispatch-style code
 # (host-rs `dispatch()`, plugin-sdk `Registry`).
@@ -11,3 +11,7 @@ type-complexity-threshold      = 250
 # This isn't a published library where SemVer breakage matters at the API
 # surface — internal refactors are fine.
 avoid-breaking-exported-api = false
+
+# Tests may unwrap freely; production code is held to `unwrap_used = "deny"`
+# in the [lints] table.
+allow-unwrap-in-tests = true

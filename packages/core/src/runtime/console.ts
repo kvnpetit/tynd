@@ -1,7 +1,6 @@
 /**
  * Redirect every console.* method to stderr so that stdout stays reserved
- * for IPC JSON. Used by full-mode boot; never called from lite (lite has
- * its own minimal console in `quickjs/globals.js`).
+ * for IPC JSON. Used by Bun runtime boot.
  */
 
 // Bun's other console methods (group/trace/table/…) already go to stderr by default.

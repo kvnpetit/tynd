@@ -3,9 +3,6 @@
  * `createBackend` are plain Promises — these utilities add deadline +
  * cancellation on top without changing the public API shape.
  */
-
-import pTimeout from "p-timeout";
-
 /**
  * Subscribe to a backend event; automatically unsubscribe after `n`
  * invocations. Returns a manual unsubscribe for the case where the
@@ -40,10 +37,19 @@ export function once<T = unknown>(event: string, handler: (payload: T) => void):
   return listenN<T>(event, 1, handler);
 }
 
+/**
+ * Discriminable timeout error — `code: "TIMEOUT"` lets handlers
+ * pattern-match on the failure reason without `instanceof` dance.
+ * Mirrors the `.code` field on `TyndIpcError` for consistency across
+ * the client surface.
+ */
 export class RpcTimeoutError extends Error {
+  readonly code = "TIMEOUT" as const;
+  readonly timeoutMs: number;
   constructor(ms: number) {
     super(`RPC timed out after ${ms}ms`);
     this.name = "RpcTimeoutError";
+    this.timeoutMs = ms;
   }
 }
 
@@ -52,14 +58,25 @@ export class RpcTimeoutError extends Error {
  * `ms`. Note: the timeout does not cancel the backend-side work for
  * non-streaming calls (Tynd's RPC doesn't surface mid-call cancellation
  * yet). Use streaming + `handle.cancel()` when true cancellation matters.
- *
- * Implemented on top of `p-timeout` so the rejection cleanup (clearing the
- * underlying timer when the promise settles first) is bullet-proof; the
- * rejection error is our `RpcTimeoutError` so existing `instanceof` checks
- * keep working.
+ * The rejection error is our `RpcTimeoutError` so existing `instanceof`
+ * checks keep working.
  */
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return pTimeout(promise, { milliseconds: ms, message: new RpcTimeoutError(ms) });
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new RpcTimeoutError(ms));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 /**
@@ -72,8 +89,20 @@ export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<
   if (signal.aborted) {
     return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
   }
-  // p-timeout's `signal` option rejects with `signal.reason` when fired,
-  // and `Infinity` disables the timeout side entirely so we get a pure
-  // abort racer in ~3 lines instead of a manual addEventListener dance.
-  return pTimeout(promise, { milliseconds: Number.POSITIVE_INFINITY, signal });
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
 }

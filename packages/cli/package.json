@@ -1,0 +1,69 @@
+{
+  "name": "@tynd/cli",
+  "version": "1.0.0",
+  "description": "Native Rust tooling for Tynd with a dependency-free TypeScript config facade.",
+  "license": "Apache-2.0",
+  "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
+  "homepage": "https://tynd-apps.github.io/tynd/docs/v1.0/cli/",
+  "funding": "https://github.com/sponsors/kvnpetit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/tynd-apps/tynd/issues"
+  },
+  "keywords": [
+    "tynd",
+    "cli",
+    "desktop",
+    "webview",
+    "bun",
+    "typescript",
+    "rust"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "private": false,
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "README.md",
+    "bin",
+    "schemas",
+    "src/lib/config.ts",
+    "src/lib/config/types.generated.ts",
+    "LICENSE",
+    "CHANGELOG.md",
+    "NOTICE"
+  ],
+  "bin": {
+    "tynd": "./bin/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/lib/config.ts",
+      "bun": "./src/lib/config.ts",
+      "import": "./src/lib/config.ts",
+      "default": "./src/lib/config.ts"
+    }
+  },
+  "scripts": {
+    "dev": "cargo run --manifest-path ../../Cargo.toml -p tynd-cli --bin tynd --",
+    "build": "node --check bin/index.js && tsc --noEmit -p tsconfig.json",
+    "build:native": "cargo build --release --manifest-path ../../Cargo.toml -p tynd-cli -p tynd-bundler",
+    "prepack": "bun run build"
+  },
+  "dependencies": {
+    "@tynd/host-src": "1.0.0",
+    "@tynd/tooling": "1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

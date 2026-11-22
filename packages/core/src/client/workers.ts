@@ -1,16 +1,30 @@
 import { tynd } from "../logger";
-import { osCall } from "./_internal";
+import {
+  createWorkerTaskScript,
+  MAX_PENDING_WORKER_RUNS,
+  MAX_WORKERS,
+  parseWorkerResponse,
+} from "../worker-protocol";
 
+/** Handle to a sandboxed Web Worker owned by the renderer. */
 export interface WorkerHandle {
   id: number;
   run<Out = unknown, In = unknown>(input: In): Promise<Out>;
   terminate(): Promise<void>;
 }
 
-let bunWorkerSeq = 0;
+let workerSequence = 0;
+const workerIds = new Set<number>();
+
+function allocateWorkerId(): number {
+  for (;;) {
+    workerSequence = workerSequence >= Number.MAX_SAFE_INTEGER ? 1 : workerSequence + 1;
+    if (!workerIds.has(workerSequence)) return workerSequence;
+  }
+}
 
 /**
- * Identifiers that always resolve in a fresh Worker context — both standard
+ * Identifiers that always resolve in a fresh Worker context — both built-in
  * globals and common host-injected ones. Used by the closure-detection
  * heuristic below so we don't warn about every `console.log`.
  */
@@ -187,88 +201,133 @@ function validateTaskFn(taskFn: unknown): string {
   return fnStr;
 }
 
-function spawnBunWorker(script: string): WorkerHandle {
-  const id = ++bunWorkerSeq;
-  const wrapped = `
-    const __fn = (${script});
-    self.onmessage = async (e) => {
-      const { rid, input } = e.data
-      try {
-        const result = await __fn(input)
-        postMessage({ rid, result })
-      } catch (err) {
-        postMessage({ rid, error: String((err && err.message) || err) })
-      }
+interface PendingWorkerCall {
+  resolve(value: unknown): void;
+  reject(error: Error): void;
+}
+
+class ManagedWebWorker implements WorkerHandle {
+  private readonly pending = new Map<number, PendingWorkerCall>();
+  private nextRunId = 0;
+  private terminated = false;
+
+  readonly id: number;
+  private readonly worker: Worker;
+  private readonly objectUrl?: string;
+
+  constructor(id: number, worker: Worker, objectUrl?: string) {
+    this.id = id;
+    this.worker = worker;
+    this.objectUrl = objectUrl;
+    worker.onmessage = (event) => this.onMessage(event.data);
+    worker.onerror = (event) => {
+      event.preventDefault();
+      this.dispose(new Error(event.message || "Web Worker crashed"));
+    };
+    worker.onmessageerror = () => {
+      this.dispose(new Error("Web Worker response could not be decoded"));
+    };
+    workerIds.add(id);
+  }
+
+  run<Out = unknown, In = unknown>(input: In): Promise<Out> {
+    if (this.terminated) return Promise.reject(new Error(`Worker ${this.id} terminated`));
+    if (this.pending.size >= MAX_PENDING_WORKER_RUNS) {
+      return Promise.reject(new Error(`Worker ${this.id} has too many pending tasks`));
     }
-  `;
-  const url = `data:application/javascript,${encodeURIComponent(wrapped)}`;
-  const w = new (globalThis as unknown as { Worker: new (u: string) => Worker }).Worker(url);
-  const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
-  let rseq = 0;
+    const runId = this.allocateRunId();
+    return new Promise<Out>((resolve, reject) => {
+      this.pending.set(runId, { resolve: (value) => resolve(value as Out), reject });
+      try {
+        this.worker.postMessage({ runId, input });
+      } catch (error) {
+        this.pending.delete(runId);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
 
-  w.onmessage = (e: MessageEvent) => {
-    const { rid, result, error } = e.data as { rid: number; result?: unknown; error?: string };
-    const p = pending.get(rid);
-    if (!p) return;
-    pending.delete(rid);
-    if (error) p.reject(new Error(error));
-    else p.resolve(result);
-  };
+  async terminate(): Promise<void> {
+    this.dispose(new Error(`Worker ${this.id} terminated`));
+  }
 
-  return {
-    id,
-    run<Out, In>(input: In): Promise<Out> {
-      const rid = ++rseq;
-      return new Promise<Out>((resolve, reject) => {
-        pending.set(rid, { resolve: resolve as (v: unknown) => void, reject });
-        w.postMessage({ rid, input });
-      });
-    },
-    terminate() {
-      w.terminate();
-      // Without this, any awaited run() outstanding at terminate time would
-      // hang forever — the worker is dead, nothing resolves the promise.
-      const err = new Error("Worker terminated");
-      for (const p of pending.values()) p.reject(err);
-      pending.clear();
-      return Promise.resolve();
-    },
-  };
+  private onMessage(raw: unknown): void {
+    const frame = parseWorkerResponse(raw);
+    if (!frame) {
+      this.dispose(new Error("Web Worker sent an invalid response"));
+      return;
+    }
+    const call = this.pending.get(frame.runId);
+    if (!call) return;
+    this.pending.delete(frame.runId);
+    if (frame.ok) call.resolve(frame.value);
+    else call.reject(new Error(typeof frame.value === "string" ? frame.value : "Worker failed"));
+  }
+
+  private allocateRunId(): number {
+    for (;;) {
+      this.nextRunId = this.nextRunId >= Number.MAX_SAFE_INTEGER ? 1 : this.nextRunId + 1;
+      if (!this.pending.has(this.nextRunId)) return this.nextRunId;
+    }
+  }
+
+  private dispose(error: Error): void {
+    if (this.terminated) return;
+    this.terminated = true;
+    workerIds.delete(this.id);
+    this.worker.terminate();
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
+    for (const call of this.pending.values()) call.reject(error);
+    this.pending.clear();
+  }
 }
 
-function isBunWorkerAvailable(): boolean {
-  return (
-    typeof (globalThis as { Worker?: unknown }).Worker === "function" &&
-    !(globalThis as { __tynd_lite__?: unknown }).__tynd_lite__
+function spawnWebWorker(script: string): WorkerHandle {
+  const WorkerConstructor = (globalThis as { Worker?: typeof Worker }).Worker;
+  if (typeof WorkerConstructor !== "function") {
+    throw new Error("workers.spawn: Web Worker is unavailable in this renderer");
+  }
+  if (workerIds.size >= MAX_WORKERS) {
+    throw new Error(`workers.spawn: worker limit reached (max ${MAX_WORKERS})`);
+  }
+  if (!script.trim()) throw new Error("workers.spawn: task source is empty");
+
+  const id = allocateWorkerId();
+  // A `blob:` URL, not `data:`: the default app CSP lists `blob:` under
+  // `worker-src` but would refuse a `data:` worker script.
+  const url = URL.createObjectURL(
+    new Blob([createWorkerTaskScript(script)], { type: "application/javascript" }),
   );
+  let worker: Worker;
+  try {
+    worker = new WorkerConstructor(url);
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
+  }
+  return new ManagedWebWorker(id, worker, url);
 }
 
+/** Frontend bindings for sandboxed Web Workers. */
 export const workers = {
   /**
    * Spawn a Worker that runs `taskFn` against the input passed to `run()`.
-   *
    * IMPORTANT: `taskFn` must be PURE — it is serialized via `.toString()`
    * and re-evaluated inside a fresh Worker context. Any closure over
    * external variables is silently lost (the captured names will be
    * `undefined` at runtime). Pass values via the `run()` input parameter
    * instead. Native functions (e.g. `Math.max`) cannot be serialized and
    * are rejected at spawn time.
-   *
    * String form (`workers.spawn("(input) => …")`) skips the closure check
    * — useful when you've pre-built the source yourself.
    */
-  async spawn(taskFn: string | ((input: unknown) => unknown)): Promise<WorkerHandle> {
+  async spawn<In = unknown, Out = unknown>(
+    taskFn: string | ((input: In) => Out | Promise<Out>),
+  ): Promise<WorkerHandle> {
     const script = typeof taskFn === "string" ? taskFn : validateTaskFn(taskFn);
-    if (isBunWorkerAvailable()) return spawnBunWorker(script);
-    const { id } = await osCall<{ id: number }>("workers", "spawn", { script });
-    return {
-      id,
-      run: <Out, In>(input: In) => osCall<Out>("workers", "run", { id, input }),
-      terminate: () => osCall<void>("workers", "terminate", { id }),
-    };
+    return spawnWebWorker(script);
   },
   list(): Promise<number[]> {
-    if (isBunWorkerAvailable()) return Promise.resolve([]);
-    return osCall("workers", "list");
+    return Promise.resolve([...workerIds].sort((a, b) => a - b));
   },
 };

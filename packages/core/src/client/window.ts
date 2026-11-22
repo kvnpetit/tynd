@@ -1,165 +1,40 @@
 import { tynd } from "../logger";
-import { osCall } from "./_internal";
-import type { Monitor } from "./monitor";
+import { currentWebviewLabel, currentWindowLabel, osCall } from "./_internal";
+import { positionWindowAt } from "./window-position";
+import type {
+  CloseRequestedEvent,
+  CursorIcon,
+  DragDropEvent,
+  DragOverEvent,
+  NavigationEvent,
+  PageLoadEvent,
+  ResizeDirection,
+  WindowEventBase,
+  WindowPosition,
+  WindowPreset,
+  WindowSize,
+} from "./window-types";
 
-/**
- * Heuristic taskbar / menu-bar thickness used when the host's `Monitor` API
- * does not report a usable `workArea`. Values are in *logical* pixels.
- *
- * Real workarea sizes vary by OS theme + DPI; these are conservative defaults
- * that keep the window from clipping under the bar in the common case. Apps
- * that need pixel-accurate tray placement should track the cursor in their
- * own `tray:click` handler instead.
- */
-const TASKBAR_HEURISTIC_PX = {
-  win: 40,
-  macos: 25,
-  linux: 32,
-} as const;
-
-function detectTaskbarHeight(): number {
-  if (typeof navigator === "undefined") return TASKBAR_HEURISTIC_PX.win;
-  const ua = navigator.userAgent || "";
-  if (ua.includes("Mac")) return TASKBAR_HEURISTIC_PX.macos;
-  if (ua.includes("Linux")) return TASKBAR_HEURISTIC_PX.linux;
-  return TASKBAR_HEURISTIC_PX.win;
-}
-
-export type WindowPreset =
-  | "topLeft"
-  | "topRight"
-  | "topCenter"
-  | "leftCenter"
-  | "rightCenter"
-  | "bottomLeft"
-  | "bottomRight"
-  | "bottomCenter"
-  | "center"
-  | "trayLeft"
-  | "trayRight"
-  | "trayCenter"
-  | "trayBottomCenter";
-
-export interface WindowSize {
-  width: number;
-  height: number;
-}
-
-export interface WindowPosition {
-  x: number;
-  y: number;
-}
-
-export interface CloseRequestedEvent {
-  /** Cancel the pending close. Must be called synchronously inside the handler. */
-  preventDefault(): void;
-}
-
-export interface CreateWindowOptions {
-  /** Unique label identifying the window (used by close / event filtering). */
-  label: string;
-  /** Override URL (e.g. "/settings"). Defaults to the primary window's entry. */
-  url?: string;
-  title?: string;
-  width?: number;
-  height?: number;
-  resizable?: boolean;
-  decorations?: boolean;
-  alwaysOnTop?: boolean;
-  /** Custom User-Agent string for requests issued by this webview. */
-  userAgent?: string;
-  /**
-   * Attach this window to a parent (by label) as a modal / owned child.
-   * Windows + macOS: native owner window; Linux: degrades to a regular
-   * always-on-top window (tao exposes no equivalent).
-   */
-  modalTo?: string;
-  /** Hide the window automatically when it loses focus (popover pattern). */
-  hideOnFocusLost?: boolean;
-  /** Hide the window automatically when the user presses Escape. */
-  hideOnEscape?: boolean;
-}
-
-export interface NavigationEvent extends WindowEventBase {
-  url: string;
-  /** `false` when the security policy blocked this navigation. */
-  allowed: boolean;
-}
-
-export interface PageLoadEvent extends WindowEventBase {
-  phase: "started" | "finished";
-  url: string;
-}
-
-export interface WindowEventBase {
-  label: string;
-}
-
-export interface DragDropEvent extends WindowEventBase {
-  /** Native OS file paths. */
-  paths: string[];
-  /** Cursor position relative to the webview top-left, logical pixels. */
-  x: number;
-  y: number;
-}
-
-export interface DragOverEvent extends WindowEventBase {
-  x: number;
-  y: number;
-}
-
-export type CursorIcon =
-  | "default"
-  | "crosshair"
-  | "hand"
-  | "arrow"
-  | "move"
-  | "text"
-  | "wait"
-  | "help"
-  | "progress"
-  | "notAllowed"
-  | "contextMenu"
-  | "cell"
-  | "verticalText"
-  | "alias"
-  | "copy"
-  | "noDrop"
-  | "grab"
-  | "grabbing"
-  | "allScroll"
-  | "zoomIn"
-  | "zoomOut"
-  | "eResize"
-  | "nResize"
-  | "neResize"
-  | "nwResize"
-  | "sResize"
-  | "seResize"
-  | "swResize"
-  | "wResize"
-  | "ewResize"
-  | "nsResize"
-  | "neswResize"
-  | "nwseResize"
-  | "colResize"
-  | "rowResize";
-
-export type ResizeDirection =
-  | "east"
-  | "north"
-  | "northEast"
-  | "northWest"
-  | "south"
-  | "southEast"
-  | "southWest"
-  | "west";
+export type {
+  CloseRequestedEvent,
+  CursorIcon,
+  DownloadPolicy,
+  DragDropEvent,
+  DragOverEvent,
+  NavigationEvent,
+  NewWindowPolicy,
+  PageLoadEvent,
+  ResizeDirection,
+  WindowEventBase,
+  WindowPosition,
+  WindowPreset,
+  WindowSize,
+} from "./window-types";
 
 declare global {
   interface Window {
-    __TYND_WINDOW_LABEL__?: string;
     /**
-     * Non-standard but supported in Chromium (WebView2) and WKWebView.
+     * Chromium/WebKit-specific but supported in WebView2 and WKWebView.
      * Returns `true` when a match was found and scrolled into view.
      */
     find?: (
@@ -174,11 +49,6 @@ declare global {
   }
 }
 
-/** Label of the current window. Defaults to "main" for the primary window. */
-function getWindowLabel(): string {
-  return typeof window !== "undefined" ? (window.__TYND_WINDOW_LABEL__ ?? "main") : "main";
-}
-
 /**
  * Subscribe to a `window:<event>`. OS events are broadcast to every webview;
  * the helper filters by the current window's label so handlers only fire for
@@ -189,7 +59,7 @@ function onWindow<T extends WindowEventBase | undefined>(
   handler: (data: T) => void,
   opts?: { anyWindow?: boolean },
 ): () => void {
-  const self = getWindowLabel();
+  const self = currentWindowLabel();
   return window.__tynd__.os_on(`window:${event}`, (raw) => {
     const data = raw as T;
     if (!opts?.anyWindow) {
@@ -203,6 +73,19 @@ function onWindow<T extends WindowEventBase | undefined>(
   });
 }
 
+/** Subscribe to a `webview:<event>`, filtered to the current webview's label. */
+function onWebview<T extends { label: string }>(
+  event: string,
+  handler: (data: T) => void,
+): () => void {
+  return window.__tynd__.os_on(`webview:${event}`, (raw) => {
+    const data = raw as T;
+    if (data.label !== currentWebviewLabel()) return;
+    handler(data);
+  });
+}
+
+/** Frontend bindings for the host's `window` API (sizing, focus, fullscreen, drag, events). */
 export const tyndWindow = {
   setTitle(title: string): Promise<void> {
     return osCall("window", "setTitle", { title });
@@ -389,11 +272,9 @@ export const tyndWindow = {
    * Move + resize to one of 13 presets, anchored on the current monitor.
    * Matches Tauri's WindowPositioner — useful for HUDs, quick pickers, or
    * panels that want consistent placement on every display.
-   *
    * All coordinates are in LOGICAL pixels (CSS pixels, divided by
    * devicePixelRatio). The host's `Monitor.size` / `Monitor.position` are
    * in physical pixels and we divide by `Monitor.scale` here.
-   *
    * The four `tray*` presets are *approximations* of the OS tray icon
    * area — there is no cross-OS API that reports the real tray bounds, so
    * we anchor to the nearest monitor corner with a heuristic taskbar
@@ -401,94 +282,7 @@ export const tyndWindow = {
    * cursor inside their own `tray:click` handler.
    */
   async positionAt(preset: WindowPreset, padding = 20): Promise<void> {
-    const [current, self] = await Promise.all([
-      osCall<Monitor | null>("window", "currentMonitor"),
-      osCall<WindowSize>("window", "getOuterSize"),
-    ]);
-    if (!current) return;
-    const scale = current.scale || 1;
-    // High-DPI multi-monitor: physical pixel rounding can shift tray
-    // placement by a few pixels — flag once so devs know not to depend
-    // on pixel-perfect alignment when scale != 1.
-    if (
-      scale !== 1 &&
-      (preset === "trayLeft" ||
-        preset === "trayRight" ||
-        preset === "trayCenter" ||
-        preset === "trayBottomCenter")
-    ) {
-      tynd.warn(
-        `window.positionAt("${preset}"): scale=${scale} — tray placement is approximate on multi-DPI setups`,
-      );
-    }
-
-    const monitorW = current.size.width / scale;
-    const monitorH = current.size.height / scale;
-    const mx = current.position.x / scale;
-    const my = current.position.y / scale;
-    const taskbar = detectTaskbarHeight();
-
-    const { width: w, height: h } = self;
-    let x = mx;
-    let y = my;
-    switch (preset) {
-      case "topLeft":
-        x = mx + padding;
-        y = my + padding;
-        break;
-      case "topRight":
-        x = mx + monitorW - w - padding;
-        y = my + padding;
-        break;
-      case "topCenter":
-        x = mx + (monitorW - w) / 2;
-        y = my + padding;
-        break;
-      case "leftCenter":
-        x = mx + padding;
-        y = my + (monitorH - h) / 2;
-        break;
-      case "rightCenter":
-        x = mx + monitorW - w - padding;
-        y = my + (monitorH - h) / 2;
-        break;
-      case "bottomLeft":
-        x = mx + padding;
-        y = my + monitorH - h - padding;
-        break;
-      case "bottomRight":
-        x = mx + monitorW - w - padding;
-        y = my + monitorH - h - padding;
-        break;
-      case "bottomCenter":
-        x = mx + (monitorW - w) / 2;
-        y = my + monitorH - h - padding;
-        break;
-      case "center":
-        x = mx + (monitorW - w) / 2;
-        y = my + (monitorH - h) / 2;
-        break;
-      // Tray presets — approximate, no cross-OS tray bounds API.
-      // We anchor to monitor edges and inset by a heuristic taskbar
-      // height to stay clear of the system bar.
-      case "trayLeft":
-        x = mx;
-        y = my + taskbar;
-        break;
-      case "trayRight":
-        x = mx + monitorW - w;
-        y = my + taskbar;
-        break;
-      case "trayCenter":
-        x = mx + (monitorW - w) / 2;
-        y = my + taskbar;
-        break;
-      case "trayBottomCenter":
-        x = mx + (monitorW - w) / 2;
-        y = my + monitorH - h - taskbar;
-        break;
-    }
-    await osCall("window", "setPosition", { x, y });
+    return positionWindowAt(preset, padding);
   },
 
   /** Override the window theme (`system` follows the OS). */
@@ -518,9 +312,9 @@ export const tyndWindow = {
     return osCall("window", "setSkipTaskbar", { skip });
   },
   /**
-   * Dock / taskbar badge. `label` is displayed on macOS; `count` is rendered
-   * on Linux (Unity). Windows uses taskbar overlay icons and is unsupported
-   * here.
+   * Dock / launcher badge. macOS shows `label` (or `count` as text when no
+   * label is given); Linux (Unity) shows `count` and rejects a label-only
+   * call. Rejects on Windows. Call with `{}` to clear.
    */
   setBadge(options: { label?: string; count?: number }): Promise<void> {
     return osCall("window", "setBadge", options);
@@ -529,7 +323,7 @@ export const tyndWindow = {
   setFocusable(focusable: boolean): Promise<void> {
     return osCall("window", "setFocusable", { focusable });
   },
-  /** Windows only — disable mouse + keyboard input. Other OS: no-op. */
+  /** Windows only — disable mouse + keyboard input. Rejects on other OS. */
   setEnabled(enabled: boolean): Promise<void> {
     return osCall("window", "setEnabled", { enabled });
   },
@@ -594,26 +388,7 @@ export const tyndWindow = {
 
   /** Label of the current window (`"main"` for the primary window). */
   label(): string {
-    return getWindowLabel();
-  },
-
-  /** Open a secondary window. Labels must be unique and not `"main"`. */
-  create(options: CreateWindowOptions): Promise<void> {
-    return osCall("window", "create", options);
-  },
-  /** Close a secondary window by label. Closing `"main"` is rejected. */
-  close(label: string): Promise<void> {
-    return osCall("window", "close", { label });
-  },
-  /** Close this window. No-op on the primary window (use `app.exit()` instead). */
-  closeSelf(): Promise<void> {
-    const label = getWindowLabel();
-    if (label === "main") return Promise.resolve();
-    return osCall("window", "close", { label });
-  },
-  /** List labels of all open windows (primary first). */
-  all(): Promise<string[]> {
-    return osCall("window", "all");
+    return currentWindowLabel();
   },
 
   onResized(handler: (e: WindowSize & WindowEventBase) => void): () => void {
@@ -676,22 +451,15 @@ export const tyndWindow = {
   /**
    * Fires before each navigation. Emits `allowed: false` when the active
    * `security` policy blocked the URL. Observation-only — to block a URL,
-   * configure `security.configure({ http: { deny: [...] } })` instead.
+   * configure `app.start({ security: { http: { deny: [...] } } })` in the
+   * trusted backend instead.
    */
   onNavigation(handler: (e: NavigationEvent) => void): () => void {
-    return window.__tynd__.os_on("webview:navigation", (raw) => {
-      const data = raw as NavigationEvent;
-      if (data.label !== getWindowLabel()) return;
-      handler(data);
-    });
+    return onWebview("navigation", handler);
   },
   /** Fires on document start + finish load. */
   onPageLoad(handler: (e: PageLoadEvent) => void): () => void {
-    return window.__tynd__.os_on("webview:page-load", (raw) => {
-      const data = raw as PageLoadEvent;
-      if (data.label !== getWindowLabel()) return;
-      handler(data);
-    });
+    return onWebview("page-load", handler);
   },
   /** Files dropped onto the window. `paths` are native OS paths. */
   onDrop(handler: (e: DragDropEvent) => void): () => void {
@@ -703,7 +471,7 @@ export const tyndWindow = {
    * synchronously in the handler. Filtered to the current window's label.
    */
   onCloseRequested(handler: (event: CloseRequestedEvent) => void): () => void {
-    const self = getWindowLabel();
+    const self = currentWindowLabel();
     return window.__tynd__.os_on("window:close-requested", (raw) => {
       // Strict match — unlabeled events (protocol drift) don't leak to every
       // subscriber and accidentally cancel closes that weren't theirs.
@@ -714,7 +482,9 @@ export const tyndWindow = {
         preventDefault() {
           if (prevented) return;
           prevented = true;
-          void osCall("window", "cancelClose");
+          osCall("window", "cancelClose").catch((e: unknown) => {
+            tynd.warn(`window.cancelClose failed: ${e instanceof Error ? e.message : String(e)}`);
+          });
         },
       });
     });

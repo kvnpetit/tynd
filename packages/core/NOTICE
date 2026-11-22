@@ -11,4 +11,7 @@ You may obtain a copy of the License at
 THIRD-PARTY SOFTWARE INCLUDED
 ================================================================================
 
+- c12              (MIT)              — https://github.com/unjs/c12
+- devalue          (MIT)              — https://github.com/Rich-Harris/devalue
+- pathe            (MIT)              — https://github.com/unjs/pathe
 - valibot          (MIT)              — https://github.com/fabian-hiller/valibot

@@ -1,19 +1,16 @@
 /**
  * Discriminated error type for IPC failures crossing the host boundary.
- *
  * `TyndIpcError` lets frontends `switch` on a stable `code` instead of
  * substring-matching `error.message`. Surfaced everywhere a backend RPC
  * call fails: unknown function, args validation, handler throw, cancel,
  * timeout, security policy, host crash, wire decode error.
- *
- * Wire envelope: the full runtime serializes errors as
+ * Wire envelope: the Bun runtime serializes errors as
  *   `__TYND_IPC_ERR__:<json>`
  * where `<json>` is a `{ name, code, message, fn? }` payload — the host
  * shim wraps this verbatim in `new Error(message)`. The client-side call
  * proxy detects the sentinel prefix in `_internal.ts::decodeIpcError` and
- * reconstructs the typed instance. Errors without the sentinel (lite
- * runtime, OS calls, legacy backends) degrade to plain `Error`.
- *
+ * reconstructs the typed instance. Errors without the sentinel (OS calls)
+ * degrade to plain `Error`.
  * @example
  *   try {
  *     await api.greet("Alice")
@@ -57,9 +54,9 @@ export type TyndIpcErrorCode =
   | "CANCELLED"
   /** Call exceeded its `withTimeout(...)` window. */
   | "TIMEOUT"
-  /** ACL / `security.configure` policy denied the call. */
+  /** Startup ACL / `app.start({ security })` policy denied the call. */
   | "PERMISSION_DENIED"
-  /** Host process died mid-call (Bun crashed, QuickJS panicked, …). */
+  /** Host process died mid-call (for example, Bun crashed). */
   | "BACKEND_DEAD"
   /** Wire-level encode/decode failure (devalue / JSON / base64). */
   | "PROTOCOL_ERROR";

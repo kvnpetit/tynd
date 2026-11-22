@@ -4,17 +4,13 @@
  * Ambient types for globals + bundler env injected by the Tynd host /
  * CLI. Reference this file from your frontend `tsconfig.json` (added
  * automatically by `tynd init`):
- *
  *   {
  *     "compilerOptions": {
  *       "types": ["@tynd/core/env"]
  *     }
  *   }
- *
  * — or, equivalently, drop a triple-slash directive in `src/global.d.ts`:
- *
  *   /// <reference types="@tynd/core/env" />
- *
  * Without this file the typed shim members below exist only inside
  * `_internal.ts`; declaring them globally lets app code read the native
  * runtime metadata and the bundler-injected `import.meta.env` flags
@@ -24,8 +20,8 @@
 declare global {
   /**
    * Native bridge surface exposed by the host before any user JS runs.
-   * Available in both `tynd-full` (Bun + WebView2 / WKWebView / WebKitGTK)
-   * and `tynd-lite` (QuickJS-driven) contexts. Always check for presence
+   * Available in Tynd Bun host contexts.
+   * Always check for presence
    * (`if (window.__tynd__)`) — this object is `undefined` in plain
    * browser, in test, in SSR, and during hot-module replacement before
    * the shim re-installs.
@@ -46,19 +42,20 @@ declare global {
       off: (name: string, handler: (payload: unknown) => void) => void;
     };
 
-    /** `"full"` (Bun host) or `"lite"` (QuickJS host). Set by the bundler. */
-    __TYND_RUNTIME__?: "full" | "lite";
+    /** Bun is Tynd's only JavaScript runtime. */
+    __TYND_RUNTIME__?: "bun";
     /** Enabled in dev (`tynd dev`); falsy in production builds. */
     __tynd_dev__?: boolean;
     /** Label of the current window (`"main"` for the primary window). */
     __TYND_WINDOW_LABEL__?: string;
+    /** Current webview label. Equals window label for top-level webviews. */
+    __TYND_WEBVIEW_LABEL__?: string;
   }
 
   /**
-   * Bundler-time env injected by the CLI's `bundle.ts` (DEV/PROD/MODE
-   * mirror Vite's contract) plus a tynd-specific version pin. App code
-   * can branch on these without polluting `process.env` (which is empty
-   * in webview).
+   * Frontend build-tool env (`DEV`/`PROD`/`MODE` mirror Vite's contract)
+   * plus an optional application-defined version pin. App code can use these
+   * without polluting `process.env` (which is empty in a webview).
    */
   interface ImportMeta {
     readonly env: {
@@ -69,7 +66,7 @@ declare global {
       /** `"development" | "production"` — convenient for switch statements. */
       readonly MODE: "development" | "production";
       /** Version of `@tynd/core` the bundle was built against. */
-      readonly TYND_VERSION: string;
+      readonly TYND_VERSION?: string;
     };
   }
 }

@@ -4,7 +4,7 @@ The backend API and frontend client for [Tynd](https://github.com/tynd-apps/tynd
 
 ## Prerequisites
 
-**[Bun](https://bun.sh) is required** during development. Tynd's backend runs on Bun (full mode) or an embedded JS engine via `@tynd/cli`'s bundler (lite mode); Node.js is not a supported substitute. Install Bun once:
+**[Bun](https://bun.sh) is required** during development. Every Tynd backend runs on Bun; Node.js is not a supported substitute. Install Bun once:
 
 ```bash
 # macOS / Linux / WSL
@@ -14,12 +14,22 @@ curl -fsSL https://bun.sh/install | bash
 powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
+**[Rust](https://rustup.rs) 1.95 or newer** is also required, with the platform build tools: `tynd dev` and `tynd build` compile each app's native host with Cargo. You write no Rust. See [Installation](https://tynd-apps.github.io/tynd/docs/v1.0/getting-started/installation).
+
+```bash
+# macOS / Linux
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Windows: run rustup-init.exe from https://rustup.rs
+```
+
 End users of built apps need nothing — the runtime ships inside the binary.
 
 ## Install
 
 ```bash
-bun add @tynd/core @tynd/host
+bun add @tynd/core
+bun add -d @tynd/cli @tynd/host-src
 ```
 
 ## Two entrypoints
@@ -29,12 +39,11 @@ bun add @tynd/core @tynd/host
 import { app, createEmitter } from "@tynd/core"
 
 // src/App.tsx  (WebView)
-import { createBackend, fs, dialog /* …and more core APIs */ } from "@tynd/core/client"
+import { createBackend, tyndWindow /* ...and more core client APIs */ } from "@tynd/core/client"
 
-// Plugins bring their own import path — preset runtimes bundle every
-// first-party plugin; your code still imports from the plugin package so
-// third-party plugins drop in with the same shape.
-import { sql } from "@tynd/plugin-sql/client"
+// Plugins bring their own import path. Only the plugins your app declares
+// are compiled into its host.
+import { terminal } from "@tynd/plugin-terminal/client"
 ```
 
 ## Backend — `app.start()` + typed emitters
@@ -61,46 +70,104 @@ Every exported function becomes callable from the frontend. No codegen.
 ## Frontend — zero-codegen typed RPC
 
 ```ts
-import { createBackend, fs, dialog } from "@tynd/core/client"
+import { createBackend } from "@tynd/core/client"
+import { dialog } from "@tynd/plugin-dialog/client"
+import { createStore } from "@tynd/plugin-store/client"
 import type * as backend from "../backend/main"
 
+const store = createStore("app")
 const api = createBackend<typeof backend>()
 const msg = await api.greet("Alice")   // string ✅ — types flow from backend
 api.on("ready", ({ message }) => console.log(message))
 
-// Direct OS APIs — bypass the backend
+// Direct OS APIs from official plugins — bypass the backend
 const file = await dialog.openFile()
-const bytes = await fs.readBinary(file!)
+await store.set("recent-file", file)
 ```
 
-## OS APIs (`@tynd/core/client`)
+## Core OS APIs (`@tynd/core/client`)
 
-Native integrations — identical surface in both `full` and `lite` modes:
+The core stays minimal: only what every app needs to run and talk to its
+backend.
 
-`app`, `dialog`, `tyndWindow`, `monitors`, `menu`, `clipboard`, `shell`, `notification`, `tray`, `process`, `fs` (+ watcher, handles, symlinks), `shortcuts`, `keyring`, `autolaunch`, `store`, `updater`, `log`, `power`, `security`, `os`, `path`, `http`, `websocket`, `sql`, `sidecar`, `terminal`, `compute`, `workers`, `singleInstance`.
+`app`, `tyndWindow`, `tyndWebview` (current window and webview), `monitors`,
+`log`, `security`, `os`, `path`, `workers`.
 
-Plus Web-standard re-exports (`fetch`, `WebSocket`, `crypto`, `URL`, `Blob`, `AbortController`, `TextEncoder`, …) so `import * as tynd from "@tynd/core/client"` gives you the whole namespace at once.
+Every other native capability is a host-backed official plugin. These plugins
+(`plugins/host/*` in the repo) declare the native host APIs they need, so the CLI compiles the matching
+Cargo features into the app's host. `tynd add <name>` installs one and lists it
+in `plugins`:
 
-**Full reference:** [API docs](https://tynd.kvnpetit.com/docs/api).
+```ts
+// tynd.config.ts
+export default {
+  plugins: ["@tynd/plugin-fs", "@tynd/plugin-updater"],
+  backend: "backend/main.ts",
+  frontendDir: "frontend",
+}
 
-## Runtime modes
+// frontend
+import { fs } from "@tynd/plugin-fs/client"
+import { updater } from "@tynd/plugin-updater/client"
+```
 
-`@tynd/core` runs on either of Tynd's two native hosts:
+Host-backed official plugins:
 
-| | `lite` | `full` |
+| Capability | Package | Client import |
 |---|---|---|
-| JS runtime | embedded interpreter, in-process | Bun, packed into the binary |
-| Binary size | ~6.5 MB + assets | ~44 MB (Bun compressed) |
-| Best for | most desktop apps | CPU-bound JS / npm native bindings |
+| Filesystem | `@tynd/plugin-fs` | `@tynd/plugin-fs/client` |
+| Host HTTP | `@tynd/plugin-http` | `@tynd/plugin-http/client` |
+| Updater | `@tynd/plugin-updater` | `@tynd/plugin-updater/client` |
+| WebSocket client | `@tynd/plugin-websocket` | `@tynd/plugin-websocket/client` |
+| Notifications | `@tynd/plugin-notification` | `@tynd/plugin-notification/client` |
+| System stats | `@tynd/plugin-system-stats` | `@tynd/plugin-system-stats/client` |
+| Window state | `@tynd/plugin-window-state` | `@tynd/plugin-window-state/client` |
+| Process exec/spawn | `@tynd/plugin-process` | `@tynd/plugin-process/client` |
+| Sidecars | `@tynd/plugin-sidecar` | `@tynd/plugin-sidecar/client` |
+| Global shortcuts | `@tynd/plugin-shortcuts` | `@tynd/plugin-shortcuts/client` |
+| Keyring | `@tynd/plugin-keyring` | `@tynd/plugin-keyring/client` |
+| Autolaunch | `@tynd/plugin-autolaunch` | `@tynd/plugin-autolaunch/client` |
+| Power monitor | `@tynd/plugin-power` | `@tynd/plugin-power/client` |
+| Vault | `@tynd/plugin-vault` | `@tynd/plugin-vault/client` |
+| Screenshot | `@tynd/plugin-screenshot` | `@tynd/plugin-screenshot/client` |
+| Network interfaces | `@tynd/plugin-network` | `@tynd/plugin-network/client` |
+| Deep links | `@tynd/plugin-deep-link` | `@tynd/plugin-deep-link/client` |
+| Biometric auth | `@tynd/plugin-biometric` | `@tynd/plugin-biometric/client` |
+| AppleScript/JXA | `@tynd/plugin-apple-script` | `@tynd/plugin-apple-script/client` |
+| Dialogs | `@tynd/plugin-dialog` | `@tynd/plugin-dialog/client` |
+| Clipboard | `@tynd/plugin-clipboard` | `@tynd/plugin-clipboard/client` |
+| Key-value store | `@tynd/plugin-store` | `@tynd/plugin-store/client` |
+| Tray | `@tynd/plugin-tray` | `@tynd/plugin-tray/client` |
+| Menus | `@tynd/plugin-menu` | `@tynd/plugin-menu/client` |
+| Secondary windows and child webviews | `@tynd/plugin-multiwindow` | `@tynd/plugin-multiwindow/client` |
+| Shell open | `@tynd/plugin-shell` | `@tynd/plugin-shell/client` |
+| Single instance | `@tynd/plugin-single-instance` | `@tynd/plugin-single-instance/client` |
+| Theme | `@tynd/plugin-theme` | `@tynd/plugin-theme/client` |
+| Key blocking | `@tynd/plugin-keys` | `@tynd/plugin-keys/client` |
+| CLI arguments | `@tynd/plugin-cli` | `@tynd/plugin-cli/client` |
+| Hashing and random bytes | `@tynd/plugin-compute` | `@tynd/plugin-compute/client` |
 
-The CLI's bundler swaps in the right module at build time via a `define`-based dead-code-elimination trick — only one runtime ships in any given binary.
+Other official plugins ship their own implementation instead of a host API,
+such as `@tynd/plugin-sql` or `@tynd/plugin-terminal`. Community (third-party)
+plugins are packages linked from
+their own repositories through npm/git dependencies; their manifest omits
+`tynd.kind`.
 
-See the [runtimes guide](https://tynd.kvnpetit.com/docs/runtimes).
+Other entry points: `@tynd/core/client/bridge` (`osCall`, `osOn`, `binFetch`, … — the host bridge plugin clients build on), `@tynd/core/plugin` (`definePlugin`, `createPluginClient`, no Bun or Node imports), `@tynd/core/testing` (`installTyndMock` for frontend unit tests) and `@tynd/core/env` (ambient types).
+
+**Full reference:** [API docs](https://tynd-apps.github.io/tynd/docs/v1.0/api).
+
+## Runtime
+
+`@tynd/core` always runs on Bun. Every app runs on a native host compiled for
+it with Cargo from `@tynd/host-src` (`tynd dev` uses the dev profile, `tynd build`
+release), with the core APIs plus the ones its plugins declare. No prebuilt host
+is published.
 
 ## Related packages
 
 - [`@tynd/cli`](https://www.npmjs.com/package/@tynd/cli) — `tynd create / dev / build / start`
-- [`@tynd/host`](https://www.npmjs.com/package/@tynd/host) — prebuilt native binaries (downloaded by postinstall)
+- [`@tynd/host-src`](https://www.npmjs.com/package/@tynd/host-src) — Rust host sources compiled into each app's host
 
 ## License
 

@@ -1,5 +1,6 @@
 import { osCall } from "./_internal";
 
+/** Description of one connected display. */
 export interface Monitor {
   /** OS-assigned monitor name (null on some Linux setups). */
   name: string | null;
@@ -12,6 +13,7 @@ export interface Monitor {
   isPrimary: boolean;
 }
 
+/** Frontend bindings for monitor enumeration and pointer queries. */
 export const monitors = {
   /** List every monitor connected to the system. */
   all(): Promise<Monitor[]> {

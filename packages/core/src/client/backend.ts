@@ -48,7 +48,6 @@ export type BackendClient<T> = ModuleFunctions<T> & {
 
 /**
  * Create a fully type-safe proxy to the backend.
- *
  * @example
  * import type * as backend from "../backend/main"
  * const api = createBackend<typeof backend>()
@@ -83,7 +82,7 @@ export function createBackend<T>(): BackendClient<T> {
           return () => window.__tynd__.off(event, wrapper);
         };
       }
-      return undefined;
+      return;
     },
   );
 }

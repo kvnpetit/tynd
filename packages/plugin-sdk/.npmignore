@@ -1,0 +1,15 @@
+# Belt-and-suspenders against Cargo build artefacts leaking into the
+# npm tarball. The package.json `files` field is the primary allowlist
+# (`native/**` + `native-macros/**`, the synced Rust SDK mirrors); this excludes the heavy `target/`
+# trees if a contributor ran `cargo build` before `npm pack` / publish.
+
+native/target/
+native-macros/target/
+**/target/
+
+# Local rust-analyzer / sccache scratch
+.cargo-cache/
+.rustc_info.json
+
+# Test scratch
+**/*.rs.bk

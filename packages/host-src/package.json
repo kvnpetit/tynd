@@ -1,10 +1,10 @@
 {
   "name": "@tynd/host-src",
   "version": "1.0.0",
-  "description": "Rust source of the Tynd host — consumed by the CLI when building `full-custom` or `lite-custom` runtimes locally.",
+  "description": "Self-contained Rust host and runtime sources for Tynd custom builds.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
-  "homepage": "https://tynd.kvnpetit.com/",
+  "homepage": "https://tynd-apps.github.io/tynd/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tynd-apps/tynd.git",
@@ -26,21 +26,25 @@
   "private": false,
   "tynd": {
     "hostSrc": "./native",
-    "crateName": "tynd_host"
+    "crateName": "tynd-host"
   },
   "scripts": {
     "sync": "bun run scripts/sync.ts",
-    "prepublishOnly": "bun run sync"
+    "lock": "bun run scripts/sync.ts",
+    "prepack": "bun run sync"
   },
   "files": [
     "native/**",
-    "scripts/**",
+    "!native/target/**",
     "README.md",
     "LICENSE",
     "NOTICE",
     "CHANGELOG.md"
   ],
   "devDependencies": {
-    "smol-toml": "^1.6.1"
+    "smol-toml": "^1.9.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

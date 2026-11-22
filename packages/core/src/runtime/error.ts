@@ -1,12 +1,10 @@
 /**
  * Single source of truth for "what does an error look like on the wire".
- *
  * SECURITY: errors crossing the IPC boundary are stringified to
  * `{name, message}` only. Stack frames are dropped on purpose — they often
  * embed absolute filesystem paths, env-resolved tokens, source-map hints,
  * or values from `Error()` constructors that the host should never receive.
- *
- * Both runtimes (`full` Bun + `lite` QuickJS) call this on every error
+ * Bun runtime calls this on every error
  * path that fans out to the host (return frame, yield-fail, frontend emit
  * dispatch). Keeping it centralized means a future change (e.g. add
  * `cause` chain stringification) lands in one place.
@@ -41,7 +39,7 @@ export function sanitizeError(e: unknown): SanitizedError {
   return { name: "Error", message: String(e) };
 }
 
-/** Convenience: just the message string, for legacy call sites. */
+/** Convenience: just the sanitized message, for call sites that only log or forward it. */
 export function sanitizedMessage(e: unknown): string {
   return sanitizeError(e).message;
 }

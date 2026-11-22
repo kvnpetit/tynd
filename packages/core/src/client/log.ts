@@ -1,11 +1,9 @@
 /**
  * File logger client. Mirrors the host's `os.log.*` dispatch table.
- *
- * The host writes JSON-lines to disk with size-based rotation. Calling
+ * The host writes JSON-lines to disk with size and UTC time rotation. Calling
  * `log.configure({...})` is opt-in: until then any `log.write()` is a
  * no-op above the default `info` threshold and starts a file at the
  * platform-default path (`<cache>/<exe>/app.log`) on first write.
- *
  * `captureConsole()` keeps the previous plugin's console-as-file
  * convenience: it patches `console.*` so DevTools still works, plus
  * forwards each call to `log.write` so the file sink mirrors the
@@ -15,6 +13,7 @@
 import { osCall } from "./_internal";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogRotation = "size" | "daily" | "hourly" | "both";
 
 export interface LogConfigureOptions {
   level?: LogLevel;
@@ -24,6 +23,11 @@ export interface LogConfigureOptions {
   maxBytes?: number;
   /** How many rotated copies to keep. Default 3. */
   maxFiles?: number;
+  /**
+   * Rotation trigger. `both` combines `maxBytes` and daily UTC rotation.
+   * Default: `size`.
+   */
+  rotation?: LogRotation;
 }
 
 let consoleRestore: (() => void) | null = null;

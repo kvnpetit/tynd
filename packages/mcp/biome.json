@@ -1,0 +1,8 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+  "root": false,
+  "extends": ["../../biome.json"],
+  "files": {
+    "includes": ["**/*.{js,mjs,cjs,ts,json,jsonc}", "!catalog/plugin-schemas"]
+  }
+}

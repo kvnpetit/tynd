@@ -24,7 +24,7 @@ This distribution includes code from the following projects, each under
 its own license. Full license texts are available on the respective
 project pages.
 
-## Rust runtime hosts (tynd-host, tynd-full, tynd-lite)
+## Rust runtime hosts (tynd-host, tynd-runtime)
 
 - wry              (Apache-2.0 / MIT) — https://github.com/tauri-apps/wry
 - tao              (Apache-2.0 / MIT) — https://github.com/tauri-apps/tao
@@ -36,13 +36,11 @@ project pages.
 - pollster         (Apache-2.0 / MIT) — https://github.com/zesterer/pollster
 - notify-rust      (Apache-2.0 / MIT) — https://github.com/hoodie/notify-rust
 - image            (Apache-2.0 / MIT) — https://github.com/image-rs/image
-- rquickjs         (MIT)              — https://github.com/DelSkayn/rquickjs
 - serde            (Apache-2.0 / MIT) — https://github.com/serde-rs/serde
 - serde_json       (Apache-2.0 / MIT) — https://github.com/serde-rs/json
 - tempfile         (Apache-2.0 / MIT) — https://github.com/Stebalien/tempfile
 - dirs             (Apache-2.0 / MIT) — https://github.com/dirs-dev/dirs-rs
 - zstd             (MIT)              — https://github.com/gyscos/zstd-rs
-- mimalloc         (MIT)              — https://github.com/purpleprotocol/mimalloc_rust
 - base64           (Apache-2.0 / MIT) — https://github.com/marshallpierce/rust-base64
 - ureq             (Apache-2.0 / MIT) — https://github.com/algesten/ureq
 - portable-pty     (MIT)              — https://github.com/wez/wezterm/tree/main/pty
@@ -63,50 +61,37 @@ project pages.
 - windows-sys             (Apache-2.0 / MIT) — https://github.com/microsoft/windows-rs
 - rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
 - tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
-- rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite
 - parking_lot      (Apache-2.0 / MIT) — https://github.com/Amanieu/parking_lot
 - dashmap          (MIT)              — https://github.com/xacrimon/dashmap
 - ahash            (Apache-2.0 / MIT) — https://github.com/tkaitchuck/ahash
 
-QuickJS (bundled via rquickjs) is (C) Fabrice Bellard and Charlie Gordon,
-licensed under the MIT License.
-
-SQLite (bundled via rusqlite) is in the public domain — https://www.sqlite.org/copyright.html
-
-## TypeScript CLI (@tynd/cli)
-
-- cac              (MIT)              — https://github.com/cacjs/cac
-- @clack/prompts   (MIT)              — https://github.com/natemoo-re/clack
-- @resvg/resvg-js  (MPL-2.0)          — https://github.com/yisibl/resvg-js
-- resedit          (MIT)              — https://github.com/jet2jet/resedit-js
-- valibot          (MIT)              — https://github.com/fabian-hiller/valibot
-- adm-zip          (MIT)              — https://github.com/cthackers/adm-zip
-- tar-stream       (MIT)              — https://github.com/mafintosh/tar-stream
 
 ## TypeScript core (@tynd/core)
 
+- c12              (MIT)              — https://github.com/unjs/c12
+- devalue          (MIT)              — https://github.com/Rich-Harris/devalue
+- pathe            (MIT)              — https://github.com/unjs/pathe
 - valibot          (MIT)              — https://github.com/fabian-hiller/valibot
 
-## Build-time runtime (distributed with tynd-full apps)
+## Build-time runtime (distributed with tynd-runtime apps)
 
-Applications packaged with `tynd build` and the `full` runtime embed a
+Applications packaged with `tynd build` embed a
 copy of the Bun runtime:
 
 - Bun              (MIT)              — https://github.com/oven-sh/bun
 
 ## Tynd plugin native crates
 
-Plugins ship their own Rust native crates; each is statically linked into
-the app's host binary when the plugin is enabled. All are licensed under
-`Apache-2.0 OR MIT` and live at https://github.com/tynd-apps/plugins.
+Native plugins ship Rust crates and are statically linked into the app's
+host binary when enabled. Bun/TypeScript plugins add no Rust crate. They live
+at https://github.com/tynd-apps/plugins.
 
-- tynd_plugin_audio
-- tynd_plugin_command_palette
-- tynd_plugin_gpu
-- tynd_plugin_llm
-- tynd_plugin_screen_rec
-- tynd_plugin_sql
-- tynd_plugin_terminal
-- tynd_plugin_tts
-- tynd_plugin_wgpu
-- tynd_plugin_whisper
+- tynd-plugin-audio
+- tynd-plugin-command-palette
+- tynd-plugin-gpu
+- tynd-plugin-llm
+- tynd-plugin-screen-rec
+- tynd-plugin-terminal
+- tynd-plugin-tts
+- tynd-plugin-wgpu
+- tynd-plugin-whisper

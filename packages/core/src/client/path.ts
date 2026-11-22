@@ -3,21 +3,20 @@
  * and forward to the matching `pathe` backend. `pathe` ships pure-JS
  * implementations of both flavours (no `node:path` runtime dep) so the
  * helpers work inside the WebView.
+ * Callers use `path.join`, `path.dirname`, etc. without knowing about pathe.
  *
- * Public signature is preserved for back-compat: callers keep using
- * `path.join`, `path.dirname`, etc. without knowing about pathe.
+ * Contract: every helper that builds a path outputs `/` as the separator,
+ * Windows included (pathe normalizes `\` to `/`; Windows APIs accept it).
+ * Inputs may use either separator. There is deliberately no `sep()`: a native
+ * `\` would contradict what `join` produces.
  */
 
 import { posix, win32 } from "pathe";
 
 const _isWindows = typeof navigator !== "undefined" && /win/i.test(navigator.platform ?? "");
 const _impl = _isWindows ? win32 : posix;
-const _sep: "/" | "\\" = _isWindows ? "\\" : "/";
 
 export const path = {
-  sep(): "/" | "\\" {
-    return _sep;
-  },
   join(...parts: string[]): string {
     // Filter empties to match the previous behaviour (pathe.join would
     // otherwise emit a `.` for `join("")`).
