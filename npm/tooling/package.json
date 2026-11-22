@@ -1,0 +1,52 @@
+{
+  "name": "@tynd/tooling",
+  "version": "1.0.0",
+  "description": "Native Rust binaries for the Tynd CLI, MCP server, and application bundler.",
+  "license": "Apache-2.0",
+  "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
+  "homepage": "https://tynd-apps.github.io/tynd/",
+  "funding": "https://github.com/sponsors/kvnpetit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "directory": "npm/tooling"
+  },
+  "bugs": {
+    "url": "https://github.com/tynd-apps/tynd/issues"
+  },
+  "keywords": [
+    "tynd",
+    "cli",
+    "mcp",
+    "bundler",
+    "native",
+    "rust"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "private": false,
+  "type": "module",
+  "sideEffects": false,
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "optionalDependencies": {
+    "@tynd/tooling-darwin-x64": "1.0.0",
+    "@tynd/tooling-darwin-arm64": "1.0.0",
+    "@tynd/tooling-linux-x64": "1.0.0",
+    "@tynd/tooling-linux-arm64": "1.0.0",
+    "@tynd/tooling-win32-x64": "1.0.0",
+    "@tynd/tooling-win32-arm64": "1.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

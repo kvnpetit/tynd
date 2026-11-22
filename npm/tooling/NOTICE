@@ -1,0 +1,57 @@
+@tynd/tooling
+Copyright 2026 Kevin Petit (@kvnpetit)
+
+This product includes software developed by Kevin Petit (@kvnpetit) and
+the Tynd contributors (https://github.com/tynd-apps/tynd).
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+================================================================================
+NATIVE EXECUTABLES
+================================================================================
+
+The selected `@tynd/tooling-<os>-<arch>` package contains:
+
+- `tynd`
+- `tynd-mcp`
+- `tynd-bundler`
+
+================================================================================
+THIRD-PARTY RUST SOFTWARE
+================================================================================
+
+The native executables include software from the following projects:
+
+- clap             (Apache-2.0 / MIT) — https://github.com/clap-rs/clap
+- anyhow           (Apache-2.0 / MIT) — https://github.com/dtolnay/anyhow
+- serde            (Apache-2.0 / MIT) — https://github.com/serde-rs/serde
+- serde_json       (Apache-2.0 / MIT) — https://github.com/serde-rs/json
+- serde_yaml       (Apache-2.0 / MIT) — https://github.com/dtolnay/serde-yaml
+- toml             (Apache-2.0 / MIT) — https://github.com/toml-rs/toml
+- tracing          (Apache-2.0 / MIT) — https://github.com/tokio-rs/tracing
+- ctrlc            (Apache-2.0 / MIT) — https://github.com/Detegr/rust-ctrlc
+- dirs             (MIT / Apache-2.0) — https://github.com/dirs-dev/dirs-rs
+- interprocess     (Apache-2.0 / MIT) — https://github.com/kotauskas/interprocess
+- ureq             (Apache-2.0 / MIT) — https://github.com/algesten/ureq
+- regex            (Apache-2.0 / MIT) — https://github.com/rust-lang/regex
+- semver           (Apache-2.0 / MIT) — https://github.com/dtolnay/semver
+- tempfile         (Apache-2.0 / MIT) — https://github.com/Stebalien/tempfile
+- walkdir          (MIT / Unlicense)  — https://github.com/BurntSushi/walkdir
+- zip              (MIT)              — https://github.com/zip-rs/zip2
+- blake3           (Apache-2.0 / CC0-1.0) — https://github.com/BLAKE3-team/BLAKE3
+- sha2             (Apache-2.0 / MIT) — https://github.com/RustCrypto/hashes
+- ed25519-dalek    (BSD-3-Clause)     — https://github.com/dalek-cryptography/ed25519-dalek
+- tauri-bundler    (Apache-2.0 / MIT) — https://github.com/tauri-apps/tauri
+- apple-codesign   (MPL-2.0)          — https://github.com/indygreg/apple-platform-rs
+- resvg / usvg     (MPL-2.0)          — https://github.com/linebender/resvg
+- image            (Apache-2.0 / MIT) — https://github.com/image-rs/image
+- ico              (MIT)              — https://github.com/mdsteele/rust-ico
+- tauri-icns       (Apache-2.0 / MIT) — https://github.com/tauri-apps/icns
+- rpm              (Apache-2.0)       — https://github.com/rpm-rs/rpm
+
+The complete resolved dependency graph is recorded in the Tynd Cargo lockfiles.
+Each dependency remains subject to its own license terms.
