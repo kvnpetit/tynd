@@ -1,0 +1,38 @@
+---
+title: store
+description: "Persistent JSON key-value store. Facade over the `store` host API."
+---
+
+# `store`
+
+`@tynd/plugin-store` enables the host `store` API and exposes its typed client. The API itself is documented on the [`store`](/docs/v1.0/api/os/store) page.
+
+## Install
+
+```bash
+tynd add store
+```
+
+```ts
+import { createStore } from "@tynd/plugin-store/client";
+```
+
+Declaring the plugin compiles the matching `api-store` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-store` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-store`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-store` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `store` |
+| Aliases for `tynd add` | `kv`, `settings`, `preferences` |
+| Catalog permission labels | `host:store`, `local-storage` |
+| Estimated size | 60 KB |
+| Client exports | `StoreErrorEvent`, `createStore` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

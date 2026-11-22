@@ -1,0 +1,38 @@
+---
+title: shortcuts
+description: "Global keyboard shortcuts. Facade over the core `shortcuts` host API."
+---
+
+# `shortcuts`
+
+`@tynd/plugin-shortcuts` enables the host `shortcuts` API and exposes its typed client. The API itself is documented on the [`shortcuts`](/docs/v1.0/api/os/shortcuts) page.
+
+## Install
+
+```bash
+tynd add shortcuts
+```
+
+```ts
+import { shortcuts } from "@tynd/plugin-shortcuts/client";
+```
+
+Declaring the plugin compiles the matching `api-shortcuts` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-shortcuts` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-shortcuts` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `shortcuts` |
+| Aliases for `tynd add` | `shortcut`, `hotkey`, `hotkeys` |
+| Catalog permission labels | `host:shortcuts`, `global-keyboard` |
+| Estimated size | 120 KB |
+| Client exports | `ShortcutHandle`, `shortcuts` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

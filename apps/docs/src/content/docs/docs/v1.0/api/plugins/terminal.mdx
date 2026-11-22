@@ -1,0 +1,129 @@
+---
+title: terminal
+description: "Real PTY inside your app — cross-OS (ConPTY on Windows, POSIX elsewhere)."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# `terminal`
+
+Install the required plugin:
+
+```bash
+tynd add terminal
+```
+
+```ts
+import { terminal } from "@tynd/plugin-terminal/client";
+```
+
+Real PTY sessions. ConPTY on Windows, POSIX PTY elsewhere. Pair with [xterm.js](https://xtermjs.org/) for a full interactive terminal UI.
+
+## `spawn(opts?): Promise<TerminalHandle>`
+
+```ts
+interface TerminalSpawnOptions {
+  shell?: string;       // default: $SHELL on Unix, %COMSPEC% on Windows
+  args?:  string[];
+  cwd?:   string;
+  env?:   Record<string, string>;
+  cols?:  number;       // default 80
+  rows?:  number;       // default 24
+}
+
+const t = await terminal.spawn({ cols: 120, rows: 30 });
+```
+
+<Aside type="note">
+  **Option name is `shell`**, not `command`.
+</Aside>
+
+## `TerminalHandle`
+
+```ts
+interface TerminalHandle {
+  id: number;
+  write(data: string | Uint8Array): Promise<void>;
+  resize(cols: number, rows: number): Promise<void>;
+  kill(): Promise<void>;
+  onData(handler: (chunk: Uint8Array) => void): () => void;
+  onExit(handler: (code: number | null) => void): () => void;
+}
+```
+
+### `onData(handler)`
+
+Streams raw PTY bytes (base64-encoded on the IPC channel; decoded to `Uint8Array` for you). Output that arrives before the first `onData` listener is buffered (up to 1 MiB, oldest chunks dropped first) and flushed to it.
+
+```ts
+t.onData((bytes) => xterm.write(bytes));
+```
+
+### `onExit(handler)`
+
+Fires once when the shell exits on its own. `code` is the exit code, or `null` when the host could not read the exit status. It does not fire after `kill()`.
+
+```ts
+t.onExit((code) => console.log("shell exited:", code));
+```
+
+### `write(data)`
+
+```ts
+await t.write("ls -la\n");
+await t.write(new Uint8Array([0x03]));   // Ctrl+C
+```
+
+### `resize(cols, rows)`
+
+Call after the user resizes the terminal UI.
+
+### `kill()`
+
+Force-close the session. Idempotent. The session's `onData` and `onExit` listeners are removed and no exit event is delivered.
+
+## `list(): Promise<number[]>`
+
+IDs of currently-open sessions.
+
+```ts
+const ids = await terminal.list();
+```
+
+## Example — xterm.js integration
+
+```ts
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { terminal } from "@tynd/plugin-terminal/client";
+import "@xterm/xterm/css/xterm.css";
+
+const xterm = new Terminal();
+const fit = new FitAddon();
+xterm.loadAddon(fit);
+xterm.open(document.getElementById("terminal")!);
+fit.fit();
+
+const pty = await terminal.spawn({ cols: xterm.cols, rows: xterm.rows });
+
+pty.onData((bytes) => xterm.write(bytes));
+pty.onExit((code) => xterm.writeln(`\r\n[process exited: ${code ?? "killed"}]`));
+
+xterm.onData((data) => pty.write(data));
+
+new ResizeObserver(() => {
+  fit.fit();
+  void pty.resize(xterm.cols, xterm.rows);
+}).observe(document.getElementById("terminal")!);
+```
+
+## Notes
+
+- Output from the PTY is base64-encoded on the IPC channel.
+- Up to 64 concurrent sessions, each with its own id and reader thread. `spawn` rejects past that limit.
+- Sessions stay open across calls until the shell exits or `kill()` runs; the host closes the remaining ones on app exit.
+
+## Related
+
+- [process](/docs/v1.0/api/os/process) — one-shot `exec` with buffered output.
+- [sidecar](/docs/v1.0/api/os/sidecar) — run a bundled helper binary.

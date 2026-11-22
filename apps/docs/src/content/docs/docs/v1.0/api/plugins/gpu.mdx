@@ -1,0 +1,61 @@
+---
+title: gpu
+description: "GPU diagnostics, WebGL/WebGPU readiness checks and a quick benchmark. Pure JavaScript."
+---
+
+# `gpu`
+
+`@tynd/plugin-gpu` reads what the webview already exposes (`navigator.gpu`, WebGL debug info, `navigator.deviceMemory`) so the frontend can choose a quality preset or refuse a heavy pipeline on a software adapter. No native code, so it does not change the host build.
+
+## Install
+
+```bash
+tynd add gpu
+```
+
+or `bun add @tynd/plugin-gpu` and list it in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-gpu"],
+}
+```
+
+## Use
+
+```ts
+import { gpu } from "@tynd/plugin-gpu";
+
+const info = await gpu.info();
+if (!info.webgpu.supported) console.warn("WebGPU disabled:", info.webgpu.reason);
+
+await gpu.requireWebGPU();                    // throws with a diagnostic when unavailable
+const bench = await gpu.benchmark();          // about 250 ms, 1.5 s at most
+const preset = bench.category === "extreme" ? "ultra" : bench.category === "high" ? "high" : "medium";
+```
+
+## API
+
+| Export | Purpose |
+|---|---|
+| `gpu.info()` | Capability snapshot (vendor, renderer, dedicated, WebGL1/2/WebGPU). Cached after the first call |
+| `gpu.refreshInfo()` | Probe again and replace the cached snapshot, for example when `info()` ran before the browser initialized its GPU |
+| `gpu.requireWebGPU()` / `gpu.requireWebGL2()` | Throw with a diagnostic message when unavailable |
+| `gpu.benchmark()` | `{ durationMs, opsPerSec, score (0-100), category, backend }`; WebGPU compute, WebGL fallback |
+| `gpu.supportsFeature(name)` | WebGPU adapter feature lookup |
+| `gpu.memoryStatus()` | Best-effort memory pressure; `available: false` outside Chrome and Edge |
+
+`@tynd/plugin-gpu/benchmark` exports `runBenchmark()`, the function behind `gpu.benchmark()`, for code that wants the benchmark without the rest of the client.
+
+## Caveats
+
+- Safari and Firefox mask the WebGL renderer string by default. The plugin falls back to WebGPU adapter info, otherwise vendor and renderer are `"unknown"`.
+- No browser exposes VRAM; `memoryMB` is a system RAM hint.
+- Benchmark categories (cut at scores 25, 50 and 80) are a coarse signal for picking a preset, not a benchmark suite.
+- Software adapters (SwiftShader, llvmpipe, Microsoft Basic Render) report `vendor: "Software"` and `isDedicated: false`.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [Full README](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/gpu)

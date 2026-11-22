@@ -1,0 +1,116 @@
+---
+title: app
+description: "App identity, exit, relaunch, and OS requests to open a file or reopen the app."
+---
+
+# `app`
+
+```ts
+import { app } from "@tynd/core/client";
+```
+
+App identity and lifecycle. Callable from both frontend and backend.
+
+## `app.setInfo({ name, bundleId })`
+
+Sets the app's name and bundle identifier:
+
+```ts
+import pkg from "../package.json";
+await app.setInfo({
+  name:     pkg.name,
+  bundleId: "com.acme.myapp",   // reverse-DNS identifier
+});
+```
+
+The client `AppInfo` type has no `version`, and the host refuses an `app.setInfo` call from a renderer that carries one (`'version' can only be set by the backend`). The version is the updater's downgrade floor, so only the backend sets it: Tynd's Bun runtime sends the `package.json` version to the host at startup, and `app.getVersion()` returns it.
+
+Used by other APIs (notifications, tray tooltip, OS integration) to identify the app consistently.
+
+## `app.getName(): Promise<string>`
+
+Returns the registered name. Falls back to the binary file stem if `setInfo` wasn't called.
+
+```ts
+const name = await app.getName();
+```
+
+## `app.getVersion(): Promise<string>`
+
+Returns the registered version. Falls back to `"0.0.0"`.
+
+```ts
+const version = await app.getVersion();
+```
+
+## `app.getFrameworkVersion(): Promise<string>`
+
+Version of the Tynd host binary, baked in at compile time via `CARGO_PKG_VERSION`. Surface it in About dialogs + crash reports without rolling your own constant.
+
+```ts
+const tynd = await app.getFrameworkVersion();
+```
+
+## `app.getBundleIdentifier(): Promise<string | null>`
+
+Returns the reverse-DNS identifier set via `setInfo({ bundleId })`, or `null` if none was set.
+
+```ts
+const id = await app.getBundleIdentifier();
+```
+
+## `app.relaunch(): Promise<void>`
+
+Spawns a fresh copy of the current binary with the same command-line arguments and exits the current process. The single-instance lock is released before the copy starts, so it becomes the primary instance. If the copy cannot be started, the call rejects and the current process keeps running (and keeps the lock).
+
+```ts
+await app.relaunch();
+```
+
+Useful after applying an update, toggling a runtime flag, or loading a new backend.
+
+## `app.exit(code?: number): Promise<void>`
+
+Exits the app gracefully. The `app.onClose` hook runs (with its usual 2-second watchdog) before the process terminates.
+
+```ts
+await app.exit(0);
+```
+
+Pass a non-zero code to signal an error to the invoking shell / installer. Default is `0`.
+
+## `app.onOpenFile(handler): { dispose() }`
+
+Fires with the absolute path of each document the OS asks the app to open.
+
+```ts
+const sub = app.onOpenFile((path) => openDocument(path));
+// later: sub.dispose();
+```
+
+| Platform | Source |
+|---|---|
+| macOS | File-association double-click or "Open with" (file URLs from the app delegate) |
+| Windows / Linux | Existing file paths on the command line at launch, and from a second instance forwarded through `singleInstance` (relative paths resolve against that instance's working directory) |
+
+Paths that arrive before the first `onOpenFile` call (typically the file that launched the app) are buffered, up to 256 with the oldest dropped, and delivered to the first handler. Non-file URLs are not reported here; use `singleInstance.onOpenUrl`. Declare which extensions the app handles with `bundle.fileAssociations` (see the [Deep Linking guide](/docs/v1.0/guides/deep-linking)).
+
+## `app.onReopen(handler): { dispose() }`
+
+macOS only. Fires with `{ hasVisibleWindows }` when the user re-activates the running app (dock icon click). The host does not re-show windows by itself; show or create one when `hasVisibleWindows` is `false`. Never fires on Windows or Linux.
+
+```ts
+app.onReopen(({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) void tyndWindow.show();
+});
+```
+
+## Notes
+
+- `app.exit(0)` is preferable to `process.exit(0)` — the former runs lifecycle hooks, the latter doesn't.
+- `relaunch` starts the current executable directly, then exits about 100 ms later after running the cleanup hooks.
+
+## Related
+
+- [Single Instance guide](/docs/v1.0/guides/single-instance) — argv forwarding.
+- [Updater](/docs/v1.0/api/os/updater) — `install({ relaunch: true })` uses `app.relaunch` internally.

@@ -1,0 +1,113 @@
+---
+title: store
+description: "Persistent JSON key-value store under the OS config directory."
+---
+
+# `store`
+
+Install the required plugin:
+
+```bash
+tynd add store
+```
+
+```ts
+import { createStore } from "@tynd/plugin-store/client";
+```
+
+Namespaced JSON k/v. Writes are held in memory and persisted to `<config_dir>/<app-id>/<ns>/store.json` by a debounced background write (about 100 ms), not on resolve.
+
+## `createStore(namespace)`
+
+```ts
+const prefs = createStore("com.example.myapp");
+```
+
+- `namespace` — reverse-DNS recommended. Maps to `<config_dir>/<app-id>/<namespace>/store.json`.
+
+## Methods
+
+```ts
+await prefs.set("theme", "dark");
+const theme = await prefs.get<string>("theme");   // T | null
+
+await prefs.delete("theme");
+await prefs.clear();
+
+const keys = await prefs.keys();                   // string[]
+```
+
+Also available: `has(key)`, `values()`, `entries()` (`[key, value][]`), `length()`, and `reload()` (drop the in-memory copy and re-read `store.json`, after flushing pending writes).
+
+## `flush(): Promise<void>`
+
+Write pending changes now and wait for the result. Use it before a risky operation when a lost write matters. Rejects when the write fails or the background writer does not answer within 5 s.
+
+```ts
+await prefs.set("lastExport", Date.now());
+await prefs.flush();
+```
+
+## `onError(handler): () => void`
+
+`set` / `delete` / `clear` resolve before the disk write, so a failed background write (disk full, read-only profile) is reported only through the host's `store:error` event. `onError` subscribes to it for this namespace and returns an unsubscribe function.
+
+```ts
+interface StoreErrorEvent {
+  namespace: string;
+  phase: "touch" | "flush" | "shutdown"; // debounced write, explicit flush/reload, exit flush
+  path: string;                          // store.json path ("" when unresolved)
+  error: string;
+}
+
+const off = prefs.onError((e) => showToast(`Settings not saved: ${e.error}`));
+```
+
+The failed write is kept and retried on the next change or `flush()`.
+
+## Types
+
+- Values must be **JSON-serializable** — primitives, arrays, plain objects, nulls. No functions, class instances, Maps / Sets, or cycles.
+- `get<T>` is an unchecked cast. Validate the shape yourself if you depend on it.
+
+## Where it writes
+
+| OS | Path |
+|---|---|
+| Linux | `~/.config/<app-id>/<namespace>/store.json` |
+| macOS | `~/Library/Application Support/<app-id>/<namespace>/store.json` |
+| Windows | `%APPDATA%\<app-id>\<namespace>\store.json` |
+
+`<app-id>` is the executable's file name without extension, so two apps that use the same namespace don't share a file. The directory is created lazily on first write.
+
+## Durability
+
+- `set` / `delete` / `clear` update the in-memory copy and resolve; a burst of writes is coalesced into one atomic write (fsync + rename) about 100 ms later. **A resolved write is not yet durable.** A crash, kill or power loss in that window loses it. `get` and `keys` see it immediately.
+- On a graceful exit (app quit, the last window closing with `quitOnLastWindowClosed`, `SIGINT` / `SIGTERM`), host cleanup flushes pending writes of every opened namespace, bounded by a 5 s deadline shared by all namespaces. A disk that blocks past it can still drop the last writes. A host crash or kill skips this.
+- To checkpoint important data, call `flush()`; failures of background writes surface through `onError`.
+- Two processes writing the same file: last writer wins. Give each app a unique executable name.
+- **No atomic multi-key writes.** For transactional semantics across keys, use [`sql`](/docs/v1.0/api/plugins/sql) with a single `UPDATE` statement, or write a flat JSON blob with one key.
+
+## Security
+
+**Not encrypted.** Plain JSON readable by any process with user-level access. For sensitive data (tokens, passwords, API keys), use [`keyring`](/docs/v1.0/api/os/keyring).
+
+## Example — per-instance cache + preferences
+
+```ts
+import { createStore } from "@tynd/plugin-store/client";
+
+const prefs = createStore("com.example.myapp");
+const cache = createStore("com.example.myapp.cache");
+
+await prefs.set("theme", "dark");
+await cache.set("lastSync", Date.now());
+```
+
+Each namespace is a separate file.
+
+## Related
+
+- [keyring](/docs/v1.0/api/os/keyring) — encrypted secrets.
+- [sql](/docs/v1.0/api/plugins/sql) — relational + transactional.
+- [fs](/docs/v1.0/api/os/fs) — raw file writes for custom formats.

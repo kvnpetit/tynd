@@ -1,0 +1,97 @@
+---
+title: http-server
+description: "Embedded HTTP and WebSocket server in the Bun backend through Bun.serve."
+---
+
+# `http-server`
+
+`@tynd/plugin-http-server` runs in the Bun backend through `Bun.serve`. It adds no Rust crate, but installing it adds the `network` host feature.
+
+## Install
+
+```bash
+tynd add http-server
+```
+
+or `bun add @tynd/plugin-http-server` and list it in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-http-server"],
+}
+```
+
+## Use
+
+```ts
+import { httpServer } from "@tynd/plugin-http-server";
+
+const server = await httpServer.serve(
+  { port: 8080 },
+  {
+    async fetch(req) {
+      return new URL(req.url).pathname === "/ping" ? new Response("pong") : new Response("not found", { status: 404 });
+    },
+    websocket: {
+      open(ws) { ws.send("hello"); },
+      message(ws, data) { ws.send(`echo: ${data}`); },
+    },
+  },
+);
+
+console.log(`http://${server.host}:${server.port}`);
+await server.stop();                  // releases the port
+```
+
+## API
+
+`httpServer.serve(opts, handlers): Promise<RunningServer>`
+
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `port` | `number` | `0` (OS-picked) | |
+| `host` | `string` | `"127.0.0.1"` | `"0.0.0.0"` exposes the server on the LAN |
+| `maxPendingRequests` | `number` | `4096` | In-flight requests; capped at 1,000,000 |
+| `maxWsConnections` | `number` | `4096` | Open WebSocket connections; capped at 1,000,000 |
+| `responseTimeoutSecs` | `number` | `60` | Time a handler has to answer; capped at 3600 |
+| `bodyCapBytes` | `number` | 16 MiB | Request body limit; capped at 1 GiB |
+| `streaming` | `boolean` | `false` | Pass request bodies to `fetch` as a stream instead of buffering them |
+
+`handlers` take `fetch(req, { remote })` and an optional `websocket` object with `open`, `message` and `close`. A `RunningServer` has `id`, `host`, `port` and `stop()`; `ServerWebSocket` has `id`, `remote`, `send()` and `close()`. `httpServer.list()` returns the ids of running servers.
+
+## Cookies
+
+Handlers run in the webview, where `Set-Cookie` is a forbidden response-header name, so a `Response` built there silently loses it. Add `setCookieHeader(cookies)` to the response headers instead; the plugin turns it into real `Set-Cookie` headers on the wire:
+
+```ts
+import { setCookieHeader } from "@tynd/plugin-http-server";
+
+new Response("ok", { headers: [setCookieHeader(["a=1; Path=/", "b=2; HttpOnly"])] });
+```
+
+A plain `Set-Cookie` header still works where the runtime keeps it (tests under Bun), but is not reliable in a webview.
+
+## Limits
+
+| Constraint | Default |
+|---|---|
+| Concurrent servers | 32 (fixed) |
+| In-flight requests per server | 4096 (`maxPendingRequests`) |
+| Open WebSocket connections per server | 4096 (`maxWsConnections`) |
+| Request body size | 16 MiB (`bodyCapBytes`) |
+| Response timeout per request | 60 s (`responseTimeoutSecs`) |
+
+Invalid options throw. Hitting a request or connection limit returns HTTP 503, a body over the limit returns 413, and a handler that does not answer in time returns 504.
+
+## Pitfalls
+
+- No TLS option; put a reverse proxy in front for HTTPS.
+- Routing is up to you (`req.url`); use `hono` or `itty-router` if you want declarative routes.
+- Binding a public address is an explicit `host` choice in your code.
+- **Loopback rule.** A `host` of `localhost`, a literal `127.x.x.x` address or an IPv6 loopback (`::1`, `::ffff:127.x.x.x`) is validated through `network-loopback.bind`. Every other host, including DNS names that merely look local such as `127.0.0.1.nip.io`, goes through `network-public.bind`, which refuses loopback hosts. A refused bind makes `serve` throw.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [Full README](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/http-server)

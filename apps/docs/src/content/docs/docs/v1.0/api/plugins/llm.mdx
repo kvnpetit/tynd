@@ -1,0 +1,98 @@
+---
+title: llm
+description: "Local GGUF model inference through llama.cpp with streamed tokens. Experimental."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# `llm`
+
+`@tynd/plugin-llm` loads GGUF checkpoints (Llama, Mistral, Phi, Qwen, ...) through `llama-cpp-2` and streams tokens to the app.
+
+<Aside type="caution">
+  **Experimental.** CPU inference is enabled when installed through Tynd, but the C/C++/CMake/libclang build has not passed the full desktop matrix. It is published to npm under the `experimental` dist-tag, not `latest`.
+</Aside>
+
+## Install
+
+```bash
+tynd add llm
+```
+
+or `bun add @tynd/plugin-llm` and list it in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-llm"],
+}
+```
+
+`tynd dev` and `tynd build` link the plugin's Rust crate into the app host they compile.
+
+For GPU acceleration add one target feature (it implies `inference`):
+
+```ts
+plugins: [{ pkg: "@tynd/plugin-llm", features: ["metal"] }], // or "cuda" / "vulkan"
+```
+
+## Use
+
+```ts
+import { llm } from "@tynd/plugin-llm";
+
+const model = await llm.load({ path: "/models/mistral-7b-instruct.Q4_K_M.gguf", contextSize: 4096, gpuLayers: 32 });
+
+for await (const piece of llm.generate(model.id, "Write a haiku about Rust:", { maxTokens: 64 })) {
+  process.stdout.write(piece);
+}
+
+const answer = await llm.complete(model.id, "What is 2 + 2?", { maxTokens: 16 });
+await llm.unload(model.id);
+```
+
+## API
+
+| Method | Purpose |
+|---|---|
+| `llm.load({ path, contextSize?, gpuLayers? })` | Open a GGUF file (`contextSize` 2048 and `gpuLayers` 0 by default); returns an `LlmModel` handle |
+| `llm.generate(id, prompt, opts?)` | `AsyncIterable<string>` of tokens |
+| `llm.complete(id, prompt, opts?)` | Full string in one call |
+| `llm.cancel(streamId)` | Cancel an in-flight stream; idempotent |
+| `llm.unload(id)` | Free the model's memory; idempotent |
+| `llm.list()` | Loaded models |
+
+Generation options: `maxTokens` (512), `temperature` (0.7, clamped to 0-5), `topK` (40, 0 disables), `topP` (0.9), `seed` (random), `stop` (strings that halt generation) and, on the client only, `signal` (`AbortSignal`).
+
+Streamed tokens are decoded as UTF-8 across token boundaries: a character split over several tokens (byte-level tokenizers, byte fallback) is emitted whole instead of as replacement characters. Only bytes that can never form valid UTF-8 become U+FFFD.
+
+## Vercel AI SDK adapter
+
+`@tynd/plugin-llm/ai-sdk` exports `tyndLlmProvider(modelId, { name? })`, which wraps a loaded model as an AI SDK `LanguageModelV3`. Install the peer dependencies `ai` (v6+) and `@ai-sdk/provider` (v3+) yourself.
+
+```ts
+import { llm } from "@tynd/plugin-llm/client";
+import { tyndLlmProvider } from "@tynd/plugin-llm/ai-sdk";
+import { streamText } from "ai";
+
+const model = await llm.load({ path: "./mistral-7b.gguf" });
+const result = streamText({
+  model: tyndLlmProvider(model.id, { name: "mistral-7b" }),
+  messages: [{ role: "user", content: "Hello" }],
+});
+for await (const chunk of result.textStream) process.stdout.write(chunk);
+```
+
+`modelId` in the AI SDK defaults to `tynd-llm-<id>`. Generation goes through `llm.complete` and `llm.generate`; the abort signal is forwarded.
+
+## Pitfalls
+
+- Aborting the `signal`, or leaving the `for await` loop early, ends the iterator and cancels the native generation; the native loop stops at its next token.
+- The first compile of `llama.cpp` takes 5 to 15 minutes on a cold machine.
+- Model weights carry their own licenses; audit each one before shipping.
+- You download GGUF files yourself; the plugin does not fetch models.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [Full README](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/llm)

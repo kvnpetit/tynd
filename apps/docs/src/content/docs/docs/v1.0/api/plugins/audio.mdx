@@ -1,0 +1,69 @@
+---
+title: audio
+description: "Native audio capture, WAV playback and WAV file I/O (cpal and hound)."
+---
+
+# `audio`
+
+`@tynd/plugin-audio` is a native plugin: microphone capture and playback through `cpal`, WAV encode and decode through `hound`.
+
+## Install
+
+```bash
+tynd add audio
+```
+
+or `bun add @tynd/plugin-audio` and list it in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-audio"],
+}
+```
+
+`tynd dev` and `tynd build` link the plugin's Rust crate into the app host they compile.
+
+Installing through Tynd enables the `capture` and `wav` Cargo features. A direct Cargo dependency without features builds a portable stub, where each method fails with a "rebuild with the feature" error.
+
+## Use
+
+```ts
+import { audio } from "@tynd/plugin-audio";
+
+const { inputs, outputs } = await audio.listDevices();
+
+const capture = audio.startCapture({ sampleRate: 16_000, channels: 1 });
+for await (const chunk of capture) {
+  // chunk.samples: Float32Array, chunk.timestamp
+}
+await capture.stop();
+
+const playback = await audio.playFile("/path/clip.wav");
+await playback.stop();
+```
+
+## API
+
+| Method | Purpose |
+|---|---|
+| `audio.listDevices()` | `{ inputs, outputs }` device-name arrays |
+| `audio.startCapture(opts?)` | `AsyncIterable<{ samples, timestamp }>` with `.stop()` and `.streamId` |
+| `audio.stopCapture(id)` | Stop a live capture stream |
+| `audio.playFile(path, opts?)` | Play a WAV file; returns `{ id, durationMs, stop() }` |
+| `audio.playSamples(samples, opts)` | Play raw f32 PCM samples |
+| `audio.stopPlayback(id)` | Stop a playback session |
+| `audio.saveWav(samples, path, opts)` | Write a 32-bit float WAV |
+
+Capture streams emit `audio:samples`, `audio:warn` (`sample-rate-fallback`, `channel-fallback`) and `audio:error` (device disconnect, xrun) events, filtered by stream id on the client.
+
+## Limits and pitfalls
+
+- Playback is bounded by two pools: decode permits (`available_parallelism()`, each decode can allocate up to 256 MiB) and playback slots (`4 x available_parallelism()`). When the slots are exhausted, `playFile` and `playSamples` reject with a "too many live playbacks; stop one first" error; a call waiting for a decode permit fails after 15 seconds.
+- Plugin events go through the host's bounded event queue (1,024 events, delivered to webviews in batches of 64). A stalled renderer drops new events and the host logs one aggregated diagnostic.
+- Pair with [`whisper`](/docs/v1.0/api/plugins/whisper) for live transcription: pass `audio.startCapture({ sampleRate: 16000, channels: 1 })` samples to `whisper.transcribeStream`.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [Full README](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/audio)

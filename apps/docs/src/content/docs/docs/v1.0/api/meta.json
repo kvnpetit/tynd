@@ -1,0 +1,4 @@
+{
+  "title": "API Reference",
+  "pages": ["index", "backend", "streaming-rpc", "rpc-helpers", "os", "plugins", "plugin-catalog"]
+}

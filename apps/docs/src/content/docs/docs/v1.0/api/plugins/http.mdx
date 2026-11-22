@@ -1,0 +1,38 @@
+---
+title: http
+description: "Native HTTP client with progress and cancellation. Facade over the core `http` host API."
+---
+
+# `http`
+
+`@tynd/plugin-http` enables the host `http` API and exposes its typed client. The API itself is documented on the [`http`](/docs/v1.0/api/os/http) page.
+
+## Install
+
+```bash
+tynd add http
+```
+
+```ts
+import { http } from "@tynd/plugin-http/client";
+```
+
+Declaring the plugin compiles the matching `api-http` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-http` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-http` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `http` |
+| Aliases for `tynd add` | `fetch`, `request`, `requests` |
+| Catalog permission labels | `host:http`, `network` |
+| Estimated size | 180 KB |
+| Client exports | `HttpProgress`, `HttpRequestOptions`, `HttpResponse`, `http` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

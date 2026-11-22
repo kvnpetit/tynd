@@ -1,0 +1,99 @@
+---
+title: singleInstance
+description: "Prevent duplicate launches, forward argv / cwd to the primary, and auto-focus the existing window."
+---
+
+# `singleInstance`
+
+Install the required plugin:
+
+```bash
+tynd add single-instance
+```
+
+```ts
+import { singleInstance } from "@tynd/plugin-single-instance/client";
+```
+
+Cross-OS exclusive lock + argv/cwd forwarding.
+
+## `acquire(id): Promise<SingleInstanceResult>`
+
+```ts
+interface SingleInstanceResult {
+  acquired: boolean;
+  already:  boolean;   // true if another instance currently holds the lock
+}
+
+import { app } from "@tynd/core/client";
+
+const { acquired, already } = await singleInstance.acquire("com.example.myapp");
+if (!acquired) {
+  // Duplicate launch. The primary has already been focused and notified.
+  await app.exit(0);
+}
+```
+
+- `id` — stable reverse-DNS identifier. Doubles as the OS lock name and the local socket name.
+- When `acquired: false`, `already: true` means a peer instance is running. Both fields coincide for the typical case; `already` exists to distinguish "lock unavailable for some other reason" when debugging.
+
+## `isAcquired(): Promise<boolean>`
+
+Whether this process currently holds the lock.
+
+```ts
+if (await singleInstance.isAcquired()) { /* we're the primary */ }
+```
+
+## `onSecondLaunch(handler): () => void`
+
+Fires in the **primary** instance whenever a duplicate launch is detected.
+
+```ts
+interface SecondLaunchPayload {
+  argv: string[];   // duplicate's argv (argv[0] is the exe path)
+  cwd:  string;
+}
+
+singleInstance.onSecondLaunch(({ argv, cwd }) => {
+  console.log("reopened with", argv.slice(1), "at", cwd);
+});
+```
+
+## `onOpenUrl(handler): () => void`
+
+Fires when the app is opened via a registered URL scheme (declared in `tynd.config.ts::protocols`). Fires both on cold start (argv has the URL) and on duplicate launch.
+
+```ts
+singleInstance.onOpenUrl((url) => {
+  // url = "myapp://invite/abc123"
+  const parsed = new URL(url);
+  router.navigate(parsed.pathname);
+});
+```
+
+## Backing mechanisms
+
+- **Lock**: an exclusive file lock on `<cache_dir>/tynd/<id>.lock`, in the current user's cache directory.
+- **Windows**: a named pipe `tynd-single-instance-<hash>`, where the hash covers the current user's SID, the `id` and a random per-user, per-endpoint secret stored in `%LOCALAPPDATA%\tynd\pipe-nonce-<hash of the id>` (16 hex characters, created on first use). SIDs are not secret, so the secret keeps another account from computing the name and squatting the pipe. If the pipe already belongs to another account anyway, the host logs a warning and moves that endpoint to a fresh secret (and so a new pipe name); other apps keep their pipes. The pipe is owner-only, so no other account can connect.
+- **Linux and macOS**: a Unix socket in a per-user `0700` directory (`$XDG_RUNTIME_DIR/tynd`, else a `tynd-run` directory under the per-user runtime or cache directory, else `<tmp>/tynd-<uid>`). The directory is checked on every call (owned by the user, no group or other access).
+
+The second launch waits at most 2 seconds to connect to the running instance. If the endpoint stays busy past that, `acquire()` rejects with a `connect:` error and nothing is forwarded or focused (a hung or squatted primary no longer blocks the launch). It also checks that the endpoint belongs to the current user before sending anything; an endpoint owned by another account is refused and `acquire()` fails. Argv/cwd forwarding is one JSON line (at most 64 KiB), then close.
+
+If the first instance gets the lock but cannot create the forwarding endpoint (the pipe name is taken, or the secret file or the owner-only security descriptor cannot be set up), it logs a warning, releases the lock and still returns `acquired: true`. The app starts normally but single-instance is not enforced: later launches also acquire, and nothing is forwarded or focused. Look for `single-instance forwarding disabled` in the logs.
+
+## Reserved schemes
+
+When declaring `protocols: ["myapp"]` in `tynd.config.ts`, these schemes are **rejected at config-validation time**:
+
+`http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`
+
+## Notes
+
+- Use a stable id — **don't include the version**. Users upgrading need the old version to auto-focus before it shuts down.
+- `acquire()` should be called **before** rendering any UI or starting background work. The return value determines the entire process lifecycle.
+
+## Related
+
+- [Single Instance guide](/docs/v1.0/guides/single-instance).
+- [Deep Linking guide](/docs/v1.0/guides/deep-linking).

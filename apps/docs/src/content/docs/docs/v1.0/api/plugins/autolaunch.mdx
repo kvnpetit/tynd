@@ -1,0 +1,38 @@
+---
+title: autolaunch
+description: "Launch at login. Facade over the core `autolaunch` host API."
+---
+
+# `autolaunch`
+
+`@tynd/plugin-autolaunch` enables the host `autolaunch` API and exposes its typed client. The API itself is documented on the [`autolaunch`](/docs/v1.0/api/os/autolaunch) page.
+
+## Install
+
+```bash
+tynd add autolaunch
+```
+
+```ts
+import { autolaunch } from "@tynd/plugin-autolaunch/client";
+```
+
+Declaring the plugin compiles the matching `api-autolaunch` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-autolaunch` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-autolaunch` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `autolaunch` |
+| Aliases for `tynd add` | `auto-launch`, `startup` |
+| Catalog permission labels | `host:autolaunch`, `os-login-item` |
+| Estimated size | 120 KB |
+| Client exports | `AutolaunchOptions`, `autolaunch` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

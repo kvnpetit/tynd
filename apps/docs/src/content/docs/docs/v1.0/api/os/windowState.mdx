@@ -1,0 +1,36 @@
+---
+title: windowState
+description: "Persist window geometry (size, position, maximized, fullscreen) keyed by label."
+---
+
+# `windowState`
+
+Install the required plugin:
+
+```bash
+tynd add window-state
+```
+
+```ts
+import { windowState } from "@tynd/plugin-window-state/client";
+```
+
+Geometry per label is serialised into the host's data dir and rehydrated on the next app launch.
+
+## API surface
+
+```ts
+await windowState.init({ appId: "my-app" }); // load saved states, start auto-saving
+await windowState.restore();                  // apply the saved state to this window
+```
+
+- `windowState.init(opts?): Promise<void>` — load saved states from disk and attach the auto-save listeners (resize, move, maximize, fullscreen; debounced). Idempotent. Options: `appId` (default `"tynd-app"`, used in the default path), `storagePath` (absolute path, overrides `appId`), `debounceMs` (default 500).
+- `windowState.restore(label?): Promise<boolean>` — apply the last saved snapshot to a window (default: the current one). Resolves `true` when a snapshot existed, `false` otherwise. For another label the snapshot is only reported — that window must call `restore()` itself.
+- `windowState.save(label?): Promise<void>` — flush the current state to disk immediately, bypassing the debounce.
+- `windowState.get(label?): Promise<WindowStateSnapshot | null>` — read the saved snapshot without applying it.
+- `windowState.clear(label?): Promise<void>` — drop one saved entry, or all when `label` is omitted.
+- `windowState.setStoragePath(path): Promise<void>` — override the JSON file location (default `<dataDir>/<appId>/window-states.json`). Pass an absolute path: a relative one resolves against the host's working directory. `init` already does this from `storagePath`/`appId`, so call it only to move the file afterwards.
+
+`label` defaults to the current window's label.
+
+`WindowStateSnapshot` carries `x`, `y`, `width`, `height` (logical pixels, each optional until reported), `maximized` and `fullscreen`.

@@ -1,0 +1,70 @@
+---
+title: compute
+description: "Rust-native CPU helpers — hash (blake3/sha256/384/512) and CSPRNG. Runs off the JS event loop."
+---
+
+# `compute`
+
+Install the required plugin:
+
+```bash
+tynd add compute
+```
+
+```ts
+import { compute } from "@tynd/plugin-compute/client";
+```
+
+Fast Rust-native compute that avoids the Bun event loop on hot paths.
+
+## `hash(bytes, opts?): Promise<string>`
+
+Returns a base64 digest of the bytes. Default algo: **blake3**.
+
+```ts
+const digest = await compute.hash(bytes);                        // blake3 by default
+const sha256 = await compute.hash(bytes, { algo: "sha256" });
+```
+
+### Algorithms
+
+- `blake3` (default) — fast, cryptographically secure, ~4 GB/s on modern CPUs.
+- `sha256`, `sha384`, `sha512`.
+
+Bytes travel via the [binary IPC channel](/docs/v1.0/guides/binary-data) — no base64 overhead. Input is capped at 100 MiB per call; a larger buffer or an unknown `algo` rejects.
+
+Digest is always returned as **base64**; convert to hex in userland if needed:
+
+```ts
+const digest = await compute.hash(bytes, { algo: "sha256" });
+const hex = [...Uint8Array.from(atob(digest), (c) => c.charCodeAt(0))]
+  .map((b) => b.toString(16).padStart(2, "0"))
+  .join("");
+```
+
+## `randomBytes(n): Promise<Uint8Array>`
+
+Fills `n` bytes from the OS CSPRNG (`getrandom` / `BCryptGenRandom` / `SecRandomCopyBytes`).
+
+```ts
+const token = await compute.randomBytes(32);
+```
+
+**`n` must be 1 to 1 MiB (1,048,576)**; `0` or more rejects. If you genuinely need more, call in a loop or use `crypto.getRandomValues` from the Web API (identical semantics).
+
+## Why native?
+
+- **Speed** — blake3 in Rust avoids JavaScript engine overhead.
+- **Off the UI thread** — the hash runs on the host's worker pool, so a large buffer keeps your UI smooth.
+- **Uniform API** — web-standard `crypto.subtle.digest` works too, but `compute.hash` is the fast path for large inputs.
+
+## Not exposed
+
+- **Compression** (`compute.compress`) — zstd is an internal TYNDPKG detail; use `fflate` (pure JS gzip) or similar at app level.
+- **AES / RSA / ECDSA** — use Bun's `crypto.subtle` or `@noble/ciphers` + `@noble/curves`.
+- **Password hashing** (argon2, bcrypt) — use a Bun-compatible library or native binding.
+
+## Related
+
+- Web `crypto.getRandomValues` / `crypto.subtle.digest` — provided by Bun with the same semantics as `compute` for the overlap.
+- [Binary Data guide](/docs/v1.0/guides/binary-data).

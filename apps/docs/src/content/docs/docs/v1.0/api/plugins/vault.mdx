@@ -1,0 +1,38 @@
+---
+title: vault
+description: "Encrypted app vault. Facade over the core `vault` host API."
+---
+
+# `vault`
+
+`@tynd/plugin-vault` enables the host `vault` API and exposes its typed client. The API itself is documented on the [`vault`](/docs/v1.0/api/os/vault) page.
+
+## Install
+
+```bash
+tynd add vault
+```
+
+```ts
+import { vault } from "@tynd/plugin-vault/client";
+```
+
+Declaring the plugin compiles the matching `api-vault` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-vault` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-vault` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `vault` |
+| Aliases for `tynd add` | `secure-store`, `encrypted-store` |
+| Catalog permission labels | `host:vault`, `local-storage` |
+| Estimated size | 220 KB |
+| Client exports | `VaultReadResult`, `VaultWriteData`, `vault` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

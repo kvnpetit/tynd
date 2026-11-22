@@ -1,0 +1,151 @@
+---
+title: Official plugins
+description: "Official Tynd plugin packages, runtime requirements, and where their API docs live."
+---
+
+# Official plugins
+
+Official plugins ship as separate `@tynd/plugin-*` packages. They are not re-exported from `@tynd/core/client`; install the package, add it to `plugins` in `tynd.config.ts`, then import the package client directly.
+
+```bash
+bun add @tynd/plugin-sql
+```
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-sql"],
+}
+```
+
+`tynd dev` and `tynd build` link a native plugin's Rust crate into the app
+host they compile. Their package-required Cargo features are enabled
+automatically. Optional accelerators/codecs use an object entry:
+
+```ts
+plugins: [
+  { pkg: "@tynd/plugin-screen-rec", features: ["gpu-encode"] },
+]
+```
+
+The optional `permissions` field is a command-level runtime allow-list for the
+native plugin's generic host calls:
+
+```ts
+plugins: [
+  { pkg: "@acme/plugin-indexer", permissions: ["fs:readText", "fs:readDir"] },
+]
+```
+
+Selectors use `api:method`; `api:*` grants an entire API. `apis` entries act as
+API-wide wildcards and cannot be combined with `permissions`. When neither field is configured, package manifest APIs are
+used; missing package metadata stays deny-all. Pure-JS plugins keep using Bun;
+both plugin types keep Bun as the only JavaScript runtime.
+
+Native Rust plugins execute in-process. Tynd's release profile keeps panic
+unwinding enabled and contains panics from plugin `init`, command dispatch,
+background intervals, and `shutdown`; a contained failure becomes an error and
+does not stop the remaining plugins. This boundary cannot recover from process
+aborts, native memory corruption, stack overflow, or a plugin that never
+returns. Treat native plugins as trusted code, grant only commands they need,
+and prefer Bun/TypeScript for capabilities that do not require native access.
+
+Typed `#[plugin_impl]` plugins can declare the reserved untagged methods
+`plugin_init(&self, &PluginCx) -> PluginResult<()>` and
+`plugin_shutdown(&self, &PluginCx) -> PluginResult<()>`. They map to the native
+lifecycle and are never renderer commands. Stable resource-owning native
+plugins use shutdown to stop PTYs, audio streams, and speech before exit.
+
+`#[plugin_impl]` native plugins expose named renderer permissions from their
+declared commands. `start_capture` becomes `audio:allow-start-capture`;
+generated manifests also provide `allow-all`, `deny-all`, and `default`
+(`allow-all`) sets. This renderer ACL is independent from the plugin's
+`permissions` config above, which controls calls in the opposite direction:
+plugin → host. Core and plugin commands use separate internal namespaces: a
+plugin named `fs` cannot grant the core `fs:*` API.
+
+Plugin-registered init scripts and custom URI schemes run only in app-local webviews. A webview that shows remote content gets them only when the plugin registered them as `remote` (the script must then embed no secret and the scheme handler must treat every request as untrusted). Requests to a plugin URI scheme that carry neither `Origin` nor `Referer` are served only when `Sec-Fetch-Site` is `same-origin` or `none`.
+
+**Native plugin methods are webview-only.** A native plugin's client, `defineTypedPlugin<CommandsCatalog>(name)` from `@tynd/plugin-sdk`, calls the Rust side through the webview bridge (`__tynd__.os_call("plugin", "<name>:<method>")`). The Bun backend has no generic plugin host-call, by design, so backend code cannot reach native plugins.
+
+Plugin names are canonical lowercase kebab-case, at most 31 characters:
+`^[a-z][a-z0-9-]{0,30}$`. Bun definitions, native macros, generated manifests,
+and host registration enforce the same rule; invalid aliases and reserved
+names fail before the runtime starts.
+
+## Official plugins
+
+Every plugin made by the Tynd team is an official plugin. Plugins by anyone else are community plugins, added by package name.
+
+### Standalone plugins
+
+These are released independently; native ones ship their own Rust crate, linked into the host when declared.
+
+| Package | Type | Purpose | Docs |
+|---|---|---|---|
+| `@tynd/plugin-audio` | Native | Audio capture, playback, WAV I/O. | [API](/docs/v1.0/api/plugins/audio) |
+| `@tynd/plugin-command-palette` | Pure JS | Headless command registry and fuzzy search. | [API](/docs/v1.0/api/plugins/command-palette) |
+| `@tynd/plugin-gpu` | Pure JS | GPU diagnostics, readiness checks, benchmarks. | [API](/docs/v1.0/api/plugins/gpu) |
+| `@tynd/plugin-http-server` | Bun/TS | Embedded HTTP and WebSocket server through `Bun.serve`. | [API](/docs/v1.0/api/plugins/http-server) |
+| `@tynd/plugin-llm` | Native, experimental | Local GGUF inference through `llama.cpp`; native matrix pending. | [API](/docs/v1.0/api/plugins/llm) |
+| `@tynd/plugin-oauth` | Bun/TS | Loopback OAuth callback listener. | [API](/docs/v1.0/api/plugins/oauth) |
+| `@tynd/plugin-screen-rec` | Native, experimental | Region/screen recording with selectable sources; optional codec/platform matrix pending. | [API](/docs/v1.0/api/plugins/screen-rec) |
+| `@tynd/plugin-sql` | Bun/TS | Embedded SQLite via `bun:sqlite`. | [API](/docs/v1.0/api/plugins/sql) |
+| `@tynd/plugin-terminal` | Native | Real PTY terminal. | [API](/docs/v1.0/api/plugins/terminal) |
+| `@tynd/plugin-tts` | Native | Text-to-speech through platform engines. | [API](/docs/v1.0/api/plugins/tts) |
+| `@tynd/plugin-wgpu` | Native, experimental | Native `wgpu` window lifecycle; render-command bridge incomplete. | [API](/docs/v1.0/api/plugins/wgpu) |
+| `@tynd/plugin-whisper` | Native, experimental | Local speech-to-text through Whisper; native matrix pending. | [API](/docs/v1.0/api/plugins/whisper) |
+
+### Host-backed plugins
+
+Host-backed plugins are thin facades over host APIs whose native code ships in the Tynd host, released with `@tynd/core` and `@tynd/host-src`: declaring one compiles the matching `api-*` feature into the host and exposes the typed client from `<package>/client`. Each page links to the full API reference.
+
+| Plugin | Package | Description | Host API |
+|---|---|---|---|
+| [`apple-script`](/docs/v1.0/api/plugins/apple-script) | `@tynd/plugin-apple-script` | AppleScript/JXA bridge | `apple-script` |
+| [`autolaunch`](/docs/v1.0/api/plugins/autolaunch) | `@tynd/plugin-autolaunch` | Login item | `autolaunch` |
+| [`biometric`](/docs/v1.0/api/plugins/biometric) | `@tynd/plugin-biometric` | Biometric prompts | `biometric` |
+| [`cli`](/docs/v1.0/api/plugins/cli) | `@tynd/plugin-cli` | Command-line argument parsing | `cli` |
+| [`clipboard`](/docs/v1.0/api/plugins/clipboard) | `@tynd/plugin-clipboard` | System clipboard | `clipboard` |
+| [`compute`](/docs/v1.0/api/plugins/compute) | `@tynd/plugin-compute` | Native hashing and random bytes | `compute` |
+| [`deep-link`](/docs/v1.0/api/plugins/deep-link) | `@tynd/plugin-deep-link` | Custom URL schemes | `deep-link` |
+| [`dialog`](/docs/v1.0/api/plugins/dialog) | `@tynd/plugin-dialog` | Native file and message dialogs | `dialog` |
+| [`fs`](/docs/v1.0/api/plugins/fs) | `@tynd/plugin-fs` | File-system access | `fs` |
+| [`http`](/docs/v1.0/api/plugins/http) | `@tynd/plugin-http` | Native HTTP client | `http` |
+| [`keyring`](/docs/v1.0/api/plugins/keyring) | `@tynd/plugin-keyring` | OS credential store | `keyring` |
+| [`keys`](/docs/v1.0/api/plugins/keys) | `@tynd/plugin-keys` | Keyboard-combo blocking | `keys` |
+| [`menu`](/docs/v1.0/api/plugins/menu) | `@tynd/plugin-menu` | Application and context menus | `menu` |
+| [`multiwindow`](/docs/v1.0/api/plugins/multiwindow) | `@tynd/plugin-multiwindow` | Secondary windows and child webviews | `multiwindow` |
+| [`network`](/docs/v1.0/api/plugins/network) | `@tynd/plugin-network` | Network interfaces | `network` |
+| [`notification`](/docs/v1.0/api/plugins/notification) | `@tynd/plugin-notification` | Desktop notifications | `notification` |
+| [`power`](/docs/v1.0/api/plugins/power) | `@tynd/plugin-power` | Power state | `power` |
+| [`process`](/docs/v1.0/api/plugins/process) | `@tynd/plugin-process` | Process execution | `process` |
+| [`screenshot`](/docs/v1.0/api/plugins/screenshot) | `@tynd/plugin-screenshot` | Screen capture | `screenshot` |
+| [`shell`](/docs/v1.0/api/plugins/shell) | `@tynd/plugin-shell` | Open URLs and paths with the OS | `shell` |
+| [`shortcuts`](/docs/v1.0/api/plugins/shortcuts) | `@tynd/plugin-shortcuts` | Global shortcuts | `shortcuts` |
+| [`sidecar`](/docs/v1.0/api/plugins/sidecar) | `@tynd/plugin-sidecar` | Bundled helper processes | `sidecar` |
+| [`single-instance`](/docs/v1.0/api/plugins/single-instance) | `@tynd/plugin-single-instance` | Single-instance lock | `single-instance` |
+| [`store`](/docs/v1.0/api/plugins/store) | `@tynd/plugin-store` | Persistent key-value store | `store` |
+| [`system-stats`](/docs/v1.0/api/plugins/system-stats) | `@tynd/plugin-system-stats` | CPU, memory and load metrics | `system-stats` |
+| [`theme`](/docs/v1.0/api/plugins/theme) | `@tynd/plugin-theme` | OS theme tracking | `theme` |
+| [`tray`](/docs/v1.0/api/plugins/tray) | `@tynd/plugin-tray` | System tray icon and menu | `tray` |
+| [`updater`](/docs/v1.0/api/plugins/updater) | `@tynd/plugin-updater` | Auto-update runtime | `updater` |
+| [`vault`](/docs/v1.0/api/plugins/vault) | `@tynd/plugin-vault` | Encrypted app vault | `vault` |
+| [`websocket`](/docs/v1.0/api/plugins/websocket) | `@tynd/plugin-websocket` | Native WebSocket client | `websocket` |
+| [`window-state`](/docs/v1.0/api/plugins/window-state) | `@tynd/plugin-window-state` | Window persistence | `window-state` |
+
+## Core APIs
+
+The host always compiles a minimal core: the window and webview, the `tynd://` scheme, IPC, RPC and events, the app lifecycle, the debug protocol, and the `acl` and `log` APIs (no Cargo feature: they cannot be built out). Their clients come from `@tynd/core/client`, with no plugin to install:
+
+- `app`, `tyndWindow` (current window), `tyndWebview` (current webview)
+- `os`, `path`, `monitors`, `security`, `log`
+- `createBackend`, `createFrontendEmitter`, RPC helpers, `createPluginClient`, `workers`
+
+Every other host API is a host-backed official plugin listed above. Its client is imported only from `<package>/client`; `@tynd/core/client` has no subpath for it. Using one needs the package in your dependencies and in `plugins` (`tynd add <name>` does both), and the next `tynd dev` or `tynd build` compiles the API into the app host. A host built without the API rejects its calls with an error naming `@tynd/plugin-<api>`.
+
+## Related
+
+- [`tynd add`](/docs/v1.0/cli/add)
+- [`tynd plugin list`](/docs/v1.0/cli/plugin/list)
+- [`tynd plugin check`](/docs/v1.0/cli/plugin/check)
+- [`tynd plugin new`](/docs/v1.0/cli/plugin/new)

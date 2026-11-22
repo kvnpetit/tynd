@@ -1,0 +1,31 @@
+---
+title: deepLink
+description: "Custom URL scheme registration + runtime forwarding (LSRegister on macOS, XDG `.desktop` on Linux, Windows registry on Win32)."
+---
+
+# `deepLink`
+
+Install the required plugin:
+
+```bash
+tynd add deep-link
+```
+
+```ts
+import { deepLink } from "@tynd/plugin-deep-link/client";
+```
+
+Register `myapp://` URL handlers and react to incoming links.
+
+## API surface
+
+- `deepLink.register(scheme): Promise<void>` — install the OS-level handler for the current binary. On Linux it writes a `.desktop` entry and runs `xdg-mime default`; it rejects when `xdg-mime` is missing (no `xdg-utils`) or fails.
+- `deepLink.unregister(scheme): Promise<void>` — remove the handler.
+- `deepLink.isRegistered(scheme): Promise<boolean>` — query the OS handler database. Returns `false` once another app has taken the scheme over, even if this process registered it earlier.
+- `deepLink.onUrl(handler): { dispose(): void }` — fires whenever the running app receives a URL (forwarded from a second-launch when `singleInstance` is active). Call `dispose()` on the returned handle to detach the listener. The URL is delivered to app-local webviews only, never to a webview showing remote content.
+- `deepLink.getStartupUrl(): Promise<string | null>` — the URL the app was launched with, if any (cold-start deep link).
+- `deepLink.wasForwardedToPrimary(): Promise<boolean>` — `true` when this process was a secondary launch that forwarded its URL to the running primary instance and exited early.
+
+A second launch waits at most 2 seconds to connect to the primary. On timeout (or any forwarding failure) the host logs `deep-link forwarding disabled`, nothing is forwarded, and that process keeps running as a normal instance with the URL as its startup URL (`wasForwardedToPrimary()` stays `false`).
+
+The native side handles the per-platform plumbing: `LSRegister` on macOS, `.desktop` files for `xdg-open` on Linux, and the `HKCU\Software\Classes` registry hive on Windows.

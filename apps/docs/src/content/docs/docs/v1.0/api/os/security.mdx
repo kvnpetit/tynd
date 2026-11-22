@@ -1,0 +1,113 @@
+---
+title: security
+description: "Startup security policy and per-context native command capabilities."
+---
+
+# `security`
+
+```ts
+import { security } from "@tynd/core/client";
+```
+
+The renderer-facing API is intentionally read-only. Configure capability-based access control for `fs`, `http`, processes, sensitive capabilities, and WebView navigation from the trusted Bun backend before any WebView is created.
+
+`security` handles resource scopes. `app.start({ capabilities })` separately decides which native commands a renderer context may call:
+
+```ts
+app.start({
+  capabilities: [{
+    identifier: "settings-window",
+    windows: ["settings"],
+    permissions: [{
+      identifier: "settings-native",
+      commands: { allow: ["store:get", "store:set", "window:close"] },
+    }],
+  }],
+});
+```
+
+Native OS and plugin commands called from a renderer are denied by default, including when `capabilities` is omitted. `backend:<fn>`, `window:`, `tray:` and `menu:` commands are only checked once your capabilities declare one in that family; see [Security concepts](/docs/v1.0/concepts/security#backend-functions-and-window--tray--menu-commands). Add explicit grants for each caller window/webview/origin. An empty list denies every native renderer command.
+
+**Precedence:** deny rules always beat allow rules. An empty `allow` list means "allow everything" unless `defaultDeny` is on, in which case it means "deny everything".
+
+## Configure at backend startup
+
+```ts
+import { app } from "@tynd/core";
+
+app.start({
+  security: {
+    fs: {
+      allow: ["${dataDir}/myapp/**"],
+      deny: ["**/.ssh/**", "**/.env"],
+    },
+    http: {
+      allow: ["https://api.myapp.com/**", "https://cdn.myapp.com/**"],
+    },
+    defaultDeny: true,
+  },
+});
+```
+
+With no `security` policy configured, the `fs` and `http` scopes are **open** and sensitive capabilities are not checked; `tynd validate` and `tynd build` warn about it. `process.exec` and `process.spawn` are the exception: they are refused until a policy lists the binary in `processAllowedBinaries`. Configure a policy before shipping.
+
+### `SecurityPolicy` fields
+
+| Field | Type | Default | Effect |
+|---|---|---|---|
+| `fs` | `{ allow?: string[]; deny?: string[] }` | open | Path globs checked by file-system commands |
+| `http` | `{ allow?: string[]; deny?: string[] }` | open | URL globs checked by `http.request`, `http.download` and WebSocket URLs |
+| `defaultDeny` | `boolean` | `false` | An empty `allow` list denies everything instead of allowing everything |
+| `processAllowedBinaries` | `string[]` | none | Binaries `process.exec` and `process.spawn` may run. Unset refuses every call. An entry matches the exact string passed as `cmd` or the same canonical path (case-insensitive on Windows) |
+| `shellExecAllowedCommands` | `string[]` | `[]` | First tokens `process.execShell` may run. Empty refuses every call |
+| `allowedSensitiveCapabilities` | `("audioInput" \| "audioOutput" \| "screenCapture" \| "window")[]` | `[]` | Capabilities that native plugins (audio, screen recording, wgpu windows) must be granted once a policy is configured |
+
+```ts
+app.start({
+  security: {
+    fs: { allow: ["${dataDir}/myapp/**"] },
+    processAllowedBinaries: ["git"],
+    shellExecAllowedCommands: ["ls"],
+    allowedSensitiveCapabilities: ["audioInput"],
+    defaultDeny: true,
+  },
+});
+```
+
+Policy is declarative: it is installed once at startup and nothing widens it at runtime. Renderer IPC cannot configure policy or change ACLs, which keeps an XSS or compromised remote page from widening its own permissions.
+
+### Glob syntax
+
+- `*` — any run of characters within a segment (doesn't cross `/`).
+- `**` — any run of characters including `/`.
+- Everything else is a literal match.
+
+Paths are normalized to forward slashes before matching. Matching is **case-insensitive on Windows** (full Unicode case folding, applied to both the pattern and the path), case-sensitive elsewhere.
+
+`http` patterns are matched against the parsed URL: scheme and host are lowercased and the default port is dropped (`HTTPS://API.Example.com:443/v1` is matched as `https://api.example.com/v1`). With a policy configured, URLs with userinfo, backslashes or control characters, or that do not parse, are refused. The path and query are normalized too: percent-escapes of unreserved characters (`A-Za-z0-9-._~`) are decoded, so `/%61dmin` and `/admin` are the same path; every other escape stays encoded with uppercase hex (`%2F` never becomes a path separator); and raw non-ASCII, spaces and `"<>` `` ` `` `^` are encoded, so a pattern written with a literal `é` matches the `%C3%A9` form of the URL. Patterns get the same normalization.
+
+More `http` rules, applied to every `http.request`, `http.download` and WebSocket URL:
+
+- **Ambiguous paths are refused.** A URL whose path holds `%2F` or `%5C` (encoded slash or backslash), `%252e` / `%252f` / `%255c` (double-encoded dot, slash or backslash), `%00` (NUL), a `%` not followed by two hex digits (`%zz`, `%u0041`), `;` (path parameter) or a leftover `.` / `..` segment is denied, because servers disagree on what it means. The one exception is the allow rule that matches the URL, and only when it spells every such sequence itself (an allow pattern containing `%2F` lets a URL with `%2F` through; a deny pattern never opts a URL in).
+- **IPv4-mapped IPv6 hosts** (`[::ffff:127.0.0.1]`, `[::127.0.0.1]`) are rewritten to plain IPv4 before matching, so a rule on `127.0.0.1` covers them. `[::1]` is not rewritten.
+- **Host rules are not an SSRF boundary.** Matching is textual and never resolves DNS: a deny rule on an IP does not stop a DNS name that points (or rebinds) to that address. Restrict the resolved address at network level if that is your goal.
+- **Repeated `/` collapse** to one in both the URL path and the patterns (`/a//b` is matched as `/a/b`).
+- **`deny` rules are case-insensitive** (path included). `allow` rules stay case-sensitive.
+- **IDN hosts** are matched in punycode: a pattern with `bücher.example` matches `xn--bcher-kva.example`. A host label holding a glob character is only lowercased.
+- **`ws://` and `wss://`** are matched as `http://` and `https://`, and patterns written with `ws`/`wss` are mapped the same way, so one rule covers both.
+
+## `isFsAllowed(path): Promise<boolean>`
+## `isHttpAllowed(url): Promise<boolean>`
+
+Probe the active policy without triggering the underlying API. Handy for conditional UI.
+
+```ts
+if (await security.isHttpAllowed(target)) startSync(target);
+```
+
+## What's guarded
+
+- Every method in `fs.*` (including stateful handles and the `tynd-bin://` binary scheme).
+- `http.request`, `http.download` and `websocket.connect`.
+
+WebView navigation is checked too. Unsafe URLs (`javascript:` and the like) and HTTP(S) URLs with credentials are always refused; bundled app pages load; a remote HTTP(S) page loads only when a configured `http` policy allows it; loopback dev servers follow the `http` scope. Every navigation emits `webview:navigation` with `{ label, url, allowed }`, and a denied one is blocked.

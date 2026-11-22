@@ -1,0 +1,85 @@
+---
+title: screen-rec
+description: "Native screen recording with selectable sources (scap). Experimental."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# `screen-rec`
+
+`@tynd/plugin-screen-rec` records the screen through `scap`: ScreenCaptureKit on macOS 12.3+, DXGI Desktop Duplication on Windows 10+, PipeWire portal or XCB on Linux.
+
+<Aside type="caution">
+  **Experimental.** Baseline capture compiles and is tested locally, but the optional codec and platform matrix is incomplete. It is published to npm under the `experimental` dist-tag, not `latest`.
+</Aside>
+
+## Install
+
+```bash
+tynd add screen-rec
+```
+
+or `bun add @tynd/plugin-screen-rec` and list it in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-screen-rec"],
+}
+```
+
+`tynd dev` and `tynd build` link the plugin's Rust crate into the app host they compile.
+
+The package enables the `capture` feature (MJPEG). H.264 and HEVC need the optional `gpu-encode` feature, which links the system ffmpeg libraries:
+
+```ts
+plugins: [{ pkg: "@tynd/plugin-screen-rec", features: ["gpu-encode"] }],
+```
+
+## Use
+
+```ts
+import { screenRec } from "@tynd/plugin-screen-rec";
+
+if (!(await screenRec.hasPermission())) await screenRec.requestPermission();
+
+const rec = await screenRec.start({ fps: 30, output: "/tmp/demo.mjpg" });
+const report = await screenRec.stop({ recordingId: rec.id });
+console.log(report.durationMs, report.sizeBytes);
+```
+
+## API
+
+| Method | Purpose |
+|---|---|
+| `screenRec.listSources()` | Displays and windows that can be captured |
+| `screenRec.hasPermission()` / `requestPermission()` | OS screen-capture grant (macOS only) |
+| `screenRec.start(opts)` | Open a recording; returns a `RecordingHandle` |
+| `screenRec.stop({ recordingId })` | Close a recording; returns `{ durationMs, sizeBytes }` |
+| `screenRec.pause({ recordingId })` / `resume(...)` | Idempotent |
+| `screenRec.list()` | Active recordings |
+
+Start options: `output` (required), `fps` (30), `region` (`{ x, y, width, height }` in physical pixels), `monitor` (id from `listSources().monitors`), `codec` (`"mjpeg"` default, `"h264"` or `"hevc"` with `gpu-encode`), `encoder` (`"auto"`), `bitrate` (8000 kbps), `preset` (`"fast"`). `audio: true` and a non-empty `format` are rejected.
+
+## Permissions
+
+| Platform | Behavior |
+|---|---|
+| macOS 12.3+ | The user must grant Screen and System Audio Recording to the host binary; `requestPermission()` triggers the prompt |
+| Windows 10+ | No OS permission; `hasPermission()` returns `true` |
+| Linux (Wayland) | The `xdg-desktop-portal` prompts the user |
+| Linux (X11) | No permission |
+
+Each command first runs the host's `security.checkScreenCapture` policy and fails closed when no policy is available; the OS permission is a second, independent gate.
+
+## Pitfalls
+
+- `stop()` waits up to 5 seconds for the encoder; a stuck OS capture call is detached with a warning.
+- `pause` drops frames while the capture device keeps running; the reported duration discounts the pause.
+- Linux portals select the source interactively, so `listSources()` returns empty arrays and `monitor` must be omitted.
+- `WindowInfo.appName` is currently an empty string.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [Full README](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/screen-rec)

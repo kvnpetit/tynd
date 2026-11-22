@@ -1,0 +1,34 @@
+---
+title: network
+description: "Enumerate the host's network interfaces."
+---
+
+# `network`
+
+Install the required plugin:
+
+```bash
+tynd add network
+```
+
+```ts
+import { network } from "@tynd/plugin-network/client";
+```
+
+Backed by [`if-addrs`](https://github.com/messense/if-addrs) — wraps `getifaddrs(3)` on Unix and `GetAdaptersAddresses` on Windows. The raw call returns one entry per (interface, IP) pair; the host collapses them so each interface appears once with all its IPs grouped together.
+
+## API surface
+
+- `network.interfaces(): Promise<NetworkInterface[]>` — snapshot of every interface with its assigned IPs.
+
+`NetworkInterface`:
+
+```ts
+interface NetworkInterface {
+  name: string;
+  ips: string[];
+  mac: string | null;       // null when the host can't read it
+  is_up: boolean | null;    // null when the host can't read it
+  is_loopback: boolean;
+}
+```

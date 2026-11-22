@@ -1,0 +1,38 @@
+---
+title: cli
+description: "Parsed argv and matched subcommand. Facade over the `cli` host API."
+---
+
+# `cli`
+
+`@tynd/plugin-cli` enables the host `cli` API and exposes its typed client. The API itself is documented on the [`cli`](/docs/v1.0/api/os/cli) page.
+
+## Install
+
+```bash
+tynd add cli
+```
+
+```ts
+import { cli } from "@tynd/plugin-cli/client";
+```
+
+Declaring the plugin compiles the matching `api-cli` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-cli` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-cli`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-cli` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `cli` |
+| Aliases for `tynd add` | `args`, `argv` |
+| Catalog permission labels | `host:cli` |
+| Estimated size | 40 KB |
+| Client exports | `CliMatches`, `cli` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

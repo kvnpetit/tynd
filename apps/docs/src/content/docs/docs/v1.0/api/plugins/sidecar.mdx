@@ -1,0 +1,38 @@
+---
+title: sidecar
+description: "Bundled helper executables. Facade over the core `sidecar` host API."
+---
+
+# `sidecar`
+
+`@tynd/plugin-sidecar` enables the host `sidecar` API and exposes its typed client. The API itself is documented on the [`sidecar`](/docs/v1.0/api/os/sidecar) page.
+
+## Install
+
+```bash
+tynd add sidecar
+```
+
+```ts
+import { sidecar } from "@tynd/plugin-sidecar/client";
+```
+
+Declaring the plugin compiles the matching `api-sidecar` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-sidecar` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-sidecar` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `sidecar` |
+| Aliases for `tynd add` | `sidecars` |
+| Catalog permission labels | `host:sidecar`, `child-process` |
+| Estimated size | 160 KB |
+| Client exports | `sidecar` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

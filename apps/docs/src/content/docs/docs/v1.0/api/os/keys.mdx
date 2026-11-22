@@ -1,0 +1,28 @@
+---
+title: keys
+description: "Disable native browser key combos (Ctrl+R, F5, Ctrl+P, …) inside the webview."
+---
+
+# `keys`
+
+Install the required plugin:
+
+```bash
+tynd add keys
+```
+
+```ts
+import { keys } from "@tynd/plugin-keys/client";
+```
+
+The host owns the canonical set of disabled key combos so a webview reload doesn't lose state. Every mutation re-broadcasts the full list; the frontend listener installed by `keys.install()` mirrors the set into a `keydown` capture handler that calls `event.preventDefault()` for matching combos.
+
+Combo grammar: `Ctrl+Shift+Alt+Meta+<key>` where `<key>` is the JS `event.key` value (case-sensitive). Modifier order is normalised on the host side so callers can write `"Shift+Ctrl+R"` and `"Ctrl+Shift+R"` interchangeably.
+
+## API surface
+
+- `keys.disable(combos: string[]): Promise<void>` — add combos to the disabled set (idempotent).
+- `keys.enable(combos: string[]): Promise<void>` — remove combos from the disabled set.
+- `keys.list(): Promise<string[]>` — snapshot of currently disabled combos.
+- `keys.clear(): Promise<void>` — drop every disabled combo.
+- `keys.install(): void` — install the frontend keydown listener (call once at app boot).

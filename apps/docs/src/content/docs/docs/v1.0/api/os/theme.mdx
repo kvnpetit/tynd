@@ -1,0 +1,28 @@
+---
+title: theme
+description: "Read & subscribe to the OS color-scheme preference; configure light/dark palettes that update CSS variables in lockstep."
+---
+
+# `theme`
+
+Install the required plugin:
+
+```bash
+tynd add theme
+```
+
+```ts
+import { theme } from "@tynd/plugin-theme/client";
+```
+
+Wraps `prefers-color-scheme` with explicit user overrides (light / dark / system) and a palette mapper that writes CSS variables on every change.
+
+## API surface
+
+- `theme.configure(opts: ConfigureOptions): void` — register `light` + `dark` palettes (CSS-variable maps); the resolver writes them to `:root` whenever the effective theme changes.
+- `theme.preference(): ThemePreference` — read the user's current `"light" | "dark" | "system"` preference.
+- `theme.setPreference(pref): void` — persist the user's choice.
+- `theme.current(): EffectiveTheme` — the actual theme being applied right now (`"light" | "dark"`).
+- `theme.toggle(): void` — flip between light and dark (resolves `"system"` to its effective value first).
+- `theme.onChange(handler)` — fires every time the effective theme flips (system-driven or user-driven).
+- `theme.dispose(): void` — tear down the resolver and detach all listeners.

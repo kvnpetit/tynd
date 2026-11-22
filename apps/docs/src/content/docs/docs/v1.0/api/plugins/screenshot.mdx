@@ -1,0 +1,38 @@
+---
+title: screenshot
+description: "Screen and window capture. Facade over the core `screenshot` host API."
+---
+
+# `screenshot`
+
+`@tynd/plugin-screenshot` enables the host `screenshot` API and exposes its typed client. The API itself is documented on the [`screenshot`](/docs/v1.0/api/os/screenshot) page.
+
+## Install
+
+```bash
+tynd add screenshot
+```
+
+```ts
+import { screenshot } from "@tynd/plugin-screenshot/client";
+```
+
+Declaring the plugin compiles the matching `api-screenshot` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-screenshot` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-screenshot` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `screenshot` |
+| Aliases for `tynd add` | `screen-capture` |
+| Catalog permission labels | `host:screenshot`, `screen-recording` |
+| Estimated size | 190 KB |
+| Client exports | `CapturedImage`, `MonitorInfo`, `screenshot`, `WindowInfo` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

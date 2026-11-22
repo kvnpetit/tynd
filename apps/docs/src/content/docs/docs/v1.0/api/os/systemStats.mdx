@@ -1,0 +1,26 @@
+---
+title: systemStats
+description: "Sample CPU, memory, disks, processes, and uptime via `sysinfo`."
+---
+
+# `systemStats`
+
+Install the required plugin:
+
+```bash
+tynd add system-stats
+```
+
+```ts
+import { systemStats } from "@tynd/plugin-system-stats/client";
+```
+
+Backed by [`sysinfo`](https://github.com/GuillaumeGomez/sysinfo). The host keeps a single `System` instance behind a mutex so CPU usage is computed as a delta between successive `cpu()` calls (the very first call returns a meaningful baseline rather than a flat 0%).
+
+## API surface
+
+- `systemStats.cpu(): Promise<CpuStats>` — aggregate CPU usage + core count + brand.
+- `systemStats.memory(): Promise<MemoryStats>` — RAM + swap totals/usage in bytes.
+- `systemStats.disks(): Promise<DiskInfo[]>` — mounted disks with capacity and filesystem type.
+- `systemStats.processes(limit?, offset?): Promise<ProcessInfo[]>` — paginated, sorted by ascending PID. `limit` defaults to 50, capped at 1000.
+- `systemStats.uptime(): Promise<{ seconds: number }>` — host uptime in whole seconds.

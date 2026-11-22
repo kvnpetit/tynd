@@ -1,0 +1,97 @@
+---
+title: shortcuts
+description: "Register system-wide global keyboard hotkeys that fire even when the app is unfocused."
+---
+
+# `shortcuts`
+
+Install the required plugin:
+
+```bash
+tynd add shortcuts
+```
+
+```ts
+import { shortcuts } from "@tynd/plugin-shortcuts/client";
+```
+
+Global keyboard shortcuts — fire even when your app is unfocused. Backed by [`global-hotkey`](https://github.com/tauri-apps/global-hotkey): `RegisterHotKey` (Windows), `RegisterEventHotKey` (macOS), `XGrabKey` (Linux X11).
+
+## `register(accelerator, handler, id?): Promise<ShortcutHandle>`
+
+```ts
+interface ShortcutHandle {
+  id:           string;
+  unregister(): Promise<boolean>;
+}
+
+const h = await shortcuts.register("CmdOrCtrl+Shift+P", () => {
+  openCommandPalette();
+}, "open-palette");
+
+console.log(h.id);        // "open-palette"
+await h.unregister();      // true if existed
+```
+
+- `accelerator` — accelerator string (standard format — `CmdOrCtrl+Shift+P`, etc.).
+- `handler` — fires on key-down of the full combo.
+- `id` — optional stable id. Defaults to the accelerator string. Registering an id that is already taken throws.
+
+## `unregister(id): Promise<boolean>`
+
+Unregister by id without the handle. Returns `true` if the id existed and belongs to the caller (see [Ownership](#ownership)).
+
+```ts
+await shortcuts.unregister("open-palette");
+```
+
+## `unregisterAll(): Promise<void>`
+
+Unregisters the shortcuts the caller can reach: all of them from the backend; from a webview, its own plus the backend-created ones for an app-local webview, only its own for a webview showing remote content.
+
+```ts
+await shortcuts.unregisterAll();
+```
+
+## `isRegistered(id): Promise<boolean>`
+
+`false` for an id another webview registered, as if it were unknown.
+
+```ts
+const ok = await shortcuts.isRegistered("open-palette");
+```
+
+## Accelerator format
+
+| Modifier | Effect |
+|---|---|
+| `CmdOrCtrl` | ⌘ on macOS, Ctrl elsewhere |
+| `Cmd` / `Super` | Command / Windows key |
+| `Ctrl` | Control |
+| `Alt` / `Option` | Alt / Option |
+| `Shift` | Shift |
+
+Key names: `A-Z`, `0-9`, `F1-F24`, `Space`, `Tab`, `Escape`, `Enter`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`.
+
+## Ownership
+
+A shortcut registered from a webview belongs to that webview.
+
+- Ownership is per webview, document and frame origin: a remote iframe inside a local page cannot use the page's shortcuts.
+- `shortcut:triggered` goes only to the webview that registered it, not to other windows.
+- `unregister`, `isRegistered` and `unregisterAll` called from a webview see its own shortcuts, plus the backend-created ones for an app-local webview (only its own for a remote webview). Another webview's id answers like an unknown id (`false`), so a settings window cannot remove the main window's shortcut: call it from the backend or from the registering webview.
+- When the webview reloads, navigates or closes, its shortcuts are unregistered. Register again after the new document loads. A `register` still running when the page navigates or reloads is undone and fails with "the document that requested it is gone".
+- A shortcut registered from the backend is not owned by a webview: its event reaches app-local webviews, which can list and unregister it. A webview showing remote content cannot.
+
+## Notes
+
+- **Conflicts** — if another process holds the combo, `register` throws. Catch and let the user pick something else.
+- **Wayland** — there is no Wayland backend; Linux registration goes through X11 (XWayland on a Wayland session).
+- **macOS Input Monitoring** — first registration on macOS Monterey+ may prompt for Input Monitoring permission.
+- Registrations last until the app exits or, for a webview's shortcuts, until its document is replaced or closed. The OS releases them on exit, so calling `unregisterAll` in `app.onClose` is optional.
+
+See the [Keyboard Shortcuts guide](/docs/v1.0/guides/keyboard-shortcuts).
+
+## Related
+
+- [menu](/docs/v1.0/api/os/menu) — menu accelerators (fire only when app focused).

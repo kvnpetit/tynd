@@ -1,0 +1,41 @@
+---
+title: process
+description: "Run and spawn processes. Facade over the core `process` host API."
+---
+
+# `process`
+
+`@tynd/plugin-process` enables the host `process` API and exposes its typed client. The API itself is documented on the [`process`](/docs/v1.0/api/os/process) page.
+
+## Install
+
+```bash
+tynd add process
+```
+
+```ts
+import { process } from "@tynd/plugin-process/client";
+```
+
+Declaring the plugin compiles the matching `api-process` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-process` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-process` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `process` |
+| Aliases for `tynd add` | `exec`, `spawn`, `command` |
+| Catalog permission labels | `host:process`, `shell` |
+| Estimated size | 140 KB |
+| Client exports | `ExecOptions`, `ExecResult`, `process`, `SpawnedProcess`, `SpawnOptions` |
+
+## Security
+
+`process` is the broadest host capability. Grant only the commands you need in your [capabilities](/docs/v1.0/concepts/security).
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

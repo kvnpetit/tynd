@@ -1,0 +1,38 @@
+---
+title: notification
+description: "Desktop notifications. Facade over the core `notification` host API."
+---
+
+# `notification`
+
+`@tynd/plugin-notification` enables the host `notification` API and exposes its typed client. The API itself is documented on the [`notification`](/docs/v1.0/api/os/notification) page.
+
+## Install
+
+```bash
+tynd add notification
+```
+
+```ts
+import { notification } from "@tynd/plugin-notification/client";
+```
+
+Declaring the plugin compiles the matching `api-notification` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-notification` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-notification` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `notification` |
+| Aliases for `tynd add` | `notifications`, `notify` |
+| Catalog permission labels | `host:notification` |
+| Estimated size | 90 KB |
+| Client exports | `NotificationActionEvent`, `NotificationOptions`, `NotificationPermission`, `notification` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

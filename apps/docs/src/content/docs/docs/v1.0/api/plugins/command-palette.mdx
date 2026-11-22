@@ -1,0 +1,60 @@
+---
+title: command-palette
+description: "Headless command registry with fuzzy search and a Cmd/Ctrl+K binding. You render the UI."
+---
+
+# `command-palette`
+
+`@tynd/plugin-command-palette` is pure JavaScript and runs in the frontend. It owns the command store, search, open state and keyboard trigger; the view is yours.
+
+## Install
+
+```bash
+tynd add command-palette
+```
+
+or `bun add @tynd/plugin-command-palette` and list it in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-command-palette"],
+}
+```
+
+## Use
+
+```ts
+import { registerMany, search, run, bindShortcut, onOpenChange } from "@tynd/plugin-command-palette";
+
+registerMany([
+  { id: "file.new", title: "New File", keywords: ["create"], hint: "Ctrl+N", action: () => createNewFile() },
+  { id: "view.sidebar", title: "Toggle Sidebar", group: "View", action: toggleSidebar, when: () => !isFullscreen() },
+]);
+
+const off = bindShortcut();              // Cmd+K / Ctrl+K
+onOpenChange((open) => render(open));
+
+const results = search(query);           // ranked
+await run(results[0].id);                // fires the action, closes the palette
+```
+
+## API
+
+| Export | Purpose |
+|---|---|
+| `register(cmd)` / `registerMany(cmds)` | Add or replace commands |
+| `unregister(id)` / `clear()` | Remove |
+| `list()` | Snapshot of registered commands |
+| `search(q, limit?)` | Ranked results, at most `limit` (default 50); an empty query returns the visible commands in registration order |
+| `run(id)` | Execute and close; returns `false` when the id is unknown or its `when()` hides it |
+| `open()` / `close()` / `toggle()` / `isOpen()` | Visibility |
+| `onOpenChange(fn)` | Subscribe to open/close |
+| `bindShortcut(opts?)` | Keyboard handler; returns a function that removes it |
+
+`search()` ranks title equals query, then title starts with, title contains, subtitle or keyword contains, and finally a subsequence match. Non-matches are dropped and ties keep registration order. It is meant for up to about a thousand commands.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [Full README](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/command-palette)

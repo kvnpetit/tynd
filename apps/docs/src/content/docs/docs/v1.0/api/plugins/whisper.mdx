@@ -1,0 +1,77 @@
+---
+title: whisper
+description: "Local speech-to-text through whisper.cpp with streamed segments. Experimental."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# `whisper`
+
+`@tynd/plugin-whisper` loads Whisper checkpoints (GGML or GGUF, tiny to large) through `whisper-rs` and streams transcribed segments.
+
+<Aside type="caution">
+  **Experimental.** CPU transcription is enabled when installed through Tynd, but the C/C++/CMake/libclang build has not passed the full desktop matrix. It is published to npm under the `experimental` dist-tag, not `latest`.
+</Aside>
+
+## Install
+
+```bash
+tynd add whisper
+```
+
+or `bun add @tynd/plugin-whisper` and list it in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-whisper"],
+}
+```
+
+`tynd dev` and `tynd build` link the plugin's Rust crate into the app host they compile.
+
+Hardware acceleration is an optional feature per target: `metal`, `cuda`, `vulkan`, `hipblas` or `openblas`.
+
+## Use
+
+```ts
+import { whisper } from "@tynd/plugin-whisper";
+
+const model = await whisper.load({ path: "/models/ggml-base.bin", gpu: true });
+
+for await (const seg of whisper.transcribe(model.id, samples, { language: "auto", wordTimestamps: true })) {
+  console.log(`[${seg.startMs}-${seg.endMs}]`, seg.text);
+}
+
+const text = await whisper.transcribeAll(model.id, samples, { language: "en" });
+const { language, confidence } = await whisper.detectLanguage(model.id, samples);
+await whisper.unload(model.id);
+```
+
+## API
+
+| Method | Purpose |
+|---|---|
+| `whisper.load({ path, gpu? })` | Open a model; returns a `WhisperModel` handle |
+| `whisper.transcribe(id, samples, opts?)` | `AsyncIterable<TranscriptSegment>` |
+| `whisper.transcribeAll(id, samples, opts?)` | Concatenated string |
+| `whisper.transcribeStream(id, audioStream, opts?)` | Live transcription from an `AsyncIterable<Float32Array>`, for example [`audio`](/docs/v1.0/api/plugins/audio) capture |
+| `whisper.detectLanguage(id, samples)` | `{ language, confidence }` |
+| `whisper.cancel(streamId)` | Abort the decode; no segments are emitted for a cancelled run; idempotent |
+| `whisper.unload(id)` | Free the model; idempotent |
+| `whisper.list()` | Loaded models |
+
+Options: `language` (`"auto"` or a BCP-47 short code), `translate` (to English), `threads` (0 = all cores, CPU only), `prompt`, `temperature` (0.0), `maxLen`, `wordTimestamps`, and on the client only `signal`, `sampleRate` and `channels` (source format; 16000 and 1 by default). `transcribeStream` also takes `windowMs` (30000 by default and at most).
+
+## Pitfalls
+
+- Input must be 16 kHz mono f32 PCM. The backend rejects a `sampleRate` or `channels` argument that does not match instead of producing garbled text.
+- The encoder sees 30 s at a time. `transcribeStream` buffers windows of `windowMs` (30 s by default); add a voice activity detector upstream for long live audio.
+- Each buffer is decoded in one pass, so its segments arrive together once the decode finishes, not while it runs. `whisper.cancel(streamId)` stops the decode itself (within a fraction of a second) and a cancelled run emits no segments. Aborting the `signal`, or leaving the `for await` loop early, ends the iterator and cancels the decode too.
+- You download model files yourself. Sizes run from about 75 MB (`ggml-tiny.bin`) to 3 GB (`ggml-large-v3.bin`).
+- Whisper only transcribes. Pass the text to [`llm`](/docs/v1.0/api/plugins/llm) for summaries or intent extraction.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [Full README](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/whisper)

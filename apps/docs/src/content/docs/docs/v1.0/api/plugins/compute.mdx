@@ -1,0 +1,38 @@
+---
+title: compute
+description: "Native hashing and random bytes. Facade over the `compute` host API."
+---
+
+# `compute`
+
+`@tynd/plugin-compute` enables the host `compute` API and exposes its typed client. The API itself is documented on the [`compute`](/docs/v1.0/api/os/compute) page.
+
+## Install
+
+```bash
+tynd add compute
+```
+
+```ts
+import { compute } from "@tynd/plugin-compute/client";
+```
+
+Declaring the plugin compiles the matching `api-compute` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-compute` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-compute`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-compute` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `compute` |
+| Aliases for `tynd add` | `hash`, `random-bytes` |
+| Catalog permission labels | `host:compute` |
+| Estimated size | 90 KB |
+| Client exports | `HashAlgo`, `compute` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

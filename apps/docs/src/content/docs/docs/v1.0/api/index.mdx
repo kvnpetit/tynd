@@ -1,0 +1,107 @@
+---
+title: API Reference
+description: "Every public Tynd surface — backend, frontend RPC, OS APIs, and official plugins — with signatures and examples."
+---
+
+import { Aside, CardGrid } from '@astrojs/starlight/components';
+import DocCard from '@/components/DocCard.astro';
+
+# API Reference
+
+Every Tynd app has three surfaces:
+
+- **Backend** (`@tynd/core`) — imported by `backend/main.ts`, exposes `app.start`, emitters, lifecycle hooks.
+- **Frontend RPC** (`@tynd/core/client`) — typed proxy to your backend functions via `createBackend<typeof backend>()`.
+- **Capability APIs** — the minimal core (app, current window and webview, os, path, monitors, security, log, workers) comes from `@tynd/core/client`; every other capability is an official plugin imported from its `@tynd/plugin-*/client` entry point.
+
+<Aside type="note">
+  **Availability follows configuration.** The host always carries the core; an API from a host-backed official plugin is compiled in, and works, once the plugin is declared in `plugins`. See [Bun runtime](/docs/v1.0/concepts/runtimes) and [Plugins](/docs/v1.0/api/plugins).
+</Aside>
+
+## Backend
+
+- [`@tynd/core`](/docs/v1.0/api/backend) — `app.start`, `app.onReady`, `app.onClose`, `createEmitter`, `AppConfig`, `WindowConfig`, menu/tray config.
+- [Streaming RPC](/docs/v1.0/api/streaming-rpc) — async-generator handlers.
+
+## Core
+
+Always in the host and imported from `@tynd/core/client`:
+
+<CardGrid>
+  <DocCard title="app" href="/docs/v1.0/api/os/app">Name, version, exit, relaunch.</DocCard>
+  <DocCard title="tyndWindow" href="/docs/v1.0/api/os/window">Current window: control and events.</DocCard>
+  <DocCard title="tyndWebview" href="/docs/v1.0/api/os/webview">Current webview: label, cookies, downloads, popups.</DocCard>
+  <DocCard title="monitors" href="/docs/v1.0/api/os/monitor">Enumerate displays, scale factors.</DocCard>
+  <DocCard title="path" href="/docs/v1.0/api/os/path">Cross-OS path helpers.</DocCard>
+  <DocCard title="os" href="/docs/v1.0/api/os/os">Platform, arch, system dirs.</DocCard>
+  <DocCard title="workers" href="/docs/v1.0/api/os/workers">Offload CPU-bound JS to OS threads.</DocCard>
+  <DocCard title="log" href="/docs/v1.0/api/os/log">Structured JSON-lines file log with rotation.</DocCard>
+  <DocCard title="security" href="/docs/v1.0/api/os/security">Capability ACL for fs / http.</DocCard>
+</CardGrid>
+
+## Official plugins
+
+Every plugin made by the Tynd team is an official plugin, installed with `tynd add <name>`.
+
+### Host-backed plugins
+
+Their native code ships in the Tynd host. Each one is a `@tynd/plugin-<name>` package imported from `@tynd/plugin-<name>/client`. `tynd add <name>` installs it and lists it in `plugins`; the next `tynd dev` or `tynd build` compiles it into the host.
+
+<CardGrid>
+  <DocCard title="appleScript" href="/docs/v1.0/api/plugins/apple-script">Run AppleScript / JXA (macOS only).</DocCard>
+  <DocCard title="windowState" href="/docs/v1.0/api/os/windowState">Persist window geometry per label.</DocCard>
+  <DocCard title="multiwindow" href="/docs/v1.0/api/plugins/multiwindow">Secondary windows and child webviews.</DocCard>
+  <DocCard title="dialog" href="/docs/v1.0/api/os/dialog">Native pickers, message / confirm.</DocCard>
+  <DocCard title="clipboard" href="/docs/v1.0/api/os/clipboard">Text / image / HTML.</DocCard>
+  <DocCard title="shell" href="/docs/v1.0/api/os/shell">Open URLs and files in default handler.</DocCard>
+  <DocCard title="notification" href="/docs/v1.0/api/os/notification">Native OS notifications.</DocCard>
+  <DocCard title="tray" href="/docs/v1.0/api/os/tray">System tray + menu.</DocCard>
+  <DocCard title="menu" href="/docs/v1.0/api/os/menu">App menu bar click handlers.</DocCard>
+  <DocCard title="shortcuts" href="/docs/v1.0/api/os/shortcuts">Global system-wide hotkeys.</DocCard>
+  <DocCard title="keys" href="/docs/v1.0/api/os/keys">Disable native browser key combos in the webview.</DocCard>
+  <DocCard title="fs" href="/docs/v1.0/api/os/fs">Filesystem — text, binary, watcher.</DocCard>
+  <DocCard title="process" href="/docs/v1.0/api/os/process">Subprocess exec + shell exec.</DocCard>
+  <DocCard title="sidecar" href="/docs/v1.0/api/os/sidecar">Bundled binaries — resolve runtime path.</DocCard>
+  <DocCard title="store" href="/docs/v1.0/api/os/store">Persistent JSON k/v.</DocCard>
+  <DocCard title="http" href="/docs/v1.0/api/os/http">HTTP client, upload/download progress.</DocCard>
+  <DocCard title="websocket" href="/docs/v1.0/api/os/websocket">WebSocket client.</DocCard>
+  <DocCard title="compute" href="/docs/v1.0/api/os/compute">Rust-native hash + CSPRNG.</DocCard>
+  <DocCard title="keyring" href="/docs/v1.0/api/os/keyring">OS-encrypted secret storage.</DocCard>
+  <DocCard title="autolaunch" href="/docs/v1.0/api/os/autolaunch">Start at system boot.</DocCard>
+  <DocCard title="singleInstance" href="/docs/v1.0/api/os/single-instance">Single-launch lock + deep links.</DocCard>
+  <DocCard title="cli" href="/docs/v1.0/api/os/cli">Parsed argv + matched subcommand.</DocCard>
+  <DocCard title="deepLink" href="/docs/v1.0/api/os/deepLink">Custom URL scheme registration + forwarding.</DocCard>
+  <DocCard title="updater" href="/docs/v1.0/api/os/updater">Ed25519-signed auto-update.</DocCard>
+  <DocCard title="power" href="/docs/v1.0/api/os/power">User idle time.</DocCard>
+  <DocCard title="vault" href="/docs/v1.0/api/os/vault">Encrypted file vault — AES-256-GCM via cocoon.</DocCard>
+  <DocCard title="biometric" href="/docs/v1.0/api/os/biometric">Touch ID / Windows Hello prompt.</DocCard>
+  <DocCard title="screenshot" href="/docs/v1.0/api/os/screenshot">Capture monitors + windows as PNG.</DocCard>
+  <DocCard title="systemStats" href="/docs/v1.0/api/os/systemStats">CPU, memory, disks, processes, uptime.</DocCard>
+  <DocCard title="network" href="/docs/v1.0/api/os/network">Enumerate network interfaces.</DocCard>
+  <DocCard title="theme" href="/docs/v1.0/api/os/theme">Light / dark / system + palette mapper.</DocCard>
+</CardGrid>
+
+### Standalone plugins
+
+Each one is a `@tynd/plugin-<name>` package that carries its own code: JS only, a backend module, or a native Rust crate in the package that `tynd` compiles into the host. Install them with `tynd add <name>` like the host-backed ones.
+
+<CardGrid>
+  <DocCard title="audio" href="/docs/v1.0/api/plugins/audio">Mic capture, WAV playback and file I/O.</DocCard>
+  <DocCard title="command-palette" href="/docs/v1.0/api/plugins/command-palette">Headless command registry + fuzzy search.</DocCard>
+  <DocCard title="gpu" href="/docs/v1.0/api/plugins/gpu">WebGPU / WebGL diagnostics and benchmark.</DocCard>
+  <DocCard title="http-server" href="/docs/v1.0/api/plugins/http-server">Embedded HTTP + WebSocket server (Bun.serve).</DocCard>
+  <DocCard title="llm" href="/docs/v1.0/api/plugins/llm">Local GGUF inference via llama.cpp.</DocCard>
+  <DocCard title="oauth" href="/docs/v1.0/api/plugins/oauth">Loopback OAuth callback receiver.</DocCard>
+  <DocCard title="screen-rec" href="/docs/v1.0/api/plugins/screen-rec">Native screen recording.</DocCard>
+  <DocCard title="sql" href="/docs/v1.0/api/plugins/sql">Embedded SQLite via bun:sqlite.</DocCard>
+  <DocCard title="terminal" href="/docs/v1.0/api/plugins/terminal">Real PTY (cross-OS).</DocCard>
+  <DocCard title="tts" href="/docs/v1.0/api/plugins/tts">Native text-to-speech.</DocCard>
+  <DocCard title="wgpu" href="/docs/v1.0/api/plugins/wgpu">Native wgpu surfaces.</DocCard>
+  <DocCard title="whisper" href="/docs/v1.0/api/plugins/whisper">Local speech-to-text via whisper.cpp.</DocCard>
+</CardGrid>
+
+The full catalog of official plugins lives in [Plugins](/docs/v1.0/api/plugins).
+
+## Web-platform APIs
+
+`fetch`, `WebSocket`, `crypto`, `URL`, `Blob` and the other Web globals are not re-exported by `@tynd/core/client`: use the globals the WebView (frontend) or Bun (backend) provides. The plugin clients add the native paths the Web APIs lack, such as [`http`](/docs/v1.0/api/plugins/http) without CORS and [`compute`](/docs/v1.0/api/plugins/compute) hashing.

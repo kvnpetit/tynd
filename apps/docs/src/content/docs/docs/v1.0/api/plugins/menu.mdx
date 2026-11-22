@@ -1,0 +1,40 @@
+---
+title: menu
+description: "App menu bar and context menus. Facade over the `menu` host API."
+---
+
+# `menu`
+
+`@tynd/plugin-menu` enables the host `menu` API and exposes its typed client. The API itself is documented on the [`menu`](/docs/v1.0/api/os/menu) page.
+
+## Install
+
+```bash
+tynd add menu
+```
+
+```ts
+import { menu } from "@tynd/plugin-menu/client";
+```
+
+Declaring the plugin compiles the matching `api-menu` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-menu` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-menu`.
+
+`MenuItem`, `MenuSubmenu` and the other menu item types are exported from the package root: `import type { MenuItem, MenuSubmenu } from "@tynd/plugin-menu"`. A `menu` configured in `app.start` without this plugin stops app startup with an error naming `@tynd/plugin-menu`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-menu` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `menu` |
+| Aliases for `tynd add` | `menus`, `context-menu` |
+| Catalog permission labels | `host:menu` |
+| Estimated size | 120 KB |
+| Client exports | `ContextMenuItem`, `MenuAction`, `MenuCheckbox`, `MenuItem`, `MenuItemPartial`, `MenuRadio`, `MenuRole`, `MenuSeparator`, `MenuSubmenu`, `menu` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

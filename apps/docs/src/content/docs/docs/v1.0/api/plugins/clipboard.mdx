@@ -1,0 +1,38 @@
+---
+title: clipboard
+description: "Text, image and HTML on the system clipboard. Facade over the `clipboard` host API."
+---
+
+# `clipboard`
+
+`@tynd/plugin-clipboard` enables the host `clipboard` API and exposes its typed client. The API itself is documented on the [`clipboard`](/docs/v1.0/api/os/clipboard) page.
+
+## Install
+
+```bash
+tynd add clipboard
+```
+
+```ts
+import { clipboard } from "@tynd/plugin-clipboard/client";
+```
+
+Declaring the plugin compiles the matching `api-clipboard` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-clipboard` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-clipboard`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-clipboard` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `clipboard` |
+| Aliases for `tynd add` | `copy`, `paste` |
+| Catalog permission labels | `host:clipboard` |
+| Estimated size | 110 KB |
+| Client exports | `ClipboardImage`, `clipboard` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

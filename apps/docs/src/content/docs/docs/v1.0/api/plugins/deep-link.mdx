@@ -1,0 +1,38 @@
+---
+title: deep-link
+description: "Custom URL scheme handling. Facade over the core `deep-link` host API."
+---
+
+# `deep-link`
+
+`@tynd/plugin-deep-link` enables the host `deep-link` API and exposes its typed client. The API itself is documented on the [`deepLink`](/docs/v1.0/api/os/deepLink) page.
+
+## Install
+
+```bash
+tynd add deep-link
+```
+
+```ts
+import { deepLink } from "@tynd/plugin-deep-link/client";
+```
+
+Declaring the plugin compiles the matching `api-deep-link` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-deep-link` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-deep-link` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `deep-link` |
+| Aliases for `tynd add` | `deeplink`, `protocol`, `protocols` |
+| Catalog permission labels | `host:deep-link`, `os-protocol` |
+| Estimated size | 110 KB |
+| Client exports | `deepLink` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

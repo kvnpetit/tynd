@@ -1,0 +1,29 @@
+---
+title: vault
+description: "Encrypted file vault for secrets too big for the OS keychain — AES-256-GCM via `cocoon`."
+---
+
+# `vault`
+
+Install the required plugin:
+
+```bash
+tynd add vault
+```
+
+```ts
+import { vault } from "@tynd/plugin-vault/client";
+```
+
+Sized for secrets larger than the OS keychain happily holds: bundled API keys, plugin state, long refresh tokens, etc. Path resolution goes through the same FS scope policy as `fs.*`, so an unconfigured policy still confines reads/writes to the app's allowed roots.
+
+Passwords are forwarded once and zeroized on the Rust side after use; never log them.
+
+## API surface
+
+- `vault.read(path, password): Promise<{ data: string }>` — decrypt; `data` is base64 plaintext bytes.
+- `vault.write(path, password, data): Promise<void>` — atomic encrypt + write (tempfile + rename). `data` accepts `string` (base64) or `Uint8Array`.
+- `vault.exists(path): Promise<boolean>` — file presence check, no decryption.
+- `vault.delete(path): Promise<void>` — idempotent delete.
+
+Backed by the [`cocoon`](https://crates.io/crates/cocoon) crate (AES-256-GCM, default cipher).

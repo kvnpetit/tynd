@@ -1,0 +1,450 @@
+---
+title: Backend (@tynd/core)
+description: "Backend API — app.start, app.use, getCallContext, app.onReady, app.onClose, createEmitter, hostCall, plugins, TyndIpcError, AppConfig, WindowConfig, MenuItem, TrayConfig."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Backend — `@tynd/core`
+
+The backend module drives the app's lifecycle and declares window/menu/tray config.
+
+## `app.start(config)`
+
+Call once at the bottom of your backend entry file. The host reads the config on stdout's first line, builds the window, and starts the event loop.
+
+```ts
+import { app } from "@tynd/core";
+
+app.start({
+  frontendDir: import.meta.dir + "/../dist",
+  window: {
+    title: "My App",
+    width: 1200,
+    height: 800,
+    center: true,
+  },
+});
+```
+
+### `AppConfig`
+
+| Field | Type | Description |
+|---|---|---|
+| `window` | `WindowConfig` | Window options (see below) |
+| `frontendDir` | `string` | Path to built frontend assets |
+| `devUrl` | `string` | Dev server URL (auto-detected; overrides `frontendDir` in dev) |
+| `menu` | `MenuSubmenu[]` | Native menu bar (needs `@tynd/plugin-menu`) |
+| `tray` | `TrayConfig` | System tray (needs `@tynd/plugin-tray`) |
+| `security` | `SecurityPolicy` | Startup-only path, URL, process, shell, and sensitive-capability scopes |
+| `capabilities` | `Capability[]` | Explicit renderer-native command grants. Omitted or empty means deny all. |
+| `quitOnLastWindowClosed` | `boolean` (default `false`) | Exit when the last window closes. Leave off for tray-only apps that should stay alive in the background. |
+
+Unknown keys are rejected at every level (`window: { titel }`, `security: { fs: { alow } }`): `app.start()` throws `Invalid app.start() config` with a `<path>: unknown option "<key>"` line that lists the valid options. Open records such as a permission's `scope` accept any key. `plugins` and other build settings belong in `tynd.config.ts`, not here.
+
+### `WindowConfig`
+
+| Field | Default | Description |
+|---|---|---|
+| `title` | `""` | Window title |
+| `width` | `1200` | Initial width |
+| `height` | `800` | Initial height |
+| `minWidth` / `minHeight` | — | Minimum size |
+| `maxWidth` / `maxHeight` | — | Maximum size |
+| `resizable` | `true` | Allow resize |
+| `decorations` | `true` | Show title bar |
+| `transparent` | `false` | Transparent background |
+| `alwaysOnTop` | `false` | Pin above other windows |
+| `center` | `false` | Center on screen at startup |
+| `fullscreen` | `false` | Start fullscreen |
+| `maximized` | `false` | Start maximized |
+| `userAgent` | — | Custom User-Agent string set on every webview request. |
+| `incognito` | `false` | Non-persistent data store: cookies, cache and local storage are discarded when the window closes |
+| `newWindow` | `"allow"` | `window.open()` / `target="_blank"` handling: `"allow"`, `"external"` or `"deny"`. See [New windows](/docs/v1.0/api/os/webview#new-windows-windowopen-target_blank) |
+| `downloads` | — | `"allow"` or `"deny"`. Unset allows only app-local (and app-local `blob:`) downloads while the window shows app content. See [Downloads](/docs/v1.0/api/os/webview#downloads) |
+| `proxy` | — | `http://host[:port]` or `socks5://host:port`, no credentials. Works on every platform (macOS 14+). See [Proxy](/docs/v1.0/api/os/webview#proxy) |
+| `webgpu` | `true` | Enable WebGPU (ignored on macOS) |
+| `hardwareAcceleration` | `"default"` | `"default"`, `"high-performance"` or `"low-power"` GPU hint |
+| `preferredFps` | `"monitor"` | `"monitor"` or an integer frame-rate cap, clamped to 15..480 |
+| `contextLostRecovery` | `true` | Reload the webview when the GPU / web-content process dies (macOS) |
+| `colorSpace` | — | `"srgb"`, `"p3"`, `"rec2020"` or `"linear"` |
+| `hdr` | `false` | Request an HDR10 surface (Windows, macOS) |
+| `vrr` | `false` | Variable refresh rate |
+| `gpu` | — | `"auto"`, `"primary"`, `"discrete"` or `{ vendor: "nvidia" \| "amd" \| "intel" }` |
+
+The GPU keys are platform hints, not guarantees; see [GPU acceleration](/docs/v1.0/concepts/gpu-acceleration#knobs-you-actually-have-today).
+
+## `app.onReady(fn)`
+
+Fires on `__tynd_page_ready` — a one-shot `postMessage` sent from the `JS_PAGE_READY` init script on `DOMContentLoaded`.
+
+```ts
+app.onReady(() => {
+  console.log("window shown, WebView alive");
+});
+```
+
+## `app.onClose(fn)`
+
+Fires when the user closes the primary window. The window is hidden immediately; **you have 2 seconds** to run handlers before a watchdog force-exits.
+
+```ts
+app.onClose(() => {
+  // quick cleanup only — don't block
+});
+```
+
+## `createEmitter<T>()`
+
+Create a typed event bus. Exporting the result makes it subscribable from the frontend.
+
+```ts
+import { createEmitter } from "@tynd/core";
+
+export const events = createEmitter<{
+  fileChanged: { path: string };
+  progress: { percent: number };
+}>();
+
+events.emit("fileChanged", { path: "/foo.ts" });
+events.emit("progress", { percent: 42 });
+
+// Target a single window — other windows don't receive the event.
+events.emitTo("settings", "progress", { percent: 42 });
+```
+
+Without a target, `emit` reaches app-local webviews only (bundled pages, dev server). A webview showing remote content never receives broadcasts; target it explicitly (`emitTo`).
+
+Frontend subscribes:
+
+```ts
+api.on("fileChanged", ({ path }) => { /* … */ });
+api.once("progress", ({ percent }) => { /* … */ });
+```
+
+<Aside type="note">
+  **Emitters must be `export`ed.** The frontend's type-only `typeof backend` import needs to see them for `api.on("…", …)` to type-check.
+</Aside>
+
+## Frontend -> backend events (`onFrontendEmit` + `createFrontendEmitter`)
+
+The mirror of `createEmitter`: frontend emits, backend listens. Reuses the same RPC pipe — no new transport.
+
+```ts title="backend/main.ts"
+import { onFrontendEmit } from "@tynd/core";
+
+onFrontendEmit<string>("toast", (text) => log.info(text));
+```
+
+```ts title="src/toast.ts"
+import { createFrontendEmitter } from "@tynd/core/client";
+
+const frontend = createFrontendEmitter<{ toast: string }>();
+frontend.emit("toast", "Saved!");
+```
+
+`onFrontendEmit` returns an unsubscribe function. Handlers survive frontend navigations. `clearFrontendListeners(name?)` drops every handler, or only those of `name`; use it in test teardown or `app.onClose`.
+
+```ts
+import { clearFrontendListeners } from "@tynd/core";
+
+app.onClose(() => clearFrontendListeners());
+```
+
+## `evalInFrontend(script, label?)`
+
+Run raw JavaScript in a webview from the backend. When `label` is omitted the script runs on every open window that shows app-local content; target a webview showing remote content explicitly with `label`.
+
+```ts
+import { evalInFrontend } from "@tynd/core";
+
+evalInFrontend(`document.body.classList.add('debug')`);
+evalInFrontend(`location.reload()`, "settings");
+```
+
+## `bunWorkers`
+
+Run trusted backend computation on `Bun.Worker` threads:
+
+```ts
+import { bunWorkers } from "@tynd/core";
+
+const worker = await bunWorkers.spawn(
+  (values: number[]) => values.reduce((sum, value) => sum + value, 0),
+);
+const total = await worker.run<number, number[]>([1, 2, 3, 4]);
+await worker.terminate();
+```
+
+This API is backend-only. Renderer code uses
+[`workers`](/docs/v1.0/api/os/workers), which stays inside the WebView
+sandbox so executable source never crosses into the trusted Bun process.
+
+## Call context and middleware
+
+### `getCallContext()`
+
+Inside a backend function, a JS plugin method, middleware, or a plugin `ipc:*` hook, `getCallContext()` tells you which webview issued the call:
+
+```ts
+import { getCallContext } from "@tynd/core";
+
+export async function deleteAll() {
+  const caller = getCallContext(); // { window, webview, origin } | undefined
+  if (caller?.window !== "admin") throw new Error("admin window only");
+  // ...
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `window` | Label of the window that owns the calling webview |
+| `webview` | Label of the calling webview (child webviews differ from their window) |
+| `origin` | Origin of the calling page, or `null` when unknown |
+
+The host attaches this to every forwarded call and overwrites anything the frontend sent, so it can be trusted. It is `undefined` outside a call (startup code, timers created at module load) and when the host sent none or a malformed value. It stays available across `await`, for the whole life of a streaming call.
+
+To restrict who may call a function without writing code, use `backend:<fn>` capabilities (see [Security](/docs/v1.0/concepts/security#backend-functions-and-window--tray--menu-commands)).
+
+### `app.use(middleware)`
+
+Registers a function that runs around every backend function and JS plugin method, in registration order (the first registered is the outermost). Register before `app.start()`.
+
+```ts
+app.use(async (ctx, next) => {
+  // ctx: { fn: string; args: unknown[]; caller: CallContext | undefined; plugin?: string }
+  const started = performance.now();
+  try {
+    return await next();
+  } finally {
+    log.info(`${ctx.fn} took ${Math.round(performance.now() - started)}ms`);
+  }
+});
+
+app.use(async (ctx, next) => {
+  if (ctx.fn === "deleteAll" && ctx.caller?.window !== "admin") throw new Error("denied");
+  return next();
+});
+```
+
+- `ctx.fn` is the function name, or the method name when `ctx.plugin` is set.
+- `ctx.args` may be replaced before `next()` to rewrite the arguments.
+- Return without calling `next()` to short-circuit with your own value; throw to reject the call through the normal IPC error path.
+- Calling `next()` twice in one middleware throws. Passing something other than a function to `app.use` throws a `TypeError`.
+- Plugin `ipc:before` / `ipc:after` hooks run outside user middleware.
+
+## Plugin lifecycle hooks
+
+Plugins built with `defineTyndPlugin` (from `@tynd/plugin-sdk/hooks`) can declare these hooks:
+
+| Hook | Fires | Notes |
+|---|---|---|
+| `app:beforeStart(cx, config)` | Before the config is sent to the host | Awaited |
+| `app:ready(cx)` | When the primary page is ready | |
+| `app:beforeQuit(cx)` | On orderly shutdown, before `app.onClose` handlers | Awaited, capped at 3 s |
+| `ipc:before(cx, cmd, args)` | Before each backend call | Throw to reject the call. `cmd` is the raw wire name; plugin methods look like `$plugin$<name>$<method>` |
+| `ipc:after(cx, cmd, result)` | After each successful call | Errors are logged and never change the result |
+| `window:created(cx, { label })` / `window:closed(cx, { label })` | When a window is created or destroyed | Needs a host that sends window events |
+
+`cx` is `{ name, log: { debug, info, warn, error }, state }`. A hook that throws is logged and does not block other plugins (except `ipc:before`, which rejects the call). See the [`@tynd/plugin-sdk` README](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk) for the full contract.
+
+## Plugins — `definePlugin`
+
+`definePlugin({ name, methods })` declares a JavaScript plugin; export the result as the default of the plugin's backend file. The frontend calls its methods through `createPluginClient` (see [RPC helpers](/docs/v1.0/api/rpc-helpers#createpluginclientpname)).
+
+```ts title="plugin/backend.ts"
+import { definePlugin } from "@tynd/core";
+
+let count = 0;
+export default definePlugin({
+  name: "counter",
+  methods: {
+    increment() { count += 1; return count; },
+    reset() { count = 0; },
+  },
+});
+```
+
+- Method names must match `^[A-Za-z_][A-Za-z0-9_-]{0,63}$`, and every value in `methods` must be a function, or registration throws.
+- Methods are bound to `methods`, so `this.other()` works.
+- `tynd build` / `tynd dev` register each entry of `tynd.config.ts::plugins` with the running backend; app code never registers a plugin itself. Registering the same plugin twice is a no-op; a different plugin under a taken name throws.
+
+`definePlugin`, `createPluginClient` and the plugin types are also exported from `@tynd/core/plugin`, which has no Bun or Node imports: a plugin client or a frontend module can import it safely.
+
+## `hostCall(api, method, args?, opts?)`
+
+Calls a native host API from the trusted Bun backend. It is not available in the WebView. It is meant for pure TypeScript plugins that need one native primitive.
+
+```ts
+import { hostCall } from "@tynd/core";
+
+const info = await hostCall<{ name: string }>("os", "info");
+```
+
+- Rejects until `app.start()` has run.
+- `opts.timeoutMs` rejects the call after that many milliseconds; default 5 minutes, `0` disables the deadline.
+- At most 4096 calls may be pending; beyond that the call rejects.
+
+## `TyndIpcError`
+
+A failed backend RPC call rejects with a `TyndIpcError` (exported by `@tynd/core` and `@tynd/core/client`). Switch on `code` instead of matching `message`; `fn` holds the RPC function name. Native OS calls still reject with a plain `Error`.
+
+```ts
+import { TyndIpcError } from "@tynd/core/client";
+
+try {
+  await api.save(doc);
+} catch (e) {
+  if (e instanceof TyndIpcError && e.code === "PERMISSION_DENIED") showDenied();
+  else throw e;
+}
+```
+
+| `code` | Meaning |
+|---|---|
+| `UNKNOWN_FN` | No exported function or plugin method of that name, or a reserved name |
+| `INVALID_ARGS` | Arguments failed validation or decoding |
+| `HANDLER_THREW` | The backend handler threw |
+| `CANCELLED` | The client cancelled the call |
+| `TIMEOUT` | The call exceeded its timeout |
+| `PERMISSION_DENIED` | A security policy refused the call (detected from the error message) |
+| `BACKEND_DEAD` | The Bun process exited during the call |
+| `PROTOCOL_ERROR` | Wire encoding or decoding failed |
+
+## Subpath exports
+
+| Import | Content |
+|---|---|
+| `@tynd/core` | Backend API (this page) |
+| `@tynd/core/client` | Frontend API and the core clients (`app`, `tyndWindow`, `tyndWebview`, `os`, `path`, `monitors`, `security`, `log`, `workers`, RPC helpers) |
+| `@tynd/core/client/bridge` | The host bridge plugin clients build on (`osCall`, `osOn`, `binFetch`, ...). See [Bridge](/docs/v1.0/api/plugins/bridge) |
+| `@tynd/plugin-<api>/client` | An official plugin client, for example `@tynd/plugin-dialog/client` |
+| `@tynd/plugin-menu`, `@tynd/plugin-tray` | The `MenuItem` / `MenuSubmenu` and `TrayConfig` types |
+| `@tynd/core/plugin` | `definePlugin`, `createPluginClient` and the plugin types, with no Bun or Node imports |
+| `@tynd/core/testing` | `installTyndMock()`, a mock of the IPC bridge for frontend unit tests (`osFallback` answers OS calls with no handler) |
+| `@tynd/core/env` | Ambient types for the frontend (`tsconfig` `types`) |
+
+## Native menu bar
+
+The menu bar needs the `menu` official plugin. Without it, a configured `menu` stops app startup with an error naming `@tynd/plugin-menu`.
+
+Install the required plugin:
+
+```bash
+tynd add menu
+```
+
+```ts
+app.start({
+  menu: [
+    {
+      type: "submenu",
+      label: "File",
+      items: [
+        { label: "New",  id: "file.new",  accelerator: "CmdOrCtrl+N" },
+        { label: "Open", id: "file.open", accelerator: "CmdOrCtrl+O" },
+        { type: "separator" },
+        { label: "Quit", role: "quit" },
+      ],
+    },
+    {
+      type: "submenu",
+      label: "Edit",
+      items: [
+        { label: "Undo", role: "undo" }, { label: "Redo", role: "redo" },
+        { type: "separator" },
+        { label: "Cut", role: "cut" }, { label: "Copy", role: "copy" }, { label: "Paste", role: "paste" },
+      ],
+    },
+  ],
+  // ...
+});
+```
+
+React to clicks from the frontend with the [`menu`](/docs/v1.0/api/os/menu) API:
+
+```ts
+import { menu } from "@tynd/plugin-menu/client";
+menu.onClick("file.new", () => createDocument());
+```
+
+### Menu item shapes
+
+`app.start()` validates every item against one of five shapes and throws `Invalid app.start() config` otherwise. Top-level `menu` entries must be submenus. The types come from the plugin packages:
+
+```ts
+import type { MenuItem, MenuSubmenu } from "@tynd/plugin-menu";
+import type { TrayConfig } from "@tynd/plugin-tray";
+```
+
+| Shape | Fields |
+|---|---|
+| Item | `{ type?: "item", label, id?, enabled?, role?, accelerator? }` |
+| Checkbox | `{ type: "checkbox", label, id?, enabled?, checked?, accelerator? }` |
+| Radio | `{ type: "radio", label, id?, enabled?, checked?, accelerator? }` |
+| Separator | `{ type: "separator" }` |
+| Submenu | `{ type: "submenu", label, enabled?, items: MenuItem[] }` |
+
+- `label` is required on every shape except the separator, role items included.
+- `id` defaults to `label`; it is the value `menu.onClick` and `tray.onMenu` match.
+- `accelerator` uses the muda format, for example `"CmdOrCtrl+S"` or `"Alt+F4"`. An invalid accelerator is logged and dropped.
+- `role` is one of `quit`, `copy`, `cut`, `paste`, `undo`, `redo`, `selectAll`, `minimize`, `close`, `separator`, `about`. A role item becomes the OS-provided item, which the OS manages.
+- Radio items render as check items: the OS does not group them. Keep one item checked yourself by calling `menu.setItemChecked(id, false)` (`tray.setItemChecked` in a tray menu) on the siblings when one is clicked.
+
+## System tray
+
+The tray needs the `tray` official plugin. Without it, a configured `tray` stops app startup with an error naming `@tynd/plugin-tray`.
+
+Install the required plugin:
+
+```bash
+tynd add tray
+```
+
+```ts
+app.start({
+  tray: {
+    icon:    import.meta.dir + "/assets/tray.png",
+    tooltip: "My App",
+    menu: [
+      { label: "Show", id: "show" },
+      { label: "Quit", id: "quit" },
+    ],
+  },
+  // ...
+});
+```
+
+Handle clicks with the [`tray`](/docs/v1.0/api/os/tray) API:
+
+```ts
+import { app, tyndWindow } from "@tynd/core/client";
+import { tray } from "@tynd/plugin-tray/client";
+tray.onClick(() => tyndWindow.show());
+tray.onMenu("quit", () => app.exit(0));
+```
+
+## Frontend RPC — `createBackend<T>()`
+
+From the frontend:
+
+```ts
+import { createBackend } from "@tynd/core/client";
+import type * as backend from "../../backend/main";
+
+const api = createBackend<typeof backend>();
+
+const msg = await api.greet("Alice");   // fully typed
+api.on("fileChanged", (evt) => { /* … */ });
+api.once("progress", (evt) => { /* … */ });
+```
+
+- Types flow from `typeof backend` — no codegen.
+- Errors thrown on the backend surface as rejected promises carrying a [`TyndIpcError`](#tyndipcerror).
+- `async function*` backend handlers return [StreamCall](/docs/v1.0/api/streaming-rpc) handles — awaitable + async-iterable.
+
+## Next
+
+- [Streaming RPC](/docs/v1.0/api/streaming-rpc)
+- [Backend RPC guide](/docs/v1.0/guides/backend-rpc)
+- [OS API reference](/docs/v1.0/api)

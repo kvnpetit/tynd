@@ -1,0 +1,108 @@
+---
+title: workers
+description: "Offload renderer JavaScript to a sandboxed Web Worker."
+---
+
+# `workers`
+
+```ts
+import { workers } from "@tynd/core/client";
+```
+
+Sandboxed Web Worker on its own OS thread. Task source and data stay inside
+the WebView process; executable code is never forwarded into the trusted
+Bun backend.
+
+## `spawn<In, Out>(fn): Promise<WorkerHandle>`
+
+```ts
+const w = await workers.spawn((input: number[]) =>
+  input.reduce((a, b) => a + b, 0)
+);
+```
+
+- `fn` must be **self-contained** — no closure captures, no outer references. It is sent as its source text; outside production builds, suspected outer references log a warning. A native function (`Math.max`) is refused.
+- `fn` may also be a source string (`"(input) => input * 2"`), which skips the check.
+- At most 64 live workers per renderer; `spawn` throws past that.
+- Arguments and return values must be supported by browser structured clone.
+
+## `WorkerHandle` methods
+
+The handle also carries its numeric `id`.
+
+### `run(input): Promise<O>`
+
+```ts
+const sum = await w.run<number, number[]>([1, 2, 3, 4, 5]);   // 15
+```
+
+Serializes `input`, runs the function in the worker, returns the result. At most 4096 runs may be pending per worker; beyond that `run` rejects.
+
+### `terminate(): Promise<void>`
+
+Force-stop the worker.
+
+```ts
+await w.terminate();
+```
+
+### `workers.list(): Promise<number[]>`
+
+Ids of the workers spawned by this renderer that are still alive, sorted ascending. Handles are renderer-local, so ids from other windows are not listed.
+
+```ts
+const ids = await workers.list();   // [1, 2]
+```
+
+## How it works under the hood
+
+- The renderer wraps a Web Worker via a `blob:` URL script (apps with a custom CSP need `worker-src blob:`, see [Security](/docs/v1.0/concepts/security#csp--auto-injected)). Each `run` sends
+  input to that worker and returns the result without sharing globals or heap state.
+- Handles are local to the renderer. There is no Rust or backend IPC fallback.
+- Trusted backend code that needs Bun threads can import `bunWorkers` from
+  `@tynd/core`; this separate API is intentionally not callable from a WebView.
+
+## Typical uses
+
+- **Heavy JSON parsing** — 50 MB JSON blob that would block the main thread.
+- **Image / audio processing in pure JS** — keep the UI responsive.
+- **Computation without an event loop** — simulation loops, particle systems.
+
+For **Rust-backed compute** (hashing, CSPRNG), prefer [`compute`](/docs/v1.0/api/os/compute) — it's faster and doesn't round-trip through JSON.
+
+## Notes
+
+- Cannot import modules inside the worker function — everything it needs must be captured in the function body or serialized as input.
+- Workers run on OS threads, not thread pools. Spawning dozens is wasteful. Use a small pool + `run` tasks to it.
+
+## Example — parallel map
+
+```ts
+async function parallelMap<I, O>(
+  items: I[],
+  fn: (x: I) => O,
+  poolSize = 4,
+): Promise<O[]> {
+  const pool = await Promise.all(
+    Array.from({ length: poolSize }, () => workers.spawn(fn)),
+  );
+  try {
+    const out = new Array<O>(items.length);
+    let idx = 0;
+    await Promise.all(pool.map(async (w) => {
+      while (idx < items.length) {
+        const i = idx++;
+        out[i] = await w.run(items[i]);
+      }
+    }));
+    return out;
+  } finally {
+    await Promise.all(pool.map((w) => w.terminate()));
+  }
+}
+```
+
+## Related
+
+- [compute](/docs/v1.0/api/os/compute) — Rust-native hashing and RNG (faster for those tasks).
+- [Streaming RPC](/docs/v1.0/api/streaming-rpc) — if you need to stream intermediate results.

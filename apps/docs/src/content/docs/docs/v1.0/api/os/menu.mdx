@@ -1,0 +1,164 @@
+---
+title: menu
+description: "Handle clicks on the native app menu bar. Items are declared in `app.start({ menu: … })`."
+---
+
+# `menu`
+
+Install the required plugin:
+
+```bash
+tynd add menu
+```
+
+```ts
+import { menu } from "@tynd/plugin-menu/client";
+```
+
+The menu bar is declared in `app.start({ menu: … })` on the backend. This module subscribes to menu-item clicks (both app menu bar and tray menu).
+
+## Declare the menu
+
+```ts title="backend/main.ts"
+app.start({
+  menu: [
+    {
+      type: "submenu",
+      label: "File",
+      items: [
+        { label: "New",   id: "file.new",   accelerator: "CmdOrCtrl+N" },
+        { label: "Open",  id: "file.open",  accelerator: "CmdOrCtrl+O" },
+        { label: "Save",  id: "file.save",  accelerator: "CmdOrCtrl+S" },
+        { type: "separator" },
+        { label: "Quit", role: "quit" },
+      ],
+    },
+    {
+      type: "submenu",
+      label: "Edit",
+      items: [
+        { label: "Undo", role: "undo" }, { label: "Redo", role: "redo" },
+        { type: "separator" },
+        { label: "Cut", role: "cut" }, { label: "Copy", role: "copy" }, { label: "Paste", role: "paste" },
+        { type: "separator" },
+        { label: "Find",    id: "edit.find",  accelerator: "CmdOrCtrl+F" },
+      ],
+    },
+    {
+      type: "submenu",
+      label: "View",
+      items: [
+        { type: "checkbox", label: "Dark Theme", id: "view.theme" },
+      ],
+    },
+  ],
+  // ...
+});
+```
+
+## Subscribe to clicks
+
+```ts
+const unsub1 = menu.onClick("file.new",  () => createDocument());
+const unsub2 = menu.onClick("file.open", () => openPicker());
+const unsub3 = menu.onClick("file.save", () => saveCurrent());
+const unsub4 = menu.onClick("edit.find", () => focusSearch());
+
+let dark = false;
+const unsub5 = menu.onClick("view.theme", () => {
+  // The handler receives no arguments: track checkbox state yourself.
+  dark = !dark;
+  applyTheme(dark ? "dark" : "light");
+});
+```
+
+Each returns `unsubscribe()`.
+
+## Item shapes
+
+`app.start()` validates every item against one of five shapes. Top-level `menu` entries must be submenus.
+
+| Shape | Fields |
+|---|---|
+| Item | `{ type?: "item", label, id?, enabled?, role?, accelerator? }` |
+| Checkbox | `{ type: "checkbox", label, id?, enabled?, checked?, accelerator? }` |
+| Radio | `{ type: "radio", label, id?, enabled?, checked?, accelerator? }` |
+| Separator | `{ type: "separator" }` |
+| Submenu | `{ type: "submenu", label, enabled?, items }` |
+
+- `label` is required on every shape except the separator, role items included.
+- `id` defaults to `label`; it is the value `menu.onClick` matches.
+
+### Role
+
+OS-native actions, managed by the OS:
+
+```ts
+{ label: "Quit", role: "quit" | "copy" | "cut" | "paste" | "undo" | "redo" | "selectAll"
+                     | "minimize" | "close" | "separator" | "about" }
+```
+
+Roles don't need `id` / `accelerator`.
+
+## Accelerators
+
+Accelerators use the muda format (an invalid one is logged and dropped):
+
+- `CmdOrCtrl+S` — ⌘S on macOS, Ctrl+S elsewhere
+- `Alt+F4`
+- `Shift+Space`
+
+Accelerators on menu items fire **only when your app is focused** (unlike `shortcuts.register` which is global).
+
+## Programmatic context menu
+
+Show a native popup anchored on the current window. `x` / `y` are window-relative logical pixels; omit both to anchor on the cursor. Clicks feed the same `menu:action` event as menu bar + tray.
+
+```ts
+await menu.showContextMenu(
+  [
+    { id: "copy",   label: "Copy", role: "copy" },
+    { type: "separator" },
+    { id: "delete", label: "Delete selection" },
+  ],
+  { x: 120, y: 240 },
+);
+
+menu.onClick("delete", () => deleteSelection());
+```
+
+## Mutate items at runtime
+
+Change a menu-bar item by `id` without rebuilding the bar. Rejects if the `id` was never registered, and `checked` rejects if the item is not a checkbox/radio.
+
+```ts
+await menu.update("file.save", { label: "Save As...", enabled: false });
+
+// Single-field shortcuts, equivalent to update(id, { field })
+await menu.setItemEnabled("file.save", true);
+await menu.setItemLabel("file.save", "Save");
+await menu.setItemChecked("view.theme", true);
+await menu.setItemVisible("edit.find", false);   // detached, re-inserted near its old position
+```
+
+| Method | Signature |
+| --- | --- |
+| `update` | `(id: string, partial: { label?: string; enabled?: boolean; checked?: boolean; visible?: boolean }): Promise<void>` |
+| `setItemEnabled` | `(id: string, enabled: boolean): Promise<void>` |
+| `setItemLabel` | `(id: string, label: string): Promise<void>` |
+| `setItemChecked` | `(id: string, checked: boolean): Promise<void>` |
+| `setItemVisible` | `(id: string, visible: boolean): Promise<void>` |
+
+`id`, `type`, `role`, `accelerator` and submenu structure are fixed at build time and cannot be changed through `update`.
+
+## Notes
+
+- Menu item clicks are broadcast — a single `menu.onClick` handler fires from any window or the backend.
+- Radio items render as check items: the OS does not group them. Keep one checked yourself with `menu.setItemChecked(id, false)` on the siblings.
+- Icons and tooltips are not exposed yet.
+- Requires `@tynd/plugin-menu` in your dependencies and in `plugins` (`tynd add menu`), which compiles the menu API into the app host. Without it, `menu.*` and `showContextMenu` reject and a configured `menu` bar stops app startup, both with an error naming `@tynd/plugin-menu`. Calls are also subject to the `menu:<method>` / `window:showContextMenu` [ACL rules](/docs/v1.0/concepts/security).
+
+## Related
+
+- [tray](/docs/v1.0/api/os/tray) — tray menu handlers share the same `menu.onClick` dispatcher.
+- [shortcuts](/docs/v1.0/api/os/shortcuts) — global hotkeys (fire unfocused).
