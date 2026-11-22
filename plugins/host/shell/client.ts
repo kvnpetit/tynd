@@ -15,4 +15,8 @@ export const shell = {
   revealInFolder(path: string): Promise<void> {
     return osCall("shell", "revealInFolder", path);
   },
+  /** Play the OS alert sound. Resolves at once; the sound plays asynchronously. */
+  beep(): Promise<void> {
+    return osCall("shell", "beep");
+  },
 };

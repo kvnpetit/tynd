@@ -38,4 +38,19 @@ describe("power", () => {
     expect(fired).toBe(1);
     expect(attempts).toBe(2);
   });
+
+  test("onPowerSourceChange forwards the payload", async () => {
+    mock = installTyndMock({ os: { "power.subscribePowerEvents": () => undefined } });
+    const seen: boolean[] = [];
+    const sub = await power.onPowerSourceChange(({ onBattery }) => seen.push(onBattery));
+    mock.emitOs("power:source-change", { onBattery: true });
+    sub.dispose();
+    mock.emitOs("power:source-change", { onBattery: false });
+    expect(seen).toEqual([true]);
+  });
+
+  test("getThermalState maps to power.getThermalState", async () => {
+    mock = installTyndMock({ os: { "power.getThermalState": () => "serious" } });
+    expect(await power.getThermalState()).toBe("serious");
+  });
 });

@@ -3,7 +3,7 @@
  * `os.power.*` dispatch.
  * `getPowerStatus` exposes battery + AC information collected
  * via platform-native APIs (`GetSystemPowerStatus` on Windows, sysfs
- * on Linux). Fields are nullable — callers must treat `null` as
+ * on Linux, IOKit on macOS). Fields are nullable — callers must treat `null` as
  * "unavailable on this platform / hardware" instead of zero.
  * `onSuspend` / `onResume` / `onLock` / `onUnlock` mirror Electron's
  * `powerMonitor`: the OS forwards system events to the app so background
@@ -36,6 +36,15 @@ export interface BatteryInfo {
   status: "charging" | "discharging" | "full" | "unknown";
 }
 
+/** Thermal pressure reported by macOS (`NSProcessInfo.thermalState`). */
+export type ThermalState = "nominal" | "fair" | "serious" | "critical";
+
+/** Payload of `power.onPowerSourceChange`. */
+export interface PowerSourceChange {
+  /** `true` once the machine runs on battery (or a UPS), `false` on AC. */
+  onBattery: boolean;
+}
+
 /** Handle returned by every power event subscription. Call `dispose()` to unsubscribe. */
 export interface PowerSubscription {
   dispose(): void;
@@ -54,9 +63,12 @@ function ensureSubscribed(): Promise<void> {
   return subscription;
 }
 
-async function subscribePower(eventName: string, handler: () => void): Promise<PowerSubscription> {
+async function subscribePower<T = void>(
+  eventName: string,
+  handler: (payload: T) => void,
+): Promise<PowerSubscription> {
   // Listen first so no event is lost between the host ack and the return.
-  const dispose = osOn(eventName, () => handler());
+  const dispose = osOn<T>(eventName, (payload) => handler(payload));
   try {
     await ensureSubscribed();
   } catch (error) {
@@ -100,6 +112,14 @@ export const power = {
     return osCall("power", "preventSleep", { display: options.display === true });
   },
 
+  /**
+   * Thermal pressure on macOS (`"nominal"` to `"critical"`); `null` on
+   * Windows and Linux, which expose no public thermal API.
+   */
+  getThermalState(): Promise<ThermalState | null> {
+    return osCall("power", "getThermalState", null);
+  },
+
   /** Release a request made by `preventSleep`. Unknown ids are ignored. */
   allowSleep(id: number): Promise<void> {
     return osCall("power", "allowSleep", { id });
@@ -130,5 +150,27 @@ export const power = {
   /** Fired when the user unlocks the screen. */
   onUnlock(handler: () => void): Promise<PowerSubscription> {
     return subscribePower("power:unlock", handler);
+  },
+  /**
+   * Fired when the machine switches between AC and battery. Windows reports
+   * it immediately; macOS and Linux poll every 5 seconds.
+   */
+  onPowerSourceChange(handler: (change: PowerSourceChange) => void): Promise<PowerSubscription> {
+    return subscribePower<PowerSourceChange>("power:source-change", handler);
+  },
+  /**
+   * Fired when the session ends: log off, restart or shut down
+   * (`WM_ENDSESSION` on Windows, `NSWorkspaceWillPowerOff` on macOS, logind
+   * `PrepareForShutdown` on Linux). Best effort: the OS gives the app very
+   * little time, so only flush small amounts of state.
+   */
+  onShutdown(handler: () => void): Promise<PowerSubscription> {
+    return subscribePower("power:shutdown", handler);
+  },
+  /** Fired when the macOS thermal state changes. Never fires on Windows or Linux. */
+  onThermalStateChange(
+    handler: (change: { state: ThermalState }) => void,
+  ): Promise<PowerSubscription> {
+    return subscribePower<{ state: ThermalState }>("power:thermal-change", handler);
   },
 };

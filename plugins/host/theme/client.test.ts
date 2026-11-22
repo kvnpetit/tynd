@@ -66,3 +66,57 @@ describe("theme watcher lifetime", () => {
     expect(seen).toEqual(["start", "stop"]);
   });
 });
+
+describe("system preferences", () => {
+  afterEach(() => {
+    mock?.restore();
+    mock = undefined;
+  });
+
+  test("systemPreferences reads theme.preferences", async () => {
+    const prefs = {
+      mode: "dark",
+      accentColor: "#0078d4",
+      highContrast: false,
+      reducedMotion: true,
+      reducedTransparency: null,
+    };
+    mock = installTyndMock({ os: { "theme.preferences": () => prefs } });
+    expect(await theme.systemPreferences()).toEqual(prefs as never);
+  });
+
+  test("onSystemPreferencesChange holds one watcher reference until dispose", async () => {
+    const calls: string[] = [];
+    mock = installTyndMock({
+      os: {
+        "theme.startWatch": () => {
+          calls.push("start");
+          return { watching: true };
+        },
+        "theme.stopWatch": () => {
+          calls.push("stop");
+        },
+      },
+    });
+    const seen: (string | null)[] = [];
+    const sub = await theme.onSystemPreferencesChange((p) => seen.push(p.accentColor));
+    mock.emitOs("theme:preferences-change", { accentColor: "#ff0000" });
+    sub.dispose();
+    sub.dispose();
+    mock.emitOs("theme:preferences-change", { accentColor: "#00ff00" });
+    await settle();
+    expect(seen).toEqual(["#ff0000"]);
+    expect(calls).toEqual(["start", "stop"]);
+  });
+
+  test("onSystemPreferencesChange rejects when the watcher cannot start", async () => {
+    mock = installTyndMock({
+      os: {
+        "theme.startWatch": () => {
+          throw new Error("host is shutting down");
+        },
+      },
+    });
+    await expect(theme.onSystemPreferencesChange(() => undefined)).rejects.toThrow("shutting down");
+  });
+});

@@ -219,6 +219,58 @@ function savePreference(key: string, value: ThemePreference): void {
  * and call `theme.configure()` / `theme.current()` / `theme.onChange()` —
  * matches the shape of the other os.* clients (autolaunch, keyring, …).
  */
+/** System appearance snapshot from `theme.systemPreferences()`. */
+export interface SystemPreferences {
+  /** OS color scheme; `"unspecified"` when the OS has no preference. */
+  mode: "light" | "dark" | "unspecified";
+  /** Accent color as `"#rrggbb"`; `null` where the OS does not expose it (Linux). */
+  accentColor: string | null;
+  /** High-contrast mode (Windows) / "Increase contrast" (macOS); `null` on Linux. */
+  highContrast: boolean | null;
+  /** Animations turned off in the OS accessibility settings; `null` on Linux. */
+  reducedMotion: boolean | null;
+  /** Transparency effects turned off; `null` on Linux. */
+  reducedTransparency: boolean | null;
+}
+
+/** Handle returned by `theme.onSystemPreferencesChange`. */
+export interface ThemeSubscription {
+  dispose(): void;
+}
+
+/** Read the OS appearance preferences (accent color, contrast, motion, transparency). */
+function systemPreferences(): Promise<SystemPreferences> {
+  return osCall("theme", "preferences", null);
+}
+
+/**
+ * Subscribe to changes of `systemPreferences()` (the OS is polled once a
+ * second). Resolves once the host watcher runs; rejects when it cannot
+ * start. Each subscription holds one watcher reference until `dispose()`.
+ */
+async function onSystemPreferencesChange(
+  handler: (prefs: SystemPreferences) => void,
+): Promise<ThemeSubscription> {
+  const off = osOn<SystemPreferences>("theme:preferences-change", (prefs) => handler(prefs));
+  try {
+    await osCall("theme", "startWatch", null);
+  } catch (error) {
+    off();
+    throw error;
+  }
+  let active = true;
+  return {
+    dispose() {
+      if (!active) return;
+      active = false;
+      off();
+      void osCall("theme", "stopWatch", null).catch(() => {
+        /* ignore: host may already have stopped */
+      });
+    },
+  };
+}
+
 export const theme = {
   configure,
   dispose,
@@ -227,4 +279,6 @@ export const theme = {
   setPreference,
   toggle,
   onChange,
+  systemPreferences,
+  onSystemPreferencesChange,
 };

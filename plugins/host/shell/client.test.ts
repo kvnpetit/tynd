@@ -15,4 +15,10 @@ describe("@tynd/plugin-shell client", () => {
       { kind: "os", api: "shell", method: "openExternal", args: "https://example.com" },
     ]);
   });
+
+  test("beep takes no arguments", async () => {
+    await shell.beep();
+    expect(bridge.calls).toHaveLength(1);
+    expect(bridge.calls[0]).toMatchObject({ kind: "os", api: "shell", method: "beep" });
+  });
 });

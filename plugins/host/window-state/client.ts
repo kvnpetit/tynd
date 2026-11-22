@@ -37,14 +37,9 @@ export interface WindowStateSnapshot {
 /** Options for [`windowState.init`]. */
 export interface WindowStateInitOptions {
   /**
-   * App identifier used when computing the default storage path:
-   * `<dataDir>/<appId>/window-states.json`. Defaults to `"tynd-app"`
-   * — set this to your app's slug so multiple apps don't share state.
-   */
-  appId?: string;
-  /**
-   * Override the storage path entirely. When set, `appId` is ignored
-   * and the path is used verbatim. Must be absolute.
+   * Override the storage path, used verbatim. Must be absolute and inside
+   * the fs scope. Defaults to `<appDataDir>/window-states.json`
+   * (`os.appDataDir()`, named after the app identifier).
    */
   storagePath?: string;
   /** Auto-save debounce in milliseconds. Defaults to 500. */
@@ -53,7 +48,6 @@ export interface WindowStateInitOptions {
 
 interface InternalState {
   initPromise: Promise<void> | null;
-  appId: string;
   debounceMs: number;
   /** Pending debounce timers, keyed by label. */
   timers: Map<string, ReturnType<typeof setTimeout>>;
@@ -63,7 +57,6 @@ interface InternalState {
 
 const internal: InternalState = {
   initPromise: null,
-  appId: "tynd-app",
   debounceMs: 500,
   timers: new Map(),
   unsubs: [],
@@ -74,17 +67,15 @@ function call<T>(method: string, args: unknown = null): Promise<T> {
 }
 
 /**
- * Compute the default storage path:
- * `<dataDir>/<appId>/window-states.json`. Returns `null` when the host
- * can't report a data dir (rare — locked-down sandboxes).
+ * Default storage path: `<appDataDir>/window-states.json`, in the app's own
+ * data directory (created by the host, inside the default fs scope).
  */
-async function defaultStoragePath(appId: string): Promise<string | null> {
-  const root = await os.dataDir();
-  if (!root) return null;
+async function defaultStoragePath(): Promise<string> {
+  const root = await os.appDataDir();
   // Use the same separator as the data dir so the resulting path
   // round-trips cleanly through Rust's `Path` on every OS.
   const sep = root.includes("\\") ? "\\" : "/";
-  return `${root}${sep}${appId}${sep}window-states.json`;
+  return `${root}${sep}window-states.json`;
 }
 
 /**
@@ -182,14 +173,11 @@ export const windowState = {
    */
   init(opts: WindowStateInitOptions = {}): Promise<void> {
     if (internal.initPromise) return internal.initPromise;
-    if (opts.appId !== undefined) internal.appId = opts.appId;
     if (opts.debounceMs !== undefined) internal.debounceMs = opts.debounceMs;
     const initialization = (async () => {
-      const path = opts.storagePath ?? (await defaultStoragePath(internal.appId));
-      if (path !== null) {
-        await call("setStoragePath", { path });
-        await call("loadFromDisk", { path });
-      }
+      const path = opts.storagePath ?? (await defaultStoragePath());
+      await call("setStoragePath", { path });
+      await call("loadFromDisk", { path });
       attachListeners();
     })();
     internal.initPromise = initialization;
@@ -256,7 +244,7 @@ export const windowState = {
 
   /**
    * Override the on-disk JSON file location. Default is
-   * `<dataDir>/<appId>/window-states.json`. Pass an absolute path;
+   * `<appDataDir>/window-states.json`. Pass an absolute path;
    * relative paths resolve against the host's CWD which is rarely
    * what callers expect.
    */

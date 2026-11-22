@@ -60,3 +60,36 @@ describe("clipboard.onChange shared watcher", () => {
     expect(seen).toEqual(["start", "stop"]);
   });
 });
+
+describe("@tynd/plugin-clipboard formats", () => {
+  test("writeRtf sends the plain-text fallback when given", async () => {
+    await clipboard.writeRtf("{\rtf1 hi}", "hi");
+    await clipboard.writeRtf("{\rtf1}");
+    expect(bridge.calls.map((c) => (c as { args: unknown }).args)).toEqual([
+      { rtf: "{\rtf1 hi}", alt: "hi" },
+      { rtf: "{\rtf1}" },
+    ]);
+  });
+
+  test("writeFormat and writeFormats encode bytes and strings as base64", async () => {
+    await clipboard.writeFormat("application/x-app", new Uint8Array([1, 2, 3]));
+    await clipboard.writeFormats({ "text/plain": "hé", "com.example.x": new Uint8Array([255]) });
+    expect(bridge.calls.map((c) => (c as { args: unknown }).args)).toEqual([
+      { items: [{ format: "application/x-app", data: "AQID" }] },
+      {
+        items: [
+          { format: "text/plain", data: "aMOp" },
+          { format: "com.example.x", data: "/w==" },
+        ],
+      },
+    ]);
+  });
+
+  test("readFormat decodes base64 and passes null through", async () => {
+    bridge.setOs("clipboard", "readFormat", (args) =>
+      (args as { format: string }).format === "x" ? "AQID" : null,
+    );
+    expect(await clipboard.readFormat("x")).toEqual(new Uint8Array([1, 2, 3]));
+    expect(await clipboard.readFormat("y")).toBeNull();
+  });
+});
