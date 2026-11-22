@@ -1,0 +1,71 @@
+[package]
+name         = "tynd-bundler"
+description  = "Cross-platform bundler + code-signer for Tynd apps. Wraps tauri-bundler + apple-codesign behind a JSON-config CLI invoked by @tynd/cli."
+publish.workspace       = true
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+readme                  = "README.md"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "tynd-bundler"
+path = "src/main.rs"
+
+[dependencies]
+tauri-bundler.workspace      = true
+tauri-utils.workspace        = true
+apple-codesign.workspace     = true
+# Pinned with `apple-codesign`: see the root workspace manifest.
+app-store-connect.workspace  = true
+clap.workspace               = true
+serde.workspace              = true
+serde_json.workspace         = true
+anyhow.workspace             = true
+tracing.workspace            = true
+# `tracing-log` routes tauri-bundler's `log` records into the subscriber;
+# `ansi` keeps coloured terminal output (both are off at the workspace level).
+tracing-subscriber           = { workspace = true, features = [ "ansi", "tracing-log" ] }
+miette.workspace             = true
+thiserror.workspace          = true
+# Stacked-context reports for the cause chain inside helpers; rendered to
+# the `cause: String` field of the existing `miette::Diagnostic` enums at
+# the boundary so user-facing output keeps its code/url/help affordances.
+error-stack.workspace        = true
+goblin.workspace             = true
+walkdir.workspace            = true
+zip.workspace                = true
+handlebars.workspace         = true
+camino.workspace             = true
+rayon.workspace              = true
+tempfile.workspace           = true
+# Binary diff (BSDIFF-derived) — produces the `.bsdiff` patch consumed
+# by the tynd-host updater's `bipatch` reader. zstd compresses the patch
+# afterward so the network payload stays in the ~100 KB ballpark for
+# typical updates instead of the 50–100 MB full binary.
+bidiff.workspace             = true
+zstd.workspace               = true
+blake3.workspace             = true
+tynd-bundle-contract.workspace = true
+tynd-pack-format.workspace   = true
+tynd-update-core.workspace   = true
+# Pack subcommand (`tynd-bundler pack`) — native self-extracting executable builder.
+# Declared here because the bundler binary owns the pack implementation.
+resvg.workspace              = true
+usvg.workspace               = true
+image.workspace              = true
+ico.workspace                = true
+quick-xml.workspace          = true
+
+
+[target.'cfg(target_os = "macos")'.dependencies]
+embed_plist.workspace = true
