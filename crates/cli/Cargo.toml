@@ -1,0 +1,60 @@
+[package]
+name                    = "tynd-cli"
+description             = "Native CLI and MCP tooling for the Tynd framework"
+publish                 = false
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+readme                  = "README.md"
+
+[lints]
+workspace = true
+
+[features]
+default = ["local-socket"]
+local-socket = ["dep:interprocess"]
+
+[[bin]]
+name = "tynd"
+path = "src/bin/tynd.rs"
+
+[[bin]]
+name = "tynd-mcp"
+path = "src/bin/tynd-mcp.rs"
+
+[dependencies]
+anyhow.workspace              = true
+base64.workspace              = true
+blake3.workspace              = true
+clap.workspace                = true
+clap_complete.workspace       = true
+ctrlc.workspace               = true
+dirs.workspace                = true
+dunce.workspace               = true
+ed25519-dalek.workspace       = true
+getrandom.workspace           = true
+interprocess                  = { workspace = true, optional = true }
+regex.workspace               = true
+schemars.workspace            = true
+semver.workspace              = true
+serde.workspace               = true
+serde_json.workspace          = true
+serde_yaml.workspace          = true
+tempfile.workspace            = true
+toml.workspace                = true
+toml_edit.workspace           = true
+tracing.workspace             = true
+tracing-subscriber.workspace  = true
+tynd-debug-protocol           = { workspace = true, features = ["local-socket"] }
+tynd-bundle-contract.workspace = true
+tynd-pack-format.workspace    = true
+url.workspace                 = true
+walkdir.workspace             = true
+zip.workspace                 = true
