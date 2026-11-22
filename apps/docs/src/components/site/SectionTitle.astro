@@ -1,0 +1,47 @@
+---
+interface Props {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  align?: "left" | "center";
+  /** Heading level; the page title uses `h1`. */
+  as?: "h1" | "h2";
+}
+const { eyebrow, title, description, align = "center", as: Heading = "h2" } = Astro.props;
+---
+
+<div class:list={[align]}>
+  {eyebrow && <div class="eyebrow">{eyebrow}</div>}
+  <Heading>{title}</Heading>
+  {description && <p>{description}</p>}
+</div>
+
+<style>
+  .center {
+    text-align: center;
+  }
+  .center p {
+    max-width: 42rem;
+    margin-inline: auto;
+  }
+  .eyebrow {
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent-text);
+  }
+  h1,
+  h2 {
+    margin-top: 0.5rem;
+    font-size: clamp(1.875rem, 4vw, 2.25rem);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+  }
+  p {
+    margin-top: 1rem;
+    font-size: 1.125rem;
+    color: var(--fg-muted);
+  }
+</style>

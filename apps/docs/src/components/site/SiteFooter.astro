@@ -1,0 +1,85 @@
+---
+import { FOOTER_LINKS, navLinkAttrs } from "../../lib/nav";
+import { SITE } from "../../lib/site";
+import Container from "./Container.astro";
+---
+
+<footer>
+  <Container class="cols">
+    <div class="about">
+      <div class="name">{SITE.name}</div>
+      <p>{SITE.description}</p>
+    </div>
+    {
+      FOOTER_LINKS.map((col) => (
+        <div>
+          <h3>{col.title}</h3>
+          <ul>
+            {col.items.map((item) => (
+              <li>
+                <a {...navLinkAttrs(item)}>{item.label}</a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </Container>
+  <div class="legal">{SITE.license} {new Date().getFullYear()} © {SITE.name}</div>
+</footer>
+
+<style>
+  footer {
+    border-top: 1px solid var(--border);
+    background: var(--bg-muted);
+  }
+  footer :global(.cols) {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+    padding-block: 3rem;
+  }
+  .about {
+    grid-column: span 2;
+  }
+  @media (min-width: 768px) {
+    footer :global(.cols) {
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .about {
+      grid-column: span 1;
+    }
+  }
+  .name {
+    margin-bottom: 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+  p,
+  a {
+    font-size: 0.875rem;
+    color: var(--fg-muted);
+  }
+  a:hover {
+    color: var(--accent-text);
+  }
+  h3 {
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  ul {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .legal {
+    padding-block: 1.5rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--fg-subtle);
+  }
+</style>

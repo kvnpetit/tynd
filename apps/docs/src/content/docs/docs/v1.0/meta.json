@@ -1,0 +1,20 @@
+{
+  "pages": [
+    "index",
+    "getting-started",
+    "concepts",
+    "guides",
+    "tutorials",
+    "recipes",
+    "api",
+    "cli",
+    "compare",
+    "production-checklist",
+    "faq",
+    "glossary",
+    "troubleshooting",
+    "---For AI Assistants---",
+    "[llms.txt](https://tynd-apps.github.io/tynd/docs/v1.0/llms.txt)",
+    "[llms-full.txt](https://tynd-apps.github.io/tynd/docs/v1.0/llms-full.txt)"
+  ]
+}

@@ -1,0 +1,50 @@
+---
+import Button from "../components/site/Button.astro";
+import Container from "../components/site/Container.astro";
+import Base from "../layouts/Base.astro";
+import { withBase } from "../lib/site";
+import { LATEST_SLUG } from "../lib/versions";
+---
+
+<Base title="Page not found - Tynd" canonicalPath="/404.html" noindex>
+  <Container class="not-found">
+    <div class="code">404</div>
+    <h1>Page not found</h1>
+    <p>This page moved, never existed, or got renamed between versions.</p>
+    <div class="actions">
+      <Button href={withBase("/")}>Home</Button>
+      <Button href={withBase(`/docs/${LATEST_SLUG}/`)} variant="secondary">Docs</Button>
+    </div>
+  </Container>
+</Base>
+
+<style>
+  main :global(.not-found) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-block: 8rem;
+    text-align: center;
+  }
+  .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 4.5rem;
+    font-weight: 700;
+    color: var(--accent-text);
+  }
+  h1 {
+    margin-top: 1rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  p {
+    margin-top: 0.5rem;
+    max-width: 28rem;
+    color: var(--fg-muted);
+  }
+  .actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+</style>

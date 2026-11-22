@@ -1,0 +1,230 @@
+---
+title: Troubleshooting
+description: "Current fixes for native Tynd tooling, Bun application builds, host resolution, packaging, and MCP discovery."
+---
+
+# Troubleshooting
+
+Start with:
+
+```bash
+tynd info
+tynd validate
+tynd doctor
+```
+
+These inspect project-local inputs and resolved native binaries. They intentionally skip network, registry, WebView, and broad installer-tool probes.
+
+## Installation and native packages
+
+### `tynd` or `tynd-bundler` cannot be resolved
+
+`@tynd/cli` is a small launcher. `@tynd/tooling` selects one optional platform package containing `tynd`, `tynd-mcp`, and `tynd-bundler`.
+
+```bash
+bun add -d @tynd/cli
+bun install --force
+```
+
+Ensure npm optional dependencies are enabled. No postinstall script or command-time GitHub download repairs a missing binary.
+
+### Tynd host not compiled yet
+
+The app host is compiled by `tynd dev` (Cargo `dev` profile) and `tynd build` (`release` profile), then copied to `.tynd/build/bin/debug/` and `.tynd/build/bin/release/`. `tynd start` runs the release host and fails with “Tynd host not compiled yet … run `tynd build` first” until a release build exists.
+
+### Tynd host sources are missing
+
+The host is compiled from the `@tynd/host-src` dev dependency. `tynd create` and `tynd add` install it; otherwise add it yourself:
+
+```bash
+bun add -d @tynd/host-src
+```
+
+`tynd validate --ci` reports `Tynd host sources are not installed` when it is absent. Keep its version in step with `@tynd/cli`; `tynd upgrade` updates both.
+
+### Bun not found or version mismatch
+
+Bun executes TypeScript config, application backend code, frontend commands, and package operations. Install Bun, then confirm:
+
+```bash
+bun --version
+```
+
+When `.bun-version` exists, its exact version must match. `tynd init` creates a pin when it can inspect Bun; `tynd validate --ci` requires one.
+
+### cargo or rustc not found, or Rust too old
+
+Every project generates `.tynd/build/Cargo.toml` and invokes `cargo build`. When `cargo` or `rustc` is not on `PATH`, or `rustc` is older than 1.95, `tynd dev` and `tynd build` stop with a message pointing to https://rustup.rs. Install Rust from there, or run `rustup update`. Tynd does not download a toolchain itself. Platform build tools are also required: the MSVC build tools on Windows, the Xcode command line tools on macOS, the WebKitGTK/GTK development packages on Linux.
+
+### First build is slow
+
+The first `tynd dev` or `tynd build` on a machine compiles the whole host and takes a few minutes (the CLI prints `Compiling Tynd host (first build can take a few minutes; dependencies are cached for every project in <path>)…`). Dependencies go to the [shared host build cache](/docs/v1.0/concepts/build-pipeline#shared-host-build-cache), so later projects using the same host sources, Rust version, and target reuse them. Later builds are incremental, and a `tynd dev` run whose inputs did not change skips Cargo entirely. A Rust upgrade or a new `@tynd/host-src` version recompiles the dependencies once. In CI, set `TYND_CACHE_DIR` to a workspace path and cache it.
+
+### Host binary cannot be replaced (Windows)
+
+A build fails with `replace … (is the app still running?)` when the app built from this project is still running: Windows does not allow replacing a running executable. Stop the app, then rebuild.
+
+## Config
+
+### Config shape error
+
+Config is decoded/validated by native Rust tooling. Supported names include `tynd.config.ts`, JavaScript variants, JSON/JSONC, TOML, YAML, and YML.
+
+Minimum values default to:
+
+```ts
+export default {
+  backend: "backend/main.ts",
+  frontendDir: "frontend",
+};
+```
+
+Use [`tynd config show`](/docs/v1.0/cli/config/show) to inspect the merged/resolved value and [`tynd validate`](/docs/v1.0/cli/validate) for path checks.
+
+### Remote config `extends` rejected
+
+Only local/absolute files and installed npm package entries are accepted. `http:`, `https:`, `file:`, and other URL schemes are rejected deliberately.
+
+### SSR framework rejected
+
+Tynd requires a static SPA. Use Vite/plain React, Vue, Svelte, Solid, Preact, Lit, Angular SPA output, or another framework producing static assets. Server-rendered Next/Nuxt/SvelteKit/Remix-style projects are blocked.
+
+## Development and launch
+
+### Frontend readiness timeout
+
+`tynd dev` waits 30 seconds for detected/configured `devUrl`. Run the frontend command directly and configure an argument array when needed:
+
+```ts
+{
+  devCommandArgs: ["bunx", "vite", "--port", "4173"],
+  devUrl: "http://localhost:4173",
+}
+```
+
+### `OS API '<name>' is not compiled in this build`
+
+The app calls an API whose official plugin is not declared. Add it, then restart `tynd dev` or rebuild:
+
+```bash
+tynd add <name>
+```
+
+This installs `@tynd/plugin-<name>` and lists it in `plugins` in `tynd.config.ts`. Importing an undeclared `@tynd/plugin-*` package warns in `tynd dev` and fails `tynd build`; a `menu` or `tray` in `app.start` without its plugin stops startup.
+
+### Config changed while `tynd dev` runs
+
+Restart `tynd dev`. Native capabilities, plugin crates, environment, and host arguments can require a new host plan; only compatible source changes use live backend reload.
+
+### `cached backend bundle not found`
+
+`tynd start` is cache-only and never rebuilds. Run:
+
+```bash
+tynd build
+tynd start
+```
+
+The build creates `.tynd/cache/bundle.dist.js` and frontend production output.
+
+### WebView unavailable at application launch
+
+Tynd does not preflight WebView availability through the registry. Windows installers default to `skip`, while supported Windows/macOS systems normally provide WebView2/WKWebView; Linux requires WebKitGTK runtime packages. If a locked-down Windows environment lacks Evergreen WebView2, install it or explicitly choose another Windows installer distribution mode. See [Bundling](/docs/v1.0/guides/bundling#windows-webview2-distribution).
+
+## Build and packaging
+
+### Output not found in `release/`
+
+Default output includes platform and architecture:
+
+```text
+release/<platform>-<arch>/<app>[.exe]
+```
+
+Check `release/win32-x64`, `release/darwin-arm64`, or `release/linux-x64`, not the release root.
+
+### `--bundle` needs a value
+
+Use:
+
+```bash
+tynd build --bundle all
+# or a current-host list: macos,dmg | deb,rpm,appimage | nsis,msi
+```
+
+Cross-platform targets are rejected before packaging.
+
+### Installer tool missing
+
+Tynd does not download installer tools. Native packaging reports the format-specific prerequisite when requested. Install the tool named by the error or select only formats supported on that host.
+
+### Windows signing says `signtool` not found
+
+Place `signtool` on `PATH`. Tynd does not search SDK registry keys or honor a custom `SIGNTOOL` discovery chain.
+
+### `tynd clean` refuses to run
+
+Destructive cleanup is explicit:
+
+```bash
+tynd clean --dry-run
+tynd clean --yes
+```
+
+Only `.tynd/cache`, `.tynd/build`, and `release` are eligible. `tynd clean --yes --cache` also removes the shared host build cache.
+
+## Updates
+
+### macOS publish says app archive is missing
+
+Build a macOS application bundle first:
+
+```bash
+tynd build --bundle macos
+```
+
+Expected updater payload: `<binary>-<version>-macos.zip`.
+
+### Local update server refuses to start
+
+Generate the signed feed first:
+
+```bash
+tynd updater publish 1.2.3 --target manifest-only
+tynd updater server --serve
+```
+
+Both `release/publish/manifest.json` and `.sig` are required.
+
+### No patches generated
+
+Prior releases must exist under `~/.tynd/releases/<app-id>/` (or `TYND_RELEASES_ROOT`). macOS intentionally uses full app archives. Pass `--no-diffs` when full-only behavior is desired.
+
+## MCP
+
+### `tynd-mcp` finds no running app
+
+Start `tynd dev` without `--no-debug`. Discovery is local/authenticated and defaults to loopback. Static framework docs/plugin schemas remain available even without a live app.
+
+### Evaluation or launch tool denied
+
+Those MCP capabilities are opt-in:
+
+```bash
+bunx @tynd/mcp serve --allow-eval
+bunx @tynd/mcp serve --allow-launch
+```
+
+Enable only the capability needed by the client.
+
+## Still blocked
+
+Create a metadata-only bundle and include the relevant command error. Project and config contents are never copied into the archive:
+
+```bash
+tynd report
+tynd info --json
+tynd validate --json
+```
+
+Then open a [GitHub issue](https://github.com/tynd-apps/tynd/issues).

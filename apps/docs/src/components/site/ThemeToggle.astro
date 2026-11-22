@@ -1,0 +1,53 @@
+---
+// Shares the "starlight-theme" storage key with the docs so the choice carries over.
+---
+
+<button type="button" class="theme-toggle" aria-label="Toggle color theme" data-theme-toggle>
+  <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg>
+  <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+</button>
+
+<script>
+  document.querySelector("[data-theme-toggle]")?.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem("starlight-theme", next);
+    } catch {
+      // Storage can be unavailable (private mode); the choice then lasts for this page only.
+    }
+  });
+</script>
+
+<style>
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 0.375rem;
+    background: transparent;
+    color: var(--fg-muted);
+    cursor: pointer;
+  }
+  .theme-toggle:hover {
+    background: var(--hover);
+    color: var(--fg);
+  }
+  svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  .moon {
+    display: none;
+  }
+  :global(:root[data-theme="dark"]) .sun {
+    display: none;
+  }
+  :global(:root[data-theme="dark"]) .moon {
+    display: block;
+  }
+</style>

@@ -1,0 +1,107 @@
+---
+title: Introduction
+description: "Tynd is a desktop-app framework with a Bun TypeScript backend and a native WebView front-end."
+---
+
+import { Aside, CardGrid } from '@astrojs/starlight/components';
+import DocCard from '@/components/DocCard.astro';
+
+# Tynd
+
+**TypeScript application DX. Native Rust tooling and host. One distributable desktop app.**
+
+Tynd is a desktop-app framework with a **TypeScript backend running on Bun** and a native WebView front-end. Your frontend and backend are both TypeScript. RPC types flow from `typeof backend` — no codegen, no IDL, no schema file.
+
+```bash
+bunx @tynd/cli create my-app
+```
+
+<Aside type="note">
+  **New here?** Start with the [5-minute quickstart](/docs/v1.0/getting-started) — scaffold an app, run it with HMR, ship a binary.
+</Aside>
+
+<Aside type="tip">
+  **v1.0 highlights.** First stable release. Stable core RPC/event primitives, package-owned OS plugins, official SQLite/PTY/audio/AI/media plugins, capability ACLs, multi-window support, native installers, signed updates, and one Bun runtime.
+</Aside>
+
+## At a glance
+
+- **TypeScript application surface.** Backend, frontend, typed IPC, and config stay TypeScript; CLI, MCP, host, and bundling are native Rust.
+- **One Bun runtime.** Development and production share Bun. Each app gets its own native Rust host, compiled with the core plus the APIs it declares.
+- **Native window, zero network.** No HTTP server, no loopback TCP port, no firewall prompt. Frontend and IPC ride a native custom scheme.
+- **Explicit capability ownership.** Core owns bootstrap, RPC, events, and stable primitives. Specialized OS and plugin APIs install from package-owned `@tynd/plugin-*` entry points. Standalone plugins with a native crate link it into the app's host explicitly.
+- **Zero-copy binary IPC.** Multi-MB payloads skip JSON/base64 — `ArrayBuffer` end-to-end, 5-10× faster than the usual webview-framework binary path.
+- **First-class installers.** `.app`, `.dmg`, `.deb`, `.rpm`, `.AppImage`, NSIS, and MSI through the native Rust bundler. Format-specific prerequisites fail where used. Built-in Windows/macOS signing and macOS notarization.
+- **Framework-agnostic.** React, Vue, Svelte, Solid, Preact, Lit, Angular — anything that outputs a pure SPA.
+
+## Why Tynd
+
+Most desktop-app frameworks force you to pick a language for the native side (Rust for Tauri, Go for Wails, or the entire Chromium for Electron). Tynd keeps application code TypeScript-first: **you write TypeScript, while native Rust tooling builds and ships the binary**.
+
+<CardGrid>
+  <DocCard title="TypeScript end-to-end" href="/docs/v1.0/concepts/architecture">
+    Backend, frontend, RPC — same language, same types.
+  </DocCard>
+  <DocCard title="Runtime" href="/docs/v1.0/concepts/runtimes">
+    Bun powers every backend; plugins only customize the Rust host.
+  </DocCard>
+  <DocCard title="Zero-network IPC" href="/docs/v1.0/concepts/ipc">
+    RPC and assets never touch TCP — no loopback port, no firewall prompt.
+  </DocCard>
+  <DocCard title="Complete API reference" href="/docs/v1.0/api">
+    Every backend, frontend, and OS API with signatures and examples.
+  </DocCard>
+</CardGrid>
+
+## How it works
+
+```
+TypeScript backend                         Native OS window
+──────────────────────────                 ─────────────────────────
+  export async function greet()  ◄── IPC ─ await api.greet("Alice")
+  events.emit("ready", payload)  ─── push ─► api.on("ready", handler)
+         │
+         ▼
+  Bun backend       — one JavaScript runtime
+  native host       — Rust host compiled for the app
+  tynd / tynd-mcp   — native Rust developer tools
+```
+
+Frontend assets and IPC ride a native custom scheme — no HTTP server, no loopback port, no firewall prompt. Multi-MB binary payloads (`fs.readBinary`, `fs.writeBinary`, `compute.hash`) skip JSON entirely via a dedicated binary channel.
+
+## Runtime
+
+All backend code runs on Bun with `Bun.*`, `node:*`, Web APIs, JIT, and native npm bindings. Specialized APIs install explicitly as plugins. Tynd compiles each app's Rust host with the core plus the declared plugins, without changing the JavaScript runtime.
+
+See [Runtime](/docs/v1.0/concepts/runtimes) for details.
+
+## Requirements
+
+**[Bun](https://bun.sh) is required for app developers.** Application backends, frontend commands, and TypeScript config run on Bun; the CLI and MCP server are native Rust. Node.js is not supported as an application-runtime replacement. [Rust](https://rustup.rs) 1.95+ and the platform build tools are also required, because `tynd dev` and `tynd build` compile the app's native host; you write no Rust. See [Installation](/docs/v1.0/getting-started/installation).
+
+```bash
+# macOS / Linux
+curl -fsSL https://bun.sh/install | bash
+
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+**End users do not install Bun separately** — the exact Bun executable is packed into the distributed binary. The target OS still supplies its normal system WebView/runtime libraries.
+
+## What to read next
+
+<CardGrid>
+  <DocCard title="Getting Started" href="/docs/v1.0/getting-started">
+    Scaffold a project, run it with HMR, produce a release binary.
+  </DocCard>
+  <DocCard title="Architecture" href="/docs/v1.0/concepts/architecture">
+    Frontend, Rust host, TS backend — how the three surfaces fit.
+  </DocCard>
+  <DocCard title="Guides" href="/docs/v1.0/guides">
+    Recipes for streaming, multi-window, auto-update, signing, bundling.
+  </DocCard>
+  <DocCard title="Comparisons" href="/docs/v1.0/compare">
+    Tynd vs Tauri, Electron, Wails — where each one fits.
+  </DocCard>
+</CardGrid>

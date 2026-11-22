@@ -1,0 +1,45 @@
+---
+import Button from "../components/site/Button.astro";
+import Container from "../components/site/Container.astro";
+import SectionTitle from "../components/site/SectionTitle.astro";
+import Base from "../layouts/Base.astro";
+import { SITE } from "../lib/site";
+---
+
+<Base
+  title="Changelog - Tynd"
+  description="Release history."
+  canonicalPath="/changelog/"
+  noindex
+>
+  <section class="head">
+    <Container>
+      <SectionTitle as="h1" eyebrow="Releases" title="Changelog" description="Release history." />
+    </Container>
+  </section>
+  <section class="body">
+    <Container>
+      <p>Full release notes are on GitHub. A curated inline changelog will land here soon.</p>
+      <Button href={SITE.links.releases} external>View releases on GitHub</Button>
+    </Container>
+  </section>
+</Base>
+
+<style>
+  .head {
+    padding-block: 4rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .body {
+    padding-block: 3rem;
+  }
+  .body :global(.container) {
+    display: grid;
+    justify-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+  p {
+    color: var(--fg-subtle);
+  }
+</style>

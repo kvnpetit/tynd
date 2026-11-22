@@ -1,0 +1,94 @@
+---
+// Shell for the non-docs pages (landing, changelog, 404): head metadata, header, footer.
+import "../styles/site.css";
+import SiteFooter from "../components/site/SiteFooter.astro";
+import SiteHeader from "../components/site/SiteHeader.astro";
+import { SITE, withBase } from "../lib/site";
+
+interface Props {
+  title?: string;
+  description?: string;
+  /** Root-relative page path used for the canonical URL (defaults to the current one). */
+  canonicalPath?: string;
+  noindex?: boolean;
+  jsonLd?: object[];
+}
+
+const {
+  title = SITE.title,
+  description = SITE.description,
+  canonicalPath,
+  noindex = false,
+  jsonLd,
+} = Astro.props;
+
+const canonical = canonicalPath
+  ? `${SITE.url}${canonicalPath}`
+  : new URL(Astro.url.pathname, Astro.site).href;
+const image = `${SITE.url}${SITE.screenshot}`;
+const robots = noindex ? "noindex,follow" : "index,follow,max-image-preview:large,max-snippet:-1";
+---
+
+<!doctype html>
+<html lang={SITE.locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="application-name" content={SITE.name} />
+    <meta name="author" content={SITE.author.name} />
+    <meta name="keywords" content={SITE.keywords.join(", ")} />
+    <meta name="category" content={SITE.category} />
+    <meta name="robots" content={robots} />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:locale" content={SITE.ogLocale} />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content={image} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={image} />
+    <link rel="icon" href={withBase(SITE.icons.icon)} />
+    <link rel="canonical" href={canonical} />
+    <link rel="sitemap" href={withBase("/sitemap-index.xml")} />
+    <!-- Same storage key as Starlight, so the theme is shared with the docs. -->
+    <script is:inline>
+      (() => {
+        let theme = "";
+        try {
+          theme = localStorage.getItem("starlight-theme") || "";
+        } catch {}
+        if (theme !== "light" && theme !== "dark") {
+          theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+  </head>
+  <body>
+    <div class="shell">
+      <SiteHeader />
+      <main id="main-content">
+        <slot />
+      </main>
+      <SiteFooter />
+    </div>
+  </body>
+</html>
+
+<style is:global>
+  .shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  .shell > main {
+    flex: 1;
+  }
+</style>
