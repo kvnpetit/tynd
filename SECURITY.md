@@ -7,9 +7,8 @@ Thanks for helping keep Tynd and its users safe. This document describes how to 
 | Version | Supported |
 |---------|-----------|
 | 1.x     | Yes       |
-| 0.x     | No        |
 
-We provide security fixes only for the current `1.x` line. Pre-1.0 releases were development previews and receive no security patches — please upgrade.
+We provide security fixes for the current `1.x` line.
 
 ## Reporting a Vulnerability
 
@@ -24,7 +23,7 @@ Please include:
 - A description of the issue and the impact you believe it has.
 - Steps to reproduce, ideally with a minimal proof-of-concept.
 - Affected versions / commit SHA.
-- Your platform (OS, architecture, runtime: full / lite / custom).
+- Your platform (OS, architecture) and the plugins listed in your `tynd.config.ts`.
 - Whether you'd like public credit (and under what name / handle).
 
 ## Response Timeline
@@ -55,13 +54,33 @@ Tynd uses **GitHub-issued GHSA identifiers** as the canonical record for each vu
   `app.tyndpkg`.
 - Privilege escalation via the host's elevated APIs.
 - WebView sandbox escapes or content-isolation bypass.
+- **MCP server (`@tynd/mcp`)**: JSON-RPC framing or injection over stdio;
+  path traversal in tool arguments; crafted tool responses (file contents,
+  logs) that steer an agent beyond the user's intent; a non-Tynd local
+  process impersonating a running app during discovery; secrets or tokens
+  leaked into agent-visible output.
+- **Plugin SDK (`@tynd/plugin-sdk`, `tynd-plugin-sdk`)**: `unsafe` boundaries
+  that allow memory corruption from plugin input; injection across the
+  host <-> plugin event channel; SDK APIs that let a plugin break host
+  isolation beyond the documented capability model.
+- **Official plugins**: path traversal in plugin file APIs, SQL injection in
+  `@tynd/plugin-sql` helpers, privilege escalation from malicious plugin input.
+- **Docs site**: XSS in rendered MDX content, workflow misconfigurations that
+  expose secrets, open redirects on documentation links.
+
+When reporting against the plugin SDK or a plugin, name the package
+(npm package or Rust crate) and its version.
 
 **Out-of-scope** — please do not file these as security reports:
 
 - DoS via OS-imposed quotas (file handles, memory, disk).
 - Risks inherent to running untrusted plugin code on the user's machine —
   plugins execute by design with user-level trust. Document the risk in
-  the plugin's README instead.
+  the plugin's README instead. The plugin SDK does not sandbox third-party
+  code.
+- Risks inherent to letting an AI agent operate through `@tynd/mcp` on a
+  developer machine: the agent runs with user-level trust by design.
+- Missing security headers on third-party assets the docs site does not control.
 - Self-XSS or attacks requiring an already-compromised host machine.
 - Findings from automated scanners without a working exploit.
 - Denial of service via deliberately malformed but locally-controlled
