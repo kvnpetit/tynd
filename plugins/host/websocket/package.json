@@ -1,0 +1,38 @@
+{
+  "name": "@tynd/plugin-websocket",
+  "version": "1.0.0",
+  "description": "Tynd websocket plugin facade.",
+  "license": "Apache-2.0",
+  "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
+  "homepage": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/websocket",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "directory": "plugins/host/websocket"
+  },
+  "private": false,
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "client.ts",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": "./client.ts",
+    "./client": "./client.ts"
+  },
+  "peerDependencies": {
+    "@tynd/core": ">=1.0.0 <2"
+  },
+  "tynd": {
+    "apis": [
+      "websocket"
+    ],
+    "kind": "host"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
