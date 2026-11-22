@@ -1,0 +1,17 @@
+# Minimum supported Rust — keeps `manual_let_else` etc. from suggesting
+# features newer than the toolchain we pin in Cargo.toml.
+msrv = "1.95"
+
+# Pragmatic complexity ceilings — defaults are noisy on dispatch-style code
+# (tynd-host `dispatch()`, plugin-sdk `Registry`).
+cognitive-complexity-threshold = 30
+too-many-arguments-threshold   = 8
+type-complexity-threshold      = 250
+
+# Published SDK — clippy surfaces lints that would change the public API
+# surface so we notice SemVer breaks before tagging.
+avoid-breaking-exported-api = true
+
+# Tests may unwrap freely; production code is held to `unwrap_used = "deny"`
+# in the [lints] table.
+allow-unwrap-in-tests = true
