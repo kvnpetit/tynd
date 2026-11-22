@@ -1,8 +1,6 @@
 <!--
-Thanks for the PR! Please fill out the sections below. Delete sections that don't apply.
-
-See CONTRIBUTING.md for the docs-update table — many user-visible changes
-require touching the relevant doc in the same commit.
+Thanks for the PR! Fill out the sections below and remove anything irrelevant.
+See the root [CONTRIBUTING.md](https://github.com/tynd-apps/tynd/blob/main/CONTRIBUTING.md) for documentation requirements.
 -->
 
 ## What
@@ -11,15 +9,11 @@ require touching the relevant doc in the same commit.
 
 ## Why
 
-<!-- Link the issue (e.g. "Fixes #123") or explain the motivation. -->
+<!-- Link the issue or explain the motivation. -->
 
-## How tested
+## Validation
 
-<!--
-- Unit tests added/updated? Which?
-- Manual test steps run, on which OS / runtime (full / lite / custom)?
-- Playground used? Which one?
--->
+<!-- List static checks, builds, and manual platform flows completed. -->
 
 ## Breaking changes
 
@@ -30,8 +24,10 @@ require touching the relevant doc in the same commit.
 
 ## Checklist
 
-- [ ] `bun run check:all` passes locally (biome + typecheck + rustfmt + clippy + tests)
-- [ ] Tests added or updated for the change
-- [ ] Docs updated in the same commit (see [CONTRIBUTING.md doc table](./CONTRIBUTING.md))
-- [ ] Conventional Commit subject (e.g. `feat(core):`, `fix(cli):`)
-- [ ] No banned characters (smart quotes, Unicode arrows beyond prose dashes)
+- [ ] `bun run check` passes locally
+- [ ] Affected TypeScript and Rust code typechecks
+- [ ] Affected packages build successfully
+- [ ] Manual platform behavior was validated when relevant
+- [ ] Docs updated in the same commit
+- [ ] Conventional Commit subject
+- [ ] No banned characters
