@@ -25,6 +25,7 @@ pub(crate) struct EmbeddedAssets {
     pub bundle_path: String,
     pub frontend_dir: String,
     pub icon_path: Option<String>,
+    #[cfg(windows)]
     pub webview2_runtime_path: Option<String>,
     /// Raw `observability.json` entry (see `crate::observability`), if packed.
     pub observability: Option<String>,
@@ -220,6 +221,7 @@ struct EmbeddedLoadState {
     bundle_path: Option<String>,
     frontend_dir: Option<String>,
     icon_path: Option<String>,
+    #[cfg(windows)]
     webview2_runtime_path: Option<String>,
     observability: Option<String>,
     app_identifier: Option<String>,
@@ -241,6 +243,7 @@ impl EmbeddedLoadState {
             bundle_path: None,
             frontend_dir: None,
             icon_path: None,
+            #[cfg(windows)]
             webview2_runtime_path: None,
             observability: None,
             app_identifier: None,
@@ -271,7 +274,14 @@ impl EmbeddedLoadState {
             "bun.blake3" => self.read_bun_hash(pack, data_len),
             "bun.zst" => self.read_bun_archive(pack, data_len),
             tynd_pack_format::WEBVIEW2_RUNTIME_PATH_ENTRY => {
-                self.read_webview2_runtime_path(pack, data_len)
+                let path = read_webview2_runtime_path(pack, data_len)?;
+                #[cfg(windows)]
+                {
+                    self.webview2_runtime_path = Some(path);
+                }
+                #[cfg(not(windows))]
+                drop(path);
+                Some(())
             },
             crate::observability::PACK_ENTRY => self.read_observability(pack, data_len),
             tynd_pack_format::DEBUG_FLAG_ENTRY => self.read_debug_flag(pack, data_len),
@@ -343,23 +353,6 @@ impl EmbeddedLoadState {
             self.published_bun = Some(cache_path.clone());
         }
         self.bun_path = Some(cache_path);
-        Some(())
-    }
-
-    fn read_webview2_runtime_path(&mut self, pack: &mut VerifiedPack, data_len: u64) -> Option<()> {
-        if data_len == 0 || data_len > tynd_pack_format::MAX_BOOT_METADATA_BYTES {
-            tynd_host::tynd_error!(
-                "Embedded WebView2 runtime path has invalid size ({data_len} bytes)"
-            );
-            pack.skip(data_len).ok()?;
-            return None;
-        }
-        let path = read_small_text_entry(pack, data_len)?;
-        if safe_subpath(&path).is_none() {
-            tynd_host::tynd_error!("Embedded WebView2 runtime path is unsafe");
-            return None;
-        }
-        self.webview2_runtime_path = Some(path);
         Some(())
     }
 
@@ -466,6 +459,7 @@ impl EmbeddedLoadState {
             bundle_path,
             frontend_dir,
             icon_path: self.icon_path,
+            #[cfg(windows)]
             webview2_runtime_path: self.webview2_runtime_path,
             observability: self.observability,
             app_identifier: self.app_identifier,
@@ -532,6 +526,23 @@ fn safe_subpath(rest: &str) -> Option<&str> {
     tynd_pack_format::validate_subpath(rest)
 }
 
+fn read_webview2_runtime_path(pack: &mut VerifiedPack, data_len: u64) -> Option<String> {
+    if data_len == 0 || data_len > tynd_pack_format::MAX_BOOT_METADATA_BYTES {
+        tynd_host::tynd_error!(
+            "Embedded WebView2 runtime path has invalid size ({data_len} bytes)"
+        );
+        pack.skip(data_len).ok()?;
+        return None;
+    }
+    let path = read_small_text_entry(pack, data_len)?;
+    if safe_subpath(&path).is_none() {
+        tynd_host::tynd_error!("Embedded WebView2 runtime path is unsafe");
+        return None;
+    }
+    Some(path)
+}
+
+#[cfg(windows)]
 pub(crate) fn resolve_webview2_runtime_path(exe: &Path, relative: &str) -> Option<PathBuf> {
     safe_subpath(relative)?;
     let runtime = exe.parent()?.join(relative);
