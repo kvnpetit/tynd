@@ -1070,7 +1070,6 @@ Real-world plugins built on this SDK:
 
 - [`@tynd/plugin-sql`](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone/sql) — bundled SQLite, stateful handles
 - [`@tynd/plugin-terminal`](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone/terminal) — PTY sessions, `cx.spawn_interval` polling pattern
-- [`@tynd/plugin-command-palette`](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone/command-palette) — pure-JS, complex client-side state
 
 Stable host capabilities such as
 [`@tynd/plugin-keyring`](https://github.com/kvnpetit/tynd/tree/main/plugins/host/keyring)

@@ -60,7 +60,7 @@ fn catalog_aliases_resolve_to_their_plugin() {
         ("Hotkeys", "@tynd/plugin-shortcuts"),
         ("db", "@tynd/plugin-sql"),
         ("sql", "@tynd/plugin-sql"),
-        ("server", "@tynd/plugin-http-server"),
+        ("oauth-callback", "@tynd/plugin-oauth"),
     ] {
         assert!(
             project::is_capability_alias(alias),

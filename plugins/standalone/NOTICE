@@ -14,8 +14,6 @@ You may obtain a copy of the License at
 THIRD-PARTY SOFTWARE INCLUDED — by plugin
 ================================================================================
 
-## @tynd/plugin-command-palette (pure JS, no native deps)
-
 ## @tynd/plugin-sql
 - SQLite           (public domain; supplied by Bun) — https://www.sqlite.org/copyright.html
 

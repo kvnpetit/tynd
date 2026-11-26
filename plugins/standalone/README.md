@@ -10,9 +10,6 @@ Standalone official Tynd plugins workspace — native and pure-JS plugins for th
 | Package | Description |
 |---|---|
 | [`@tynd/plugin-audio`](./audio) | Audio capture / playback — `cpal` + WAV via `hound` |
-| [`@tynd/plugin-command-palette`](./command-palette) | Headless command registry + fuzzy search (no UI imposed — bring your own components) |
-| [`@tynd/plugin-gpu`](./gpu) | GPU diagnostics + benchmark + readiness checks (WebGPU / WebGL2 / WebGL1 capabilities, vendor/renderer detection, quick compute-shader benchmark) |
-| [`@tynd/plugin-http-server`](./http-server) | Embedded HTTP + WebSocket server via `Bun.serve` |
 | [`@tynd/plugin-oauth`](./oauth) | Loopback OAuth callback listener with PKCE-style state validation |
 | [`@tynd/plugin-sql`](./sql) | Bundled SQLite via `bun:sqlite` |
 | [`@tynd/plugin-terminal`](./terminal) | Embedded PTY — spawn shells, stream output, resize, real `kill()` |
@@ -22,17 +19,14 @@ Standalone official Tynd plugins workspace — native and pure-JS plugins for th
 > lifecycle, `acl` and `log`. Other host APIs (autolaunch, biometric,
 > deep-link, power, shortcuts, updater, vault, network, AppleScript, ...) are
 > host-backed official plugins under [`plugins/host`](../host). The plugins here
-> cover terminal/PTY, HTTP/WebSocket serving, SQL, audio and text-to-speech.
+> cover terminal/PTY, OAuth callbacks, SQL, audio and text-to-speech.
 > For i18n or QR codes, use npm libraries
 > directly (`i18next` / `lingui` / `formatjs`; `qrcode`).
 
 ## Plugin types
 
-**Frontend TypeScript** — optional renderer plugins:
-`command-palette`, `gpu`
-
 **Bun backend** — optional plugins bundled into the app backend:
-`http-server`, `oauth`, `sql`
+`oauth`, `sql`
 
 **Native (Rust)** — ship a Rust crate compiled into the app's host:
 `audio`, `terminal`, `tts`

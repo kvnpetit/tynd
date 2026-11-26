@@ -15,8 +15,15 @@ First stable release.
 
 ### Added
 
-- Standalone official plugins workspace: `audio`, `command-palette`, `gpu`,
-  `http-server`, `oauth`, `sql`, `terminal` and `tts`.
+- Standalone official plugins workspace: `audio`, `oauth`, `sql`,
+  `terminal` and `tts`.
+
+### Removed from the pre-release catalog
+
+- Build command palettes in the app's frontend to replace `command-palette`.
+  Use WebGPU and WebGL capability checks to replace `gpu`.
+- Replace `http-server` with `Bun.serve` in the backend. Use `createBackend`
+  for calls from a Tynd WebView to its own backend.
 
 [Unreleased]: https://github.com/kvnpetit/tynd/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/kvnpetit/tynd/releases/tag/v1.0.0

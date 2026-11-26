@@ -476,48 +476,6 @@
     "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/audio/"
   },
   {
-    "id": "command-palette",
-    "kind": "standalone",
-    "pkg": "@tynd/plugin-command-palette",
-    "aliases": ["commands", "palette", "cmdk"],
-    "apis": [],
-    "importName": "register",
-    "importPath": "@tynd/plugin-command-palette",
-    "description": "Headless command palette",
-    "permissions": ["frontend-ui"],
-    "estimatedSizeKb": 15,
-    "install": "tynd add command-palette",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/command-palette/"
-  },
-  {
-    "id": "gpu",
-    "kind": "standalone",
-    "pkg": "@tynd/plugin-gpu",
-    "aliases": ["webgpu", "graphics"],
-    "apis": [],
-    "importName": "gpu",
-    "importPath": "@tynd/plugin-gpu",
-    "description": "WebGPU and WebGL diagnostics",
-    "permissions": ["gpu"],
-    "estimatedSizeKb": 25,
-    "install": "tynd add gpu",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/gpu/"
-  },
-  {
-    "id": "http-server",
-    "kind": "standalone",
-    "pkg": "@tynd/plugin-http-server",
-    "aliases": ["server", "bun-server"],
-    "apis": ["network"],
-    "importName": "httpServer",
-    "importPath": "@tynd/plugin-http-server",
-    "description": "Bun HTTP and WebSocket server",
-    "permissions": ["network-loopback", "network-public"],
-    "estimatedSizeKb": 45,
-    "install": "tynd add http-server",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/http-server/"
-  },
-  {
     "id": "oauth",
     "kind": "standalone",
     "pkg": "@tynd/plugin-oauth",

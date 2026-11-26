@@ -83,9 +83,6 @@ These are released independently; native ones ship their own Rust crate, linked 
 | Package | Type | Purpose | Docs |
 |---|---|---|---|
 | `@tynd/plugin-audio` | Native | Audio capture, playback, WAV I/O. | [API](/docs/v1.0/api/plugins/audio) |
-| `@tynd/plugin-command-palette` | Pure JS | Headless command registry and fuzzy search. | [API](/docs/v1.0/api/plugins/command-palette) |
-| `@tynd/plugin-gpu` | Pure JS | GPU diagnostics, readiness checks, benchmarks. | [API](/docs/v1.0/api/plugins/gpu) |
-| `@tynd/plugin-http-server` | Bun/TS | Embedded HTTP and WebSocket server through `Bun.serve`. | [API](/docs/v1.0/api/plugins/http-server) |
 | `@tynd/plugin-oauth` | Bun/TS | Loopback OAuth callback listener. | [API](/docs/v1.0/api/plugins/oauth) |
 | `@tynd/plugin-sql` | Bun/TS | Embedded SQLite via `bun:sqlite`. | [API](/docs/v1.0/api/plugins/sql) |
 | `@tynd/plugin-terminal` | Native | Real PTY terminal. | [API](/docs/v1.0/api/plugins/terminal) |
@@ -128,6 +125,11 @@ Host-backed plugins are thin facades over host APIs whose native code ships in t
 | [`vault`](/docs/v1.0/api/plugins/vault) | `@tynd/plugin-vault` | Encrypted app vault | `vault` |
 | [`websocket`](/docs/v1.0/api/plugins/websocket) | `@tynd/plugin-websocket` | Native WebSocket client | `websocket` |
 | [`window-state`](/docs/v1.0/api/plugins/window-state) | `@tynd/plugin-window-state` | Window persistence | `window-state` |
+
+Use the [Bun runtime](/docs/v1.0/concepts/runtimes#local-http-servers) for a local
+HTTP server and the [WebView's graphics APIs](/docs/v1.0/concepts/gpu-acceleration#detecting-gpu-capabilities)
+for GPU capability detection. Build command palettes in your frontend with
+your UI library of choice.
 
 ## Core APIs
 

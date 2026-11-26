@@ -368,53 +368,6 @@
         "@tynd/plugin-sdk",
       ],
     },
-    "plugins/standalone/command-palette": {
-      "name": "@tynd/plugin-command-palette",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@biomejs/biome": "2.6.8",
-        "@types/bun": "1.4.5",
-        "typescript": "~7.0.2",
-      },
-      "peerDependencies": {
-        "@tynd/core": "^1.0.0",
-      },
-      "optionalPeers": [
-        "@tynd/core",
-      ],
-    },
-    "plugins/standalone/gpu": {
-      "name": "@tynd/plugin-gpu",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@biomejs/biome": "2.6.8",
-        "@types/bun": "1.4.5",
-        "typescript": "~7.0.2",
-      },
-      "peerDependencies": {
-        "@tynd/core": "^1.0.0",
-      },
-      "optionalPeers": [
-        "@tynd/core",
-      ],
-    },
-    "plugins/standalone/http-server": {
-      "name": "@tynd/plugin-http-server",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@biomejs/biome": "2.6.8",
-        "@types/bun": "1.4.5",
-        "typescript": "~7.0.2",
-      },
-      "peerDependencies": {
-        "@tynd/core": "^1.0.0",
-        "@tynd/plugin-sdk": "^1.0.0",
-      },
-      "optionalPeers": [
-        "@tynd/core",
-        "@tynd/plugin-sdk",
-      ],
-    },
     "plugins/standalone/oauth": {
       "name": "@tynd/plugin-oauth",
       "version": "1.0.0",
@@ -906,8 +859,6 @@
 
     "@tynd/plugin-clipboard": ["@tynd/plugin-clipboard@workspace:plugins/host/clipboard"],
 
-    "@tynd/plugin-command-palette": ["@tynd/plugin-command-palette@workspace:plugins/standalone/command-palette"],
-
     "@tynd/plugin-compute": ["@tynd/plugin-compute@workspace:plugins/host/compute"],
 
     "@tynd/plugin-deep-link": ["@tynd/plugin-deep-link@workspace:plugins/host/deep-link"],
@@ -916,11 +867,7 @@
 
     "@tynd/plugin-fs": ["@tynd/plugin-fs@workspace:plugins/host/fs"],
 
-    "@tynd/plugin-gpu": ["@tynd/plugin-gpu@workspace:plugins/standalone/gpu"],
-
     "@tynd/plugin-http": ["@tynd/plugin-http@workspace:plugins/host/http"],
-
-    "@tynd/plugin-http-server": ["@tynd/plugin-http-server@workspace:plugins/standalone/http-server"],
 
     "@tynd/plugin-keyring": ["@tynd/plugin-keyring@workspace:plugins/host/keyring"],
 

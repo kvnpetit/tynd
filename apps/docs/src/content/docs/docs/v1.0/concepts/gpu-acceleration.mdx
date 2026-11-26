@@ -139,23 +139,18 @@ so you get free V-Sync without doing anything special.
 
 ## WebGPU compute (advanced)
 
-WebGPU is available on all 3 OS — the webview ships it, Tynd doesn't
-restrict it. Use it for ML inference (transformers.js with
+WebGPU support depends on the installed WebView, GPU and driver. Detect it in
+the frontend before using it for ML inference (transformers.js with
 `WebGPUBackend`), image processing, particle systems, or modern 3D
 renderers (Three.js `WebGPURenderer`):
 
 ```ts
 const adapter = await navigator.gpu?.requestAdapter()
-if (!adapter) {
-  // Fallback to WebGL — see the note below for graceful detection.
-  return
-}
-const device = await adapter.requestDevice()
-
-// Pass into Three.js' WebGPU renderer:
-import { WebGPURenderer } from "three/webgpu"
-const renderer = new WebGPURenderer({ device })
+const device = await adapter?.requestDevice()
 ```
+
+Choose your WebGL renderer when there is no adapter and the required WebGL
+context is available.
 
 On Linux, the host sets `WEBKIT_USE_WEBGPU=1` before WebKitGTK starts when
 `window.webgpu` is not `false`. Older WebKitGTK releases ignore the hint, so
@@ -178,19 +173,15 @@ function getGPUInfo() {
     renderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "unknown",
     maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
     webgl2: gl instanceof WebGL2RenderingContext,
-    webgpu: typeof navigator !== "undefined" && "gpu" in navigator,
   }
 }
 
-const info = getGPUInfo()
-if (!info?.webgpu) {
-  console.warn("WebGPU unavailable — falling back to WebGL2 renderer")
-}
+const webgl = getGPUInfo()
+const webgpu = Boolean(await navigator.gpu?.requestAdapter())
 ```
 
-The `WEBGL_debug_renderer_info` extension is gated in pure browsers
-for fingerprinting, but the system webview exposes it inside Tynd —
-you get the real GPU vendor + renderer string.
+`WEBGL_debug_renderer_info` is optional. When the WebView withholds the
+extension, use the context and its limits to choose a rendering preset.
 
 ## Performance gotchas
 

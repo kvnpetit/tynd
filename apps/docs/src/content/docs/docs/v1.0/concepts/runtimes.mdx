@@ -18,6 +18,34 @@ export default {
 Bun provides JIT execution, `Bun.*`, Node-compatible APIs, `Buffer`, `process`,
 `node:*` imports, npm packages, and native addons.
 
+## Local HTTP servers
+
+Use [backend RPC](/docs/v1.0/guides/backend-rpc) for calls between your WebView
+and the Bun backend. If another process needs an HTTP endpoint, start one in
+the backend with [`Bun.serve`](https://bun.com/docs/runtime/http/server):
+
+```ts title="backend/main.ts"
+import { app } from "@tynd/core";
+
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch(request) {
+    if (request.method === "GET" && new URL(request.url).pathname === "/health") {
+      return new Response("ok");
+    }
+    return new Response("Not found", { status: 404 });
+  },
+});
+
+app.onClose(() => { void server.stop(true); });
+app.start();
+```
+
+Read `server.url` for the address assigned by the OS. `Bun.serve` runs in the
+trusted backend. Enforce authorization there before adding routes that read or
+modify app data, including on loopback.
+
 ## Native host
 
 Every app runs on a native Rust host that Tynd compiles for it with Cargo from

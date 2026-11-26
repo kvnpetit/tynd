@@ -54,7 +54,7 @@ fn window_label_validation() {
 #[test]
 fn plugin_name_is_lowercased_kebab() {
     assert_eq!(PluginName::try_new("FS").unwrap().as_ref(), "fs");
-    assert!(PluginName::try_new("http-server").is_ok());
+    assert!(PluginName::try_new("deep-link").is_ok());
     for bad in ["", "1fs", "fs_x", "fs:x", "-fs"] {
         assert!(PluginName::try_new(bad).is_err(), "{bad:?}");
     }
@@ -147,7 +147,7 @@ fn lookup_keys_include_wildcards() {
 #[test]
 fn validate_plugin_name_rules() {
     assert!(validate_plugin_name("fs").is_ok());
-    assert!(validate_plugin_name("http-server").is_ok());
+    assert!(validate_plugin_name("deep-link").is_ok());
     assert!(validate_plugin_name(APP_ACL_KEY).is_err());
     assert!(validate_plugin_name("Fs").is_err(), "must be canonical");
     assert!(validate_plugin_name("").is_err());

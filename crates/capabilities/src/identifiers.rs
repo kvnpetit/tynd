@@ -21,7 +21,7 @@ use nutype::nutype;
 )]
 pub struct WindowLabel(String);
 
-/// Plugin name (`"fs"`, `"vault"`, `"http-server"`). Lowercase kebab.
+/// Plugin name (`"fs"`, `"vault"`, `"deep-link"`). Lowercase kebab.
 #[nutype(
     sanitize(trim, lowercase),
     validate(not_empty, regex = r"^[a-z][a-z0-9-]{0,30}$"),
