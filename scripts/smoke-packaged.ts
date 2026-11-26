@@ -5,6 +5,20 @@ import { dirname, join, resolve } from "node:path";
 const root = realpathSync(resolve(import.meta.dir, ".."));
 const target = resolve(root, Bun.env.CARGO_TARGET_DIR ?? "target", "debug");
 const extension = process.platform === "win32" ? ".exe" : "";
+const testNativeMenus = process.platform === "darwin" || process.platform === "win32";
+const nativeMenuImports = `import { menu } from "../../plugins/host/menu/client";
+import { tray } from "../../plugins/host/tray/client";`;
+const nativeMenuChecks = `
+  await menu.setMenu([{
+    type: "submenu", label: "Smoke", items: [{ id: "action", label: "Action" }],
+  }]);
+  await menu.setItemEnabled("action", false);
+  const status = await tray.create("smoke", {
+    icon: { rgba: new Uint8Array([0, 0, 0, 255]), width: 1, height: 1 },
+    menu: [{ type: "checkbox", id: "check", label: "Check" }],
+  });
+  await status.setItemChecked("check", true);
+  await status.remove();`;
 const parent = join(root, ".tynd");
 mkdirSync(parent, { recursive: true });
 assert.equal(realpathSync(parent), parent, "smoke directory must be inside the repository");
@@ -17,7 +31,12 @@ try {
   writeFileSync(join(project, "package.json"), '{"name":"tynd-smoke","private":true}');
   writeFileSync(
     join(project, "tynd.config.json"),
-    '{"backend":"backend.ts","frontendDir":"frontend","bundle":{"identifier":"com.tynd.smoke"}}',
+    JSON.stringify({
+      backend: "backend.ts",
+      frontendDir: "frontend",
+      bundle: { identifier: "com.tynd.smoke" },
+      ...(testNativeMenus ? { apis: ["menu", "tray"] } : {}),
+    }),
   );
   writeFileSync(
     join(project, "backend.ts"),
@@ -28,6 +47,9 @@ export async function confirm(reply: string) {
   if (reply !== "tynd-ready") throw new Error("Unexpected ping result: " + reply);
   await Bun.write(process.env.TYND_SMOKE_RESULT!, reply);
 }
+export async function reportFailure(message: string) {
+  await Bun.write(process.env.TYND_SMOKE_RESULT!, message);
+}
 app.start({ window: { title: "Tynd packaged smoke" } });
 `,
   );
@@ -35,9 +57,14 @@ app.start({ window: { title: "Tynd packaged smoke" } });
   writeFileSync(
     client,
     `import { createBackend } from "@tynd/core/client";
+${testNativeMenus ? nativeMenuImports : ""}
 
 const backend = createBackend<typeof import("./backend")>();
-await backend.confirm(await backend.ping());
+try {${testNativeMenus ? nativeMenuChecks : ""}
+  await backend.confirm(await backend.ping());
+} catch (error) {
+  await backend.reportFailure(String(error));
+}
 `,
   );
   await Bun.build({ entrypoints: [client], outdir: frontend, target: "browser", throw: true });
@@ -69,7 +96,7 @@ await backend.confirm(await backend.ping());
     signal: AbortSignal.timeout(60_000),
   });
   assert.equal(await app.exited, 0, "packaged app failed or timed out");
-  assert.ok(await Bun.file(result).exists(), "WebView did not confirm the backend RPC response");
+  assert.ok(await Bun.file(result).exists(), "WebView did not complete the smoke checks");
   assert.equal(await Bun.file(result).text(), "tynd-ready");
   process.stdout.write("Packaged app loaded its frontend and completed a backend RPC.\n");
 } finally {

@@ -25,7 +25,8 @@ pub(super) fn optional_field<T: serde::de::DeserializeOwned>(
     registry::optional_field("tray", args, op, field)
 }
 
-#[cfg(test)]
+// AppKit requires the main thread; macOS exercises the tray in smoke-packaged.ts.
+#[cfg(all(test, not(target_os = "macos")))]
 mod tests {
     use serde_json::json;
 

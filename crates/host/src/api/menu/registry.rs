@@ -123,13 +123,13 @@ impl MenuRegistry {
         &self.root
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(target_os = "macos")))]
     pub(crate) fn contains(&self, id: &str) -> bool {
         self.entries.contains_key(id)
     }
 
     /// Checked state of checkbox / radio `id`.
-    #[cfg(test)]
+    #[cfg(all(test, not(target_os = "macos")))]
     pub(crate) fn is_checked(&self, id: &str) -> Option<bool> {
         match &self.entries.get(id)?.item {
             RegItem::Check(item) => Some(item.is_checked()),
@@ -138,7 +138,7 @@ impl MenuRegistry {
     }
 
     /// Simulate muda's click on check item `id`: flip it, then report it.
-    #[cfg(test)]
+    #[cfg(all(test, not(target_os = "macos")))]
     pub(crate) fn click(&self, id: &str) -> bool {
         if let Some(RegItem::Check(item)) = self.entries.get(id).map(|entry| &entry.item) {
             item.set_checked(!item.is_checked());
@@ -146,7 +146,7 @@ impl MenuRegistry {
         self.on_activated(id)
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(target_os = "macos")))]
     pub(crate) fn is_submenu(&self, id: &str) -> bool {
         matches!(
             self.entries.get(id).map(|entry| &entry.item),
@@ -154,7 +154,7 @@ impl MenuRegistry {
         )
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(target_os = "macos")))]
     pub(crate) fn is_icon_item(&self, id: &str) -> bool {
         matches!(
             self.entries.get(id).map(|entry| &entry.item),
@@ -162,7 +162,7 @@ impl MenuRegistry {
         )
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(target_os = "macos")))]
     pub(crate) fn accelerator(&self, id: &str) -> Option<&str> {
         self.entries.get(id)?.accelerator.as_deref()
     }
@@ -637,7 +637,8 @@ fn icon_item_from(
     }
 }
 
-#[cfg(test)]
+// AppKit requires the main thread; macOS exercises the menu in smoke-packaged.ts.
+#[cfg(all(test, not(target_os = "macos")))]
 mod tests {
     use serde_json::json;
 
