@@ -1,0 +1,246 @@
+---
+title: Testing
+description: "Unit-test backend logic with bun test, drive the real app end to end with @tynd/test and `tynd test`, and validate releases."
+---
+
+# Testing
+
+Four layers, each optional:
+
+| Layer | Tool | Covers |
+|---|---|---|
+| Static checks | `tynd validate`, `tsc`, your linter | Config, build inputs, types |
+| Unit tests | `bun test` | Backend logic kept free of host side effects |
+| Frontend unit tests | `bun test` + `installTyndMock` from `@tynd/core/testing` | Frontend code that calls the backend or plugins, without a host |
+| End-to-end | [`@tynd/test`](#end-to-end-tests-with-tyndtest) + [`tynd test`](/docs/v1.0/cli/test) | The real app: windows, DOM, IPC, screenshots |
+
+## Tynd checks
+
+```bash
+tynd info
+tynd validate
+tynd validate --ci
+tynd doctor
+tynd build
+```
+
+- `validate`: config/backend/frontend/package presence.
+- `validate --ci`: also requires Bun pin and resolves Bun, native host, and bundler.
+- `doctor`: focused project/native binary checks with optional repair/state reporting.
+- `build`: authoritative frontend/backend/host/packaging execution.
+
+These commands do not run your TypeScript typechecker, linter, or application tests. Add `bunx tsc --noEmit` and your own linter as you would in any project.
+
+## Unit tests for backend logic
+
+Backend RPC functions are normal typed functions. Keep business logic outside host and window side effects and test it with `bun test`:
+
+```ts title="backend/pricing.test.ts"
+import { expect, test } from "bun:test";
+import { total } from "./pricing";
+
+test("applies the discount", () => {
+  expect(total([10, 20], 0.1)).toBe(27);
+});
+```
+
+Test the RPC boundary (serialization, thrown errors) as plain function calls rather than reproducing Tynd internals.
+
+## Unit tests for frontend code
+
+`installTyndMock()` from `@tynd/core/testing` replaces the IPC bridge with an in-memory one, so frontend modules that use `createBackend` or plugin clients run under `bun test` without a host:
+
+```ts title="src/open.test.ts"
+import { afterEach, expect, test } from "bun:test";
+import { installTyndMock, type TyndMock } from "@tynd/core/testing";
+import { createBackend } from "@tynd/core/client";
+import { dialog } from "@tynd/plugin-dialog/client";
+import type * as backend from "../backend/main";
+
+let mock: TyndMock;
+afterEach(() => mock.restore());
+
+test("opens the picked file", async () => {
+  mock = installTyndMock({
+    backend: { greet: (name) => `Hello ${name}` },
+    os: { "dialog.openFile": () => "/tmp/a.txt" },
+  });
+  const api = createBackend<typeof backend>();
+  expect(await api.greet("Ada")).toBe("Hello Ada");
+  expect(await dialog.openFile()).toBe("/tmp/a.txt");
+  expect(mock.calls.map((c) => c.kind)).toEqual(["backend", "os"]);
+});
+```
+
+- `backend` handlers are keyed by function name; `os` handlers by `"api.method"`. An OS call with no handler rejects unless `osFallback` answers it (for example `osFallback: () => null` to accept every call and assert on `calls` only).
+- `binary` handles `tynd-bin://` requests; `windowLabel` sets the current window label.
+- The returned mock records every call in `calls` and offers `emit` / `emitOs` (fire backend or OS events), `setBackend` / `setOs`, `clear()` and `restore()`. Call `restore()` after each test.
+
+## End-to-end tests with `@tynd/test`
+
+`@tynd/test` launches your app with `tynd dev` (debug socket on), drives the webview over the Tynd debug protocol, and plugs into `bun test`. It has no runtime dependencies and needs Bun.
+
+```bash
+bun add -d @tynd/test
+```
+
+```ts title="e2e/greeting.test.ts"
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { launchApp, type TyndApp } from "@tynd/test";
+
+let app: TyndApp;
+beforeAll(async () => {
+  app = await launchApp(); // cwd: TYND_TEST_PROJECT, then process.cwd()
+});
+afterAll(() => app.close());
+
+test("greets the user", async () => {
+  await app.fill([{ selector: "#name", value: "Ada" }]);
+  await app.click("button[type=submit]");
+  await app.waitFor(async () => (await app.eval<string>("document.title")) === "Hello Ada");
+});
+```
+
+Run it with the CLI, which finds the project root and prepares the environment:
+
+```bash
+tynd test                       # all tests, 180 s per test
+tynd test e2e/greeting.test.ts  # a file filter, forwarded to bun test
+```
+
+See [`tynd test`](/docs/v1.0/cli/test) for the flags and the variables it sets. Plain `bun test` also works; set `TYND_TEST_CLI` or put `tynd` on `PATH` so `launchApp` can start the app.
+
+### How `launchApp` starts the app
+
+1. Runs `tynd dev` (or the `command` you give) with the debug socket enabled.
+2. Waits for the host's discovery file: `%LOCALAPPDATA%\tynd\debug\<pid>.json` on Windows, `~/Library/Application Support/tynd/debug` on macOS, `$XDG_RUNTIME_DIR/tynd` on Linux.
+3. Connects (named pipe, unix socket, or loopback TCP), authenticates with the file's token, and waits for a loaded window.
+
+Unless `env.TYND_DEBUG_SOCKET` is set, `launchApp` picks the debug endpoint itself: on Linux and macOS a socket in a fresh private (mode `0700`) directory under the system temp directory (`tynd-test-*`), on Windows a named pipe with a random name (`tynd-test-<pid>-<random>`). The directory is removed on `close()` and when the launch fails; if removal fails, a leftover empty `tynd-test-*` directory is harmless and can be deleted.
+
+```ts
+launchApp({
+  cwd,                // project root
+  args,               // extra args for the launch command
+  env,                // extra env vars for the app process
+  command,            // replaces `tynd dev`, e.g. a packaged binary built with `tynd build --debug-protocol`
+  timeout,            // default 120000 ms: the first run compiles the host
+  appId,              // attach only to this app id when several run
+  waitForReady,       // default true: wait for a loaded window
+  discoveryDir,       // override the discovery directory
+});
+```
+
+### Driving the app
+
+`launchApp` resolves to a `TyndApp`. Selectors are CSS selectors, resolved to element refs with `webview.find_element`; every window method takes an optional `{ label }` to target a window other than the default.
+
+| Method | Purpose |
+|---|---|
+| `windowList()` | Open windows |
+| `eval(script, { label, raw })` | Run JS in the page; the JSON result is parsed unless `raw` |
+| `findElement(selector)` | Element ref, or `null` |
+| `click(selector \| { ref } \| { x, y })` | Click |
+| `type(text, target?)` | Type into the target or the focused element |
+| `fill([{ selector \| ref, value }])` | Replace field values |
+| `pressKey("ctrl+k")` | Key combination |
+| `snapshot({ mode })` | `map` (default), `html` or `state` |
+| `consoleLogs()` | Page console output |
+| `screenshot()` | PNG of a window |
+| `ipcRecent(n)` | Last IPC frames seen by the host |
+| `appInfo()` | App identity |
+| `call(method, params)` | Any other debug-protocol method |
+| `waitFor(predicate, { timeout, interval })` | Poll until truthy (5 s, 50 ms by default) |
+| `waitForSelector(selector)` | Poll until the element exists |
+| `expectScreenshot(path, opts)` | Compare with a baseline PNG |
+| `output()` | Captured app stdout/stderr |
+| `close()` | Ask the app to quit, then kill the process tree |
+
+Actions throw `ActionError` when the helper reports `ok: false` or the selector matches nothing.
+
+`waitFor` and `waitForSelector` throw `WaitForTimeoutError` when the deadline passes. Its message says how long it waited; `lastError` holds the last error the predicate threw, if any. `waitFor(predicate, options)` is also exported on its own, with an optional `message` for the error.
+
+Besides `launchApp`, the package exports lower-level pieces: `DebugClient`, discovery helpers (`readDiscoveryEntries`, `selectEntry`, `defaultDiscoveryDir`), transports (`connectTransport`, `socketTransport`), `diffImages` / `diffPng` and `ScreenshotMismatchError`. Two subpaths need nothing else from the package:
+
+| Import | Exports |
+|---|---|
+| `@tynd/test/png` | `decodePng(bytes)`, `encodePng(image)`, `RawImage` (`{ width, height, data }`, RGBA, 4 bytes per pixel). A minimal codec for 8-bit non-interlaced PNGs such as host screenshots |
+| `@tynd/test/protocol` | Debug-protocol framing: `encodeFrame`, `encodeRequest`, `FrameDecoder`, `decodeMessage`, `RpcError`, `MAX_FRAME_BYTES` (16 MiB) |
+
+### Screenshot baselines
+
+```ts
+await app.expectScreenshot("e2e/__screenshots__/home.png", { maxDiffRatio: 0.001 });
+```
+
+- A missing baseline is created and the test passes.
+- On a mismatch, `<name>.actual.png` and `<name>.diff.png` are written next to the baseline and the call throws.
+- `tynd test --update-snapshots` (or `TYND_UPDATE_SNAPSHOTS=1`) rewrites baselines.
+- Options: `threshold` (per-pixel color sensitivity, default `0.1`), `maxDiffPixels`, `maxDiffRatio`, `update`.
+- Capturing needs a host built with the `debug-screenshot` feature (dev-only, see [`tynd.config.ts`](/docs/v1.0/cli/config#apis)). Without it `screenshot()` fails.
+
+Rendering differs across OSes and font stacks, so keep baselines per platform and prefer small regions or a tolerance over full-window pixel equality.
+
+### Constraints and pitfalls
+
+- **One client at a time.** The debug server accepts a single client; a second gets `already_attached`. Run E2E files with one app at a time (`tynd test --max-concurrency 1`, or one `launchApp` per file in sequence).
+- **Packaged binaries need `--debug-protocol`.** By default `@tynd/test` launches `tynd dev`. To drive a packaged binary through a custom `command`, build it with [`tynd build --debug-protocol`](/docs/v1.0/cli/build#debug-protocol-and-security-warnings); otherwise the app refuses to start the debug server and `launchApp` cannot attach.
+- **Always close.** Call `app.close()` in `afterAll`, or the app process may outlive the run.
+- **Slow first run.** The 120 s default launch timeout allows the first host compile; raise the bun `--timeout` with `--timeout-ms` for long tests.
+- **Attach ambiguity.** If several apps start at the same instant, pass `appId` so `launchApp` attaches to the right one.
+- **No WebDriver.** There is no WebDriver or Playwright adapter; `@tynd/test` talks the debug protocol directly.
+- The same protocol backs the `tynd-mcp` inspection tools below.
+
+## Native development inspection
+
+`tynd dev` exposes a local authenticated debug endpoint unless `--no-debug` is used. Native `tynd-mcp` can inspect a running app:
+
+```bash
+bunx @tynd/mcp serve
+bunx @tynd/mcp call app.info
+bunx @tynd/mcp call webview.snapshot
+bunx @tynd/mcp call ipc.failed
+```
+
+Use screenshots, element snapshots/interactions, console/network records, IPC traces, plugin metadata, and capability checks only for flows your product needs. Evaluation/launch tools remain explicit opt-ins.
+
+## Release QA
+
+Validate on every shipped OS/architecture:
+
+- application launch and shutdown;
+- window/navigation/menu/tray/dialog/shortcut flows actually used;
+- frontend to Bun RPC success and failure paths;
+- offline startup;
+- installer install/upgrade/uninstall;
+- platform signing/notarization;
+- signed updater N-1 to N, including full fallback and patches when enabled.
+
+Built output lives under `release/<platform>-<arch>/`. The CLI does not launch a WebView during `info`, `validate`, or `doctor`; GUI proof requires an explicit app launch, an `@tynd/test` run, or an MCP-driven development session.
+
+## CI shape
+
+A lean non-interactive job can run:
+
+```yaml
+env:
+  TYND_CACHE_DIR: ${{ github.workspace }}/.tynd-cache
+steps:
+- uses: actions/cache@v4
+  with:
+    path: .tynd-cache
+    key: tynd-host-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+- run: bun install --frozen-lockfile
+- run: bunx tsc --noEmit
+- run: bunx @tynd/cli validate --ci
+- run: bunx @tynd/cli build
+```
+
+The runner needs Bun 1.3+, Rust 1.95+ (`rustup update` upgrades an older toolchain), and the platform build tools. Set `TYND_CACHE_DIR` on the job and cache that directory (the [shared host build cache](/docs/v1.0/concepts/build-pipeline#shared-host-build-cache)) to avoid recompiling the host from scratch on every job. Add `bun test` for unit tests. Run `tynd test` only on runners that can display the app (a desktop session or a virtual display on Linux), and build installer/signing targets on their native host.
+
+## Related
+
+- [`tynd test`](/docs/v1.0/cli/test)
+- [Development Workflow](/docs/v1.0/getting-started/dev-workflow)
+- [Debugging](/docs/v1.0/guides/debugging)
+- [Production Checklist](/docs/v1.0/production-checklist)

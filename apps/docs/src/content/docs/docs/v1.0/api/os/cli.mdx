@@ -1,0 +1,34 @@
+---
+title: cli
+description: "Parsed argv + matched subcommand for the host process — exposed to the backend without re-parsing on the JS side."
+---
+
+# `cli`
+
+Install the required plugin:
+
+```bash
+tynd add cli
+```
+
+```ts
+import { cli } from "@tynd/plugin-cli/client";
+```
+
+Read the host process's command-line arguments. Argv is captured once when the host boots and parsed lazily; the frontend additionally caches the parsed `Promise` so repeated `cli.matches()` calls don't roundtrip through the IPC bridge.
+
+## API surface
+
+- `cli.matches(): Promise<CliMatches>` — parsed argv (positional `args`, `flags`, `subcommand`).
+- `cli.raw(): Promise<string[]>` — untouched argv snapshot, including `argv[0]` (the binary path).
+
+`CliMatches`:
+
+```ts
+interface CliMatches {
+  args: string[];
+  flags: Record<string, string | boolean>;
+  subcommand: string | null;
+  raw: string[];
+}
+```

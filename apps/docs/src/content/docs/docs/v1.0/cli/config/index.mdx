@@ -1,0 +1,356 @@
+---
+title: tynd.config.ts
+description: "Editor-friendly TypeScript configuration loaded and validated by native Rust tooling."
+---
+
+# `tynd.config.ts`
+
+The application and its configuration stay in TypeScript. The native Rust CLI uses Bun only to evaluate TS/JS config files, then deserializes, normalizes, and validates the result in Rust.
+
+```ts title="tynd.config.ts"
+import { defineConfig } from "@tynd/cli";
+
+export default defineConfig({
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  icon: "assets/icon.svg",
+  bundle: {
+    identifier: "com.example.myapp",
+  },
+});
+```
+
+`defineConfig` is optional but recommended for TypeScript inference. An object with `satisfies TyndConfig` works too.
+
+Window, menu, and tray configuration belongs in the backend through `app.start(...)`, not in this file. This lets each window have its own policy. See [Backend API](/docs/v1.0/api/backend).
+
+## Supported files
+
+Tynd searches upward from the current directory for the nearest config file, in this order:
+
+```text
+tynd.config.ts   tynd.config.mts   tynd.config.cts
+tynd.config.js   tynd.config.mjs   tynd.config.cjs
+tynd.config.json tynd.config.jsonc tynd.config.toml
+tynd.config.yaml tynd.config.yml
+```
+
+JSON and JSONC files can point editors to the published JSON Schema for completion and validation. The schema is generated from the CLI's Rust config model, so it accepts the same fields as the CLI:
+
+```json title="tynd.config.json"
+{
+  "$schema": "https://kvnpetit.github.io/tynd/schemas/tynd.config.json",
+  "backend": "backend/main.ts",
+  "frontendDir": "dist"
+}
+```
+
+The CLI ignores a top-level `$schema` string in every config file, including `extends` bases and environment overrides. A non-string `$schema`, or a `$schema` key nested inside another field, is a config error.
+
+TS/JS files may export an object or a synchronous/asynchronous factory:
+
+```ts title="tynd.config.ts"
+import { defineConfig } from "@tynd/cli";
+
+export default defineConfig(async ({ envName }) => ({
+  backend: "backend/main.ts",
+  frontendDir: envName === "production" ? "dist" : "frontend",
+}));
+```
+
+`envName` comes from the global `--env` option, then `TYND_ENV`; its factory default is `development`.
+
+## Inheritance and environment variants
+
+`extends` accepts a local/absolute path, an installed npm package, or a list:
+
+```ts
+export default defineConfig({
+  extends: ["@acme/tynd-config", "./tynd.shared.ts"],
+  frontendDir: "dist",
+});
+```
+
+For a package without a subpath, Tynd resolves `tyndConfig` or `tynd` in `package.json`, the `./tynd-config` export, a `tynd.config.*`, then an `index.*`. URLs and other remote schemes are rejected. Cycles are detected.
+
+With `--env production`, merge order is:
+
+1. inherited config, then the main config;
+2. `tynd.config.production.*`;
+3. `tynd.config.local.*`;
+4. `tynd.config.production.local.*`.
+
+Objects merge recursively. Arrays and scalar values are replaced by the latest variant.
+
+Tynd also loads `.env`, `.env.local`, `.env.<env>`, and `.env.<env>.local` in that order. A variable already present in the process wins. Sensitive values from dotenv files are not injected into the config-evaluation bridge or child commands; provide signing secrets through the process environment.
+
+## Top-level fields
+
+| Field | Default | Purpose |
+|---|---|---|
+| `extends` | — | Local configs or npm packages to merge |
+| `apis` | `[]` | Extra native APIs compiled into the host |
+| `plugins` | `[]` | Plugin packages and native options |
+| `backend` | `"backend/main.ts"` | Bun backend entry |
+| `frontendDir` | `"frontend"` | Build output directory of the frontend framework, served as is |
+| `devUrl` | detected | HTTP(S) development frontend URL |
+| `devCommand` | detected | Frontend development command |
+| `devCommandArgs` | — | Separate arguments for `devCommand` |
+| `icon` | native fallback | Explicit SVG, PNG, or ICO path |
+| `binaryArgs` | `[]` | Extra arguments passed after `--` to the backend (`process.argv`) |
+| `protocols` | `[]` | Custom URL schemes |
+| `sidecars` | `[]` | Additional bundled binaries |
+| `bundle` | — | Metadata, platform formats, and signing |
+| `updater` | — | Signed-update endpoints, keys, channel and policy |
+| `observability` | — | Opt-in Sentry crash reporting and OpenTelemetry traces |
+
+Relative paths resolve from the project root.
+
+## `binaryArgs`
+
+`tynd dev` and `tynd start` run the compiled host as `<host> --backend-entry <path> -- <binaryArgs...>`. Everything after `--` reaches the Bun backend untouched in `process.argv`. A packaged executable forwards its own command-line arguments (`argv[1..]`) to the backend the same way and does not answer `-h` / `--help` or `-V` / `--version` itself, so your backend decides how to handle them.
+
+## `apis`
+
+`apis` lists native host APIs to compile into the app host, on top of the core and the APIs of the declared `plugins`. Accepted names (`tynd explain capabilities` prints the same list):
+
+| Group | Names |
+|---|---|
+| Core, always compiled into every host | `acl`, `log` |
+| Fronted by a host-backed official plugin `@tynd/plugin-<name>` | `autolaunch`, `biometric`, `cli`, `clipboard`, `compute`, `deep-link`, `dialog`, `fs`, `http`, `keyring`, `keys`, `menu`, `multiwindow`, `network`, `notification`, `power`, `process`, `screenshot`, `shell`, `shortcuts`, `sidecar`, `single-instance`, `store`, `system-stats`, `theme`, `tray`, `updater`, `vault`, `websocket`, `window-state` |
+
+[`tynd add <name>`](/docs/v1.0/cli/add) adds a name to `apis` and, for a plugin-first API, also installs and declares its `@tynd/plugin-<name>` package. The next `tynd dev` or `tynd build` compiles it into the host. `acl` has no TypeScript client: its host commands are `isAllowed` and `list` (read-only, callable from the renderer) and `generateSchema` (writes the permission schema to a path; backend only). Capabilities are declared in config and sent once at startup; nothing can load or change them at runtime.
+
+Three of the plugin-first APIs gate UI surfaces beyond their client:
+
+| `apis` name | Cargo feature | Gates |
+|---|---|---|
+| `menu` | `api-menu` | `menu.*` (`setItem*`, `update`), `showContextMenu`, the `menu` bar |
+| `tray` | `api-tray` | `tray.*` and the `tray` config |
+| `multiwindow` | `api-multiwindow` | `multiwindow.*` (secondary windows) and `multiwindow.webview.*` (child webviews) |
+
+A call into an API that is not compiled in is rejected with ``OS API '<name>' is not compiled in this build. Install `@tynd/plugin-<name>` and add it to `plugins` in tynd.config.ts ...``. A configured `menu` or `tray` without its plugin stops app startup with the same message.
+
+A separate dev-only feature, `debug-screenshot`, adds screenshot capture to the debug protocol; [`@tynd/test`](/docs/v1.0/guides/testing) needs it for `screenshot()` and `expectScreenshot()`. It is not an `apis` entry.
+
+## `plugins`
+
+A string uses the package's default metadata:
+
+```ts
+plugins: ["@tynd/plugin-audio"]
+```
+
+An object can restrict native commands and add optional Cargo features:
+
+```ts
+plugins: [{
+  pkg: "@acme/plugin-indexer",
+  permissions: ["fs:readText", "fs:readDir"],
+  features: ["simd"],
+}]
+```
+
+- `permissions` uses `api:method` selectors; `api:*` allows the whole API.
+- An explicit empty list denies all generic commands.
+- `apis` is an API-wide allow-list and behaves like `api:*`; it cannot be combined with `permissions`.
+- `features` adds to package-required features.
+- The same package may appear only once.
+- Bun-only plugins ignore native-only fields.
+
+A native plugin's Rust crate is linked into the app host on the next `tynd dev` or `tynd build`.
+
+## `sidecars`
+
+```ts
+sidecars: [
+  { name: "ffmpeg", path: "bin/ffmpeg" },
+  { name: "helper.exe", path: "bin/helper.exe" },
+]
+```
+
+`name` must be a safe, unique filename. `path` points to a project file and resolves at build time. See [Sidecars](/docs/v1.0/guides/sidecars).
+
+## `protocols`
+
+```ts
+protocols: ["myapp", "myapp-dev"]
+```
+
+Each value must start with a letter and then contain only letters, digits, `+`, `-`, or `.`. System/reserved schemes including `http`, `https`, `file`, `mailto`, `javascript`, `data`, `blob`, and `tynd` are rejected. See [Deep Linking](/docs/v1.0/guides/deep-linking).
+
+## `bundle`
+
+`bundle.identifier` is required when creating installers with `tynd build --bundle <targets>`. It also names the app's own data, config, cache and temp directories (`os.appDataDir()` and its siblings, where the store, log, window state and persisted grants live): `tynd build` embeds it in the binary and `tynd dev` passes it to the host, so set it before the first release, since changing it later moves those folders. Without it they are named after the executable.
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  displayName: "My App",
+  categories: ["Utility"],
+  shortDescription: "A small desktop app",
+  longDescription: "A longer package description.",
+  copyright: "© 2026 Acme",
+  licenseFile: "LICENSE",
+  resources: ["LICENSE", "assets/manual"],
+  fileAssociations: [{
+    ext: ["myapp"],
+    name: "My App Document",
+    role: "Editor",
+    mimeType: "application/x-myapp",
+    rank: "Owner",
+  }],
+  deb: {
+    depends: ["libwebkit2gtk-4.1-0"],
+    section: "utils",
+    priority: "optional",
+    desktopTemplate: "build/app.desktop.hbs",
+  },
+  rpm: {
+    requires: ["webkit2gtk4.1"],
+    desktopTemplate: "build/app.desktop.hbs",
+  },
+  appimage: {
+    bundleXdgOpen: true,
+  },
+  windows: {
+    webviewInstallMode: { type: "skip" },
+    minimumWebView2Version: "120.0.0.0",
+    allowDowngrades: false,
+    installMode: "currentUser",
+    requestedExecutionLevel: "asInvoker",
+    msix: { publisher: "CN=Example Corp" },
+  },
+  macos: {
+    urlSchemes: ["myapp"],
+    minimumSystemVersion: "14.0",
+    entitlements: "build/app.entitlements",
+    infoPlist: "build/Info.extra.plist",
+  },
+}
+```
+
+`resources` contains exact files or directories; globs are not expanded. Paths that escape the project root and unsafe links are rejected.
+
+`fileAssociations.ext` accepts a leading dot, which normalization removes. Other optional fields are `contentTypes`, `description`, and `exportedType: { identifier, conformsTo? }`.
+
+`bundle.macos.urlSchemes` overrides top-level `protocols` for every installer when present.
+
+`licenseFile`, `desktopTemplate`, `entitlements` and `infoPlist` are project-relative files. `macos.minimumSystemVersion` cannot go below `14.0`. `windows.installMode` is the NSIS scope (`currentUser`, `perMachine`, `both`); `windows.requestedExecutionLevel` (`asInvoker`, `highestAvailable`, `requireAdministrator`) is embedded in the app executable as its application manifest. `windows.msix` (`publisher`, optional `publisherDisplayName`, `minVersion`) is required by the `msix` target. See [Bundling](/docs/v1.0/guides/bundling#metadata).
+
+### Windows WebView2
+
+Tynd does not probe the registry or run a global WebView2 preflight. Installer default is `skip`, because supported Windows systems normally already provide WebView2. Override it only for controlled distribution requirements:
+
+- `{ type: "skip" }`;
+- `{ type: "downloadBootstrapper", silent? }`;
+- `{ type: "embedBootstrapper", silent? }`;
+- `{ type: "offlineInstaller", silent? }`;
+- `{ type: "fixedRuntime", path }`.
+
+A fixed runtime must be a safe project directory containing `msedgewebview2.exe`. See [Bundling](/docs/v1.0/guides/bundling).
+
+### Signing
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  sign: {
+    windows: {
+      certificate: "certs/windows.pfx",
+      password: "env:WINDOWS_CERT_PASSWORD",
+      timestampUrl: "http://timestamp.digicert.com",
+    },
+    macos: {
+      identity: "certs/DeveloperIDApplication.p12",
+      password: "env:MACOS_P12_PASSWORD",
+      entitlements: "certs/entitlements.plist",
+      notarize: {
+        apiKey: "env:APP_STORE_CONNECT_API_KEY_JSON",
+      },
+    },
+  },
+}
+```
+
+Missing `env:NAME` references are errors. See [Code Signing](/docs/v1.0/guides/code-signing).
+
+## `updater`
+
+```ts
+updater: {
+  endpoints: ["https://updates.example.com/manifest.json"],
+  publicKeys: ["<base64 Ed25519 public key>"],
+  // or, with mirrors, channels and key rotation:
+  // endpoints: ["https://a.example.com/{{channel}}/manifest.json", "https://b.example.com/{{channel}}/manifest.json"],
+  // publicKeys: ["<new key>", "<old key>"],
+  // channel: "stable",
+  // private update server, backend-only (see below):
+  // proxy: "http://proxy.corp:3128",
+  // headers: { Authorization: "Bearer ${env:UPDATE_TOKEN}" },
+  preferPatch: true,
+  allowPatch: true,
+  maxPatchSize: "5MB",
+  fallbackToFull: true,
+  autoCheck: true,
+  checkInterval: "12h",
+  checkOnStartup: true,
+  autoDownload: true,
+  autoApply: false,
+  promptStyle: "modal",
+  requireSignature: true,
+  requireMajorPrompt: true,
+}
+```
+
+`endpoints` and `publicKeys` must each hold at least one entry. Every endpoint must be an HTTP(S) URL once the placeholders `{{channel}}`, `{{target}}`, `{{arch}}` and `{{current_version}}` are expanded (any other `{{...}}` is rejected); endpoints and keys must be unique. Every key must decode to exactly 32 bytes. `channel` is the default release channel (`stable` when unset; `A-Za-z0-9._-`, at most 64 characters, not starting with `.`). The public TypeScript contract only permits `requireSignature: true`. `promptStyle` accepts `modal`, `tray`, `silent`, or `manual`.
+
+`proxy` and `headers` are backend-only network settings for private update servers; neither reaches the renderer-visible runtime config.
+
+- `proxy` is a plain `http://host[:port]` or `https://host[:port]` URL (no query or fragment). Without it the host falls back to the `HTTPS_PROXY` / `ALL_PROXY` environment.
+- `headers` is a map of header name to string value, for example `{ Authorization: "Bearer ${env:UPDATE_TOKEN}" }`. At most 32 headers, names unique ignoring case, each expanded value at most 4096 bytes with no control characters (tab is allowed). Names the HTTP client owns (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Keep-Alive`, `Upgrade`, `TE`, `Trailer`, `Expect`, `Proxy-Authorization`, `Proxy-Connection`, `Proxy-Authenticate`) are rejected.
+- `${env:NAME}` in a header value is replaced when the backend is bundled, from the process environment first, then the project `.env` files. `NAME` is letters, digits and `_`, not starting with a digit. An unset variable or a malformed placeholder is an error naming the variable, never the value.
+- Headers are sent only to the origins (scheme, host, port) of the configured endpoints, so a redirect to another origin, such as a release CDN, never receives them. At least one endpoint must therefore have a fixed origin (no `{{...}}` placeholder in its scheme, host or port), or validation fails.
+
+The resolved values are written into the generated backend bootstrap and so end up in the backend bundle of the packaged app. Use read-only, low-privilege tokens: anyone who has the app can extract them.
+
+`autoCheck`, `checkOnStartup`, `autoDownload`, and `promptStyle` expose policy to the application; they do not replace its explicit UI/control flow. See [Auto-Updates](/docs/v1.0/guides/auto-updates).
+
+## `observability`
+
+```ts
+observability: {
+  sentry: { dsn: "https://<key>@o0.ingest.sentry.io/<id>", environment: "production", release: "1.4.0", sampleRate: 1 },
+  otel:   { endpoint: "https://otlp.example.com:4317", serviceName: "my-app" },
+}
+```
+
+Both pipelines are opt-in and absent by default. A blank `dsn` or `endpoint` disables that pipeline; `sampleRate` must be between 0 and 1; the serialized block must stay under 4096 bytes. `tynd build` packs it as `observability.json`; `tynd dev` passes it as `TYND_OBSERVABILITY`. Setting `sentry` or `otel` compiles the host with the matching `obs-sentry` / `obs-otel` feature. See [Observability](/docs/v1.0/concepts/observability).
+
+## Icon
+
+Set one explicit path:
+
+```ts
+icon: "assets/icon.svg"
+```
+
+There is no automatic search under `public/`. Without `icon`, the host keeps its embedded icon and formats that require one receive Tynd's deterministic fallback. Windows converts SVG/PNG input into a multi-size ICO; SVG `<text>` nodes are rejected for reproducible builds.
+
+See [Icons & Branding](/docs/v1.0/guides/icons-branding).
+
+## Validation
+
+```bash
+tynd validate
+tynd validate --ci
+```
+
+Shape validation and security rules run in native Rust. The command checks config loading and backend/frontend paths; CI mode also checks the host plan, pinned Bun, and native binaries. It does not run a project TypeScript typecheck.
+
+## Related
+
+- [Backend API](/docs/v1.0/api/backend)
+- [Bundling](/docs/v1.0/guides/bundling)
+- [Code Signing](/docs/v1.0/guides/code-signing)
+- [Auto-Updates](/docs/v1.0/guides/auto-updates)

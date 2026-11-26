@@ -1,0 +1,182 @@
+---
+title: Deep Linking
+description: "Register a custom URL scheme (`myapp://`) so the OS launches your app for matching links."
+---
+
+# Deep Linking
+
+A **deep link** is a URL like `myapp://invite/abc123` that the OS routes to your app. Tynd handles the platform-specific registration at build time and delivers the URL to your frontend.
+
+## Declare the scheme
+
+```ts filename="tynd.config.ts"
+import type { TyndConfig } from "@tynd/cli";
+
+export default {
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  protocols: ["myapp"],
+  bundle: { identifier: "com.example.myapp" },
+} satisfies TyndConfig;
+```
+
+- `protocols` — array of scheme names (no `://`).
+- Reserved schemes (`http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`) are rejected at config-validation time.
+
+## Registration per OS
+
+`tynd build` wires each installer format:
+
+- **macOS `.app`** — writes `CFBundleURLTypes` into `Info.plist`.
+- **Windows NSIS / MSI** — creates `HKCU\Software\Classes\<scheme>\shell\open\command` registry entries (current user — no admin prompt).
+- **Linux `.deb` / `.rpm` / `.AppImage`** — adds `MimeType=x-scheme-handler/<scheme>;` + `%U` in the `Exec=` line of the generated `.desktop` file.
+
+## Handle URLs at runtime
+
+Pair with `singleInstance` so duplicate launches forward the URL to the primary:
+
+Install the required plugin:
+
+```bash
+tynd add single-instance
+```
+
+```ts
+import { app } from "@tynd/core/client";
+import { singleInstance } from "@tynd/plugin-single-instance/client";
+
+const { acquired } = await singleInstance.acquire("com.example.myapp");
+if (!acquired) await app.exit(0);
+
+singleInstance.onOpenUrl((url) => {
+  // url = "myapp://invite/abc123"
+  const parsed = new URL(url);
+  router.navigate(parsed.pathname);   // navigate to "/invite/abc123"
+});
+```
+
+`onOpenUrl` fires both on **cold start** (argv contains the URL) and on **duplicate launch** (the primary receives the forwarded URL).
+
+The [`deep-link`](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/deepLink) official plugin (`tynd add deep-link`) offers the same flow without single-instance code: `deepLink.onUrl(handler)` receives the cold-start URL and URLs forwarded from later launches, `deepLink.getStartupUrl()` reads the launch URL once, and `register` / `unregister` / `isRegistered` manage a scheme at runtime.
+
+## Testing
+
+### macOS
+
+After running `tynd build --bundle app`, open the `.app` once so Launch Services registers the scheme, then:
+
+```bash
+open "myapp://test/path"
+```
+
+### Windows
+
+After running the NSIS installer:
+
+```powershell
+start myapp://test/path
+```
+
+Check registration with:
+
+```powershell
+Get-ItemProperty "HKCU:\Software\Classes\myapp"
+```
+
+### Linux
+
+After installing the `.deb` / `.rpm`:
+
+```bash
+xdg-open "myapp://test/path"
+```
+
+Check registration:
+
+```bash
+xdg-mime query default x-scheme-handler/myapp
+```
+
+During development (outside an installer), you can hand-register for testing:
+
+```bash
+# Create a temporary .desktop file
+cat > ~/.local/share/applications/myapp-dev.desktop <<EOF
+[Desktop Entry]
+Name=MyApp Dev
+Exec=/path/to/dev-binary %U
+Type=Application
+MimeType=x-scheme-handler/myapp;
+EOF
+update-desktop-database ~/.local/share/applications/
+```
+
+## Parsing URLs
+
+Use the standard `URL` API:
+
+```ts
+singleInstance.onOpenUrl((url) => {
+  const parsed = new URL(url);
+  // parsed.protocol === "myapp:"
+  // parsed.hostname === "invite"
+  // parsed.pathname === "/abc123"
+  // parsed.searchParams.get("foo")
+
+  if (parsed.hostname === "invite") {
+    acceptInvite(parsed.pathname.slice(1));
+  }
+});
+```
+
+## Multiple schemes
+
+```ts
+protocols: ["myapp", "myapp-dev"]
+```
+
+Useful if you want a prod + dev scheme that route differently. Both are handled by the same `onOpenUrl` callback — inspect `new URL(url).protocol` to branch.
+
+## Security
+
+- **Treat deep-link input as untrusted.** Users and websites can craft arbitrary payloads. Validate path / query against a whitelist before acting.
+- **Don't run privileged actions on link open** without confirmation. `myapp://delete-all` is a foot-gun.
+- **URL encoding** — browsers encode before launching. `URL` automatically decodes pathname / searchParams.
+
+## File type associations
+
+Declare associations in `bundle.fileAssociations`; Tynd forwards them to the
+native bundler for Windows, macOS, and Linux installers:
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  fileAssociations: [{
+    ext: ["myapp", ".myapp-project"],
+    name: "MyApp document",
+    description: "MyApp project file",
+    mimeType: "application/x-myapp",
+    role: "Editor",
+    rank: "Owner",
+  }],
+}
+```
+
+Receive the files with [`app.onOpenFile`](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/app): it delivers
+the file that launched the app (buffered until you subscribe), macOS "Open
+with" requests, and, with the `single-instance` capability enabled, paths
+forwarded by later launches on Windows and Linux.
+
+```ts
+import { app } from "@tynd/core/client";
+
+app.onOpenFile((path) => openDocument(path));
+```
+
+The raw command line stays available through `cli.raw()` and
+`singleInstance.onSecondLaunch(({ argv }) => ...)`.
+
+## Next
+
+- [Single Instance](https://kvnpetit.github.io/tynd/docs/v1.0/guides/single-instance)
+- [singleInstance API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/single-instance)

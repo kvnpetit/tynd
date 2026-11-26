@@ -1,0 +1,71 @@
+---
+title: Plugin Catalog
+description: Canonical list of official plugins available through the Tynd CLI.
+---
+
+# Plugin Catalog
+
+The source of truth is [`plugins/catalog.json`](https://github.com/kvnpetit/tynd/blob/main/plugins/catalog.json).
+Its ids and aliases are compiled into the CLI: `tynd add <id>` and `tynd add <alias>` resolve to the package listed here.
+
+## Official Plugins
+
+Every plugin in the catalog is an official plugin, maintained by Tynd.
+
+### Host-backed Plugins
+
+Host-backed plugins are thin facades over host APIs. The host always carries the core (`acl`, `log`, window, webview, IPC); each declared host-backed plugin adds its API to the host `tynd dev` and `tynd build` compile.
+
+| Plugin | Description | APIs | Permissions | Size est. | Install |
+| --- | --- | --- | --- | ---: | --- |
+| [`fs`](/docs/v1.0/api/plugins/fs) | File-system access | `fs` | `host:fs` | 120 KB | `tynd add fs` |
+| [`http`](/docs/v1.0/api/plugins/http) | Native HTTP client | `http` | `host:http`, `network` | 180 KB | `tynd add http` |
+| [`notification`](/docs/v1.0/api/plugins/notification) | Desktop notifications | `notification` | `host:notification` | 90 KB | `tynd add notification` |
+| [`keyring`](/docs/v1.0/api/plugins/keyring) | OS credential store | `keyring` | `host:keyring`, `os-credentials` | 260 KB | `tynd add keyring` |
+| [`vault`](/docs/v1.0/api/plugins/vault) | Encrypted app vault | `vault` | `host:vault`, `local-storage` | 220 KB | `tynd add vault` |
+| [`window-state`](/docs/v1.0/api/plugins/window-state) | Window persistence | `window-state` | `host:window-state`, `local-storage` | 70 KB | `tynd add window-state` |
+| [`deep-link`](/docs/v1.0/api/plugins/deep-link) | Custom URL schemes | `deep-link` | `host:deep-link`, `os-protocol` | 110 KB | `tynd add deep-link` |
+| [`updater`](/docs/v1.0/api/plugins/updater) | Auto-update runtime | `updater` | `host:updater`, `network`, `local-files` | 340 KB | `tynd add updater` |
+| [`process`](/docs/v1.0/api/plugins/process) | Process execution | `process` | `host:process`, `shell` | 140 KB | `tynd add process` |
+| [`sidecar`](/docs/v1.0/api/plugins/sidecar) | Bundled helper processes | `sidecar` | `host:sidecar`, `child-process` | 160 KB | `tynd add sidecar` |
+| [`websocket`](/docs/v1.0/api/plugins/websocket) | Native WebSocket client | `websocket` | `host:websocket`, `network` | 170 KB | `tynd add websocket` |
+| [`shortcuts`](/docs/v1.0/api/plugins/shortcuts) | Global shortcuts | `shortcuts` | `host:shortcuts`, `global-keyboard` | 120 KB | `tynd add shortcuts` |
+| [`screenshot`](/docs/v1.0/api/plugins/screenshot) | Screen capture | `screenshot` | `host:screenshot`, `screen-recording` | 190 KB | `tynd add screenshot` |
+| [`network`](/docs/v1.0/api/plugins/network) | Network interfaces | `network` | `host:network` | 100 KB | `tynd add network` |
+| [`power`](/docs/v1.0/api/plugins/power) | Power state | `power` | `host:power` | 80 KB | `tynd add power` |
+| [`system-stats`](/docs/v1.0/api/plugins/system-stats) | CPU, memory and load metrics | `system-stats` | `host:system-stats` | 130 KB | `tynd add system-stats` |
+| [`biometric`](/docs/v1.0/api/plugins/biometric) | Biometric prompts | `biometric` | `host:biometric`, `os-authentication` | 170 KB | `tynd add biometric` |
+| [`autolaunch`](/docs/v1.0/api/plugins/autolaunch) | Login item | `autolaunch` | `host:autolaunch`, `os-login-item` | 120 KB | `tynd add autolaunch` |
+| [`cli`](/docs/v1.0/api/plugins/cli) | Command-line argument parsing | `cli` | `host:cli` | 40 KB | `tynd add cli` |
+| [`clipboard`](/docs/v1.0/api/plugins/clipboard) | System clipboard | `clipboard` | `host:clipboard` | 110 KB | `tynd add clipboard` |
+| [`compute`](/docs/v1.0/api/plugins/compute) | Native hashing and random bytes | `compute` | `host:compute` | 90 KB | `tynd add compute` |
+| [`dialog`](/docs/v1.0/api/plugins/dialog) | Native file and message dialogs | `dialog` | `host:dialog` | 130 KB | `tynd add dialog` |
+| [`keys`](/docs/v1.0/api/plugins/keys) | Keyboard-combo blocking | `keys` | `host:keys` | 20 KB | `tynd add keys` |
+| [`menu`](/docs/v1.0/api/plugins/menu) | Application and context menus | `menu` | `host:menu` | 120 KB | `tynd add menu` |
+| [`multiwindow`](/docs/v1.0/api/plugins/multiwindow) | Secondary windows and child webviews | `multiwindow` | `host:multiwindow` | 60 KB | `tynd add multiwindow` |
+| [`shell`](/docs/v1.0/api/plugins/shell) | Open URLs and paths with the OS | `shell` | `host:shell` | 30 KB | `tynd add shell` |
+| [`single-instance`](/docs/v1.0/api/plugins/single-instance) | Single-instance lock | `single-instance` | `host:single-instance` | 50 KB | `tynd add single-instance` |
+| [`store`](/docs/v1.0/api/plugins/store) | Persistent key-value store | `store` | `host:store`, `local-storage` | 60 KB | `tynd add store` |
+| [`theme`](/docs/v1.0/api/plugins/theme) | OS theme tracking | `theme` | `host:theme` | 30 KB | `tynd add theme` |
+| [`tray`](/docs/v1.0/api/plugins/tray) | System tray icon and menu | `tray` | `host:tray` | 140 KB | `tynd add tray` |
+
+### Standalone Plugins
+
+These official plugins are released independently and are not core desktop host features. They are installed through the same `tynd add` flow.
+
+| Plugin | Maturity | Description | APIs | Permissions | Size est. | Install |
+| --- | --- | --- | --- | --- | ---: | --- |
+| [`sql`](/docs/v1.0/api/plugins/sql) | Stable | Local SQL database | none | `local-database`, `fs` | 35 KB | `tynd add sql` |
+| [`terminal`](/docs/v1.0/api/plugins/terminal) | Stable | Embedded terminal | none | `shell`, `pty` | 420 KB | `tynd add terminal` |
+| [`audio`](/docs/v1.0/api/plugins/audio) | Stable | Audio capture and playback | none | `microphone`, `speaker` | 380 KB | `tynd add audio` |
+| [`oauth`](/docs/v1.0/api/plugins/oauth) | Stable | OAuth loopback callback listener | `network` | `network-loopback`, `secrets` | 30 KB | `tynd add oauth` |
+
+## Community Plugins
+
+Plugins made by anyone else are community plugins. They are not in the catalog; add them by package name:
+
+```bash
+tynd add @scope/plugin
+```
+
+A community plugin's `package.json` has a `tynd` block without `kind` (`kind` is reserved for `"host"` and `"standalone"`). [`tynd plugin list`](/docs/v1.0/cli/plugin/list) prints each declared plugin as `native` or `js`; with `--json` it also reports its `family`: `host`, `standalone` or `community`.

@@ -1,28 +1,21 @@
-import { describe, expect, test } from "bun:test"
-import { path } from "./path.ts"
+import { describe, expect, test } from "bun:test";
+import { path } from "./path";
 
-describe("path", () => {
-  test("join filters empty, normalises separators", () => {
-    expect(path.join("a", "", "b", "c")).toMatch(/^a[/\\]b[/\\]c$/)
-    expect(path.join("a/", "/b", "c")).toMatch(/^a[/\\]b[/\\]c$/)
-  })
+describe("client path", () => {
+  test("join always outputs forward slashes, even from backslash input", () => {
+    expect(path.join("C:\\", "Users", "me")).toBe("C:/Users/me");
+    expect(path.join("/tmp", "notes", "hello.md")).toBe("/tmp/notes/hello.md");
+    expect(path.join("", "")).toBe("");
+  });
 
-  test("dirname strips trailing separator", () => {
-    expect(path.dirname("/a/b/c")).toBe("/a/b")
-    expect(path.dirname("a/b/")).toBe("a")
-    expect(path.dirname("single")).toBe("")
-  })
+  test("exposes no native separator that would contradict join", () => {
+    expect("sep" in path).toBe(false);
+  });
 
-  test("basename + ext", () => {
-    expect(path.basename("/a/b/c.txt")).toBe("c.txt")
-    expect(path.basename("/a/b/c.txt", ".txt")).toBe("c")
-    expect(path.basename("no-ext")).toBe("no-ext")
-  })
-
-  test("extname leading-dot ignored", () => {
-    expect(path.extname("foo.ts")).toBe(".ts")
-    expect(path.extname(".bashrc")).toBe("")
-    expect(path.extname("archive.tar.gz")).toBe(".gz")
-    expect(path.extname("no-ext")).toBe("")
-  })
-})
+  test("dirname / basename / extname accept either separator", () => {
+    expect(path.dirname("/tmp/notes/hello.md")).toBe("/tmp/notes");
+    expect(path.dirname("hello.md")).toBe("");
+    expect(path.basename("C:\\notes\\hello.md", ".md")).toBe("hello");
+    expect(path.extname("hello.md")).toBe(".md");
+  });
+});

@@ -1,0 +1,260 @@
+---
+title: Bundling & Distribution
+description: "Create current-host installers with the native Rust bundler."
+---
+
+# Bundling & Distribution
+
+`tynd build` always packs a raw native executable. Add `--bundle <targets>` to create current-host installers:
+
+```bash
+tynd build --bundle all
+tynd build --bundle macos,dmg
+tynd build --bundle deb,rpm,appimage
+tynd build --bundle flatpak,snap,pkgbuild
+tynd build --bundle nsis,msi,msix
+```
+
+`--bundle` requires `all` or a comma-separated value. Cross-platform/unknown/duplicate targets are rejected.
+
+## Output layout
+
+All output for one invocation shares a platform directory:
+
+```text
+release/<platform>-<arch>/
+├── <app>[.exe]          # raw TYNDPKG-packed executable
+└── <installer files>    # only with --bundle
+```
+
+Platform names use `windows`, `macos`, or `linux`; architectures use `x64` or `arm64`.
+
+## Required config
+
+Installer creation requires `bundle.identifier`:
+
+```ts title="tynd.config.ts"
+import { defineConfig } from "@tynd/cli";
+
+export default defineConfig({
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  icon: "assets/icon.svg",
+  bundle: {
+    identifier: "com.example.myapp",
+    displayName: "My App",
+    shortDescription: "A small desktop app",
+    categories: ["Utility"],
+    resources: ["LICENSE", "assets/manual"],
+  },
+});
+```
+
+`resources` entries are existing files or directories. Globs are not expanded. Relative entries must remain inside the project root; links/escaping paths are rejected.
+
+## Formats
+
+| Host | Target | Artifact |
+|---|---|---|
+| macOS | `macos` (`app` alias) | `.app` bundle |
+| macOS | `dmg` | disk image |
+| Linux | `deb` | Debian package |
+| Linux | `rpm` | RPM package |
+| Linux | `appimage` | AppImage |
+| Linux | `flatpak` | `.flatpak` bundle, or the Flatpak manifest |
+| Linux | `snap` | `.snap`, or `snap/snapcraft.yaml` |
+| Linux | `pkgbuild` | Arch `.pkg.tar.zst`, or the `PKGBUILD` |
+| Windows | `nsis` | NSIS setup executable |
+| Windows | `msi` | MSI package |
+| Windows | `msix` | MSIX package |
+
+`all` builds the default formats of the host: `nsis,msi` on Windows, `macos,dmg` on macOS, `deb,rpm,appimage` on Linux.
+
+The native `tynd-bundler` delegates installer construction to Rust packaging libraries and host tooling.
+
+A requested format may need a platform command (for example `rpmbuild`, `hdiutil`, signing tools, or installer utilities). Tynd reports that missing prerequisite when the format runs; ordinary `info`, `doctor`, `dev`, and `start` do not perform broad toolchain checks.
+
+## Flatpak, Snap and Arch Linux
+
+`flatpak`, `snap` and `pkgbuild` need a PNG or SVG `icon`. Each target stages the packed binary, a `.desktop` entry, an AppStream `metainfo.xml` and the hicolor icons under `release/<platform>-<arch>/linux-packages/<target>/`, writes the manifest, then builds it when the tool is on `PATH`:
+
+| Target | Manifest | Tool | Without the tool |
+|---|---|---|---|
+| `flatpak` | `<identifier>.yml` (GNOME 48 runtime, Wayland + X11 fallback, network, GPU) | `flatpak-builder` + `flatpak` | the build log prints the `flatpak install` / `flatpak-builder` commands |
+| `snap` | `snap/snapcraft.yaml` (`core24`, `gnome` extension, strict confinement, the 512 px icon as the snap icon) | `snapcraft` | run `snapcraft pack` in the staged directory |
+| `pkgbuild` | `PKGBUILD` (depends on `gtk3`, `webkit2gtk-4.1` plus `bundle.pkgbuild.depends`; `libayatana-appindicator` as an optional dependency for the tray) | `makepkg` | run `makepkg -f` in the staged directory on Arch Linux |
+
+The Snap and Arch package name is the app name lowercased to `[a-z0-9-]` (at most 40 characters, `app-` prefixed when it does not start with a letter, `app` when nothing is left). `bundle.pkgbuild.depends` takes Arch package names; it is separate from `bundle.rpm.requires` because Fedora names differ.
+
+The manifests are written again on every build: to customize them, copy the staged directory and build it yourself.
+
+## Windows MSIX
+
+The `msix` target needs `bundle.windows.msix.publisher`, `makeappx.exe` from the Windows 10/11 SDK (found on `PATH` or under `Windows Kits\10\bin`), and a PNG or SVG `icon` for the tile assets:
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  windows: {
+    msix: {
+      publisher: "CN=Example Corp, O=Example Corp, C=US",
+      publisherDisplayName: "Example Corp",
+      minVersion: "10.0.17763.0",
+      version: "1.2.3.0",
+    },
+  },
+}
+```
+
+`publisher` must equal the subject of the certificate in `bundle.sign.windows`, or Windows refuses the package. The package Identity Name is `bundle.identifier`, which must be 3 to 50 characters of letters, digits, `.` and `-` for this target. The package file name uses the app name with every character outside `[A-Za-z0-9._-]` replaced by `-`, like the packed executable.
+
+The package version is `bundle.windows.msix.version` when set (four numeric parts, each at most 65535), else the app version cut to its numeric core: `1.2.3-beta.1` and `1.2.3` both become `1.2.3.0`, so the build warns when it drops a prerelease or build suffix. Windows only upgrades to a higher version, so give each prerelease its own `version`, for example `1.2.2.1` before `1.2.3.0`. The Microsoft Store reserves the fourth part and requires it to be `0` for Store submissions.
+
+When `bundle.windows.requestedExecutionLevel` is `highestAvailable` or `requireAdministrator`, the manifest also declares the restricted `allowElevation` capability, which the Microsoft Store reviews. Protocols and file associations are declared in the generated `AppxManifest.xml`. An MSIX app is installed read-only, so ship its updates as new MSIX packages (App Installer or the Microsoft Store) rather than through the Tynd updater.
+
+## Metadata
+
+| Field | Applies to | Effect |
+|---|---|---|
+| `bundle.licenseFile` | NSIS, MSI, deb, rpm, PKGBUILD | License page of the Windows installers; license file of the Linux packages |
+| `bundle.copyright` | all | Copyright notice |
+| `bundle.categories` | macOS, Linux | First entry: `LSApplicationCategoryType` and the `.desktop` `Categories` |
+| `bundle.macos.minimumSystemVersion` | `.app`, DMG | `LSMinimumSystemVersion`; default and floor `14.0` |
+| `bundle.macos.entitlements` | `.app`, DMG | Entitlements plist used when the bundle is signed |
+| `bundle.macos.infoPlist` | `.app`, DMG | Plist merged into the generated `Info.plist` |
+| `bundle.windows.installMode` | NSIS | `currentUser` (default, no elevation), `perMachine` or `both` |
+| `bundle.windows.requestedExecutionLevel` | the app `.exe`, MSIX | `asInvoker`, `highestAvailable` or `requireAdministrator`, embedded as the application manifest (see the note below) |
+| `bundle.deb.desktopTemplate` | deb, AppImage | Handlebars template replacing the generated `.desktop` entry |
+| `bundle.rpm.desktopTemplate` | rpm | Same, for the RPM |
+
+File paths are project-relative and must stay inside the project.
+
+Embedding the application manifest replaces the executable's whole resource section, so setting `requestedExecutionLevel` always embeds an icon (the configured `icon`, else the default Tynd icon) and version info, even when a `tynd-bundler pack` request sets `windows.embed_icon` to `false`. The host executable's own icon resources are not kept.
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  licenseFile: "LICENSE",
+  macos: {
+    minimumSystemVersion: "14.0",
+    entitlements: "build/app.entitlements",
+    infoPlist: "build/Info.extra.plist",
+  },
+  windows: {
+    installMode: "perMachine",
+    requestedExecutionLevel: "asInvoker",
+  },
+}
+```
+
+## Linux metadata
+
+Fields currently forwarded to native packaging:
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  deb: {
+    depends: ["libwebkit2gtk-4.1-0"],
+    section: "utils",
+    priority: "optional",
+  },
+  rpm: {
+    requires: ["webkit2gtk4.1"],
+  },
+  pkgbuild: {
+    depends: ["libnotify"],
+  },
+  appimage: {
+    bundleXdgOpen: true,
+  },
+}
+```
+
+## File associations and protocols
+
+```ts
+export default defineConfig({
+  protocols: ["myapp"],
+  bundle: {
+    identifier: "com.example.myapp",
+    fileAssociations: [{
+      ext: ["myapp"],
+      name: "My App Document",
+      role: "Editor",
+      mimeType: "application/x-myapp",
+      rank: "Owner",
+    }],
+    macos: {
+      urlSchemes: ["myapp"],
+    },
+  },
+});
+```
+
+A leading dot in `ext` is normalized away. The URL schemes are `bundle.macos.urlSchemes` when present, otherwise top-level `protocols`; every installer registers them (macOS `CFBundleURLTypes`, the NSIS/MSI registry keys, the MSIX `windows.protocol` extension, the Linux `.desktop` `x-scheme-handler` MIME types).
+
+## Windows WebView2 distribution
+
+Tynd does not query the registry or run WebView preflight logic before a build. Installer default is `skip`, so ordinary Windows builds neither download nor embed WebView2. Override it only when distribution policy requires another mode:
+
+```ts
+bundle: {
+  identifier: "com.example.myapp",
+  windows: {
+    webviewInstallMode: { type: "skip" },
+    minimumWebView2Version: "120.0.0.0",
+    allowDowngrades: false,
+  },
+}
+```
+
+Accepted modes:
+
+- `skip`;
+- `downloadBootstrapper` with optional `silent`;
+- `embedBootstrapper` with optional `silent`;
+- `offlineInstaller` with optional `silent`;
+- `fixedRuntime` with a required project-relative `path`.
+
+`fixedRuntime` is validated only when used on Windows. Its path cannot contain empty, current-directory, parent, or drive segments; the directory must contain `msedgewebview2.exe`. Tynd stages it beside the packed executable and includes it in installer resources.
+
+## Icons
+
+Set one explicit SVG, PNG, or ICO path with top-level `icon`. If omitted, the raw host keeps its embedded default and installer formats receive a generated fallback icon. [`tynd icon`](/docs/v1.0/cli/icon) renders one source into every platform format.
+
+Windows packing converts SVG/PNG input to ICO sizes and rejects SVG `<text>` nodes for reproducibility. No public-directory icon auto-discovery occurs.
+
+## Signing
+
+Signing is optional and configured under `bundle.sign`:
+
+- Windows: `signtool` found on `PATH` signs eligible `.exe`, `.msi`, and `.msix` files.
+- macOS: the Rust bundler signs from a PKCS#12 identity and can notarize/staple using an App Store Connect API-key JSON file.
+
+See [Code Signing](/docs/v1.0/guides/code-signing).
+
+## Pack integrity
+
+Every packed executable starts its pack with an `integrity.blake3` entry: the BLAKE3 digest of every other pack entry (paths, lengths and bytes, in order). It is always written and costs one hash pass at build time. At startup the runtime hashes each entry as it extracts it and refuses to start, removing what it extracted, when the digest does not match, when an entry is missing, added, duplicated or reordered, or when the pack has no `integrity.blake3` entry. This catches corruption. The digest is not keyed and lives inside the executable, so it only detects tampering as far as the executable itself is trusted: the code signature, which covers the pack too, protects against rewriting the whole file.
+
+## Cross-compilation
+
+`tynd build` builds for the machine it runs on: the host binary is compiled for the host target and the Bun runtime packed is the one running the build. Installers also need host tools (`hdiutil`, `rpmbuild`, `makensis`, WiX, `makeappx`). Build each platform on its own runner, for example a CI matrix of `windows-latest`, `macos-latest` (arm64) and `ubuntu-latest`.
+
+## Reproducibility
+
+Commit `.bun-version` and package lock data, then run:
+
+```bash
+tynd validate --ci
+tynd build --bundle <targets>
+```
+
+The exact Bun executable/version is packed. Installer metadata and timestamped signatures can still make independently built installer bytes differ; publish checksums for the exact artifacts users download.
+
+## Next
+
+- [Build Pipeline](/docs/v1.0/concepts/build-pipeline)
+- [Code Signing](/docs/v1.0/guides/code-signing)
+- [Auto-Updates](/docs/v1.0/guides/auto-updates)

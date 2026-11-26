@@ -1,0 +1,121 @@
+---
+title: Custom protocols
+description: "Load local files in the WebView with convertFileSrc (asset protocol, Range seeking) and serve your own URL schemes from the backend with app.protocol."
+---
+
+# Custom protocols
+
+```ts
+import { convertFileSrc, protocolUrl } from "@tynd/core/client";
+```
+
+Two ways to give the WebView URLs that are not your bundled frontend:
+
+- **Asset protocol**: `convertFileSrc(path)` turns a local file into a URL for `<img>`, `<video>`, `<audio>`, CSS or `fetch`. The host streams the file with HTTP Range support. Off until `app.start({ assets })` allow-lists the paths.
+- **Backend protocols**: `app.protocol(name, handler)` serves `name://...` from your backend: each request runs a handler that returns a `Response`.
+
+Both are reachable only from app pages (the bundled frontend or `tynd dev`'s server), never from remote pages.
+
+## Asset protocol (`convertFileSrc`)
+
+Declare the files the WebView may load. The scope is a list of globs over absolute paths and is installed before any window opens:
+
+```ts
+// backend
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { app } from "@tynd/core";
+
+app.start({
+  assets: { scope: [join(homedir(), "Videos", "**").replaceAll("\\", "/")] },
+});
+```
+
+```ts
+// frontend
+import { convertFileSrc } from "@tynd/core/client";
+
+video.src = convertFileSrc("/home/me/Videos/holiday.mp4");
+img.src = convertFileSrc("C:\\Users\\me\\Pictures\\cover.jpg");
+```
+
+`convertFileSrc` encodes the whole path and returns `asset://localhost/<path>` on macOS and Linux, `http://asset.localhost/<path>` on Windows (WebView2 cannot load custom schemes directly).
+
+| `assets` field | Type | Description |
+|---|---|---|
+| `scope` | `string[]` | Globs over absolute paths (`/home/me/Videos/**`, `C:/Users/me/Videos/**`). `*` stays inside one folder, `**` crosses folders. On Windows, matching ignores case and `\` equals `/`. An empty list allows nothing. |
+
+Behaviour:
+
+- **MIME type** comes from the extension (video, audio, image, font, text and document types), then from the first bytes when the extension is unknown. `.gz` / `.zst` files are served as `application/octet-stream`: the protocol never sets `Content-Encoding`.
+- **Range requests** (`bytes=a-b`, `bytes=a-`, `bytes=-n`) answer `206 Partial Content`. One response reads at most 4 MiB at the requested offset, so seeking in a large video never loads the file into memory. A range past the end answers `416`.
+- **Requests without `Range`** are served whole up to 32 MiB; larger files answer `413` and must be read with `Range` (`<video>` and `<audio>` always do this).
+- `GET`, `HEAD` and CORS preflights only. Other methods answer `405`.
+
+### Security
+
+- Disabled unless `assets` is set; deny by default.
+- The URL is decoded once and must hold an absolute path: `..` segments, NUL bytes, UNC shares (`\\server\share`), device paths (`\\?\`) and alternate data streams are refused with `400`.
+- The file is resolved by the OS (symlinks followed) and the **resolved** path must match `assets.scope`: a symlink inside the scope that points outside it is refused (`403`).
+- `security.fs.deny` rules still apply to assets.
+- Only app pages may load assets. A WebView that navigated to a remote site, or a remote iframe inside an app page, gets `403`. `Access-Control-Allow-Origin` names only the app origin.
+- The app's Content Security Policy allows `asset:` and `http://asset.localhost` in `default-src`, `img-src`, `media-src`, `font-src` and `connect-src` when `assets` is set, never in `script-src`. A dev server sets its own CSP: add the same sources there if it sends one.
+- An HTML or SVG file opened as a page runs sandboxed (no scripts, no origin).
+
+## Backend protocols (`app.protocol`)
+
+```ts
+// backend
+import { app } from "@tynd/core";
+
+app.protocol("thumbs", async (request, { webview }) => {
+  const url = new URL(request.url);              // thumbs://localhost/42?size=128
+  const id = url.pathname.slice(1);
+  const png = await renderThumbnail(id, Number(url.searchParams.get("size") ?? 64));
+  return new Response(png, { headers: { "content-type": "image/png" } });
+});
+
+app.start({ /* ... */ });
+```
+
+```ts
+// frontend
+import { protocolUrl } from "@tynd/core/client";
+
+img.src = protocolUrl("thumbs", `/${encodeURIComponent(id)}?size=128`);
+const res = await fetch(protocolUrl("thumbs", "/42"));
+```
+
+| Signature | Description |
+|---|---|
+| `app.protocol(name, handler)` | Register before `app.start()`; the host registers the scheme on every WebView when it is created. Throws after `app.start()`. |
+| `handler(request: Request, context: { webview: string })` | Returns a `Response` or a `Promise<Response>`. `request.url` is always `name://localhost/...`, on every OS. |
+| `protocolUrl(name, path = "/")` | URL of `path` on the scheme in the current WebView: `name://localhost/path`, or `http://name.localhost/path` on Windows. `path` is used as written. |
+
+Rules:
+
+- **Names**: 1-32 lowercase letters, digits or `-`, starting with a letter (the name becomes a host name on Windows). Reserved: `tynd`, `tynd-bin`, `asset`, `ipc`, `http`, `https`, `ws`, `wss`, `file`, `ftp`, `about`, `blob`, `data`, `javascript`, `mailto`, `tel`, `view-source`, `chrome`, `edge`, `webkit`, `localhost`. A name a native plugin already registers fails the WebView creation. Registering the same name twice throws.
+- **Bodies are buffered**, not streamed: request and response bodies are each capped at 4 MiB (a larger request body answers `413`, a larger response `502`). They travel base64-encoded on the backend channel. Serve large local files with the asset protocol instead.
+- **Errors**: a handler that throws or returns something other than a `Response` answers `500` (the error is logged); no answer within 30 seconds answers `504`; a dead or reloading backend answers `502`.
+- `Content-Length`, `Transfer-Encoding` and the `Access-Control-*` headers are set by the host. When the handler returns a `fetch()` response, its `Content-Encoding` is dropped because the body is already decoded.
+- Methods: any; CORS preflights are answered by the host for app origins.
+
+### Security
+
+- Only app pages reach a backend protocol; remote pages and remote iframes get `403` before the backend is called. `Access-Control-Allow-Origin` names only the app origin.
+- The handler runs with full backend rights: validate `request.url` and the body like any untrusted input, since they come from the renderer.
+- The app CSP allows the registered schemes (`name:` and `http://name.localhost`) in the same directives as the asset protocol, never in `script-src`.
+
+## Platform support
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| `convertFileSrc` URL | `http://asset.localhost/...` | `asset://localhost/...` | `asset://localhost/...` |
+| Range seeking | Yes | Yes | Yes, when WebKitGTK sends `Range` (otherwise the 32 MiB whole-file limit applies) |
+| `app.protocol` | Yes | Yes | Yes |
+
+## Related
+
+- [`tyndWebview`](/docs/v1.0/api/os/webview)
+- [Backend API](/docs/v1.0/api/backend)
+- [Security policy](/docs/v1.0/api/os/security)

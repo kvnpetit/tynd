@@ -1,0 +1,29 @@
+[package]
+name                    = "tynd-bundle-contract"
+description             = "JSON request types exchanged between the tynd CLI and the tynd-bundler executable"
+publish                 = false
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+readme                  = "README.md"
+
+[lib]
+name    = "tynd_bundle_contract"
+path    = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

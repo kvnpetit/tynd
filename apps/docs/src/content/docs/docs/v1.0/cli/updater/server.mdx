@@ -1,0 +1,62 @@
+---
+title: tynd updater server
+description: "Serve an already-published update feed locally or render provider deployment templates."
+---
+
+# `tynd updater server`
+
+```bash
+tynd updater server --serve --port 3000
+tynd updater server --deploy cloudflare
+tynd updater server --deploy vercel
+tynd updater server --deploy deno
+```
+
+Without `--serve`, the command scaffolds Cloudflare by default.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | current directory | Project root |
+| `--serve` | false | Bind a local update server to loopback |
+| `--port <n>` | `3000` | Port used by `--serve` |
+| `--deploy <provider>` | `cloudflare` when scaffolding | `cloudflare`, `vercel`, or `deno` |
+| `--manifest-url <url>` | example URL | Substitute public manifest URL in templates |
+| `--public-key <key>` | first `updater.publicKeys` entry or empty | Substitute updater public key in templates |
+
+Loose `--artifact`, `--signature`, and `--version` flags do not exist. The local server never invents a manifest.
+
+## Local server
+
+Run publish first:
+
+```bash
+tynd updater publish 1.2.3 --target manifest-only
+tynd updater server --serve --port 3000
+```
+
+Required files:
+
+- `release/publish/manifest.json`;
+- `release/publish/manifest.json.sig`.
+
+The server binds `127.0.0.1`, serves those files at `/manifest.json` and `/manifest.json.sig`, and serves safe relative artifact paths below `release/`. Traversal, backslashes, drive prefixes, query-fragment tricks, and paths escaping the canonical release directory are rejected.
+
+## Scaffold
+
+Provider files are rendered under:
+
+```text
+.tynd/update-server/<provider>/
+```
+
+Tynd strips `.tpl` suffixes and replaces app id, public key, manifest URL, and compatibility date. It also writes `tynd-update.json` with the resolved values. Deployment remains explicit through the selected provider's CLI/platform.
+
+The Cloudflare and Vercel templates gate requests with an optional `AUTH_TOKEN` secret (`Authorization: Bearer <token>`, compared in constant time). **Without `AUTH_TOKEN` the endpoints are public**: anyone can read the manifest and download artifacts. Manifests are signed, so clients still reject a tampered update; set `AUTH_TOKEN` when releases must stay private. The Deno template serves reads publicly and gates writes (`POST /admin/manifest`) with a required `ADMIN_TOKEN` secret, compared in constant time the same way; without it, writes return 503.
+
+## Related
+
+- [Auto-Updates](/docs/v1.0/guides/auto-updates)
+- [`tynd updater publish`](/docs/v1.0/cli/updater/publish)
+- [Updater API](/docs/v1.0/api/plugins/updater)

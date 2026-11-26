@@ -1,0 +1,128 @@
+---
+title: process
+description: "Run subprocesses: buffered exec / execShell, and streaming spawn with stdin, kill and exit."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# `process`
+
+Install the required plugin:
+
+```bash
+tynd add process
+```
+
+```ts
+import { process } from "@tynd/plugin-process/client";
+```
+
+Run subprocesses and either collect buffered output (`exec`, `execShell`) or stream it (`spawn`).
+
+`exec` and `spawn` are closed by default: the backend must list the binary in `app.start({ security: { processAllowedBinaries: [...] } })` ([`SecurityPolicy`](/docs/v1.0/api/os/security#securitypolicy-fields)), otherwise the call fails with `process: not permitted`. `execShell` uses `security.shellExecAllowedCommands` instead.
+
+## `exec(cmd, opts?): Promise<ExecResult>`
+
+Direct execution — no shell interpolation.
+
+```ts
+const { stdout, stderr, code } = await process.exec("git", {
+  args: ["status", "--short"],
+});
+```
+
+## `execShell(cmd, opts?): Promise<ExecResult>`
+
+Runs via `cmd.exe /c` on Windows, `sh -c` elsewhere. On Windows the host sets `NoDefaultCurrentDirectoryInExePath=1` for the shell, so a program planted in the working directory (`git.bat` next to your `cwd`) is not run in place of the allow-listed one.
+
+```ts
+const { stdout } = await process.execShell("ls -la");   // needs shellExecAllowedCommands: ["ls"]
+```
+
+`execShell` does not accept `args` — the whole command is a single string, interpreted by the shell.
+
+It is opt-in: the backend must list the first token in `security.shellExecAllowedCommands`, otherwise the call is refused. Command lines containing shell metacharacters (`&`, `|`, `;`, `<`, `>`, `(`, `)`, `{`, `}`, quotes, backtick, `\`, `$`, `%`, `^`, `!`, newline) are refused, and so is a call that sets `env`. Pipes and redirection are therefore unavailable; compose arguments with `exec` and `args` instead.
+
+## Options
+
+```ts
+interface ExecOptions {
+  args?:  string[];
+  cwd?:   string;
+  env?:   Record<string, string>;
+  input?: string;                  // written to stdin
+  inputEncoding?:  "utf8" | "base64";   // how `input` is decoded; default "utf8"
+  outputEncoding?: "utf8" | "base64";   // use "base64" for binary stdout/stderr
+  timeoutMs?:      number;              // child is killed after this; default 60 000, max 600 000
+  maxOutputBytes?: number;              // per stream; default 16 MiB, host cap 64 MiB
+}
+```
+
+- `cwd` must pass the `security.fs` scope, or the call is refused.
+- `env` is **merged** with the current process env (vars you supply override, others pass through).
+- `env` keys that change what a program loads or runs are **refused** (the call throws): `PATH`, `PATHEXT`, `COMSPEC`, `IFS`, shell startup hooks (`BASH_ENV`, `ENV`, `PROMPT_COMMAND`, `SHELLOPTS`, ...), `LD_*` and `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `BUN_*` hooks, `GIT_*` execution and config hooks (`GIT_EXEC_PATH`, `GIT_CONFIG*`, `GIT_SSH*`, ...), interpreter variables (`PYTHONPATH`, `PERL5LIB`, `RUBYOPT`, `JAVA_TOOL_OPTIONS`, `CLASSPATH`, ...), `NPM_CONFIG_*`, and `EDITOR` / `VISUAL` / `PAGER`, .NET hooks (`DOTNET_STARTUP_HOOKS`, `DOTNET_ADDITIONAL_DEPS`, `DOTNET_SHARED_STORE`, `COR_PROFILER`, `CORECLR_*`), exported bash functions (`BASH_FUNC_*`), and variables that redirect where tools read their config: `HOME`, `HOMEDRIVE`, `HOMEPATH`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `ZDOTDIR` and `XDG_CONFIG_HOME` / `XDG_CONFIG_DIRS` / `XDG_DATA_HOME` / `XDG_DATA_DIRS`. Names compare case-insensitively.
+- `execShell` refuses a call that sets any `env` key. Use `exec` with `env` when you need to pass variables.
+- `input` is piped to the child's stdin. Useful for passing large payloads without shell-quoting. Binary input must be sent with `inputEncoding: "base64"`; there is no auto-detection.
+- `outputEncoding: "utf8"` (default) decodes lossily (invalid sequences become U+FFFD); use `"base64"` for binary output.
+
+## Return
+
+```ts
+interface ExecResult {
+  code:   number | null;   // null if the process was killed by a signal
+  stdout: string;
+  stderr: string;
+}
+```
+
+## `spawn(cmd, opts?): Promise<SpawnedProcess>`
+
+Starts a long-running child with streaming stdio. `opts` accepts `args`, `cwd` and `env` (same merge rules as `exec`).
+
+```ts
+const proc = await process.spawn("git", { args: ["log", "--oneline"] });
+const dec = new TextDecoder();
+for await (const chunk of proc.stdout) {   // Uint8Array chunks
+  console.log(dec.decode(chunk));
+}
+const { code, signal, error } = await proc.exit();
+```
+
+```ts
+interface SpawnedProcess {
+  readonly pid: number;
+  readonly stdout: AsyncIterable<Uint8Array>;
+  readonly stderr: AsyncIterable<Uint8Array>;
+  readonly stdin: {
+    write(data: string | Uint8Array): Promise<void>;  // strings are UTF-8 encoded
+    close(): Promise<void>;                           // child sees EOF
+  };
+  exit(): Promise<{ code: number | null; signal: string | null; error: string | null }>;
+  kill(signal?: "SIGTERM" | "SIGKILL" | "SIGINT"): Promise<void>;  // default SIGTERM
+}
+```
+
+- `kill`: Unix honours the requested signal. Windows has no signals: `SIGTERM`, `SIGKILL` and `SIGINT` all terminate the process (`TerminateProcess`); `SIGINT` does not send Ctrl+C.
+- `exit()` is cached, so calling it again after termination returns the same result. `error` is set only when the host's wait itself failed.
+- Drain `stdout` and `stderr` (or ignore them deliberately); iteration ends when the child closes the stream.
+
+## Security
+
+<Aside type="caution">
+  `execShell` interpolates through a shell. Any unquoted user input is a shell injection. Default to `exec` with array arguments; reach for `execShell` only for a trusted, allow-listed command line.
+</Aside>
+
+## Notes
+
+- **Buffered output.** `exec` / `execShell` capture stdout/stderr fully and return at the end (capped by `maxOutputBytes`). For long-running or chatty processes use `spawn`, or [`terminal`](/docs/v1.0/api/plugins/terminal) when you need a real PTY.
+- **Background children.** After the child exits (or is killed), the output readers get 2 seconds to reach end of stream. If a descendant still holds the pipe open, the call returns the output read so far and the exit status instead of failing. Note that `execShell` refuses `&` (see above), so this applies to `exec` of a program that leaves a daemon behind.
+- Each call runs on the host's worker pool — the JS event loop never blocks.
+- `spawn` output and exit events go only to the webview that called `spawn`. A process spawned from the backend reaches app-local webviews only.
+- A spawned process belongs to the webview that spawned it: another webview's pid answers like an unknown id. When that webview reloads, navigates or closes, the process is not killed but handed to the backend: it keeps running, its output and exit now go to app-local webviews, and a remote document can no longer control it. A process whose `spawn` finishes after the webview navigated or reloaded is handed to the backend the same way. A process the renderer never activated (the webview reloaded or closed between the `spawn` reply and the client's activation call) is killed after 30 s.
+- `exec` / `execShell` cannot be cancelled while pending; they stop at `timeoutMs`. Use `spawn` and `kill()` for cancellable work.
+
+## Related
+
+- [terminal](/docs/v1.0/api/plugins/terminal) — real PTY, streaming stdout.
+- [sidecar](/docs/v1.0/api/os/sidecar) — resolve a bundled binary's runtime path.
+- [shell](/docs/v1.0/api/os/shell) — OS default-handler launches.

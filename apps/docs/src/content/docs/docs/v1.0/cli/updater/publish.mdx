@@ -1,0 +1,73 @@
+---
+title: tynd updater publish
+description: "Sign platform updater payloads, generate optional delta patches, emit a signed manifest, and stage/upload a release."
+---
+
+# `tynd updater publish`
+
+```bash
+tynd updater publish 1.2.3 --target manifest-only
+tynd updater publish 1.2.3 --target r2 --bucket updates --endpoint https://<account>.r2.cloudflarestorage.com
+tynd updater publish 1.3.0-beta.1 --channel beta --rollout 10
+```
+
+Signs and publishes artifacts already built by `tynd build`; it does not build (`tynd updater release` validates, builds, then publishes). `<version>` must be valid semver. Config must provide `bundle.identifier`; the default private key is `~/.tynd/keys/<app-id>.key`.
+
+## Inputs
+
+Recognized platform directories under `release/`:
+
+- `win32-x64`, `win32-arm64` (or `windows-x64`, `windows-arm64`);
+- `linux-x64`, `linux-arm64`;
+- `darwin-x64`, `darwin-arm64` (or `macos-x64`, `macos-arm64`).
+
+`tynd build` writes the Node.js platform names (`win32-*`, `darwin-*`, `linux-*`).
+
+Windows/Linux require exactly one packed TYNDPKG executable in each directory. macOS requires exactly one `<binary>-<version>-macos*.zip` containing `.app/Contents/Info.plist`; build it with `tynd build --bundle macos`.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | current directory | Project root |
+| `--target <target>` | `manifest-only` | `manifest-only`, `github-releases`, `s3`, or `r2` |
+| `--key <path>` | app-scoped key | Ed25519 private key |
+| `--public-base-url <url>` | relative URLs | Public prefix embedded in artifact URLs |
+| `--notes-file <path>` | none | Add release notes to manifest |
+| `--patch-strategy <strategy>` | `same-major` | `same-major`, `last-n`, or `all` |
+| `--max-diffs <n>` | `5` | Candidate count for `last-n` |
+| `--max-patches <n>` | `30` | Hard archived-version cap |
+| `--no-diffs` | false | Publish full payloads only |
+| `--channel <name>` | `TYND_PUBLISH_CHANNEL`, then `updater.channel`, then `stable` | Release channel written into the manifest. Characters `A-Za-z0-9._-`, 1 to 64, not starting with `.` |
+| `--rollout <0-100>` | none (everyone) | Staged rollout percentage written into the manifest. Out-of-range or non-numeric values are rejected by the parser |
+| `--bucket`, `--region`, `--endpoint` | provider-specific | S3/R2 upload settings |
+
+## Channels and staged rollout
+
+The manifest always carries a `channel`: `--channel`, else the `TYND_PUBLISH_CHANNEL` environment variable, else `updater.channel` from the config, else `stable`. `--rollout` adds a `rollout` field; nothing else changes. Clients choose their channel with `updater.channel` in config or `updater.setChannel(name)` at runtime. A client that follows a channel fails the check if the manifest it fetched names a different one (a manifest without `channel` counts as `stable`). Serve one manifest per channel by templating `{{channel}}` in the updater endpoint. With `--rollout N`, an install is offered the release only when its stable per-install bucket (0-99, derived from a random install id and the version) is below `N`; held-back installs see "no update" and are not told why. See [Auto-Updates](/docs/v1.0/guides/auto-updates).
+
+[`tynd updater release`](/docs/v1.0/cli/updater/release) takes the same `--channel` and `--rollout` flags, with the same fallback.
+
+## Output
+
+- `release/publish/manifest.json`;
+- `release/publish/manifest.json.sig`;
+- `release/patches/*.bsdiff.zst` when prior compatible releases exist;
+- archive copy under `~/.tynd/releases/<app-id>/<version>/` (or `TYND_RELEASES_ROOT`).
+
+Every platform payload and patch is Ed25519-signed. Manifest bytes are signed after patches are inserted. Windows/Linux reconstructed patch output is verified again against the full-release signature. macOS never receives a binary diff.
+
+## Upload targets
+
+- `manifest-only`: no external upload.
+- `github-releases`: invokes `gh release upload v<version> ... --clobber`; the release/tag must already exist.
+- `s3`/`r2`: invokes `aws s3 cp <release> s3://<bucket>/<app-id>/<version> --recursive` with optional region/endpoint.
+
+Credentials come from the environment only, never from flags, and resolve as whole pairs: the `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` pair, else the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair, else the AWS CLI profile. A half-set pair fails with an error naming the missing variable (never a value); variables of the two pairs are never mixed.
+
+## Related
+
+- [Auto-Updates](/docs/v1.0/guides/auto-updates)
+- [`tynd updater keygen`](/docs/v1.0/cli/updater/keygen)
+- [`tynd updater release`](/docs/v1.0/cli/updater/release)
+- [`tynd updater server`](/docs/v1.0/cli/updater/server)

@@ -1,0 +1,33 @@
+---
+title: screenshot
+description: "Capture monitors and individual windows as PNG bytes; enumerate the OS surfaces."
+---
+
+# `screenshot`
+
+Install the required plugin:
+
+```bash
+tynd add screenshot
+```
+
+```ts
+import { screenshot } from "@tynd/plugin-screenshot/client";
+```
+
+Backed by [`xcap`](https://github.com/nashaofu/xcap), which wraps the platform-native capture APIs:
+
+- macOS — `CGDisplayCreateImage` / `CGWindowListCreateImage`
+- Windows — DXGI desktop duplication / `BitBlt` fallback
+- Linux — X11 `XGetImage` or PipeWire (Wayland)
+
+Captures arrive as PNG bytes wrapped with the captured dimensions; `data` is base64 so the response drops straight into a `data:image/png;base64,…` URL.
+
+## API surface
+
+- `screenshot.captureScreen(monitorIndex?): Promise<CapturedImage>` — capture a monitor (defaults to index `0`).
+- `screenshot.captureWindow(windowId): Promise<CapturedImage>` — capture a single window.
+- `screenshot.listMonitors(): Promise<MonitorInfo[]>` — enumerate connected monitors.
+- `screenshot.listWindows(): Promise<WindowInfo[]>` — enumerate visible top-level windows.
+
+`captureScreen` and `captureWindow` are gated by the native `screenshot:capture*` ACL; `listMonitors` and `listWindows` are left ungated so settings UIs can populate pickers before the user has granted capture rights.

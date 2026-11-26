@@ -1,0 +1,125 @@
+name: Release standalone plugins
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (for example plugins-v1.0.0)"
+        required: true
+
+concurrency:
+  group: release-plugins-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      plugins: ${{ steps.plugin-matrix.outputs.plugins }}
+      commit: ${{ steps.release-commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - name: Require successful CI for the exact release commit
+        id: release-commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The checkout is the release tag; for workflow_dispatch it can differ
+          # from GITHUB_SHA, so gate on the commit actually being published.
+          sha="$(git rev-parse HEAD)"
+          runs="$(
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+              --commit "$sha" --event push --branch main --status success --limit 1 --json headSha
+          )"
+          test "$(jq 'length' <<<"$runs")" -eq 1
+          test "$(jq -r '.[0].headSha' <<<"$runs")" = "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version-file: ".bun-version"
+          no-cache: true
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17 # stable
+        with:
+          toolchain: "1.100.0"
+          components: clippy
+      - name: Install Linux GUI build dependencies
+        # Release jobs run without caches (no cache poisoning across runs).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libxdo-dev libxss-dev libpipewire-0.3-dev libgbm-dev libdrm-dev libclang-dev
+      - run: bun install --frozen-lockfile
+      - name: Read canonical plugin matrix
+        id: plugin-matrix
+        shell: bash
+        run: |
+          # Every plugins/standalone/<name> holding a package.json is a plugin.
+          # shellcheck disable=SC2016
+          plugins="$(bun -e 'const fs = require("node:fs"); const names = fs.readdirSync("plugins/standalone").filter((n) => fs.existsSync(`plugins/standalone/${n}/package.json`)).sort(); process.stdout.write(JSON.stringify(names))')"
+          echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
+      - name: Match tag to plugin package versions
+        env:
+          TAG: ${{ inputs.tag }}
+        run: bun scripts/check-release-version.ts plugins "$TAG"
+      - run: bunx biome ci --error-on-warnings plugins/standalone
+      - run: bunx tsc --noEmit -p plugins/standalone
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Dry-run every plugin before publishing any plugin
+        shell: bash
+        run: |
+          # The single-quoted strings are JavaScript for `bun -e`, not shell.
+          set -euo pipefail
+          # shellcheck disable=SC2016
+          for plugin in $(bun -e 'const fs = require("node:fs"); const names = fs.readdirSync("plugins/standalone").filter((n) => fs.existsSync(`plugins/standalone/${n}/package.json`)).sort(); console.log(names.join(" "))'); do
+            tag="$(bun scripts/publish-npm-package.ts --print-tag "plugins/standalone/$plugin")"
+            echo "::group::npm publish --dry-run plugins/standalone/$plugin"
+            (cd "plugins/standalone/$plugin" && npm publish --access public --tag "$tag" --dry-run)
+            echo "::endgroup::"
+          done
+
+  publish:
+    name: Publish @tynd/plugin-${{ matrix.plugin }}
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJSON(needs.validate.outputs.plugins) }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version-file: ".bun-version"
+          no-cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: bun install --frozen-lockfile
+      - name: Dry-run the package with its configured dist-tag
+        shell: bash
+        run: |
+          tag="$(bun "$GITHUB_WORKSPACE/scripts/publish-npm-package.ts" --print-tag .)"
+          npm publish --access public --tag "$tag" --dry-run
+        working-directory: plugins/standalone/${{ matrix.plugin }}
+      - run: bun scripts/publish-npm-package.ts "plugins/standalone/${{ matrix.plugin }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

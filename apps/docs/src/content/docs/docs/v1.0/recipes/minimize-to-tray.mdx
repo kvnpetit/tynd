@@ -1,0 +1,67 @@
+---
+title: Minimize to Tray
+description: "Hide window on close; restore on tray icon click. Keeps the app alive in the background."
+---
+
+# Minimize to Tray
+
+Declare a tray in `app.start`, preventDefault the close, toggle visibility on tray click.
+
+```ts title="backend/main.ts"
+import { app } from "@tynd/core";
+
+app.start({
+  window: { title: "My App", width: 900, height: 600 },
+  tray: {
+    icon: import.meta.dir + "/../assets/tray.png",
+    tooltip: "My App",
+    menu: [
+      { label: "Show",  id: "show" },
+      { label: "Quit",  id: "quit" },
+    ],
+  },
+});
+```
+
+Install the required plugins:
+
+```bash
+tynd add tray menu
+```
+
+```ts title="src/main.ts"
+import { tyndWindow, app } from "@tynd/core/client";
+import { tray } from "@tynd/plugin-tray/client";
+import { menu } from "@tynd/plugin-menu/client";
+
+let quitting = false;
+
+tyndWindow.onCloseRequested((e) => {
+  if (quitting) return;   // allow actual quit
+  e.preventDefault();
+  void tyndWindow.hide();
+});
+
+tray.onClick(async () => {
+  const visible = await tyndWindow.isVisible();
+  if (visible) await tyndWindow.hide();
+  else {
+    await tyndWindow.show();
+    await tyndWindow.setFocus();
+  }
+});
+
+menu.onClick("show", async () => {
+  await tyndWindow.show();
+  await tyndWindow.setFocus();
+});
+
+menu.onClick("quit", async () => {
+  quitting = true;
+  await app.exit(0);
+});
+```
+
+**Gotcha** — `app.exit(0)` triggers `onCloseRequested` too. The `quitting` flag lets it through.
+
+**Related:** [tray API](/docs/v1.0/api/os/tray) · [tyndWindow API](/docs/v1.0/api/os/window).

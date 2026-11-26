@@ -1,0 +1,38 @@
+---
+title: tynd info
+description: "Print Tynd/Bun versions and resolved project-native binary paths."
+---
+
+# `tynd info`
+
+```bash
+tynd info
+tynd info --json
+```
+
+Human output reports:
+
+- native Tynd tooling version;
+- project root;
+- Bun version, or `not found`;
+- compiled host binary (`.tynd/build/bin/release/<app>`, else `.tynd/build/bin/debug/<app>`), or `not found`;
+- resolved native bundler path, or `not found`.
+
+JSON output also includes the discovered config path; it does not add synthetic entries for skipped platform probes.
+
+The bundler is the `tynd-bundler` next to `tynd`. Set `TYND_BUNDLER_BIN` to the absolute path of an existing bundler executable to override it; a relative path fails with `TYND_BUNDLER_BIN must be an absolute path`, a path without `.exe` on Windows with `must end in .exe on Windows`, and a missing file with `TYND_BUNDLER_BIN does not exist`. `tynd dev` and `tynd start` pass the resolved Bun to the host as `TYND_BUN_PATH`; a host started without it runs `bun` from `PATH`.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `--json` | Emit machine-readable output |
+
+`info` does not access the network, query a registry, probe WebView, invoke Cargo, inspect plugins, or calculate previous build size. Use the command that needs a missing runtime/tool for its actionable error.
+
+## Related
+
+- [`tynd validate`](/docs/v1.0/cli/validate).
+- [`tynd doctor`](/docs/v1.0/cli/doctor).
+- [Troubleshooting](/docs/v1.0/troubleshooting).

@@ -1,0 +1,170 @@
+---
+title: sql
+description: "Embedded SQLite via Bun — no system dependency or custom Rust host."
+---
+
+# `sql`
+
+Install the required plugin:
+
+```bash
+tynd add sql
+```
+
+```ts
+import { sql } from "@tynd/plugin-sql/client";
+```
+
+Bundled SQLite via `bun:sqlite`. No system libsqlite or custom Rust host is
+needed. Connections are keyed by an opaque numeric id in the Bun backend.
+
+## `open(path): Promise<SqlConnection>`
+
+Opens or creates a database file. `":memory:"` for in-memory.
+
+```ts
+const db = await sql.open("./data.db");
+const mem = await sql.open(":memory:");
+```
+
+Prefer joining against the app's own data directory, `os.appDataDir()` (created on first call, named after `bundle.identifier`):
+
+```ts
+import { os, path } from "@tynd/core/client";
+
+const dbPath = path.join(await os.appDataDir(), "data.db");
+const db     = await sql.open(dbPath);
+```
+
+## `SqlConnection` methods
+
+### `exec(sql, params?): Promise<SqlExecResult>`
+
+Run a statement that doesn't return rows (`INSERT`, `UPDATE`, `DELETE`, `CREATE`, …).
+
+```ts
+await db.exec(`CREATE TABLE IF NOT EXISTS users(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL
+)`);
+
+const { changes, lastInsertId } = await db.exec(
+  "INSERT INTO users(name) VALUES (?1)",
+  ["Alice"],
+);
+```
+
+### `query<T>(sql, params?): Promise<T[]>`
+
+Run a `SELECT` and return every row.
+
+```ts
+const rows = await db.query<{ id: number; name: string }>(
+  "SELECT * FROM users WHERE name LIKE ?1",
+  ["A%"],
+);
+```
+
+### `queryOne<T>(sql, params?): Promise<T | null>`
+
+First row only, or `null` if no match.
+
+```ts
+const user = await db.queryOne<{ id: number; name: string }>(
+  "SELECT * FROM users WHERE id = ?1",
+  [1],
+);
+```
+
+### `close(): Promise<void>`
+
+Release the connection.
+
+```ts
+await db.close();
+```
+
+## `list(): Promise<number[]>`
+
+IDs of all currently-open connections (useful for debugging).
+
+```ts
+const ids = await sql.list();
+```
+
+## Param binding
+
+Positional:
+
+```ts
+await db.exec("INSERT INTO x(a, b) VALUES (?1, ?2)", ["hi", 42]);
+```
+
+Parameters are `SqlParam` values (`string | number | boolean | null`):
+
+- `string` → `TEXT`
+- `number` (integer) → `INTEGER`
+- `number` (float) → `REAL`
+- `boolean` → `INTEGER` (0/1)
+- `null` → `NULL`
+
+Store arrays and objects as `TEXT` with `JSON.stringify` and read them back with `json_extract(col, '$.field')`.
+
+## BLOBs
+
+`BLOB` columns come back as **base64 strings** over the JSON IPC channel. For large blobs, store a path in the table and use [`fs.readBinary`](/docs/v1.0/api/os/fs) on the payload.
+
+## Migrations
+
+No built-in migrator. Standard pattern:
+
+```ts
+await db.exec(`CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)`);
+
+const row = await db.queryOne<{ v: string }>(
+  "SELECT v FROM meta WHERE k='schema_version'",
+);
+const version = row ? parseInt(row.v) : 0;
+
+const migrations: Array<() => Promise<void>> = [
+  async () => { await db.exec(`CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT)`); },
+  async () => { await db.exec(`ALTER TABLE notes ADD COLUMN created_at INTEGER`); },
+];
+
+for (let i = version; i < migrations.length; i++) {
+  await migrations[i]();
+  await db.exec(
+    "INSERT OR REPLACE INTO meta VALUES('schema_version', ?1)",
+    [String(i + 1)],
+  );
+}
+```
+
+## Transactions
+
+Standard SQL — wrap in `BEGIN` / `COMMIT` / `ROLLBACK`:
+
+```ts
+await db.exec("BEGIN");
+try {
+  await db.exec("INSERT INTO a VALUES(?1)", [1]);
+  await db.exec("INSERT INTO b VALUES(?1)", [2]);
+  await db.exec("COMMIT");
+} catch (err) {
+  await db.exec("ROLLBACK");
+  throw err;
+}
+```
+
+## Notes
+
+- No prepared-statement handle is returned to the frontend — each call prepares, binds, and executes in Bun.
+- Limits: 256 open connections, 100,000 rows per result, 16 MiB per cell and 64 MiB per result. A larger result throws; paginate with `LIMIT`/`OFFSET`.
+- File databases automatically enable WAL, `synchronous=NORMAL`, a 30-second busy timeout, foreign keys, and tuned cache/mmap defaults.
+- These statements are blocked, so every database path must pass through `sql.open()` and the native filesystem policy: `ATTACH DATABASE`, `VACUUM INTO <file>` (writes a copy anywhere), `load_extension()` (loads native code), and the path-taking pragmas `PRAGMA temp_store_directory`, `data_store_directory` and `lock_proxy_file` (on Apple builds it makes SQLite create a lock file and its parent directories at the given path). A blocked statement makes the call throw.
+
+## Related
+
+- [store](/docs/v1.0/api/os/store) — k/v, simpler for flat preferences.
+- [fs](/docs/v1.0/api/os/fs) — for large BLOBs stored out-of-row.
+- [Persistence guide](/docs/v1.0/guides/persistence).

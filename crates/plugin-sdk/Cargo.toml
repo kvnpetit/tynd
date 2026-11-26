@@ -1,0 +1,81 @@
+[package]
+name                    = "tynd-plugin-sdk"
+description             = "Shared Rust SDK for Tynd native plugins: `TyndPlugin` trait + event emitter + helpers."
+publish.workspace       = true
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+readme                  = "README.md"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest    = false
+
+[dependencies]
+# Re-exported as `tynd_plugin_sdk::tynd_plugin` so plugin authors only
+# ever depend on a single SDK crate. The proc-macro lives in its own
+# crate because rustc requires `proc-macro = true` libs be standalone.
+tynd-plugin-macros.workspace = true
+
+serde.workspace       = true
+serde_json.workspace  = true
+thiserror   = "2.0"
+# Zero-copy archive format used by the opt-in
+# `#[plugin_command(zero_copy)]` path on `#[tynd_plugin::commands]`.
+# Re-exported as `tynd_plugin_sdk::rkyv` so plugin authors don't need
+# to pin the version themselves. Pinned here, not in the workspace: no
+# other crate depends on it.
+rkyv        = { version = "0.8", default-features = false, features = ["alloc", "bytecheck"] }
+# `Registry<T>` helper sits in the SDK because every native plugin that
+# carries per-call state (sql connections, terminal sessions, …) ends up
+# building the same `DashMap<u64, Mutex<T>>` + `AtomicU64` trio.
+# Lifting it here also keeps a single canonical "max handles" guard so
+# every plugin enforces the same limit consistently.
+dashmap.workspace     = true
+parking_lot.workspace = true
+# Used by `PluginCx::spawn_interval` for sleep-with-cancellation: the
+# stop signal interrupts the worker mid-tick instead of waiting for the
+# next 250 ms slice. Drops the previous busy-poll loop and the latency
+# floor on plugin shutdown.
+crossbeam-channel.workspace = true
+
+# Lightweight `block_on` for the `#[plugin_impl]` macro's async-fn
+# bridge. Used internally by `__internal::block_on`; plugin authors
+# never reach for it directly.
+pollster    = "1.0"
+
+# Structured warnings from background-handle teardown. `Drop` paths
+# can't surface errors any other way; `tracing::warn!` is preferred
+# over `eprintln!` so host operators can route SDK diagnostics through
+# the same subscriber as the rest of the process.
+tracing.workspace = true
+
+# Re-exported as `tynd_plugin_sdk::specta` / `::specta_typescript` so
+# the `#[plugin_impl]` / `#[commands]` codegen reaches them through a
+# single SDK dep — plugin authors never have to add specta to their
+# own `[dependencies]`. The macros emit
+# `::tynd_plugin_sdk::specta::Type` / `::tynd_plugin_sdk::specta_typescript::Typescript`
+# paths, mirroring the rkyv re-export pattern.
+specta.workspace    = true
+specta_typescript  = { package = "specta-typescript", version = "0.0.15", features = ["serde"] }
+# `specta_serde::apply_phases` is the runtime hook that reads
+# `#[serde(rename_all = ...)]` off type metadata and rewrites the
+# resolved graph before the TS exporter walks it. Without this hook,
+# specta-typescript prints raw Rust idents so a `success_html: String`
+# field lands as `success_html` in `.gen.ts` while serde sends
+# `successHtml` at runtime — silent drift between generated types and
+# wire shape. `apply_phases` is preferred over `apply` because plugin
+# authors routinely combine asymmetric serde attrs
+# (`skip_serializing_if`, `default`, …) which panic under `apply`'s
+# unified mode. Re-exported as `tynd_plugin_sdk::specta_serde` so the
+# `#[plugin_impl]` / `#[commands]` codegen reaches it through a single
+# SDK dep.
+specta_serde       = { package = "specta-serde", version = "0.0.15" }

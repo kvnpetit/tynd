@@ -1,0 +1,38 @@
+---
+title: network
+description: "Network interface information. Facade over the core `network` host API."
+---
+
+# `network`
+
+`@tynd/plugin-network` enables the host `network` API and exposes its typed client. The API itself is documented on the [`network`](/docs/v1.0/api/os/network) page.
+
+## Install
+
+```bash
+tynd add network
+```
+
+```ts
+import { network } from "@tynd/plugin-network/client";
+```
+
+Declaring the plugin compiles the matching `api-network` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-network` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-network` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `network` |
+| Aliases for `tynd add` | `net` |
+| Catalog permission labels | `host:network` |
+| Estimated size | 100 KB |
+| Client exports | `NetworkInterface`, `network` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

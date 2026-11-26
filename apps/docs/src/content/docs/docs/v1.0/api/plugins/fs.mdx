@@ -1,0 +1,38 @@
+---
+title: fs
+description: "Filesystem access. Facade over the core `fs` host API."
+---
+
+# `fs`
+
+`@tynd/plugin-fs` enables the host `fs` API and exposes its typed client. The API itself is documented on the [`fs`](/docs/v1.0/api/os/fs) page.
+
+## Install
+
+```bash
+tynd add fs
+```
+
+```ts
+import { fs } from "@tynd/plugin-fs/client";
+```
+
+Declaring the plugin compiles the matching `api-fs` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-fs` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-fs` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `fs` |
+| Aliases for `tynd add` | `file`, `files`, `filesystem` |
+| Catalog permission labels | `host:fs` |
+| Estimated size | 120 KB |
+| Client exports | `DirEntry`, `FileHandle`, `FileStat`, `FsChangeEvent`, `fs`, `OpenOptions`, `SeekFrom`, `WatchHandle` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

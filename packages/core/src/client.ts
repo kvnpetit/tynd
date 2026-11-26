@@ -1,112 +1,95 @@
 // @tynd/core/client — frontend API. Backend imports from "@tynd/core".
+// Only the core surface lives here: app, backend RPC, the current window and
+// webview, os, path, monitors, security, log, events and workers. Every other
+// native API (dialog, clipboard, store, tray, menu, multiwindow, ...) ships as
+// an official plugin: `import { dialog } from "@tynd/plugin-dialog/client"`.
+// Plugin clients are **never** re-exported here. Plugin packages
+// (`@tynd/plugin-*`) are separate npm dependencies — install only what
+// you need, then import from the plugin's own package so the plugin
+// stays the single source of truth for its types and client shape:
+//     import { sql } from "@tynd/plugin-sql/client"
+//     import { vault } from "@acme/plugin-vault/client"
+// Swapping runtimes doesn't change where imports come from — preset
+// and custom both resolve plugins from their own package.
 
-export { type AppInfo, app } from "./client/app.js"
-export { type AutolaunchOptions, autolaunch } from "./client/autolaunch.js"
-export { type BackendClient, createBackend } from "./client/backend.js"
-export { createFrontendEmitter } from "./client/frontend-emitter.js"
+export { base64ToBytes, bytesToBase64 } from "./client/_internal";
+export {
+  type ActivationPolicy,
+  type AppInfo,
+  app,
+  type DockBounceType,
+  type JumpList,
+  type JumpListCategory,
+  type JumpListItem,
+} from "./client/app";
+export { type BackendClient, type CallOptions, createBackend } from "./client/backend";
+export { Channel } from "./client/channel";
+export { createFrontendEmitter } from "./client/frontend-emitter";
+export {
+  type LogConfigureOptions,
+  type LogLevel,
+  type LogRotation,
+  log,
+} from "./client/log";
+export {
+  type Monitor,
+  type MonitorChange,
+  type MonitorRect,
+  type MonitorSubscription,
+  monitors,
+} from "./client/monitor";
+export {
+  type MediaAccessKind,
+  type MediaAccessStatus,
+  type OsInfo,
+  os,
+} from "./client/os";
+export { path } from "./client/path";
+export { createPluginClient, type PluginClient } from "./client/plugin";
+export { convertFileSrc, protocolUrl } from "./client/protocol";
 export {
   abortable,
   listenN,
   once,
   RpcTimeoutError,
   withTimeout,
-} from "./client/rpc-helpers.js"
-export { type ClipboardImage, clipboard } from "./client/clipboard.js"
-export { compute, type HashAlgo } from "./client/compute.js"
+} from "./client/rpc-helpers";
 export {
-  type ConfirmOptions,
-  dialog,
-  type MessageOptions,
-  type OpenDirectoryOptions,
-  type OpenFileOptions,
-  type SaveFileOptions,
-} from "./client/dialog.js"
+  type SecurityPolicy,
+  type SecurityScope,
+  security,
+} from "./client/security";
+export type { CommandCatalog, TypedClient } from "./client/typed-client";
 export {
-  type DirEntry,
-  type FileHandle,
-  type FileStat,
-  type FsChangeEvent,
-  fs,
-  type OpenOptions,
-  type SeekFrom,
-  type WatchHandle,
-} from "./client/fs.js"
+  tyndWebview,
+  type WebviewCookie,
+  type WebviewCookieInit,
+  type WebviewCookieTarget,
+  type WebviewDownloadCompleted,
+  type WebviewDownloadEvent,
+  type WebviewDownloadStarted,
+  type WebviewNewWindowEvent,
+  type WebviewPageSize,
+  type WebviewPdfOptions,
+  type WebviewTarget,
+} from "./client/webview";
 export {
-  type HttpProgress,
-  type HttpRequestOptions,
-  type HttpResponse,
-  http,
-} from "./client/http.js"
-export { type KeyringEntry, keyring } from "./client/keyring.js"
-export { log, type LogConfigureOptions, type LogLevel } from "./client/log.js"
-export { type ContextMenuItem, menu } from "./client/menu.js"
-export { type Monitor, monitors } from "./client/monitor.js"
-export { type NotificationOptions, notification } from "./client/notification.js"
-export { type OsInfo, os } from "./client/os.js"
-export { path } from "./client/path.js"
-export { power } from "./client/power.js"
-export { security, type SecurityPolicy, type SecurityScope } from "./client/security.js"
-export { type ExecOptions, type ExecResult, process } from "./client/process.js"
-export { shell } from "./client/shell.js"
-export { type ShortcutHandle, shortcuts } from "./client/shortcuts.js"
-export { sidecar } from "./client/sidecar.js"
-export { type SingleInstanceResult, singleInstance } from "./client/single-instance.js"
-export {
-  type SqlConnection,
-  type SqlExecResult,
-  type SqlParam,
-  sql,
-} from "./client/sql.js"
-export { createStore } from "./client/store.js"
-export {
-  type TerminalHandle,
-  type TerminalSpawnOptions,
-  terminal,
-} from "./client/terminal.js"
-export { tray, type TrayMenuItem } from "./client/tray.js"
-export {
-  type UpdateInfo,
-  type UpdaterCheckEvent,
-  type UpdaterCheckOptions,
-  type UpdaterDownloadOptions,
-  type UpdaterDownloadResult,
-  type UpdaterInstallOptions,
-  type UpdaterInstallResult,
-  type UpdaterPeriodicOptions,
-  type UpdaterProgress,
-  updater,
-} from "./client/updater.js"
-// Web-platform globals re-exported so `import * as tynd from "@tynd/core/client"`
-// gives you `tynd.fetch`, `tynd.WebSocket`, `tynd.crypto`, etc. without
-// touching the globals.
-export {
-  AbortController,
-  AbortSignal,
-  atob,
-  Blob,
-  btoa,
-  crypto,
-  EventSource,
-  File,
-  FormData,
-  fetch,
-  Headers,
-  performance,
-  ReadableStream,
-  Request,
-  Response,
-  structuredClone,
-  TextDecoder,
-  TextEncoder,
-  URL,
-  URLSearchParams,
-  WebSocket,
-} from "./client/web.js"
-export {
-  type WebSocketHandle,
-  type WebSocketMessage,
-  websocket,
-} from "./client/websocket.js"
-export { tyndWindow, type WindowPreset } from "./client/window.js"
-export { type WorkerHandle, workers } from "./client/workers.js"
-export type { Emitter, EmitterMap } from "./types.js"
+  type AlwaysOnTopLevel,
+  type AttentionKind,
+  type DownloadPolicy,
+  type NewWindowPolicy,
+  type StartDragOptions,
+  type TyndWindow,
+  tyndWindow,
+  type WindowOptions,
+  type WindowPreset,
+} from "./client/window";
+export type {
+  MacosEffect,
+  WindowEffect,
+  WindowEffectsOptions,
+  WindowsEffect,
+} from "./client/window-effects";
+export { type WorkerHandle, workers } from "./client/workers";
+export { TyndIpcError, type TyndIpcErrorCode } from "./errors";
+export type { Emitter, EmitterMap } from "./types";

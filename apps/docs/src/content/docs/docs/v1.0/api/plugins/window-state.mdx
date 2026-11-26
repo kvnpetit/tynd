@@ -1,0 +1,38 @@
+---
+title: window-state
+description: "Persist and restore window geometry. Facade over the core `window-state` host API."
+---
+
+# `window-state`
+
+`@tynd/plugin-window-state` enables the host `window-state` API and exposes its typed client. The API itself is documented on the [`windowState`](/docs/v1.0/api/os/windowState) page.
+
+## Install
+
+```bash
+tynd add window-state
+```
+
+```ts
+import { windowState } from "@tynd/plugin-window-state/client";
+```
+
+Declaring the plugin compiles the matching `api-window-state` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-window-state` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-window-state` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `window-state` |
+| Aliases for `tynd add` | `windowstate`, `window-state-store` |
+| Catalog permission labels | `host:window-state`, `local-storage` |
+| Estimated size | 70 KB |
+| Client exports | `WindowStateInitOptions`, `WindowStateSnapshot`, `windowState` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

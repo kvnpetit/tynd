@@ -1,0 +1,77 @@
+---
+title: shell
+description: "Open URLs in the default browser and files in their OS-default handler."
+---
+
+# `shell`
+
+Install the required plugin:
+
+```bash
+tynd add shell
+```
+
+```ts
+import { shell } from "@tynd/plugin-shell/client";
+```
+
+Launch URLs / files through the OS's default handler.
+
+## `openExternal(url): Promise<void>`
+
+Opens the URL in the default browser.
+
+```ts
+await shell.openExternal("https://example.com");
+await shell.openExternal("mailto:hi@example.com");
+```
+
+**Scheme allowlist** — only `http://`, `https://`, `mailto:` are accepted. Passing `file://`, `javascript:`, `data:`, or a registered custom scheme throws.
+
+## `openPath(path): Promise<void>`
+
+Opens a filesystem path in the OS default handler for that file type.
+
+```ts
+await shell.openPath("/Users/me/document.pdf");
+await shell.openPath("C:\\Users\\Me\\spreadsheet.xlsx");
+```
+
+- Absolute paths only (relative paths resolve against the app's cwd, which is unreliable).
+- The OS decides what app handles the file type.
+- **Executable and launcher types are refused** (the call throws). Only the final extension is checked, case-insensitively, because the OS picks the handler from it: `script.exe` is refused, `report.exe.txt` and `app.js.map` open with the `.txt` / `.map` handler. On the name, everything from the first `:` is dropped (NTFS stream suffix such as `x.hta::$DATA`) and trailing dots and spaces are trimmed first. Refused extensions (133):
+  - Windows executables, scripts and launchers: `exe` `bat` `cmd` `com` `scr` `dll` `pif` `cpl` `msc` `msi` `msp` `jar` `ps1` `psm1` `psc1` `vbs` `vbe` `js` `jse` `wsf` `wsh` `wsc` `sct` `hta` `lnk` `url` `scf` `reg` `inf` `xll` `gadget` `appref-ms` `settingcontent-ms` `application` `chm` `search-ms` `library-ms` `diagcab` `ocx` `sys` `ws` `wsb` `rdp` `theme` `themepack` `website` `xbap` `mht` `mhtml` `jnlp` `appinstaller` `msix` `msixbundle` `appx` `appxbundle` `searchconnector-ms` `accde` `mde` `adp` `accdb` `accdr` `vsto` `cer` `crt` `der` `p7b`
+  - Interpreter-associated scripts and further script or installer types: `py` `pyw` `pyz` `pyzw` `pl` `pyc` `pyo` `pyd` `rb` `rbw` `php` `phar` `lua` `tcl` `ps1xml` `ps2` `ps2xml` `psc2` `pssc` `cdxml` `msh` `msh1` `msh2` `mshxml` `msh1xml` `msh2xml` `drv` `msu` `mst` `mof` `ahk` `au3` `vb`
+  - Disk images: `iso` `img` `vhd` `vhdx`
+  - macOS: `app` `command` `tool` `terminal` `workflow` `action` `scpt` `scptd` `pkg` `mpkg` `dmg` `fileloc` `webloc` `inetloc` `mobileconfig` `shortcut` `prefpane` `saver` `plugin` `bundle` `qlgenerator` `kext`
+  - Linux: `desktop` `sh` `run` `appimage` `bash` `zsh` `csh` `ksh`
+
+  The list applies on every OS.
+- **On Windows, a `:` in the file name is refused** (the call throws): it names an NTFS alternate data stream (`report.pdf:evil.bat`), and the OS picks the handler from the stream name. Device paths are refused as well: `\\.\...` and any `\\?\` path that is not a drive path or a UNC share (`\\?\GLOBALROOT\...`, `\\?\pipe\...`). Both are checked on the path you pass and on the resolved path. On Linux and macOS `:` is an ordinary file-name character.
+- To run a program, use [`process.exec`](/docs/v1.0/api/os/process) or a [sidecar](/docs/v1.0/api/os/sidecar).
+- Returns when the launch is initiated, not when the target app is ready.
+
+## `revealInFolder(path): Promise<void>`
+
+Open the OS file manager with `path` selected — Windows `explorer /select`, macOS `open -R`. On Linux opens the parent directory (no standard "select" gesture across file managers). Like `openPath`, it goes through the `fs` policy, throws if the path does not exist, and on Windows refuses a `:` in the file name and device paths (the extension list does not apply: revealing selects the file, it does not run it).
+
+```ts
+await shell.revealInFolder("/Users/me/Downloads/report.pdf");
+```
+
+## `beep(): Promise<void>`
+
+Plays the OS alert sound: the Windows default beep, `NSBeep` on macOS, the GDK display bell on Linux. Resolves at once.
+
+```ts
+await shell.beep();
+```
+
+## Notes
+
+- To move a file to the trash / recycle bin, use [`fs.trash`](/docs/v1.0/api/os/fs).
+- `openPath` and `openExternal` do not throw on missing files / unreachable URLs — the OS handler surfaces those errors to the user. `openPath` does throw for a refused file type.
+
+## Related
+
+- [process](/docs/v1.0/api/os/process) — `process.exec` for more control over what's launched.

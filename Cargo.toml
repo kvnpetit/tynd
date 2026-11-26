@@ -1,105 +1,498 @@
 [workspace]
-members  = ["packages/host-rs", "packages/full", "packages/lite"]
+members = [
+    "crates/host",
+    "crates/host-macros",
+    "crates/capabilities",
+    "crates/debug-protocol",
+    "crates/pack-format",
+    "crates/protocol",
+    "crates/security-policy",
+    "crates/update-core",
+    "crates/runtime",
+    "crates/cli",
+    "crates/bundler",
+    "crates/bundle-contract",
+    "crates/plugin-sdk",
+    "crates/plugin-macros",
+    "plugins/standalone/audio/native",
+    "plugins/standalone/terminal/native",
+]
+# Generated/vendored trees that should not be members of the monorepo
+# workspace. `packages/host-src/native/` is a flattened mirror of
+# `crates/host` produced by `bun run --cwd packages/host-src sync`;
+# it's consumed by the ad-hoc workspace the CLI generates under
+# `.tynd/build/` for app-specific hosts.
+#
+# `packages/plugin-sdk/native{,-macros}` mirror `crates/plugin-sdk` and
+# `crates/plugin-macros` for the `@tynd/plugin-sdk` npm tarball
+# (`bun run --cwd packages/plugin-sdk sync`).
+#
+# Generated source mirrors stay outside the main workspace.
+exclude  = [
+    "packages/host-src/native",
+    "packages/plugin-sdk/native",
+    "packages/plugin-sdk/native-macros",
+]
 resolver = "2"
 
 [workspace.package]
-version       = "0.1.0"
+version       = "1.0.0"
+publish       = false
 edition       = "2021"
-rust-version  = "1.83"
+rust-version  = "1.95"
 license       = "Apache-2.0"
 repository    = "https://github.com/kvnpetit/tynd"
-homepage      = "https://tynd.kvnpetit.com/"
-documentation = "https://tynd.kvnpetit.com/docs"
-authors       = ["Kevin Petit <74395438+kvnpetit@users.noreply.github.com>"]
-keywords      = ["desktop", "webview", "typescript", "bun", "gui"]
-categories    = ["gui", "web-programming"]
-readme        = "../../README.md"
+homepage      = "https://kvnpetit.github.io/tynd/"
+documentation = "https://kvnpetit.github.io/tynd/docs/v1.0/"
+authors       = [ "Kevin Petit <74395438+kvnpetit@users.noreply.github.com>" ]
+keywords      = [ "desktop", "webview", "typescript", "bun", "gui" ]
+categories    = [ "gui", "web-programming" ]
 
 [workspace.dependencies]
 # Shared foundations
-serde       = { version = "1.0.228", features = ["derive"] }
-serde_json  = "1.0.149"
-tempfile    = "3.27"
-dirs        = "6"
-zstd        = { version = "0.13.3", default-features = false }
-mimalloc    = { version = "0.1.48", default-features = false }
+serde      = { version = "1.0.229", features = [ "derive" ] }
+serde_json = "1.0.154"
+schemars   = "1.2"
+tempfile   = "3.27"
+dirs       = "7"
+clap       = { version = "4.6", features = [ "derive" ] }
+clap_complete = "4.6"
+walkdir    = "2"
+toml       = "1.2"
+toml_edit  = "0.25"
+serde_yaml = "0.9"
+zstd       = { version = "0.14.4", default-features = false }
+zip        = { version = "9.6", default-features = false, features = [ "deflate" ] }
 
 # wry / tao ecosystem
-wry         = "0.55.0"
-tao         = "0.35.0"
-muda        = "0.17.2"
-tray-icon   = "0.22"
+wry       = "0.57.2"
+tao       = "0.37.2"
+muda      = "0.21.2"
+tray-icon = "0.26"
+# Standalone DPI primitives (`LogicalPosition`, `PhysicalSize`, …) shared by
+# the wry/tao ecosystem. Re-exported from `tynd-host` so consumer crates
+# (prebuilt hosts, app-specific hosts, plugins) can type their window commands against
+# the same canonical types without depending on tao directly.
+dpi       = "0.1"
 
 # OS integration
-rfd         = "0.17.2"
-arboard     = "3.6.1"
-open        = { version = "5.3.3", features = ["shellexecute-on-windows"] }
-pollster    = "0.4"
-notify-rust = "4.15.0"
-image       = { version = "0.25.10", default-features = false, features = ["png", "ico", "bmp"] }
-
-# Embedded JS runtime (lite)
-rquickjs    = { version = "0.11.0", features = ["full"] }
+rfd         = "0.18.0"
+# Window-handle traits for parenting `rfd` file dialogs to a native window.
+raw-window-handle = "0.6"
+# Window materials (`window.setEffects`): Mica / Acrylic / Tabbed / blur on
+# Windows, NSVisualEffectView vibrancy on macOS.
+window-vibrancy = "0.8"
+arboard     = "3.7.0"
+open        = { version = "5.4.5", features = [ "shellexecute-on-windows" ] }
+notify-rust = "4.19.0"
+image       = { version = "0.25.10", default-features = false, features = [ "png", "ico", "bmp" ] }
+# Drag files out of a window into other apps (`win.startDrag`, Tauri team).
+drag        = "2.1.1"
 
 # HTTP + binary encoding. `json` dropped — we parse via serde_json directly.
-ureq   = { version = "2.12", default-features = false, features = ["tls", "gzip", "brotli"] }
-base64 = "0.22"
+#
+# ureq 3 — body access goes through `body_mut().as_reader()` /
+# `read_to_string()` / `read_to_vec()`. Errors collapse into a single
+# `ureq::Error`; we set `http_status_as_error = false` so 4xx/5xx flow
+# through the normal response path (the Bun fetch bridge needs to
+# forward error bodies to JS, not turn them into `Err`).
+ureq   = { version = "3.5", default-features = false, features = [ "rustls", "gzip", "brotli", "json", "socks-proxy" ] }
+# In-memory cookie jars of `http` (`cookies` option). No public-suffix list:
+# jars are per app and every host still goes through the `security` rules.
+cookie_store = { version = "0.22", default-features = false }
+base64 = "0.23"
 
-# Cross-platform pseudo-terminal for the embedded terminal API
-portable-pty = "0.9"
+# Refcounted child handle that can be waited on AND killed concurrently —
+# matches Tauri's pattern. Drops the `Mutex<Option<Child>>` + waiter-vs-kill
+# race-protection gymnastics in `os::process` for an `Arc<SharedChild>` that
+# both threads can address directly.
+shared_child = "1"
 
-# Compute helpers
-sha2   = { version = "0.10", default-features = false }
-blake3 = { version = "1.5", default-features = false }
-hmac   = { version = "0.12", default-features = false }
+# Data-parallel iterators on top of a global work-stealing thread pool.
+# Used in `scheme.rs::AssetCache::load` to fan out file read +
+# zstd-decompress + MIME sniff across cores during the `tynd-bin://`
+# warm-up — drops first-paint cache build from O(N) sequential opens
+# (~200 ms on 5 000 assets) to ~30-60 ms on 8-core hardware. `blake3`
+# already pulls `rayon` transitively for parallel hashing of large
+# inputs, so this is a graph dedup, not a new addition.
+rayon = "1"
+
+# Compute helpers. `sha2` 0.11 dropped the `asm` feature: runtime CPU
+# detection (`cpufeatures`) selects SIMD / SHA-NI implementations on every
+# target, so no per-target feature table is needed. `blake3` carries `rayon`
+# here so the workspace shares one version pin; large-input hashing
+# parallelizes across cores.
+sha2   = { version = "0.11", default-features = false }
+blake3 = { version = "1.8", default-features = false, features = [ "rayon" ] }
 
 # Ed25519 signatures for the auto-updater manifest + binary integrity.
-ed25519-dalek = { version = "2.2", default-features = false, features = ["std"] }
+ed25519-dalek = { version = "3.0", default-features = false }
 
-# Single-instance lock across OSes
-single-instance = "0.3"
+# File-based single-instance lock — replaces the unmaintained `single-instance`
+# crate. `fslock` uses platform-native locking (`flock` on Unix, `LockFileEx`
+# on Windows) on a path under `dirs::cache_dir()` and releases on process exit.
+fslock = "0.2"
 # Cross-platform local socket for forwarding argv/cwd from a 2nd launch
 # to the 1st (Windows named pipe, Unix domain socket).
-interprocess = "2.2"
+interprocess = "2.4"
+libc = "0.2"
+# Windows registry access — used by `os::deep_link` to write the
+# per-user `HKCU\Software\Classes\<scheme>\…` entries that bind a
+# custom URL scheme to the running binary. Only consumed inside a
+# `cfg(target_os = "windows")` block on the host crate, but declared
+# at the workspace level so the version stays coherent if other
+# Windows-only code paths ever need it.
+#
+# `windows-registry` is the canonical typed wrapper from the
+# `microsoft/windows-rs` org — same import-lib resolution model as
+# `windows-sys` (which we already pull). Replaces the older `winreg`
+# crate, which is unmaintained.
+windows-registry = "0.100"
 
-# FS watcher (ReadDirectoryChangesW on Windows, FSEvents on macOS, inotify
-# on Linux) + global hotkey manager for system-wide shortcuts.
-notify        = "6.1"
+# FS watcher: consumed exclusively through `notify_debouncer_full::notify::*`,
+# so the standalone `notify` crate is not declared here. Keep the global
+# hotkey manager for system-wide shortcuts.
+# Held at 0.5: global-hotkey >= 0.6 removed `Send`/`Sync` from
+# `GlobalHotKeyManager` (thread-affine Win32 window / macOS main-thread Carbon
+# handler). `os::shortcuts` keeps the manager in a process-wide static used from
+# IPC worker threads; upgrading needs the manager marshalled onto the tao
+# event-loop thread, which cannot be verified off-Windows here.
 global-hotkey = "0.5"
 # Cross-platform recycle bin (IShellItem on Windows, NSFileManager trashItemAtURL
 # on macOS, freedesktop.org Trash Spec on Linux).
-trash         = "5"
+trash = "5"
 # User idle time — GetLastInputInfo (Win), CGEventSource (macOS), XScreenSaver (Linux).
-user-idle     = "0.6"
+user-idle = "0.6"
 
 # Linux-only gtk3 bindings — needed so we can upcast tao's gtk::ApplicationWindow
 # to the gtk::Window that muda's show_context_menu_for_gtk_window expects.
-gtk           = "0.18"
+gtk = "0.18"
 
 # Platform-specific notification backends with action callbacks — notify-rust
-# only surfaces them on Linux. Windows: tauri-winrt-notification adds WinRT
-# toasts + on_activated. macOS: mac-notification-sys adds action buttons +
-# blocking send() whose return value tells us which button was clicked.
-tauri-winrt-notification = "0.7"
+# only surfaces them on Linux. Windows: WinRT toasts through the `windows`
+# crate (toast XML, activation / dismissal events, notification history).
+# macOS: mac-notification-sys adds action buttons + blocking send() whose
+# return value tells us which button was clicked.
+windows = { version = "0.62", default-features = false, features = [ "std", "Data_Xml_Dom", "Foundation", "Foundation_Collections", "UI_Notifications" ] }
 mac-notification-sys     = "0.6"
+
+# Raw WebView2 calls wry does not wrap (`webview::session`: PDF export, page
+# capture, audio mute). Same versions as wry's own WebView2 bindings, so no
+# extra crate enters the graph.
+webview2-com = "0.39"
+windows-core = { version = "0.62", default-features = false, features = [ "std" ] }
 
 # Launch-at-boot — registry on Windows, Launch Agents on macOS, autostart
 # .desktop on Linux.
-auto-launch = "0.5"
+auto-launch = "0.6"
 
 # Secure credential storage — Keychain (macOS), Credential Manager + DPAPI
-# (Windows), Secret Service / kwallet (Linux).
-keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+# (Windows), Secret Service / kwallet (Linux). Per-OS feature gating in
+# consumer crates avoids cross-platform feature pollution. The base entry
+# below carries the shared version pin so consumers can `workspace = true`
+# from a per-target table; `default-features = false` prevents the
+# combined feature set from leaking into builds.
+keyring = { version = "4", default-features = false }
 
-# CSPRNG + WebSocket + embedded SQL (lite parity with bun:sqlite)
-rand       = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
-tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
-rusqlite   = { version = "0.32", features = ["bundled"] }
+# OS CSPRNG (`getrandom::fill`) — compute.randomBytes, multipart boundaries,
+# debug-protocol auth tokens, updater key material. WebSocket + embedded SQL
+# follow.
+getrandom   = "0.4"
+# Constant-time byte comparison primitive — used by the debug protocol
+# auth path to compare the client-supplied token against the expected
+# value without leaking timing info.
+subtle      = { version = "2.6", default-features = false }
+tungstenite = { version = "0.30", default-features = false, features = [ "rustls-tls-webpki-roots", "handshake" ] }
+
+# Audited typed ACID embedded KV store — replaces ad-hoc JSON-on-disk
+# persistence (window geometry, persisted security grants, KV store
+# namespaces) with a single MVCC-backed mmap'd database. One writer +
+# many readers, no separate server process, zero-copy reads on the
+# pinned-page cache.
+redb = "5.0"
 
 # Performance primitives
-parking_lot = "0.12"   # lock-free fast path + no poison handling (saves a branch per lock)
-dashmap     = "6"      # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
-ahash       = "0.8"    # faster non-crypto hasher for small keys (sessions, routes)
+parking_lot = "0.13" # lock-free fast path + no poison handling (saves a branch per lock)
+# Lock-free `Arc<T>` swap for read-mostly state (security policy + ACL
+# authority). Reads compile down to a single atomic load; writes do an
+# `Arc::new(...).store(...)` and never block readers. Used where the
+# previous `RwLock<T>` made every check_* call pay a lock acquisition
+# even when the policy hadn't changed in hours.
+arc-swap    = "1"
+dashmap     = "6"    # shard-locked concurrent hashmap — drops Mutex<HashMap> contention
+ahash       = "0.8"  # faster non-crypto hasher for small keys (sessions, routes)
+# MPMC sync channel with `select!` macro + native timeouts. Drop-in for
+# `std::sync::mpsc` on the BackendBridge event_rx loop.
+crossbeam-channel = "0.5"
+bytemuck = { version = "1", default-features = false }
+# Capability-based filesystem from Bytecode Alliance — `Dir` handle
+# blocks `..`/symlink/abs-path escapes via `openat2` on Linux 5.6+ and
+# equivalent on macOS/Windows. Defense-in-depth wrapper for the scope
+# policy in `os::fs`.
+cap-std      = "4"
+# Cross-platform binary self-replacement primitive — handles the
+# Windows file-lock dance (rename-then-delete-on-reboot) so the
+# updater plugin doesn't reinvent the workaround.
+self-replace = "1.5"
+
+# Plugin SDK — in-repo source package. The CLI's `.tynd/build/` template
+# substitutes a registry version when generating app-specific hosts for end users.
+tynd-plugin-sdk = { path = "crates/plugin-sdk", version = "1.0.0" }
+tynd-plugin-macros = { path = "crates/plugin-macros", version = "1.0.0" }
+
+# Official native plugins
+portable-pty = "0.9"
+
+# Type-state builders (no breaking changes when adding optional fields),
+# validated newtypes at IPC boundary, enum Display/FromStr/Default
+# derives.
+bon    = "3"
+nutype = { version = "0.8", features = ["regex", "serde"] }
+strum  = { version = "0.28", features = ["derive"] }
+
+# Host-side proc-macros — `#[tynd::handler]` collapses the per-OS-API
+# `dispatch(method, args)` boilerplate (a `match method { ... }` ladder
+# + per-arm `args.get(...)` extraction + per-arm `to_value` return
+# mapping) into one attribute on the API's `impl` block. Lives in-tree
+# at `crates/host-macros/`; the host depends on it unconditionally
+# because the always-on dispatch arms (`os::os_info`, `os::security`,
+# `os::app`) flow through the macro just like the gatable APIs do.
+tynd-host-macros = { path = "crates/host-macros", version = "1.0.0" }
+
+tynd-capabilities = { path = "crates/capabilities", version = "1.0.0" }
+tynd-debug-protocol = { path = "crates/debug-protocol", version = "1.0.0" }
+tynd-pack-format = { path = "crates/pack-format", version = "1.0.0" }
+tynd-bundle-contract = { path = "crates/bundle-contract", version = "1.0.0" }
+tynd-protocol  = { path = "crates/protocol", version = "1.0.0" }
+tynd-security-policy = { path = "crates/security-policy", version = "1.0.0" }
+tynd-update-core = { path = "crates/update-core", version = "1.0.0" }
+
+# Structured logging + error helpers — `tracing` for spans/JSON output,
+# `anyhow` for app code with `.context()`.
+tracing            = "0.1"
+# `default-features = false` strips `tracing-log`, `chrono`, `smallvec`
+# and the `std`-conditional re-exports we don't need; we re-add only
+# the two layers actually mounted in `observability::init_logging`.
+# Re-add `"json"` here if you wire `.json()` formatter for prod
+# ingestion (Loki, Datadog) — currently unused, ~200 KB binary saved.
+tracing-subscriber = { version = "0.3", default-features = false, features = [ "env-filter", "fmt" ] }
+anyhow             = "1.0"
+
+# Cross-platform Ctrl+C / SIGTERM handler — installs a single OS-level
+# signal trap (SetConsoleCtrlHandler on Windows, sigaction on Unix) and
+# routes both SIGINT *and* SIGTERM (with the `termination` feature) into
+# a Rust closure. ~250 lines, zero deps, MIT/Apache-2.0.
+ctrlc = { version = "3.5", features = [ "termination" ] }
+
+# Binary patch applier for delta updates (used by the updater to *apply*
+# patches on the end-user machine). The diff side (`bidiff`, below) is used by
+# `tynd-bundler`; both share an on-disk format
+# (`MAGIC = 0xB1DF` + version + varint-encoded controls) so a patch
+# produced by one always round-trips through the other at the same major
+# version.
+bipatch = "1.0"
+# `enc` feature is required for `bidiff::simple_diff`.
+bidiff  = { version = "1.0", features = [ "enc" ] }
+
+# === tynd-bundler (crates/bundler) — release-time tooling only ===
+#
+# None of these reach `tynd-host` / `tynd-runtime`: Cargo unifies features per
+# build selection, and the bundler is only built with `-p tynd-bundler`.
+#
+# Cross-host installer + signing pipeline (pure Rust — Linux CI signs Mac).
+# `apple-codesign` gives us the low-level `UnifiedSigner`/`Notarizer`/`Stapler`
+# used by the `codesign` subcommand without the legacy macOS-only wrapper.
+# `tauri-bundler` still pulls `tauri-macos-sign` internally for its own macOS
+# signing path; Tynd does not expose that wrapper and signs through `codesign`.
+tauri-bundler  = "2.10"
+tauri-utils    = "2.10"
+apple-codesign = "0.29"
+# Re-exported by apple-codesign; the bundler needs direct access to the
+# `SubmissionResponseStatus` enum. Pinned to **0.7** to match the version
+# `apple-codesign 0.29` pulls transitively — the enum identity must be the
+# same across both edges.
+app-store-connect = "0.7"
+# Self-extracting pack pipeline: `resvg`/`usvg` rasterise SVG, `ico`
+# assembles the multi-size ICO embedded into the rsrc section.
+resvg = { version = "0.50", default-features = false }
+usvg  = { version = "0.50", default-features = false }
+ico   = "0.6"
+# Deterministically reject SVG <text> nodes before rasterization. Host fonts
+# differ across CI/desktop machines, so production icons must outline text.
+quick-xml = "0.42"
+# Diagnostic errors with code/url/help; `thiserror` derives `Diagnostic`.
+miette    = { version = "7", features = [ "fancy" ] }
+thiserror = "2.0"
+# Stacked context between origin and diagnostic boundary — `anyhow` flattens
+# the breadcrumb trail; `error-stack` keeps it for the rendered `cause` field.
+error-stack = "0.8"
+# Templating for installer artefacts (.wxs/.nsi/.desktop/Info.plist).
+handlebars = "6"
+# PE/ELF/Mach-O parser for pre-flight notarization + universal-binary checks.
+goblin = "0.10"
+
+# Strict UTF-8 query-string parser — dropping the in-house `parse_query`
+# + `url_decode` pair removed a silent UTF-8 fallthrough bug.
+form_urlencoded = "1.2"
+
+# Windows UNC normalize — `dunce::canonicalize` returns plain drive
+# paths instead of `\\?\C:\…` so `Path::starts_with(base)` keeps
+# matching after canonicalization in the dev-mode path-traversal guard.
+dunce = "1.0"
+
+# Strict URL parser — replaces a hand-rolled `looks_like_url` that
+# happily accepted `javascript:` / `data:` strings the host then
+# forwarded to the `app:open-url` handler. `url::Url::parse` enforces
+# RFC 3986 scheme + structure so we can scheme-allowlist on parsed
+# input.
+url = "2.5"
+
+# Semver version parsing and requirement matching — used by the updater to
+# compare `currentVersion` against the manifest version with full SemVer
+# semantics (pre-release ordering, build-metadata stripping, req ranges).
+semver = { version = "1.0", features = [ "serde" ] }
+
+# Pattern matching for the security policy globs. Drops a hand-rolled
+# recursive matcher and fixes a `\\` → `/` asymmetry on Windows.
+globset = "0.4"
+
+# Required by `nutype` regex validators (tynd-capabilities) and tooling.
+regex      = "1"
+
+# `gethostname()` wrapper without shelling out to `hostname(1)`.
+hostname = "0.4"
+
+# OS version via WMI / sw_vers / uname — locale-independent, replaces
+# the brittle `cmd /c ver` parser that broke on non-EN Windows.
+os_info = "3.15"
+
+# Dark-mode detection through the freedesktop XDG portal D-Bus call,
+# Win32 Registry, and CFPreferences — handles KDE / sway / Flatpak that
+# the old `gsettings` shell-out missed. 3.x replaced `async-std` with an
+# optional `async-io` / `tokio` runtime feature; we only use the synchronous
+# `detect() -> Result<Mode, Error>`, so default features stay off.
+dark-light = { version = "3", default-features = false }
+
+# BCP-47 locale via `GetUserDefaultLocaleName` (Win),
+# `[NSLocale currentLocale]` (macOS), and `LC_*` env (Linux).
+sys-locale = "0.3"
+# IANA time zone name (`os.timezone`): `/etc/localtime` (Linux),
+# `CFTimeZone` (macOS), WinRT `Calendar` (Windows).
+iana-time-zone = "0.1"
+
+# Debounced FS watcher — collapses multi-event renames + tracks paths
+# across moves. Sits on top of `notify` and keeps the same OS backend.
+notify-debouncer-full = "0.7"
+
+# Generate TypeScript types from Rust IPC structs. Source-of-truth for
+# `@tynd/core/client` — no manual `.d.ts` drift between Rust IPC commands
+# and the typed JS proxy.
+specta = { version = "2.0.0-rc.28", features = [ "derive" ] }
+
+# UTF-8-guaranteed paths. Used at the IPC boundary to eliminate
+# `.to_string_lossy()` data loss and OsStr footguns on Windows.
+camino = { version = "1.2", features = [ "serde1" ] }
+
+# Safely embed serde values into JS template literals — closes XSS
+# surface in webview init scripts. Drop-in for `format!`-based injection.
+serialize-to-javascript = "0.1"
+
+# Embed `Info.plist` into a CLI binary's `__TEXT,__info_plist` section so
+# direct invocations get entitlements (microphone, accessibility, ...)
+# prompts on macOS. Build-time linker-section helper.
+embed_plist = "1.2"
+
+
+# === Hot path IPC perf ===
+
+# Refcounted zero-copy byte buffers. Replaces `Vec<u8>` across the
+# binary IPC path — fan-out to multi-webview is a free `Arc` clone
+# instead of a payload copy.
+bytes = "1.12"
+
+# Stack-allocated small vecs. RPC arg lists are typically <8 items —
+# this skips the heap alloc on the dispatch hot path.
+smallvec = { version = "1.16", features = ["serde", "union"] }
+
+# Compact strings — inline-stores up to 24 bytes on 64-bit (vs `String`'s
+# heap alloc + 24-byte struct). Used for IPC `id`/`label` values that
+# circulate on the dispatch hot path: UUIDs (36 chars) spill, but
+# short/typed labels (`"primary"`, `"main"`, `os_call:<short>`) stay
+# inline. -16 B per active call when the id fits.
+compact_str = "0.10"
+
+# === Extended OS surface ===
+
+# Cross-platform CPU/RAM/disk/process info. Exposed via
+# `os.systemStats()` on the JS side — load avg, free mem, mounted
+# disks, process tree.
+sysinfo = { version = "0.40", default-features = false, features = [
+    "system",   # CPU + memory
+    "disk",     # mounted disks
+    "network",  # network counters (interface-list lives in if-addrs)
+] }
+
+# Network interfaces (local IPs, MAC, up/down) for `os.network()`.
+# `getifaddrs` (Unix) / `GetAdaptersAddresses` (Win).
+if-addrs = "0.15"
+
+# Screenshot of screen / window. Used by capture / annotation / screen
+# share apps; no native equivalent in Tauri.
+# Pinned `=0.8.1`: it is the newest xcap on `pipewire ^0.8`. xcap >= 0.8.2 moves
+# to a newer PipeWire dependency. Review that dependency when upgrading xcap.
+xcap = "=0.8.1"
+
+# Battery info for `power.battery()` — level, status, time remaining.
+# Maintained fork of the abandoned `battery` crate; the upstream
+# pulled `nix 0.19.1` (RUSTSEC-2021-0119 OOB write). API is a drop-in:
+# same `Manager`, `Battery`, `State`, `units::*` items, just under a
+# different crate name.
+starship-battery = "0.12.0"
+
+# === Security / production UX ===
+
+# Encrypted file vault (AES-256-GCM + scrypt). Lighter than IOTA
+# Stronghold, healthy maintenance. Backs the extended `keyring` for
+# large secrets (API keys, long tokens) that exceed the OS keychain
+# size limit.
+cocoon = "0.6"
+
+# Memory wiping for secrets (passwords, keys). `Zeroizing<T>` zeros the
+# heap on drop — `Vec::drop` releases the allocation but doesn't scrub
+# the bytes, so a future allocator can hand the same page out and a
+# memory dump still finds the cleartext.
+zeroize = { version = "1.9", features = ["zeroize_derive"] }
+
+# End-user-readable crash log — installs a `panic_hook` that emits a
+# markdown report (stack trace + path) with a friendly message instead
+# of the raw `thread 'main' panicked at ...`.
+
+# Cross-platform Touch ID (macOS) / Face ID (iOS) / Windows Hello /
+# Linux fprintd fingerprint for `auth.requestBiometric()`.
+robius-authentication = "0.3"
+
+# === Optional ===
+
+# === Observability — production export pipelines (opt-in) ===
+#
+# OpenTelemetry traces export via OTLP (gRPC). Pulled only when the
+# consumer enables the `obs-otel` feature on `tynd-host`. Version
+# coupling is one-to-one: `tracing-opentelemetry 0.28` depends on
+# `opentelemetry 0.27`, so the OTel crates stay on 0.27 while the
+# tracing bridge stays on 0.28. Bump the four lines together.
+opentelemetry         = { version = "0.33", default-features = false, features = [ "trace" ] }
+opentelemetry_sdk     = { version = "0.33", default-features = false, features = [ "trace", "rt-tokio" ] }
+opentelemetry-otlp    = { version = "0.33", default-features = false, features = [ "trace", "grpc-tonic" ] }
+tracing-opentelemetry = { version = "0.34", default-features = false, features = [ "tracing-log" ] }
+
+# Sentry crash reporter — paired with the tracing panic hook so user
+# crashes ship with structured spans + breadcrumbs. `default-features
+# = false` strips the platform-specific `debug-images` crate (we ship
+# stripped release binaries anyway). `reqwest` + `rustls` selects the
+# tokio HTTPS sender on rustls (not native-tls / openssl) to satisfy
+# the workspace's openssl ban; gated under the `obs-sentry` feature
+# on `tynd-host`.
+sentry = { version = "0.49", default-features = false, features = [ "backtrace", "contexts", "panic", "reqwest", "rustls" ] }
 
 [workspace.lints.rust]
 unused_must_use               = "deny"
@@ -114,7 +507,7 @@ rust_2018_idioms              = { level = "warn", priority = -1 }
 all      = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
-# Pragmatic allows on top of pedantic — noise without real safety gain
+# Pragmatic overrides on top of pedantic — keep low-signal rules quiet and structural limits visible
 module_name_repetitions  = "allow"
 must_use_candidate       = "allow"
 missing_errors_doc       = "allow"
@@ -125,8 +518,14 @@ cast_sign_loss           = "allow"
 cast_precision_loss      = "allow"
 cast_lossless            = "allow"
 similar_names            = "allow"
-too_many_lines           = "allow"
+too_many_lines           = "warn"
 doc_markdown             = "allow"
+items_after_statements   = "allow"
+unnecessary_wraps        = "allow"
+# Forcing `&T` everywhere for non-Copy types is opinionated — proc-macros
+# and config builders pass owned values for ergonomic call sites and the
+# function body's borrow vs. own choice rarely matches the caller's intent.
+needless_pass_by_value   = "allow"
 
 # Bug-catchers — real safety gains
 dbg_macro           = "warn"
@@ -135,12 +534,19 @@ unimplemented       = "warn"
 panic_in_result_fn  = "warn"
 mem_forget          = "warn"
 lossy_float_literal = "warn"
+# `unwrap()` is banned outside tests (clippy.toml `allow-unwrap-in-tests`):
+# use `?`, a typed error or an `expect("invariant")` that names the reason.
+unwrap_used         = "deny"
 
 [profile.release]
 opt-level     = 3
 lto           = "fat"
 codegen-units = 1
-panic         = "abort"
+# Native plugins and OS dispatch are isolated with `catch_unwind`. Keep
+# unwinding enabled in distributed hosts or those production guards become
+# no-ops and a third-party plugin panic aborts the whole application.
+# `tynd-bundler` shares this profile: Cargo has no per-package `panic`.
+panic         = "unwind"
 strip         = true
 debug         = false
 incremental   = false

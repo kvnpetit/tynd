@@ -1,0 +1,31 @@
+---
+title: Tutorials
+description: "Build complete Tynd apps step-by-step — markdown editor, file browser, LLM chat client."
+---
+
+import { CardGrid } from '@astrojs/starlight/components';
+import DocCard from '@/components/DocCard.astro';
+
+# Tutorials
+
+End-to-end walkthroughs. Each tutorial starts from `bunx @tynd/cli create` and ends with a shippable binary.
+
+<CardGrid>
+  <DocCard title="Markdown Editor" href="/docs/v1.0/tutorials/markdown-editor">
+    File open/save, live preview, keyboard shortcuts, native menu — ~150 LOC.
+  </DocCard>
+  <DocCard title="File Browser" href="/docs/v1.0/tutorials/file-browser">
+    Directory walker, binary thumbnails via `fs.readBinary`, reveal-in-folder.
+  </DocCard>
+  <DocCard title="LLM Chat Client" href="/docs/v1.0/tutorials/chat-client">
+    Streaming RPC over `fetch`, token-by-token rendering, cancellation.
+  </DocCard>
+</CardGrid>
+
+Each tutorial is self-contained. Pick whichever matches what you're building.
+
+## Prerequisites
+
+- [Bun, Rust and the platform build tools installed](/docs/v1.0/getting-started/installation).
+- Comfortable with TypeScript.
+- A framework you like — the tutorials use framework-agnostic DOM APIs; swap in React hooks / Vue refs / Svelte runes as you prefer.

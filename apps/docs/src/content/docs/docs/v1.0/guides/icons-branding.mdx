@@ -1,0 +1,74 @@
+---
+title: Icons & Branding
+description: "Use one explicit SVG, PNG, or ICO source for packed executables and installers."
+---
+
+# Icons & Branding
+
+Set one source explicitly in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+import { defineConfig } from "@tynd/cli";
+
+export default defineConfig({
+  icon: "assets/icon.svg",
+  bundle: {
+    identifier: "com.example.myapp",
+    displayName: "My App",
+  },
+});
+```
+
+The path is relative to the project root unless absolute. Tynd accepts `.svg`, `.png`, and `.ico` files. It does not search `public/`, `assets/`, or favicon names automatically.
+
+Without `icon`, the packed host keeps its embedded default. Installer formats that require an icon receive a deterministic Tynd fallback.
+
+## Source guidance
+
+SVG is usually the best source because it scales cleanly. Keep it simple and reproducible:
+
+- use a square canvas;
+- convert text to vector paths;
+- avoid assets or fonts loaded from external locations;
+- open the final SVG in a browser before packaging.
+
+The native bundler rejects SVG `<text>` nodes because host fonts would make release output depend on the machine. A PNG must be square. An ICO passes through when building the Windows icon payload.
+
+## What the native bundler does
+
+For the packed executable, SVG and PNG sources are converted to a Windows ICO containing 16, 32, 48, and 256 pixel entries. The same payload is stored in TYNDPKG for the runtime window icon; on Windows it is also embedded into the PE resource when enabled by the standard build flow.
+
+Installer creation forwards the configured icon to the native platform bundler. Exact presentation still depends on the target desktop environment and package format, so inspect final artifacts on every shipped platform.
+
+## Generate every format
+
+```bash
+tynd icon assets/icon.svg
+```
+
+[`tynd icon`](/docs/v1.0/cli/icon) writes `icon.png` (1024 px), `icon.ico`, `icon.icns`, the Linux hicolor PNG sizes and the MSIX tile assets to `icons/`, for review or for tools outside Tynd. The `msix`, `flatpak`, `snap` and `pkgbuild` targets render the same set from `icon` during the build, so they need a PNG or SVG source.
+
+## Build and inspect
+
+```bash
+tynd validate --ci
+tynd build --bundle all
+```
+
+Artifacts are written below `release/<platform>-<arch>/`. Check the raw executable plus every installer or `.app` you distribute. On Windows, also inspect Explorer/taskbar presentation; on macOS, inspect Finder and the Dock; on Linux, inspect the installed launcher.
+
+## Runtime window and tray icons
+
+The top-level `icon` becomes the initial application window icon when the packed runtime extracts it. Window APIs can change or clear the current window icon at runtime. Tray icons remain configured independently in the backend because a tray may need a template or state-specific image.
+
+## Package identity
+
+`bundle.identifier` is the stable reverse-DNS application identifier. `bundle.displayName` controls the user-facing name when set; otherwise the package/project name is used. Other available metadata includes descriptions, categories, copyright, file associations, protocols, and platform-specific fields.
+
+See the complete [`tynd.config.ts` reference](/docs/v1.0/cli/config).
+
+## Related
+
+- [Bundling](/docs/v1.0/guides/bundling)
+- [Code Signing](/docs/v1.0/guides/code-signing)
+- [TYNDPKG](/docs/v1.0/concepts/tyndpkg)

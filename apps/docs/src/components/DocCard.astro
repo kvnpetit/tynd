@@ -1,0 +1,56 @@
+---
+// A card that links to another page; the body is rendered markdown (slot).
+import { withBase } from "../lib/site";
+
+interface Props {
+  title: string;
+  href: string;
+}
+
+const { title, href } = Astro.props;
+const url = withBase(href);
+---
+
+<a href={url} class="doc-card">
+  <span class="title">{title}</span>
+  <span class="arrow" aria-hidden="true">→</span>
+  <div class="body"><slot /></div>
+</a>
+
+<style>
+  .doc-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.25rem 0.5rem;
+    align-content: start;
+    padding: 1rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    background-color: var(--sl-color-black);
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+    transition: border-color 0.2s;
+  }
+  .doc-card:hover {
+    border-color: var(--sl-color-accent);
+  }
+  .title {
+    font-weight: 600;
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-body);
+  }
+  .arrow {
+    color: var(--sl-color-gray-3);
+  }
+  .doc-card:hover .arrow {
+    color: var(--sl-color-accent-high);
+  }
+  .body {
+    grid-column: 1 / -1;
+    font-size: var(--sl-text-sm);
+    line-height: 1.6;
+  }
+  .body :global(p) {
+    margin: 0;
+  }
+</style>

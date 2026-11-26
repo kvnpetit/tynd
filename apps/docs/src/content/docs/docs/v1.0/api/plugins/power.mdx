@@ -1,0 +1,38 @@
+---
+title: power
+description: "Power status, thermal state, power events and sleep prevention. Facade over the core `power` host API."
+---
+
+# `power`
+
+`@tynd/plugin-power` enables the host `power` API and exposes its typed client. The API itself is documented on the [`power`](/docs/v1.0/api/os/power) page.
+
+## Install
+
+```bash
+tynd add power
+```
+
+```ts
+import { power } from "@tynd/plugin-power/client";
+```
+
+Declaring the plugin compiles the matching `api-power` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-power` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-power` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `power` |
+| Aliases for `tynd add` | `battery`, `power-state` |
+| Catalog permission labels | `host:power` |
+| Estimated size | 80 KB |
+| Client exports | `BatteryInfo`, `PowerSourceChange`, `PowerStatus`, `PowerSubscription`, `PreventSleepOptions`, `ThermalState`, `power` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

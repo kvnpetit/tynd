@@ -1,0 +1,50 @@
+---
+title: Recipes
+description: "Short self-contained snippets for common desktop-app tasks — remember window size, minimize to tray, handle deep links, and more."
+---
+
+import { CardGrid } from '@astrojs/starlight/components';
+import DocCard from '@/components/DocCard.astro';
+
+# Recipes
+
+Drop-in code for common tasks. Each recipe is short, focused, and runnable.
+
+<CardGrid>
+  <DocCard title="Remember window size" href="/docs/v1.0/recipes/remember-window-size">
+    Persist width/height/position; restore on next launch.
+  </DocCard>
+  <DocCard title="Minimize to tray" href="/docs/v1.0/recipes/minimize-to-tray">
+    Hide window on close, restore on tray click.
+  </DocCard>
+  <DocCard title="Launch on boot" href="/docs/v1.0/recipes/launch-on-boot">
+    Register autostart with `--minimized` arg.
+  </DocCard>
+  <DocCard title="Handle deep link" href="/docs/v1.0/recipes/handle-deep-link">
+    React to `myapp://…` URLs on cold start and duplicate launch.
+  </DocCard>
+  <DocCard title="Detect online/offline" href="/docs/v1.0/recipes/detect-online">
+    Periodic connectivity probe — no backend polling.
+  </DocCard>
+  <DocCard title="Copy to clipboard" href="/docs/v1.0/recipes/copy-to-clipboard">
+    Text, image (RGBA), HTML.
+  </DocCard>
+  <DocCard title="Download with progress" href="/docs/v1.0/recipes/progress-download">
+    Stream to disk, render a progress bar.
+  </DocCard>
+  <DocCard title="Run a shell command" href="/docs/v1.0/recipes/run-shell-command">
+    Safe exec, shell exec, cancel on timeout.
+  </DocCard>
+  <DocCard title="Embed a sidecar" href="/docs/v1.0/recipes/embed-sidecar">
+    Bundle `ffmpeg`; resolve its path at runtime.
+  </DocCard>
+  <DocCard title="Sync with OS dark mode" href="/docs/v1.0/recipes/dark-mode-sync">
+    Read `os.isDarkMode()`; update on change.
+  </DocCard>
+  <DocCard title="Single instance + argv" href="/docs/v1.0/recipes/single-instance-argv">
+    Forward launch args to the primary instance.
+  </DocCard>
+  <DocCard title="Confirm before quit" href="/docs/v1.0/recipes/confirm-before-quit">
+    Show "unsaved changes" dialog on close.
+  </DocCard>
+</CardGrid>

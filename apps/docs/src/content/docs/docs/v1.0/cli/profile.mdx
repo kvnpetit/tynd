@@ -1,0 +1,43 @@
+---
+title: tynd profile
+description: "Profile the native host CPU, the Bun heap, or the IPC traffic of a development session."
+---
+
+# `tynd profile`
+
+```bash
+tynd profile --memory
+tynd profile --memory -o profiles/startup.heapsnapshot
+tynd profile --ipc
+tynd profile --cpu -o host.svg
+```
+
+Pick exactly one mode.
+
+| Mode | What it does | Output |
+|---|---|---|
+| `--cpu` | Runs `cargo flamegraph` on the native host | `flamegraph.svg` |
+| `--memory` | Runs `tynd dev` with `BUN_OPTIONS=--heap-prof ...` | `tynd-dev.heapsnapshot` |
+| `--ipc` | Runs `tynd dev` with `RUST_LOG=tynd::ipc=trace,tynd::debug=debug` | Logs only |
+
+Relative output paths are resolved against the project root. `--memory` and `--ipc` end when you close the app.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Start of the project-root search |
+| `--cpu` / `--memory` / `--ipc` | one required | Profile mode |
+| `-o, --out <path>` | see the table above | Output file for `--cpu` and `--memory` |
+
+## What can go wrong
+
+- `--cpu` needs the generated host workspace (`.tynd/build/Cargo.toml`) or a Tynd source checkout. Before the first `tynd dev` or `tynd build` it fails; run one first, or use `--memory` or `--ipc`. It also needs `cargo flamegraph` installed.
+- `--out is only supported with --cpu or --memory`.
+- `--memory` fails if Bun exits without writing the snapshot, and refuses an output path that contains `"`.
+- The profiled session runs with a sanitized environment.
+
+## Related
+
+- [`tynd dev`](/docs/v1.0/cli/dev)
+- [Debugging guide](/docs/v1.0/guides/debugging)

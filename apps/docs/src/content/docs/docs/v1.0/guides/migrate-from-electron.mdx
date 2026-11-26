@@ -1,0 +1,232 @@
+---
+title: Migrate from Electron
+description: "Move an Electron app to Tynd — replace `ipcMain.handle` with backend `export`s, use the system WebView, and keep your TypeScript."
+---
+
+import Steps from '@/components/Steps.astro';
+
+# Migrating from Electron
+
+Electron ships Chromium and Node.js with the application. Tynd reuses the system WebView and runs the backend on Bun, while simplifying the main/renderer split. Compare signed release artifacts for your actual features and targets.
+
+## The big differences
+
+| Electron | Tynd |
+|---|---|
+| Bundled Chromium | System WebView (WebView2 / WKWebView / WebKitGTK) |
+| Full Node.js in main process | Bun with Node-compatible APIs |
+| `ipcMain.handle("cmd", fn)` + `ipcRenderer.invoke("cmd", …)` | `export async function cmd(…)` + `api.cmd(...)` (typed) |
+| `webContents.send("evt", …)` | `events.emit("evt", …)` |
+| `contextBridge.exposeInMainWorld` + preload | **Not needed.** Export = exposure. |
+| `BrowserWindow` | `app.start({ window })` / `multiwindow.create({ label })` |
+| `BrowserWindow.loadFile` / `loadURL` | `tynd://localhost/` served from `dist/` |
+| `session` API (cookies, cache, proxy) | **Not exposed.** WebView uses OS defaults. |
+| `desktopCapturer`, `printToPDF` | No direct Chromium equivalent. Use `screenshot` for PNG captures, or a sidecar for PDF workflows. |
+
+## What you inherit
+
+- **Different runtime packaging** — Tynd reuses the system WebView instead of bundling Chromium. Measure signed release artifacts for the app and targets you ship.
+- **System-WebView reuse** — runtime memory still depends on the application, loaded pages, extensions, and operating system, so profile the migrated app directly.
+- **Same TypeScript** — your frontend ports as-is; only the main-process glue changes.
+- **Better typing** — `createBackend<typeof backend>()` beats manual typing of `ipcRenderer.invoke` calls.
+
+## What you lose
+
+- **Rendering consistency.** WebView2 version varies by Windows install, WebKitGTK varies by distro, WKWebView tracks macOS. Your CSS/JS feature detection becomes more important.
+- **Node compatibility differences.** Bun supports most `node:*` APIs, but verify dependencies that rely on obscure Node internals or native addons. Tynd OS APIs cover common desktop capabilities.
+- **Chromium-only features.** `desktopCapturer` MediaStreams, `printToPDF`, `findInPage`, built-in spellchecker, Chrome extensions, Touch Bar (macOS), StoreKit IAP. Some workflows have Tynd alternatives (`screenshot`, sidecars), but not direct Electron API parity.
+- **Bundled runtime.** Users' OS WebView version matters. Windows 10 VMs without WebView2 fail at launch — ship an Evergreen Bootstrapper on Windows or document the requirement.
+
+## Step-by-step
+
+<Steps>
+
+### Verify Bun compatibility
+
+Run the existing main-process dependencies under Bun. Replace unsupported Electron APIs with Tynd OS APIs or plugins.
+
+### Init Tynd
+
+In your existing project:
+
+```bash
+bunx @tynd/cli init
+```
+
+This detects your frontend build tool, writes `tynd.config.ts`, scaffolds `backend/main.ts`.
+
+### Port the main process
+
+Electron main processes typically look like this:
+
+```ts
+// OLD — main.ts (Electron)
+import { app, BrowserWindow, ipcMain } from "electron";
+import { readFile } from "node:fs/promises";
+
+ipcMain.handle("read-config", async () => {
+  const body = await readFile("./config.json", "utf8");
+  return JSON.parse(body);
+});
+
+app.whenReady().then(() => {
+  const win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      contextIsolation: true,
+      preload: "preload.js",
+    },
+  });
+  win.loadFile("dist/index.html");
+});
+```
+
+Tynd equivalent:
+
+```ts title="backend/main.ts"
+import { readFile } from "node:fs/promises";
+import { app } from "@tynd/core";
+
+export async function readConfig() {
+  return JSON.parse(await readFile("./config.json", "utf8"));
+}
+
+app.start({
+  window: { width: 1200, height: 800 },
+});
+```
+
+Gone:
+
+- `BrowserWindow` — `app.start` creates the window.
+- `contextIsolation` / `preload` — Tynd injects IPC shims only. No Node globals leak into the renderer.
+- `ipcMain.handle` — every `export` is an RPC method.
+
+### Port the renderer
+
+```ts
+// OLD — renderer.ts (Electron + contextBridge)
+const config = await window.api.readConfig();
+
+// preload.ts had:
+// contextBridge.exposeInMainWorld("api", {
+//   readConfig: () => ipcRenderer.invoke("read-config"),
+// });
+```
+
+```ts
+// NEW — src/main.ts (Tynd)
+import { createBackend } from "@tynd/core/client";
+import type * as backend from "../backend/main";
+
+const api = createBackend<typeof backend>();
+const config = await api.readConfig();
+```
+
+Zero preload, zero glue, types flow from `typeof backend`.
+
+### Port events
+
+```ts
+// OLD — Electron
+// main.ts
+win.webContents.send("progress", 0.42);
+
+// renderer.ts
+window.api.onProgress((pct) => render(pct));
+```
+
+```ts
+// NEW — Tynd
+// backend/main.ts
+import { createEmitter } from "@tynd/core";
+export const events = createEmitter<{ progress: number }>();
+events.emit("progress", 0.42);
+
+// frontend
+api.on("progress", (pct) => render(pct));
+```
+
+### Port Node APIs
+
+Most Node APIs work through Bun in the backend. From the frontend, use the Tynd OS APIs (core clients and official plugins), which the host enforces permissions on:
+
+| Node / Electron | Tynd OS API |
+|---|---|
+| `node:fs` → `readFile`, `writeFile`, `mkdir`, `rm`, `stat` | `fs.readText`, `fs.writeText`, `fs.mkdir`, `fs.remove`, `fs.stat` |
+| `node:fs` → `readFile(bytes)` | `fs.readBinary` (uses zero-copy channel) |
+| `node:path` | `path.join`, `path.resolve`, `path.normalize`, … |
+| `node:child_process` → `spawn`, `exec` | `process.exec`, `process.execShell` |
+| `node:os` → `homedir`, `tmpdir`, `platform`, `arch` | `os.homeDir`, `os.tmpDir`, `os.info()` |
+| `node:http` / `fetch` | `http.get` / `http.post` / `http.request`, or built-in `fetch` |
+| `node:crypto` → `createHash` | `compute.hash` (faster, off-thread) |
+| `node:crypto` → `randomBytes` | `compute.randomBytes` |
+| Electron `session` → cookies | **No replacement.** Use `keyring` for tokens, `store` for other state. |
+| Electron `safeStorage` | [`keyring`](/docs/v1.0/api/os/keyring) — OS credential manager |
+| Electron `shell.openExternal` | [`shell.openExternal`](/docs/v1.0/api/os/shell) |
+| Electron `clipboard` | [`clipboard`](/docs/v1.0/api/os/clipboard) |
+| Electron `dialog` | [`dialog`](/docs/v1.0/api/os/dialog) |
+| Electron `Notification` | [`notification.send`](/docs/v1.0/api/os/notification) |
+| Electron `Tray` | declare `tray` in `app.start`, handle in [`tray`](/docs/v1.0/api/os/tray) |
+| Electron `Menu` | declare `menu` in `app.start`, handle in [`menu`](/docs/v1.0/api/os/menu) |
+| Electron `globalShortcut` | [`shortcuts`](/docs/v1.0/api/os/shortcuts) |
+| Electron `autoUpdater` | [`updater`](/docs/v1.0/api/os/updater) (Tynd signed manifest) |
+
+### What has no Tynd replacement
+
+- **`desktopCapturer`** (screen/window MediaStreams). No direct Electron API equivalent. Use `screenshot` for PNG captures, or a native CLI via `sidecar` for specialized capture.
+- **`printToPDF`** (webview to PDF). Use a pure-JS lib like `jspdf`, or render server-side via `sidecar`.
+- **`findInPage`**. Implement in JS with a content-search overlay on your app HTML.
+- **Built-in spellcheck**. Use `nspell` + Hunspell dictionaries, or the browser's native spellcheck attribute.
+- **Chrome extensions**. Not supported by the WebView stack.
+- **Touch Bar (macOS)**. Not exposed.
+- **StoreKit IAP**. Not exposed.
+
+### Port the build
+
+Replace your Electron build tooling (electron-builder, electron-forge) with `tynd build --bundle all`:
+
+```bash
+tynd build --bundle all        # .app, .dmg, .deb, .rpm, .AppImage, NSIS, MSI for host OS
+```
+
+See [Bundling](/docs/v1.0/guides/bundling).
+
+### Port CI
+
+Remove Electron-specific steps (Electron download cache, ASAR packaging). Add Rust to the runner (Tynd compiles the native host for each app) and run `tynd build --bundle all` once per target OS. See [CI shape](/docs/v1.0/guides/testing#ci-shape) for caching the shared host build cache.
+
+### Port code signing
+
+If you were signing Electron builds, reuse the same Windows certificate and macOS Developer ID certificate material. Declare `bundle.sign` in `tynd.config.ts`; Tynd uses `signtool` on Windows and a P12 + App Store Connect API-key flow for built-in macOS signing/notarization. See [Code Signing](/docs/v1.0/guides/code-signing).
+
+### Port the updater
+
+Tynd's updater uses a signed Tynd manifest. Its platform map follows the common Tauri shape, with Tynd artifact-format and patch extensions, so existing Electron or Tauri manifests must be migrated. If you used a custom flow on top of `autoUpdater`, the primitives remain similar:
+
+- Fetch manifest JSON.
+- Compare versions.
+- Download + verify signature.
+- Swap + relaunch.
+
+See [Auto-Updates](/docs/v1.0/guides/auto-updates).
+
+</Steps>
+
+## Frontend compatibility
+
+- **Works as-is** — any framework that builds to a pure SPA. Vite + React / Vue / Svelte / Solid / Preact / Lit / Angular.
+- **Won't work** — SSR frameworks (Next.js, Nuxt, SvelteKit, Remix, …). Use the SPA variant.
+- **WebView differences** — no `window.electronAPI` unless you re-export it yourself on top of `createBackend`.
+
+## Security model difference
+
+Electron's security relies on `contextIsolation` + preload scripts exposing a minimal API. Tynd's security is **structural**: the frontend can only call what the backend exports. There's no separate preload boundary to maintain; if it's not `export`ed from `backend/main.ts`, the frontend can't reach it.
+
+See [Security concept](/docs/v1.0/concepts/security).
+
+## Related
+
+- [vs Electron comparison](/docs/v1.0/compare/vs-electron).
+- [Code Signing](/docs/v1.0/guides/code-signing).

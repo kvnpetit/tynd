@@ -1,0 +1,235 @@
+---
+title: multiwindow
+description: "Secondary windows and child webviews: create, window handles, messages between windows, per-window menus, bounds, navigation and lifecycle events."
+---
+
+# `multiwindow`
+
+`@tynd/plugin-multiwindow` enables the host `multiwindow` API and exposes its typed client. The current window and webview stay on [`tyndWindow`](/docs/v1.0/api/os/window) and [`tyndWebview`](/docs/v1.0/api/os/webview) from `@tynd/core/client`; this plugin opens and drives the others.
+
+## Install
+
+```bash
+tynd add multiwindow
+```
+
+```ts
+import { multiwindow } from "@tynd/plugin-multiwindow/client";
+```
+
+Declaring the plugin compiles the matching `api-multiwindow` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-multiwindow` and list it in `plugins` in `tynd.config.ts`. Without it, every `multiwindow.*` call rejects with an error naming `@tynd/plugin-multiwindow`.
+
+## Secondary windows
+
+```ts
+const settings = await multiwindow.create({
+  label:  "settings",
+  url:    "/settings",
+  title:  "Settings",
+  width:  600,
+  height: 480,
+  theme:  "dark",
+  dataPartition: "account-a",
+});
+await settings.setAlwaysOnTop(true);
+
+const labels = await multiwindow.all();   // ["main", "settings", …]
+await multiwindow.close("settings");       // "main" cannot be closed this way
+await multiwindow.closeSelf();             // no-op on the primary window (use app.exit())
+```
+
+`CreateWindowOptions` is the main-window option set (`WindowOptions`, the `window` block of `tynd.config.ts` without the GPU settings) plus the options that only make sense for a secondary window:
+
+```ts
+interface CreateWindowOptions extends WindowOptions {
+  label:            string;   // unique; letter first, up to 64 letters/digits/_/-; not "main"
+  url?:             string;   // defaults to the primary window's entry
+  dataPartition?:   string;   // app-scoped persistent partition; a name, never a path
+  modalTo?:         string;   // parent label: native owner on Windows/macOS, GTK transient-for on Linux
+  hideOnFocusLost?: boolean;  // popover pattern
+  hideOnEscape?:    boolean;
+}
+// WindowOptions includes title, width, height, minWidth…maxHeight, x, y, center,
+// resizable, decorations, transparent, alwaysOnTop, visible, maximized, fullscreen,
+// kiosk, theme, skipTaskbar, backgroundColor, titleBarStyle, userAgent, incognito,
+// newWindow, downloads, proxy…
+```
+
+The window starts hidden, gets its geometry, theme and background color, then shows once its WebView is ready, unless `visible: false`. Each window gets its own WebView and IPC channel; window events are routed by label.
+
+`incognito` and `dataPartition` are mutually exclusive. Partition names are case-insensitive, contain at most 64 ASCII letters, digits, `.`, `-`, or `_`, and must start with a letter or digit. A partition can be attached to one open window or webview at a time.
+
+`newWindow`, `downloads` and `proxy` behave as described on the [`tyndWebview`](/docs/v1.0/api/os/webview) page.
+
+### Window handles
+
+`create`, `getWindow`, `getAllWindows` and `getCurrentWindow` return a `TyndWindow`: the same object as [`tyndWindow`](/docs/v1.0/api/os/window), bound to one label.
+
+```ts
+const settings = await multiwindow.getWindow("settings"); // null when not open
+await settings?.setSize(800, 600);
+settings?.onClosed(() => console.log("settings closed"));
+
+for (const win of await multiwindow.getAllWindows()) {
+  await win.setSkipTaskbar(true);
+}
+const self = multiwindow.getCurrentWindow(); // === tyndWindow
+```
+
+Every method targets the handle's window. Only app-local pages can drive other windows; a window showing remote content can only drive itself. `findInPage` and `stopFindInPage` work on the current window only.
+
+From the Bun backend, `getWindow(label)` from `@tynd/core` returns the same handle (the primary window by default). Backend handles run commands but cannot subscribe to window events: those are delivered to renderers.
+
+```ts
+import { getWindow } from "@tynd/core";
+
+await getWindow("settings").setTitle("Settings (synced)");
+```
+
+### Messages between windows
+
+`events<T>()` gives a typed channel. `emit` reaches every app-local window and webview, `emitTo` reaches one label, and `listen` filters by event name. Listeners receive the sender's label.
+
+```ts
+type AppEvents = {
+  "doc:saved": { id: string };
+  "theme:changed": "light" | "dark";
+};
+const bus = multiwindow.events<AppEvents>();
+
+await bus.emitTo("settings", "doc:saved", { id: "42" });
+await bus.emit("theme:changed", "dark");
+
+const off = bus.listen("doc:saved", ({ id }, { from }) => {
+  console.log(`saved ${id} in ${from}`);
+});
+```
+
+Event names are 1-128 ASCII letters, digits, `_`, `-`, `:`, `.` or `/`. Remote-content windows can neither send nor receive these messages.
+
+### Per-window menu bar
+
+```ts
+await settings.setMenu([
+  { type: "submenu", label: "File", items: [{ type: "item", id: "settings:reset", label: "Reset" }] },
+]);
+await settings.setMenu(null); // remove it
+```
+
+Top-level entries must be submenus. Clicks emit `menu:action` with the item `id`, like the application menu. On the primary window `setMenu` replaces the application bar ([`menu`](/docs/v1.0/api/plugins/menu)). Runtime mutation by id applies to the application bar only.
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Menu bar on a secondary window | Yes | Not supported (one app-wide bar; use `menu.setMenu`) | Yes (GTK) |
+| `skipTaskbar` option | Yes | Ignored (no taskbar entry per window) | Yes |
+| `startDrag` (drag files out) | Yes | Yes | Yes (GTK) |
+
+## Child webviews
+
+`multiwindow.webview` embeds several native WebViews in one native window. Each child has an independent label, IPC response/stream route, navigation lifecycle, browsing-data store, and `capabilities.webviews` identity. Native window operations still target its parent window.
+
+### Create
+
+Coordinates and dimensions are logical pixels relative to the parent content area. Labels are global: they cannot collide with a window or another WebView. They start with a letter and contain at most 64 ASCII letters, digits, `_`, or `-`.
+
+```ts
+await multiwindow.webview.create({
+  label: "preview",
+  parent: "main",       // optional; defaults to the caller's window
+  url: "/preview",
+  x: 320,
+  y: 0,
+  width: 960,
+  height: 720,
+  visible: true,
+  focused: false,
+  dataPartition: "preview-account-a",
+});
+```
+
+`CreateWebviewOptions` also accepts `autoResize`, `userAgent`, `incognito`, `newWindow`, `downloads` and `proxy`. For a child webview, unset `downloads` means `"allow"` for app-local content and `"deny"` for remote content.
+
+Use `autoResize: true` to fill the whole parent content area and follow every parent resize. Calling `setBounds` disables auto-resize until it is enabled again.
+
+### Enumerate and close
+
+```ts
+const webviews = await multiwindow.webview.all();
+// [
+//   { label: "main", parent: null, kind: "window" },
+//   {
+//     label: "preview",
+//     parent: "main",
+//     kind: "child",
+//     bounds: { x: 320, y: 0, width: 960, height: 720 },
+//     visible: true,
+//     autoResize: false,
+//   },
+// ]
+
+await multiwindow.webview.close("preview");
+await multiwindow.webview.closeSelf(); // valid from a child WebView
+```
+
+Closing a parent window closes all of its children and cancels their active backend streams. `webview:closed` is emitted once per child.
+
+### Geometry, visibility, and focus
+
+```ts
+await multiwindow.webview.setBounds("preview", { x: 0, y: 64, width: 1280, height: 656 });
+await multiwindow.webview.setAutoResize("preview", true);
+await multiwindow.webview.setVisible("preview", false);
+await multiwindow.webview.focus("preview");
+await multiwindow.webview.focusParent("preview");
+```
+
+### Navigation and runtime operations
+
+```ts
+await multiwindow.webview.navigate("preview", "/documents/42");
+const url = await multiwindow.webview.getUrl("preview");
+await multiwindow.webview.reload("preview");
+await multiwindow.webview.setZoom("preview", 1.25);
+await multiwindow.webview.print("preview");
+await multiwindow.webview.clearBrowsingData("preview");
+
+await multiwindow.webview.openDevTools("preview");  // debug builds only
+await multiwindow.webview.closeDevTools("preview");
+```
+
+Navigation uses the same URL-policy checks as top-level windows. Remote HTTP(S) destinations must be allowed by the trusted startup security policy.
+
+### Lifecycle
+
+```ts
+const offCreated = multiwindow.webview.onCreated(({ label, parent }) => {
+  console.log(label, "created inside", parent);
+});
+const offClosed = multiwindow.webview.onClosed(({ label, parent }) => {
+  console.log(label, "closed inside", parent);
+});
+```
+
+### Platform support
+
+- Windows: native child WebView2 controller.
+- macOS: native child WKWebView.
+- Linux: native child WebKitGTK on X11, XWayland, or pure Wayland, through Wry's GTK composition path.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-multiwindow` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `multiwindow` |
+| Aliases for `tynd add` | `multi-window`, `windows`, `webviews` |
+| Catalog permission labels | `host:multiwindow` |
+| Estimated size | 60 KB |
+| Client exports | `CreateWebviewOptions`, `CreateWindowOptions`, `DownloadPolicy`, `NewWindowPolicy`, `TyndWindow`, `WebviewBounds`, `WebviewInfo`, `WebviewLifecycleEvent`, `WindowEvents`, `WindowMessageMeta`, `WindowOptions`, `multiwindow` |
+
+## Related
+
+- [Multi-Window and Multi-WebView guide](/docs/v1.0/guides/multi-window)
+- [`tyndWindow`](/docs/v1.0/api/os/window) and [`tyndWebview`](/docs/v1.0/api/os/webview)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)

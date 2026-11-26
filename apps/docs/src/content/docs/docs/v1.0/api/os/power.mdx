@@ -1,0 +1,111 @@
+---
+title: power
+description: "Idle time, battery status, sleep prevention, and suspend / resume / lock / unlock events."
+---
+
+# `power`
+
+Install the required plugin:
+
+```bash
+tynd add power
+```
+
+```ts
+import { power } from "@tynd/plugin-power/client";
+```
+
+Idle time, battery and AC status, keep-awake requests, and OS power events. Useful to pause sync, mute notifications, or hold the machine awake during a long task.
+
+## `getIdleTime(): Promise<number>`
+
+Seconds since the last keyboard / mouse input, as reported by the OS.
+
+```ts
+const idle = await power.getIdleTime();
+if (idle > 300) pauseSync();
+```
+
+Backed by the [`user-idle`](https://github.com/olback/user-idle-rs) crate — `GetLastInputInfo` on Windows, `CGEventSource` on macOS, `XScreenSaver` on Linux.
+
+## `getPowerStatus(): Promise<PowerStatus>`
+
+Battery and AC summary.
+
+```ts
+interface PowerStatus {
+  onBattery:        boolean | null;  // true = battery, false = AC
+  batteryPercent:   number | null;   // 0-100
+  charging:         boolean | null;
+  secondsRemaining: number | null;   // null while charging or unknown
+}
+```
+
+Every field is nullable: treat `null` as "unavailable on this platform / hardware", not zero. Sources: `GetSystemPowerStatus` on Windows, `/sys/class/power_supply/*` on Linux, IOKit on macOS (a Mac without a battery reports `onBattery: false`; a laptop holding its charge limit on AC reads as on AC).
+
+## `getThermalState(): Promise<ThermalState | null>`
+
+`"nominal" | "fair" | "serious" | "critical"` from `NSProcessInfo.thermalState` on macOS; `null` on Windows and Linux, which expose no public thermal API. Back off heavy work from `"serious"` up.
+
+## `getBattery(): Promise<BatteryInfo | null>`
+
+Detailed snapshot of the first battery the OS reports, or `null` on a machine without one.
+
+```ts
+interface BatteryInfo {
+  percent:          number;          // 0-100
+  charging:         boolean;
+  secondsRemaining: number | null;   // to full while charging, to empty while discharging
+  status: "charging" | "discharging" | "full" | "unknown";
+}
+
+const battery = await power.getBattery();
+if (battery && !battery.charging && battery.percent < 15) lowPowerMode();
+```
+
+Rejects when the OS battery interface cannot be read.
+
+## `preventSleep(opts?) / allowSleep(id)`
+
+```ts
+const id = await power.preventSleep({ display: true }); // display defaults to false
+try {
+  await longExport();
+} finally {
+  await power.allowSleep(id);
+}
+```
+
+`preventSleep` keeps the system awake (and the display on with `display: true`) and returns a numeric request id. Each call is an independent request: sleep is allowed again only when every request has been released. `allowSleep` ignores unknown ids. All requests are released when the app exits. A request made from a webview belongs to it: another webview's `allowSleep(id)` is ignored like an unknown id, and the request is released when that webview reloads, navigates or closes. A `preventSleep` that finishes after that is released at once and fails with "power.preventSleep: the document that requested it is gone".
+
+| OS | Mechanism |
+| --- | --- |
+| Windows | Power request (`SystemRequired`, plus `DisplayRequired` with `display`) |
+| macOS | IOPM assertion (`PreventUserIdleSystemSleep` / `PreventUserIdleDisplaySleep`) |
+| Linux | logind `Inhibit("sleep:idle")`; the display option also calls `org.freedesktop.ScreenSaver.Inhibit` on a best-effort basis |
+
+## Power events
+
+```ts
+const sub = await power.onSuspend(() => saveNow());
+await power.onResume(() => reconnect());
+await power.onLock(() => pauseSensitiveViews());
+await power.onUnlock(() => resume());
+await power.onPowerSourceChange(({ onBattery }) => setLowPowerMode(onBattery));
+await power.onShutdown(() => flushDraft());
+await power.onThermalStateChange(({ state }) => throttle(state));
+sub.dispose(); // each subscription resolves to { dispose() }
+```
+
+| Event | Fires when |
+| --- | --- |
+| `onSuspend` | The system goes to sleep. You typically have only milliseconds to save work. |
+| `onResume` | The system wakes. |
+| `onLock` | The user locks the screen (macOS also maps "session resign-active" here). |
+| `onUnlock` | The user unlocks the screen. |
+| `onPowerSourceChange` | The machine switches between AC and battery (`{ onBattery }`). Immediate on Windows; macOS and Linux poll every 5 s. |
+| `onShutdown` | The session ends: log off, restart or shut down. Best effort, the OS leaves very little time. |
+| `onThermalStateChange` | The macOS thermal state changes (`{ state }`). Never fires on Windows or Linux. |
+
+The first subscription lazily installs the OS watcher (Windows: a hidden window receiving `WM_POWERBROADCAST`, `WM_ENDSESSION`, session and power-source notifications; macOS: `NSWorkspace` and `NSProcessInfo` observers; Linux: logind over D-Bus), so apps that never subscribe pay nothing. Each `on*` call resolves once the watcher is installed. If it cannot start (for example no logind on the D-Bus system bus), the call rejects with the host error and the handler is not registered; a later call retries.
+

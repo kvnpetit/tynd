@@ -1,0 +1,171 @@
+---
+title: tray
+description: "System tray icons: several icons, icon images, menus with runtime mutation, click events with icon bounds, and tray-attached windows."
+---
+
+# `tray`
+
+Install the required plugin:
+
+```bash
+tynd add tray
+```
+
+```ts
+import { tray } from "@tynd/plugin-tray/client";
+```
+
+An app can show several tray icons, each identified by an `id`. The icon declared in `app.start({ tray })` is the tray `"main"`, and the methods of `tray` itself drive it. `tray.create(id, options)` adds more icons and returns a handle with the same methods.
+
+## Declare the main tray
+
+```ts title="backend/main.ts"
+app.start({
+  tray: {
+    icon:    import.meta.dir + "/assets/tray.png",
+    tooltip: "My App",
+    menu: [
+      { label: "Show", id: "show" },
+      { type: "separator" },
+      { label: "Quit", id: "quit", role: "quit" },
+    ],
+  },
+  // ...
+});
+```
+
+Menu items take the [menu item shapes](/docs/v1.0/api/os/menu#item-shapes); `type` defaults to `"item"`, or `"submenu"` when the entry has `items`. Item ids must be unique across every menu of the app (other trays, the application bar, window bars, the Dock and context menus): a click is reported by id only, so an item id shared with another menu cannot be attributed to its tray.
+
+## Several icons
+
+```ts
+const status = await tray.create("status", {
+  icon: { png: pngBytes },          // or a path, or { rgba, width, height }
+  tooltip: "Connected",
+  menu: [{ id: "reconnect", label: "Reconnect" }],
+});
+await status.setTitle("3");          // macOS menu bar / Linux panel text
+
+await tray.get("status");            // TrayHandle | null
+await tray.list();                   // ["main", "status"]
+await tray.remove("status");
+```
+
+| `create` option | Type | Default | Notes |
+|---|---|---|---|
+| `icon` | path, `{ png }`, `{ rgba, width, height }` | | Required unless `nativeIcon` is set. Bytes or base64; inline images are at most 512x512 px. Paths go through the fs allow-list. |
+| `nativeIcon` | `MenuNativeIcon` | | Platform icon (`"info"`, `"add"`…). Windows rejects names with no stock shell icon. |
+| `template` | `boolean` | `false` | macOS: drawn from the alpha channel, follows the light / dark menu bar. |
+| `tooltip` | `string` | | |
+| `title` | `string` | | Text next to the icon. macOS and Linux; ignored on Windows. |
+| `menu` | `TrayRuntimeMenuItem[]` | `[]` | |
+| `showMenuOnLeftClick` | `boolean` | `true` | Windows and macOS. Linux panels always open the menu. |
+| `visible` | `boolean` | `true` | |
+
+Ids are 1-64 letters, digits, `_` or `-`; at most 16 trays exist at once. `create` rejects an id already in use.
+
+## Update the icon
+
+```ts
+await tray.setIcon("/abs/icon.png");
+await tray.setIcon({ rgba: pixels, width: 32, height: 32 }, { template: true });
+await tray.setIcon({ native: "info" });
+await tray.setTooltip("3 unread");
+await tray.setVisible(false);
+await tray.setShowMenuOnLeftClick(false);
+await tray.setIconAsTemplate(true);   // macOS: the current icon becomes a template
+```
+
+## Menu
+
+`setMenu(items)` replaces the whole menu; a bad item leaves the old one in place. Single items change by `id` without a rebuild, like on [`menu`](/docs/v1.0/api/os/menu):
+
+```ts
+await tray.update("sync", { label: "Syncing...", enabled: false });
+await tray.setItemChecked("dark", true);       // a radio unchecks the rest of its group
+await tray.setItemVisible("debug", false);
+await tray.setItemAccelerator("quit", "CmdOrCtrl+Q");
+await tray.setItemIcon("open", { native: "folder" });
+await tray.append({ id: "help", label: "Help" }, { parent: "more", index: 0 });
+await tray.removeItem("help");
+await tray.popUpContextMenu();                 // Windows / macOS
+```
+
+Adjacent radio items form a group (a separator or another item ends it): clicking one unchecks the others.
+
+```ts
+tray.onMenu("quit", () => app.exit(0));
+tray.onMenuClick(({ id }) => console.log("clicked", id));
+```
+
+`menu.onClick` also receives tray clicks; their payload carries `tray: "<id>"`.
+
+## Events
+
+```ts
+tray.onClick(({ button, position, rect }) => { /* … */ });
+tray.onRightClick((event) => {});
+tray.onMiddleClick((event) => {});
+tray.onDoubleClick((event) => {});
+tray.onEnter(({ position }) => {});
+tray.onMove(({ position }) => {});
+tray.onLeave(() => {});
+
+const rect = await tray.getRect();   // { x, y, width, height } | null
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `tray` | `string` | Id of the tray that fired. Handles only receive their own events. |
+| `button` | `"left" \| "right" \| "middle"` | Click events only. |
+| `position` | `{ x, y }` | Cursor, physical pixels. |
+| `rect` | `{ x, y, width, height } \| null` | Icon bounds, physical pixels. `null` on Linux. |
+
+A click fires once, on release. Each `on*` returns an `unsubscribe()` function.
+
+## Tray-attached window
+
+`attachWindow` turns an open window into the tray's popover: a left click on the icon shows it next to the icon, or hides it when it is open, and it hides when it loses focus. Windows and macOS only: the Linux tray backend (libappindicator) reports no icon clicks, so `attachWindow` rejects with `tray.attachWindow: not supported on linux` there; use `positionWindow` from a menu item instead.
+
+```ts
+import { multiwindow } from "@tynd/plugin-multiwindow/client";
+
+await multiwindow.create({
+  label: "popover", url: "/popover", width: 320, height: 420,
+  decorations: false, alwaysOnTop: true, resizable: false,
+});
+await tray.attachWindow({ label: "popover" });   // or attachWindow() for the calling window
+```
+
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `label` | `string` | calling window | An open window (`"main"` included). |
+| `hideOnBlur` | `boolean` | `true` | |
+| `gap` | `number` | `8` | Pixels between the window and the taskbar / menu bar, 0-200. |
+
+The window opens below the icon on a top bar (macOS), above it on a bottom taskbar (Windows), beside it on a vertical taskbar, centred on the icon and kept inside the monitor's work area. Attaching hides the window and stops the left click from opening the menu; `detachWindow()` restores it. `positionWindow(label?)` moves a window next to the icon once.
+
+## Platform support
+
+| Feature | Windows | macOS | Linux |
+|---|---|---|---|
+| Several icons, icon images, tooltip, menu | Yes | Yes | Yes |
+| `title` | No (ignored) | Yes | Yes |
+| `template` / `setIconAsTemplate` | No (ignored) | Yes | No (ignored) |
+| `showMenuOnLeftClick` | Yes | Yes | No (always opens) |
+| `popUpContextMenu` | Yes | Yes | No (rejects) |
+| `rect` / `getRect` | Yes | Yes | No (`null`) |
+| `onDoubleClick` | Yes | No | No |
+| `onEnter` / `onMove` / `onLeave` | Yes | Yes | No |
+| `attachWindow` | Yes, inside the work area | Yes, below the menu bar | No (rejects) |
+| `positionWindow` | Next to the icon | Next to the icon | Next to the pointer, inside the monitor |
+
+## Notes
+
+- Tray events are broadcast: a handler registered in any window (or in the backend) fires.
+- Requires `@tynd/plugin-tray` (`tynd add tray`), which compiles the tray API into the app host. Without it, `tray.*` calls reject and a configured `tray` stops app startup, both with an error naming `@tynd/plugin-tray`. Calls are subject to the `tray:<method>` [ACL rules](/docs/v1.0/concepts/security).
+
+## Related
+
+- [menu](/docs/v1.0/api/os/menu): item shapes, menu bar and context menus.
+- [Backend API](/docs/v1.0/api/backend): tray config shape.

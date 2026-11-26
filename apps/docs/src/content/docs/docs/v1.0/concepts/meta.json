@@ -1,0 +1,13 @@
+{
+  "title": "Core Concepts",
+  "pages": [
+    "architecture",
+    "runtimes",
+    "ipc",
+    "build-pipeline",
+    "tyndpkg",
+    "security",
+    "observability",
+    "gpu-acceleration"
+  ]
+}

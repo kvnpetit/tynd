@@ -1,0 +1,40 @@
+---
+title: tray
+description: "System tray icons, menus and tray-attached windows (Windows and macOS). Facade over the `tray` host API."
+---
+
+# `tray`
+
+`@tynd/plugin-tray` enables the host `tray` API and exposes its typed client. The API itself is documented on the [`tray`](/docs/v1.0/api/os/tray) page. Tray-attached windows (`attachWindow`) are Windows and macOS only: on Linux the call rejects with `tray.attachWindow: not supported on linux`.
+
+## Install
+
+```bash
+tynd add tray
+```
+
+```ts
+import { tray } from "@tynd/plugin-tray/client";
+```
+
+Declaring the plugin compiles the matching `api-tray` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-tray` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-tray`.
+
+`TrayConfig`, `MenuItem` and `MenuRole` are exported from the package root: `import type { TrayConfig } from "@tynd/plugin-tray"`. A `tray` configured in `app.start` without this plugin stops app startup with an error naming `@tynd/plugin-tray`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-tray` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `tray` |
+| Aliases for `tynd add` | `system-tray`, `menubar` |
+| Catalog permission labels | `host:tray` |
+| Estimated size | 140 KB |
+| Client exports | `tray`, `MAIN_TRAY`, `TrayHandle`, `TrayOptions`, `TrayImage`, `TrayIconSource`, `TrayRuntimeMenuItem`, `TrayRect`, `TrayClickEvent`, `TrayPointerEvent`, `TrayMenuClickEvent`, `TrayMenuItemUpdate`, `TrayWindowPlacement`, `AttachWindowOptions`, `MenuIcon`, `MenuItem`, `MenuNativeIcon`, `MenuRole`, `TrayConfig`, `TrayMenuItem` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

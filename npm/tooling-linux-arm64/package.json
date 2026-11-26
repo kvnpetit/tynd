@@ -1,0 +1,41 @@
+{
+  "name": "@tynd/tooling-linux-arm64",
+  "version": "1.0.0",
+  "description": "Native Tynd CLI, MCP, and bundler binaries for Linux ARM64.",
+  "keywords": [
+    "tynd",
+    "cli",
+    "mcp",
+    "bundler",
+    "native",
+    "linux",
+    "arm64"
+  ],
+  "license": "Apache-2.0",
+  "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
+  "homepage": "https://kvnpetit.github.io/tynd/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
+    "directory": "npm/tooling-linux-arm64"
+  },
+  "bugs": {
+    "url": "https://github.com/kvnpetit/tynd/issues"
+  },
+  "private": false,
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin/",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

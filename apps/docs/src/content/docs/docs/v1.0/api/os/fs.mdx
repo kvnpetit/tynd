@@ -1,0 +1,194 @@
+---
+title: fs
+description: "Filesystem — read / write text and binary, walk directories, watch for changes."
+---
+
+# `fs`
+
+Install the required plugin:
+
+```bash
+tynd add fs
+```
+
+```ts
+import { os, path } from "@tynd/core/client";
+import { fs } from "@tynd/plugin-fs/client";
+
+// The app's own data directory: inside the default scope, created on first call.
+const dir = await os.appDataDir();
+```
+
+Cross-OS filesystem operations. Binary I/O uses the [zero-copy binary channel](/docs/v1.0/guides/binary-data). The examples below build their paths from `dir`; a path outside the [scope](#notes) is refused.
+
+## Text I/O
+
+```ts
+await fs.writeText(path.join(dir, "data.json"), JSON.stringify(state), { createDirs: true });
+const text = await fs.readText(path.join(dir, "data.json"));
+```
+
+### `readText(path): Promise<string>`
+
+Reads the file as UTF-8.
+
+### `writeText(path, content, opts?): Promise<void>`
+
+Writes UTF-8 text.
+
+- `createDirs?: boolean` — create parent directories if missing.
+
+## Binary I/O
+
+```ts
+const bytes = await fs.readBinary(path.join(dir, "image.png")); // Uint8Array
+await fs.writeBinary(path.join(dir, "copy.png"), bytes, { createDirs: true });
+```
+
+Uses the `tynd-bin://` channel — no base64, zero-copy. Accepts `Uint8Array | ArrayBuffer`. See the [Binary Data guide](/docs/v1.0/guides/binary-data).
+
+## Metadata
+
+### `exists(path): Promise<boolean>`
+
+```ts
+if (await fs.exists(path.join(dir, "data.json"))) { /* … */ }
+```
+
+### `stat(path): Promise<FileStat>`
+
+```ts
+interface FileStat {
+  size:      number;
+  isFile:    boolean;
+  isDir:     boolean;
+  isSymlink: boolean;
+  mtime:     number | null;   // ms since epoch; null if unsupported
+}
+
+const info = await fs.stat(path.join(dir, "data.json"));
+```
+
+## Directories
+
+### `readDir(path): Promise<DirEntry[]>`
+
+```ts
+interface DirEntry {
+  name:      string;
+  isFile:    boolean;
+  isDir:     boolean;
+  isSymlink: boolean;
+}
+
+const entries = await fs.readDir(dir);
+```
+
+Join with the parent path for an absolute path: `path.join(dir, entry.name)`.
+
+### `mkdir(path, opts?): Promise<void>`
+
+```ts
+await fs.mkdir(path.join(dir, "nested/dir"), { recursive: true });
+```
+
+### `remove(path, opts?): Promise<void>`
+
+Works on files and directories.
+
+```ts
+await fs.remove(path.join(dir, "old.json"));
+await fs.remove(path.join(dir, "old-cache"), { recursive: true });
+```
+
+### `rename(from, to): Promise<void>`
+
+```ts
+await fs.rename(path.join(dir, "a.txt"), path.join(dir, "b.txt"));
+```
+
+### `copy(from, to): Promise<void>`
+
+```ts
+await fs.copy(path.join(dir, "src.json"), path.join(dir, "dst.json"));
+```
+
+### `copyDir(from, to): Promise<void>`
+
+Recursive — files are copied, `symlink`s are left alone (call `fs.symlink` yourself if you need them).
+
+```ts
+await fs.copyDir(path.join(dir, "src-assets"), path.join(dir, "dist/assets"));
+```
+
+### `trash(path): Promise<void>`
+
+Move to the OS recycle bin / Trash — reversible, unlike `remove()`. Backed by the [`trash`](https://crates.io/crates/trash) crate (the freedesktop.org Trash spec on Linux).
+
+```ts
+await fs.trash(path.join(dir, "old.log"));
+```
+
+### Symbolic + hard links
+
+```ts
+const data = path.join(dir, "data.db");
+await fs.symlink(data, path.join(dir, "data-link"));
+const target = await fs.readlink(path.join(dir, "data-link")); // the data.db path
+await fs.hardlink(data, path.join(dir, "data.bak"));
+```
+
+Windows chooses file vs dir symlink based on what the target currently is (falls back to file when the target doesn't exist).
+
+## Stateful file handles
+
+Open a file once, then `seek` / `read` / `write` by chunk — handy for large or partially-read files. Binary travels base64 over JSON; for multi-MB I/O prefer [`fs.readBinary` / `fs.writeBinary`](/docs/v1.0/guides/binary-data) (zero-copy via `tynd-bin://`).
+
+```ts
+const h = await fs.open(path.join(dir, "big.bin"), { read: true, write: true, create: true });
+await h.seek(1024);                         // "start" | "current" | "end"
+const { bytes, read } = await h.read(256);  // read up to 256 B
+const written = await h.write(new Uint8Array([1, 2, 3]));
+await h.close();                            // always release the handle
+```
+
+`seek(offset, from?)` resolves to the new position; `from` is `"start"` (default), `"current"` or `"end"`. Handles are `AsyncDisposable`, so `await using h = await fs.open(...)` closes them at scope exit.
+
+A handle is usable only from the webview that opened it (or the backend) and is closed when that webview reloads, navigates or closes; another webview, or a frame of another origin in the same webview (a remote iframe in a local page), gets the same answer as for a handle that is not open (`fs: handle <id> not open`; `close` returns `false`). If the page navigates or reloads while `open` is still running, the new handle is closed and the call fails with "fs.open: the document that requested it is gone".
+
+## Watcher
+
+```ts
+interface FsChangeEvent {
+  id:    number;
+  kind:  "create" | "modify" | "delete" | "rename" | "error" | "other";
+  path?: string;
+  error?: string;
+}
+
+const watcher = await fs.watch(path.join(dir, "notes"), { recursive: true }, (event) => {
+  console.log(event.kind, event.path);
+});
+
+// later
+await watcher.unwatch(); // false if the watch was already gone
+```
+
+- Uses `ReadDirectoryChangesW` (Windows), `FSEvents` (macOS), `inotify` (Linux).
+- Event coalescing behavior differs by OS — `modify` may fire multiple times for a single logical save. Debounce on your side if needed.
+- `kind: "error"` events include an `error` field; watcher remains active.
+- Change events go only to the webview that called `watch`. Other webviews, including other app-local ones, do not receive them. A watch started from the backend reaches app-local webviews only.
+- Watches and file handles belong to the webview that created them: another webview's `unwatch` / handle id answers like an unknown id, and they are released when that webview reloads, navigates or closes. A `watch` still being created when the page navigates or reloads is removed and fails with "fs.watch: the document that requested it is gone". See [security](/docs/v1.0/concepts/security#local-and-remote-webviews).
+
+## Notes
+
+- Paths accept both absolute and relative. Relative paths resolve against the app's **current working directory** at launch, which is in scope under `tynd dev` only. Build absolute paths from `os.appDataDir()`, `os.appConfigDir()`, `os.appCacheDir()` or `os.appTempDir()`.
+- By default a path must sit in the app's own directories: `<dataDir>/<app>`, `<configDir>/<app>`, `<cacheDir>/<app>` or `<tmpDir>/<app>` (`<app>` is `bundle.identifier`, the executable name when unset; `os.appDataDir()` and its siblings return them), or the working directory under `tynd dev` only. The home directory and the shared data and temp directories are not in scope. Anything else, including a symlink whose target escapes them, is refused (`fs: path '…' is outside capability roots`) unless an `fs.allow` rule starting with an absolute directory above it or a runtime grant (for example a dialog opened with `grantAccess: true`) names it; a rule such as `**/*.pdf` reaches nothing outside. See [default filesystem scope](/docs/v1.0/api/os/security#default-filesystem-scope).
+- Credential stores (`~/.ssh`, `~/.aws`, `~/.git-credentials`, `~/.npmrc`, keychains...), browser profiles and Tynd's grants file are always refused (`fs: '…' is a protected location`), whatever the policy. See [protected locations](/docs/v1.0/api/os/security#protected-locations).
+- All methods run on the host's worker pool — the JS event loop is never blocked.
+
+## Related
+
+- [path](/docs/v1.0/api/os/path) — path helpers.
+- [os](/docs/v1.0/api/os/os) — `dataDir`, `configDir`, `cacheDir`, `tmpDir`.
+- [Binary Data guide](/docs/v1.0/guides/binary-data).

@@ -1,0 +1,67 @@
+---
+title: Download with Progress
+description: "Stream a file to disk, render a progress bar, handle cancellation."
+---
+
+# Download with Progress
+
+Install the required plugins:
+
+```bash
+tynd add http dialog
+```
+
+The download target must be inside the fs scope. The Downloads folder is not in the default scope, so the user picks the target in a save dialog opened with `grantAccess: true`, which grants read and write access to that file. To save without asking, write into the app's own cache instead: `path.join(await os.appCacheDir(), filename)`.
+
+```ts
+import { dialog } from "@tynd/plugin-dialog/client";
+import { http } from "@tynd/plugin-http/client";
+import { os } from "@tynd/core/client";
+
+export async function downloadWithProgress(
+  url: string,
+  filename: string,
+  onProgress: (pct: number, loaded: number, total: number | null) => void,
+) {
+  const dest = await dialog.saveFile({
+    defaultDir: (await os.downloadsDir()) ?? undefined,
+    defaultName: filename,
+    grantAccess: true,
+  });
+  if (!dest) return null; // the user cancelled
+
+  await http.download(url, dest, {
+    onProgress: ({ loaded, total }) => {
+      const pct = total ? (loaded / total) * 100 : 0;
+      onProgress(pct, loaded, total);
+    },
+  });
+
+  return dest;
+}
+
+// usage
+const saved = await downloadWithProgress(
+  "https://example.com/big.zip",
+  "big.zip",
+  (pct, loaded, total) => {
+    progressBar.style.width = `${pct.toFixed(1)}%`;
+    label.textContent = total
+      ? `${formatBytes(loaded)} / ${formatBytes(total)} (${pct.toFixed(1)}%)`
+      : formatBytes(loaded);
+  },
+);
+
+function formatBytes(n: number) {
+  const u = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(1)} ${u[i]}`;
+}
+```
+
+- Bytes stream **straight to disk** — never round-tripped through JS memory.
+- `onProgress` throttled to ~50 ms on the Rust side — no DOM thrash.
+- No cancel method yet — if you need it, wrap the call in an `AbortController` + switch to `fetch` with manual streaming (at the cost of no disk-streaming).
+
+**Related:** [http API](/docs/v1.0/api/os/http) · [Binary Data guide](/docs/v1.0/guides/binary-data).

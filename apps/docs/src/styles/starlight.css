@@ -1,0 +1,24 @@
+/* Cyan accent, matching the landing page. */
+:root {
+  --sl-color-accent-low: #083344;
+  --sl-color-accent: #0891b2;
+  --sl-color-accent-high: #67e8f9;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #cffafe;
+  --sl-color-accent: #0891b2;
+  --sl-color-accent-high: #155e75;
+}
+
+/* Small screens: keep the code-block copy button clear of the first line of code. */
+@media (max-width: 50rem) {
+  .expressive-code .frame:not(.has-title):not(.is-terminal) pre {
+    padding-top: calc(var(--ec-codePadBlk, 1rem) + 1.75rem);
+  }
+}
+
+/* Archived-version banner: white on #0891b2 is only 3.7:1 in light mode. */
+:root[data-theme="light"] {
+  --sl-color-banner-bg: #0e7490;
+}

@@ -1,0 +1,174 @@
+---
+title: security
+description: "Startup security policy and per-context native command capabilities."
+---
+
+# `security`
+
+```ts
+import { security } from "@tynd/core/client";
+```
+
+The renderer-facing API is intentionally read-only. Configure capability-based access control for `fs`, `http`, processes, sensitive capabilities, and WebView navigation from the trusted Bun backend before any WebView is created.
+
+`security` handles resource scopes. `app.start({ capabilities })` separately decides which native commands a renderer context may call:
+
+```ts
+app.start({
+  capabilities: [{
+    identifier: "settings-window",
+    windows: ["settings"],
+    permissions: [{
+      identifier: "settings-native",
+      commands: { allow: ["store:get", "store:set", "window:close"] },
+    }],
+  }],
+});
+```
+
+Native OS and plugin commands called from a renderer are denied by default, including when `capabilities` is omitted. `backend:<fn>`, `window:`, `tray:` and `menu:` commands are only checked once your capabilities declare one in that family; see [Security concepts](/docs/v1.0/concepts/security#backend-functions-and-window--tray--menu-commands). Add explicit grants for each caller window/webview/origin. An empty list denies every native renderer command.
+
+**Precedence:** the [protected locations](#protected-locations) are refused first, then deny rules beat allow rules. An empty `allow` list means "allow everything inside the [default filesystem scope](#default-filesystem-scope)" (for `http`, every URL) unless `defaultDeny` is on, in which case it means "deny everything".
+
+## Default filesystem scope
+
+Renderers and plugins (`fs.*`, `security.checkFs` and every API that takes a path) reach only these directories by default, with or without a policy:
+
+- the app's own data, config, cache and temp directories: `<dataDir>/<app>`, `<configDir>/<app>`, `<cacheDir>/<app>` and `<tmpDir>/<app>`, where `<app>` is the app identifier (`bundle.identifier`, the executable name when unset), the folders `os.appDataDir()`, `os.appConfigDir()`, `os.appCacheDir()` and `os.appTempDir()` return and the store, log and window-state files use;
+- under `tynd dev` only, the working directory (never a filesystem root). A packaged app's working directory is not in scope: its launcher chooses it, and it is often `/` or `C:\Windows\System32`.
+
+The home directory, the shared data and temp directories and other apps' folders are outside it. To reach anything else, add an `fs.allow` rule naming it (an empty allow list adds nothing) or a [runtime grant](#runtime-grants-backend), such as a file the user picked in a dialog opened with `grantAccess: true`. Only a rule whose wildcard-free leading part is an absolute directory reaches outside, and only below that directory: `/Users/me/Projects/**/*.pdf` reaches PDFs under `/Users/me/Projects`, while `**/*.pdf` filters inside the default scope and runtime grants but reaches nothing outside them. The host logs a warning for such a rule, and for a relative rule (`projects/**`), which matches nothing. Once `fs.allow` is non-empty it also filters the default scope, so list the app's own directories too if the renderer needs them.
+
+The Bun backend is not restricted: it uses Bun's own file APIs.
+
+### Protected locations
+
+Some paths are refused to renderers and plugins whatever the policy says. No `fs.allow` rule, runtime grant or file dialog can reach them:
+
+- `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.config/gcloud`, `~/.config/gh` (`%APPDATA%\GitHub CLI` on Windows), `~/.password-store`, `~/.docker/config.json`, `~/.git-credentials`, `~/.config/git/credentials`, `~/.npmrc`, `~/.pypirc` and `~/.cargo/credentials` / `credentials.toml`, and any file named `.netrc` or `_netrc`;
+- the same stores moved through the environment, read at startup: `$GNUPGHOME`, `$AWS_SHARED_CREDENTIALS_FILE`, `$AWS_CONFIG_FILE`, every entry of `$KUBECONFIG`, `$DOCKER_CONFIG/config.json`, `$CARGO_HOME/credentials` / `credentials.toml` and `$NPM_CONFIG_USERCONFIG`;
+- browser profiles: Chrome, Chromium, Edge, Brave and Firefox on every OS, plus Safari, `~/Library/Cookies` on macOS;
+- credential stores: `~/Library/Keychains` (macOS), `%APPDATA%\Microsoft\{Credentials,Protect,Crypto,SystemCertificates}` and `%LOCALAPPDATA%\Microsoft\{Credentials,Vault}` (Windows), `~/.local/share/keyrings` (Linux);
+- Tynd's own `<dataDir>/<app>/security` directory, which holds the persisted grants. The host creates it when the policy is installed, and loads `grants.json` only when its real path is exactly that file (not a symlink, nor a case or trailing-dot variant).
+
+A symlink pointing into one of them is refused as well, and so is a spelling that differs only by case on Windows and macOS, or (on Windows) by trailing dots and spaces in a segment or an `::$DATA`-style stream suffix. The backend can still read them with Bun's file APIs if the app really needs to.
+
+## Configure at backend startup
+
+```ts
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { app } from "@tynd/core";
+
+const projects = join(homedir(), "Projects");
+
+app.start({
+  security: {
+    fs: {
+      allow: [`${projects}/**`],
+      deny: ["**/.env"],
+    },
+    http: {
+      allow: ["https://api.myapp.com/**", "https://cdn.myapp.com/**"],
+    },
+    defaultDeny: true,
+  },
+});
+```
+
+With no `security` policy configured, the whole [default filesystem scope](#default-filesystem-scope) and every URL are open and sensitive capabilities are not checked; `tynd validate` and `tynd build` warn about it. `process.exec` and `process.spawn` are the exception: they are refused until a policy lists the binary in `processAllowedBinaries`. Configure a policy before shipping.
+
+### `SecurityPolicy` fields
+
+| Field | Type | Default | Effect |
+|---|---|---|---|
+| `fs` | `{ allow?: string[]; deny?: string[] }` | default scope | Path globs checked by file-system commands. `allow` rules also reach paths outside the [default scope](#default-filesystem-scope) |
+| `http` | `{ allow?: string[]; deny?: string[] }` | open | URL globs checked by `http.request`, `http.download` and WebSocket URLs |
+| `defaultDeny` | `boolean` | `false` | An empty `allow` list denies everything instead of allowing everything |
+| `processAllowedBinaries` | `string[]` | none | Binaries `process.exec` and `process.spawn` may run. Unset refuses every call. An entry matches the exact string passed as `cmd` or the same canonical path (case-insensitive on Windows) |
+| `shellExecAllowedCommands` | `string[]` | `[]` | First tokens `process.execShell` may run. Empty refuses every call |
+| `allowedSensitiveCapabilities` | `("audioInput" \| "audioOutput" \| "screenCapture" \| "window")[]` | `[]` | Capabilities that native plugins (such as audio capture) must be granted once a policy is configured |
+| `persistGrants` | `boolean` | `false` | Keep [runtime grants](#runtime-grants-backend) across restarts |
+
+```ts
+app.start({
+  security: {
+    fs: { allow: [`${projects}/**`] },
+    processAllowedBinaries: ["git"],
+    shellExecAllowedCommands: ["ls"],
+    allowedSensitiveCapabilities: ["audioInput"],
+    defaultDeny: true,
+  },
+});
+```
+
+Policy is declarative: it is installed once at startup. The only runtime widening is a [runtime grant](#runtime-grants-backend) made by the backend or by a file dialog the user answered. Renderer IPC cannot configure policy, change ACLs or add grants, which keeps an XSS or compromised remote page from widening its own permissions.
+
+## Runtime grants (backend)
+
+`capabilities` from `@tynd/core` adds named paths and URL patterns to the scopes after startup, typically right after the user picked a file. Only the Bun backend can call it: renderers and native plugins are refused.
+
+```ts
+import { capabilities } from "@tynd/core";
+
+await capabilities.allowPath("/Volumes/Photos", { recursive: true }); // read-only subtree
+await capabilities.allowPath("/Users/me/report.pdf", { write: true });
+await capabilities.allowUrl("https://*.example.com/**");
+await capabilities.revokePath("/Volumes/Photos");
+const { paths, urls } = await capabilities.list();
+```
+
+| Method | Effect |
+|---|---|
+| `allowPath(path, { recursive?, write? })` | Grant a file, a directory (its direct entries, or its whole subtree with `recursive`) or a file about to be created. Read-only unless `write: true`. Returns the stored `PathGrant`. Granting the same path again replaces the grant. |
+| `revokePath(path)` | Remove that grant. Resolves `false` when there was none. |
+| `allowUrl(pattern)` | Add an `http(s)://` URL glob to a configured `http.allow` list (requests, downloads, WebSocket and main-frame navigation). The pattern must name a host; only a leading `*.` wildcard is accepted in it. |
+| `revokeUrl(pattern)` | Remove that pattern. |
+| `list()` | `{ paths: PathGrant[], urls: string[] }`. |
+
+Rules:
+
+- **Deny rules win.** A grant never admits a path or URL that `fs.deny` / `http.deny` refuses, nor a [protected location](#protected-locations).
+- **Paths are resolved when granted.** The OS resolves the path (symlinks followed) and the grant holds that spelling; a later symlink swap cannot redirect it, and a symlink inside a granted directory that points elsewhere is not covered.
+- **Outside the [default scope](#default-filesystem-scope)**, a path is reachable only through a grant or an explicit `fs.allow` rule, even without a configured policy.
+- **Read-only means read-only.** A read-only grant admits `fs.readText`, `readBinary`, `exists`, `stat`, `readDir`, `readlink`, `watch` and `open` without write flags. Every other call (writes, `copy`, `rename`, `shell.openPath`, uploads, icons...) needs `write: true`.
+- **URL grants extend a configured `http` policy.** Without one, every request URL is already allowed and remote navigation stays refused; a URL whose path holds an encoded separator or dot segment is never granted.
+- **Limits:** 1024 path grants and 256 URL grants.
+
+With `persistGrants: true`, grants are saved to `<data dir>/<app>/security/grants.json` and loaded when the policy is installed. Each path is resolved again on load: an entry that now resolves somewhere else or changed between file and directory is dropped. Dialogs opened with [`grantAccess: true`](/docs/v1.0/api/os/dialog#granting-the-picked-path) create the same grants.
+
+### Glob syntax
+
+- `*` — any run of characters within a segment (doesn't cross `/`).
+- `**` — any run of characters including `/`.
+- Everything else is a literal match.
+
+Paths are normalized to forward slashes before matching. Matching is **case-insensitive on Windows** (full Unicode case folding, applied to both the pattern and the path), case-sensitive elsewhere, except that `fs.deny` rules also ignore case on macOS, whose default filesystem does. On Windows, trailing dots and spaces of each path segment and `:stream` suffixes are stripped before matching, as Win32 does when it opens the path.
+
+`http` patterns are matched against the parsed URL: scheme and host are lowercased and the default port is dropped (`HTTPS://API.Example.com:443/v1` is matched as `https://api.example.com/v1`). With a policy configured, URLs with userinfo, backslashes or control characters, or that do not parse, are refused. The path and query are normalized too: percent-escapes of unreserved characters (`A-Za-z0-9-._~`) are decoded, so `/%61dmin` and `/admin` are the same path; every other escape stays encoded with uppercase hex (`%2F` never becomes a path separator); and raw non-ASCII, spaces and `"<>` `` ` `` `^` are encoded, so a pattern written with a literal `é` matches the `%C3%A9` form of the URL. Patterns get the same normalization.
+
+More `http` rules, applied to every `http.request`, `http.download` and WebSocket URL:
+
+- **Ambiguous paths are refused.** A URL whose path holds `%2F` or `%5C` (encoded slash or backslash), `%252e` / `%252f` / `%255c` (double-encoded dot, slash or backslash), `%00` (NUL), a `%` not followed by two hex digits (`%zz`, `%u0041`), `;` (path parameter) or a leftover `.` / `..` segment is denied, because servers disagree on what it means. The one exception is the allow rule that matches the URL, and only when it spells every such sequence itself (an allow pattern containing `%2F` lets a URL with `%2F` through; a deny pattern never opts a URL in).
+- **IPv4-mapped IPv6 hosts** (`[::ffff:127.0.0.1]`, `[::127.0.0.1]`) are rewritten to plain IPv4 before matching, so a rule on `127.0.0.1` covers them. `[::1]` is not rewritten.
+- **Host rules are not an SSRF boundary.** Matching is textual and never resolves DNS: a deny rule on an IP does not stop a DNS name that points (or rebinds) to that address. Restrict the resolved address at network level if that is your goal.
+- **Repeated `/` collapse** to one in both the URL path and the patterns (`/a//b` is matched as `/a/b`).
+- **`deny` rules are case-insensitive** (path included). `allow` rules stay case-sensitive.
+- **IDN hosts** are matched in punycode: a pattern with `bücher.example` matches `xn--bcher-kva.example`. A host label holding a glob character is only lowercased.
+- **`ws://` and `wss://`** are matched as `http://` and `https://`, and patterns written with `ws`/`wss` are mapped the same way, so one rule covers both.
+
+## `isFsAllowed(path): Promise<boolean>`
+## `isHttpAllowed(url): Promise<boolean>`
+
+Probe the active policy without triggering the underlying API. Handy for conditional UI.
+
+```ts
+if (await security.isHttpAllowed(target)) startSync(target);
+```
+
+## What's guarded
+
+- Every method in `fs.*` (including stateful handles and the `tynd-bin://` binary scheme).
+- `http.request`, `http.download` and `websocket.connect`.
+
+WebView navigation is checked too. Unsafe URLs (`javascript:` and the like) and HTTP(S) URLs with credentials are always refused; bundled app pages load; a remote HTTP(S) page loads only when a configured `http` policy allows it; loopback dev servers follow the `http` scope. Every navigation emits `webview:navigation` with `{ label, url, allowed }`, and a denied one is blocked.

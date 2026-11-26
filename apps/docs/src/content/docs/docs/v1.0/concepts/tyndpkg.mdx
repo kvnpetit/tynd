@@ -1,0 +1,103 @@
+---
+title: TYNDPKG Format
+description: "The bounded self-extracting trailer written and read by Tynd's native Rust tooling."
+---
+
+# TYNDPKG Format
+
+`tynd build` copies the app's compiled release Rust host and appends one TYNDPKG section. The resulting executable contains the Bun runtime, backend bundle, frontend assets, optional icon/fixed-WebView metadata, and sidecars.
+
+Both the writer and reader are native Rust. The shared `tynd-pack-format` contract owns header/trailer validation so the CLI bundler and application runtime agree on exact consumption and bounds.
+
+## Wire format
+
+```text
+┌──────────────────────────────────┐
+│ host executable bytes            │
+├──────────────────────────────────┤
+│ file_count: u32 little-endian    │
+│ repeated file_count times:       │
+│   path_len: u16 little-endian    │
+│   path: UTF-8 bytes              │
+│   data_len: u32 little-endian    │
+│   data: bytes                    │
+├──────────────────────────────────┤
+│ section_size: u64 little-endian  │
+│ magic: "TYNDPKG\0"              │
+└──────────────────────────────────┘
+```
+
+The final 16 bytes locate the section. Readers reject an invalid magic value, impossible section size, truncated entry, unconsumed entry bytes, unsafe path, duplicate entry, or configured per-entry/total size limit breach.
+
+## Entries
+
+A standard release contains entries in this model:
+
+```text
+bun.version
+bun.blake3
+bun.zst
+webview2.runtime-path        # only for a configured Windows fixed runtime
+observability.json           # only when `observability` is configured
+bundle.js
+frontend/<path>[.zst]
+icon.ico                     # only when icon is configured
+debug.flag                   # only with `tynd build --debug-protocol`
+sidecar/<name>
+```
+
+Bun metadata precedes `bun.zst`. The version is a bounded safe identifier and `bun.blake3` authenticates the decompressed executable. The Rust bundler compresses Bun with zstd.
+
+The backend's production Bun bundle is stored raw as `bundle.js`.
+
+Frontend text files with `html`, `htm`, `js`, `mjs`, `cjs`, `css`, `json`, or `svg` extensions are compressed with zstd and receive a packed `.zst` suffix. Other frontend assets stay byte-for-byte. Directory traversal and symbolic links in frontend input are rejected.
+
+A configured SVG/PNG icon is converted by the native bundler to an ICO payload; an ICO source passes through. With no configured icon, no icon entry is added and the host keeps its embedded default.
+
+`debug.flag` is an optional reserved entry holding `1`. It is written only for `tynd build --debug-protocol` and never as `0`. The runtime allows the debug protocol only when it is present; a missing or damaged entry (anything but `1`) means disabled.
+
+Sidecars use their declared safe, unique names under `sidecar/`.
+
+## Launch flow
+
+1. The native runtime opens its own executable and validates the trailer.
+2. It creates one registered temporary extraction root with backend/frontend subdirectories.
+3. It reuses the cached Bun executable only when its file type, size, and BLAKE3 digest match package metadata; otherwise it safely decompresses and publishes a fresh copy.
+4. It extracts `bundle.js`, frontend entries, the optional icon, and sidecars while enforcing path and byte limits.
+5. Unix sidecars receive executable permissions and are registered for the sidecar API.
+6. The frontend asset cache warms in the background; `.zst` assets are decompressed under bounded memory before being served by `tynd://`.
+7. The runtime starts the extracted backend with the exact packaged Bun binary, then creates the native WebView from backend startup configuration.
+
+Temporary application assets are registered for explicit cleanup. The integrity-qualified Bun cache survives launches.
+
+## Windows PE processing
+
+The native bundler can switch a PE host to the Windows GUI subsystem so a console window is not opened. When an icon is configured, it writes the multi-size ICO into the host's PE resource section and stores the same icon payload in TYNDPKG for runtime use. PE mutation happens before Authenticode signing.
+
+See [Icons & Branding](/docs/v1.0/guides/icons-branding) for accepted sources and fallback behavior.
+
+## Inspecting a binary
+
+```bash
+# The final eight bytes are TYNDPKG followed by NUL.
+tail -c 8 release/linux-x64/my-app | xxd
+```
+
+For complete inspection, read the preceding little-endian `section_size`, seek to the section start, then consume every bounded entry exactly. Do not search for the magic string through arbitrary executable bytes.
+
+Use `tynd size` to measure your actual host, Bun, frontend, backend, and sidecars. Their sizes depend on target, framework, enabled native features, and project assets; the format does not promise a fixed application size.
+
+## Not included
+
+- the frontend development server;
+- user data or application databases;
+- installer metadata such as `Info.plist`, desktop entries, NSIS, or MSI structures;
+- release manifest/signature files.
+
+Those are runtime state or outer packaging artifacts, not TYNDPKG entries.
+
+## Related
+
+- [Build Pipeline](/docs/v1.0/concepts/build-pipeline)
+- [Bundling](/docs/v1.0/guides/bundling)
+- [Sidecars](/docs/v1.0/guides/sidecars)

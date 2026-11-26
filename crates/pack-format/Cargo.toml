@@ -1,0 +1,27 @@
+[package]
+name                    = "tynd-pack-format"
+description             = "Shared TYNDPKG pack reader/writer format for Tynd bundler and runtimes"
+publish                 = false
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+readme                  = "README.md"
+
+[lib]
+name    = "tynd_pack_format"
+path    = "src/lib.rs"
+doctest = false
+
+[dependencies]
+# Pack integrity digest (`integrity.blake3` entry).
+blake3.workspace = true
+
+[lints]
+workspace = true

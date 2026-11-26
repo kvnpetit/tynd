@@ -1,0 +1,58 @@
+---
+title: tynd plugin check
+description: "Validate a plugin package manifest, exports, and optional native crate layout."
+---
+
+# `tynd plugin check`
+
+```bash
+tynd plugin check
+tynd plugin check --cwd ./my-plugin
+tynd plugin check --json
+```
+
+Use the standalone native validator before publishing a plugin.
+
+## Checked contract
+
+Every package is checked for:
+
+- valid `package.json`;
+- package name shaped as `plugin-name` or `@scope/plugin-name`;
+- semantic `version`, non-empty license, and `type: "module"`;
+- `peerDependencies.@tynd/core`;
+- a `tynd` object, when present, holding only `kind` (`"host"` or `"standalone"`; omitted by community plugins), `apis` (known host API names), `native` (object), and `backend` (boolean); any other key fails;
+- existing targets for `.` and `./client` exports;
+- `./backend` when `tynd.backend: true`.
+
+When `tynd.native` is declared, the command also checks:
+
+- only the `path`, `crateName`, and `features` keys;
+- a package-contained native directory and `Cargo.toml`;
+- a valid `crateName`: a lowercase Cargo package name (`my-plugin`) whose Rust identifier (`my_plugin`) is not a keyword;
+- valid declared Cargo feature names;
+- `[lib] crate-type` containing `rlib`;
+- a `tynd-plugin-sdk` dependency;
+- plugin registration through `#[plugin]` + `#[plugin_impl]`, or `register_plugin!` + `impl TyndPlugin`;
+- `src/bin/gen-types.rs` (warning when absent).
+
+## Flags and result
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Plugin package directory (default `.`) |
+| `--json` | Emit `{ ok, fails, warns, issues }` |
+
+Each issue contains `name`, `status`, `detail`, and an optional `hint`. Failed checks produce a non-zero exit; warnings do not.
+
+## CI
+
+```yaml
+- name: Validate plugin package
+  run: bunx @tynd/cli plugin check --cwd ./plugins/example
+```
+
+## Related
+
+- [`tynd plugin new`](/docs/v1.0/cli/plugin/new)
+- [Plugin SDK README](https://github.com/kvnpetit/tynd/tree/main/packages/plugin-sdk#readme)

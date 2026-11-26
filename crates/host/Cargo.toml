@@ -1,0 +1,484 @@
+[package]
+name                    = "tynd-host"
+description             = "Native WebView host for the Tynd framework (wry + tao + OS integration)"
+publish                 = false
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+readme                  = "README.md"
+
+build = "build.rs"
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# Always-on — structural or used by more than one always-on module.
+wry.workspace                = true
+tao.workspace                = true
+dpi.workspace                = true
+serde.workspace              = true
+serde_json.workspace         = true
+image.workspace              = true
+drag.workspace               = true
+muda                         = { workspace = true, optional = true }
+tray-icon                    = { workspace = true, optional = true }
+dirs.workspace               = true
+zstd.workspace               = true
+# Optional — each is enabled only by the features whose code uses it, so
+# minimal custom hosts (`default-features = false`) don't compile them.
+base64                       = { workspace = true, optional = true }
+sha2                         = { workspace = true, optional = true }
+blake3                       = { workspace = true, optional = true }
+getrandom.workspace          = true
+parking_lot.workspace        = true
+shared_child                 = { workspace = true, optional = true }
+rayon.workspace              = true
+arc-swap.workspace           = true
+dashmap.workspace            = true
+ahash                        = { workspace = true, optional = true }
+tempfile.workspace           = true
+tracing.workspace            = true
+tracing-subscriber.workspace = true
+tynd-capabilities.workspace   = true
+tynd-debug-protocol           = { workspace = true, optional = true, features = [ "local-socket" ] }
+ctrlc.workspace              = true
+anyhow.workspace             = true
+crossbeam-channel.workspace  = true
+# Always-on: `security.checkFs` is available to native/Bun plugins even when
+# the renderer-facing `api-fs` feature is omitted. Its path authorization must
+# still be confined to the same pre-opened capability roots.
+cap-std                    = { workspace = true }
+# Always-on URL/path/mime helpers used across scheme handlers + util.
+form_urlencoded.workspace = true
+dunce.workspace           = true
+# Strict URL parser used by `looks_like_url` to scheme-allowlist
+# deep-link argv (rejects `javascript:` / `data:` / `file://./...`
+# before they reach the `app:open-url` handler).
+url.workspace             = true
+# XSS-safe JS init-script serialization (replaces format!-based serde_json injection).
+serialize-to-javascript.workspace = true
+# UTF-8-guaranteed paths at the filesystem IPC boundary.
+camino                     = { workspace = true, optional = true }
+# Always-on OS detection helpers. The `api::os_info` + `security::policy`
+# modules sit outside the `api-*` feature gates (they're consumed by
+# every dispatch path), so their backing crates are too.
+hostname.workspace   = true
+os_info.workspace    = true
+dark-light.workspace = true
+sys-locale.workspace = true
+iana-time-zone.workspace = true
+
+# Always-on perf primitives.
+# `bytes` / `smallvec` are used throughout the IPC + scheme handlers
+# (zero-copy buffers, stack-allocated arg vecs).
+bytes.workspace       = true
+smallvec.workspace    = true
+# Compact-strings — inline-stores short IPC IDs/labels (≤24 B on 64-bit)
+# without heap alloc. Hot path on every dispatch.
+compact_str.workspace = true
+# Optional — pulled only when their matching `api-*` feature is enabled.
+rfd                   = { workspace = true, optional = true }
+arboard               = { workspace = true, optional = true }
+open                  = { workspace = true, optional = true }
+ureq                  = { workspace = true, optional = true }
+cookie_store          = { workspace = true, optional = true }
+fslock                = { workspace = true, optional = true }
+interprocess          = { workspace = true, optional = true }
+notify-debouncer-full = { workspace = true, optional = true }
+trash                 = { workspace = true, optional = true }
+tungstenite           = { workspace = true, optional = true }
+ed25519-dalek         = { workspace = true, optional = true }
+self-replace          = { workspace = true, optional = true }
+# Binary patch applier — the inverse of `bidiff`. Reconstructs the new
+# binary by reading a `bidiff::enc::Writer` patch over the currently
+# running executable. Only pulled with `api-updater`; the diff side
+# (`bidiff`) lives in the bundler crate.
+bipatch               = { workspace = true, optional = true }
+auto-launch           = { workspace = true, optional = true }
+# `keyring` is gated per-OS in the `target.'cfg(...)'.dependencies` tables
+# below — each platform pins exactly one backend feature
+# (apple-native / windows-native / sync-secret-service) instead of
+# carrying the union set. Kept optional so `api-keyring` can flip it off.
+global-hotkey         = { workspace = true, optional = true }
+user-idle             = { workspace = true, optional = true }
+
+# New optional OS surface — gated behind matching `api-*` features so
+# slim custom builds don't drag them in.
+sysinfo               = { workspace = true, optional = true }
+if-addrs              = { workspace = true, optional = true }
+xcap                  = { workspace = true, optional = true }
+starship-battery      = { workspace = true, optional = true }
+cocoon                = { workspace = true, optional = true }
+# Memory wiping for vault password buffers. Tied to api-vault below.
+zeroize               = { workspace = true, optional = true }
+
+# Audited typed ACID embedded KV store — backs the window-state
+# persistence layer (`api::window_state`) so the app's per-window
+# geometry survives across sessions through a single MVCC-mapped file
+# instead of an atomic JSON rewrite per save. Gated behind
+# `api-window-state` because that's the only consumer for now (`api::store`
+# stays on JSON).
+redb = { workspace = true, optional = true }
+
+# Production observability — opt-in via the `obs-otel` / `obs-sentry`
+# feature gates below. Bringing OpenTelemetry pulls a tokio runtime
+# transitively (via `opentelemetry_sdk` rt-tokio + `opentelemetry-otlp`
+# grpc-tonic), so default builds stay free of it.
+opentelemetry         = { workspace = true, optional = true }
+opentelemetry_sdk     = { workspace = true, optional = true }
+opentelemetry-otlp    = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
+sentry                = { workspace = true, optional = true }
+tokio                 = { version = "1", default-features = false, features = [ "rt-multi-thread", "time" ], optional = true }
+
+# Native plugin contract. Pulled only for custom builds that actually compile
+# native plugins. The base presets keep plugin dispatch disabled so `rkyv`,
+# Specta codegen helpers, and the plugin registry stay out of the binary.
+tynd-plugin-sdk = { workspace = true, optional = true }
+
+# Host proc-macros — `#[tynd::handler]` typed dispatch. Re-exported
+# under the `tynd` ident at the crate root so user-facing call sites
+# read `#[tynd::handler(api = "compute")]` without an extra `use`.
+tynd-host-macros.workspace = true
+
+tynd-pack-format.workspace = true
+tynd-protocol.workspace  = true
+tynd-security-policy.workspace = true
+tynd-update-core          = { workspace = true, optional = true }
+
+# Builder-pattern derive. Compile-time checked; zero runtime cost.
+# Adds `Foo::builder()` alongside existing brace-literal / `Default`
+# constructors — never breaks existing call sites.
+bon.workspace = true
+# Validated newtype derive. `#[nutype(...)]` generates a tuple struct +
+# `try_new` constructor that rejects invalid inputs at construction
+# time — including during serde `Deserialize`. Used at IPC boundaries
+# to refuse malformed action ids etc. before they land in the
+# dispatch tables.
+nutype.workspace = true
+# Enum derives. `strum::Display` / `EnumString` collapse the hand-rolled
+# `match` ladders that map enum variants ↔ wire strings (e.g.
+# `PromptStyle` → "modal"/"tray"/"silent"/"manual"). Pure compile-time
+# codegen; zero runtime cost.
+
+# API CATALOG - single source of truth for the user-facing `apis` names.
+# `core = true` marks an API that every host compiles unconditionally: it has no
+# cargo feature (checked: `api-<name>` must not exist). Every other entry maps
+# the config name to the cargo feature `api-<name>` (checked to exist in
+# [features]); `plugin` names the host-backed plugin package that fronts a
+# plugin-first API (checked against plugins/host/*/package.json).
+# Everything derived from it (the `api-all` list below, the Rust
+# consts in crates/cli/src/config/model.rs, the TS catalog and the JSON
+# schemas) is regenerated with `bun scripts/gen-api-catalog.ts`; `--check`
+# fails when anything drifted. Do not edit the generated blocks by hand.
+[package.metadata.tynd.apis]
+acl = { core = true }
+autolaunch = { plugin = "@tynd/plugin-autolaunch" }
+biometric = { plugin = "@tynd/plugin-biometric" }
+cli = { plugin = "@tynd/plugin-cli" }
+clipboard = { plugin = "@tynd/plugin-clipboard" }
+compute = { plugin = "@tynd/plugin-compute" }
+deep-link = { plugin = "@tynd/plugin-deep-link" }
+dialog = { plugin = "@tynd/plugin-dialog" }
+fs = { plugin = "@tynd/plugin-fs" }
+http = { plugin = "@tynd/plugin-http" }
+keyring = { plugin = "@tynd/plugin-keyring" }
+keys = { plugin = "@tynd/plugin-keys" }
+log = { core = true }
+menu = { plugin = "@tynd/plugin-menu" }
+multiwindow = { plugin = "@tynd/plugin-multiwindow" }
+network = { plugin = "@tynd/plugin-network" }
+notification = { plugin = "@tynd/plugin-notification" }
+power = { plugin = "@tynd/plugin-power" }
+process = { plugin = "@tynd/plugin-process" }
+screenshot = { plugin = "@tynd/plugin-screenshot" }
+shell = { plugin = "@tynd/plugin-shell" }
+shortcuts = { plugin = "@tynd/plugin-shortcuts" }
+sidecar = { plugin = "@tynd/plugin-sidecar" }
+single-instance = { plugin = "@tynd/plugin-single-instance" }
+store = { plugin = "@tynd/plugin-store" }
+system-stats = { plugin = "@tynd/plugin-system-stats" }
+theme = { plugin = "@tynd/plugin-theme" }
+tray = { plugin = "@tynd/plugin-tray" }
+updater = { plugin = "@tynd/plugin-updater" }
+vault = { plugin = "@tynd/plugin-vault" }
+websocket = { plugin = "@tynd/plugin-websocket" }
+window-state = { plugin = "@tynd/plugin-window-state" }
+
+[features]
+# Preset builds enable no API feature: the window/webview, `tynd://`, IPC and
+# lifecycle core plus `acl` and `log` are always compiled (the renderer
+# capability check is never a build option). Every other API is fronted by a
+# `@tynd/plugin-<name>` host-backed plugin; declaring one makes the CLI build a
+# custom host with `--no-default-features` and the exact set of `api-*`
+# features the app asked for, which also keeps the other crate dependencies out
+# of the compile graph. `api-all` remains as an explicit
+# full-capability opt-in for development and apps that knowingly want
+# the whole native host surface.
+default = [  ]
+
+# Native plugin registry + `tynd-plugin-sdk` trait surface. Enabled by the CLI
+# only when `tynd.config.ts` declares at least one native plugin.
+plugins = [ "dep:tynd-plugin-sdk", "dep:ahash" ]
+
+# Built-in JSON-RPC 2.0 debug protocol — bound only when the
+# `TYND_DEBUG_SOCKET` / `TYND_DEBUG_PORT` env var is set, so it carries
+# zero runtime overhead in production. The compile-time cost is one
+# tokio-free server thread + interprocess-backed UDS/named-pipe
+# accept loop. Custom builds that want a fully stripped binary can
+# pass `--no-default-features --features "<api-set>"` (omitting this
+# feature drops the entire `debug` module + interprocess dep when no
+# other consumer pulls it in).
+# `base64` encodes the debug `screenshot.*` PNG (always compiled on Windows,
+# which captures through GDI).
+debug-protocol = [ "dep:tynd-debug-protocol", "dep:base64" ]
+
+# Window capture for the debug protocol's `screenshot.*` methods on macOS and
+# Linux (Windows captures through GDI and needs no extra dependency). Opt-in so
+# `debug-protocol` alone never links `xcap`; `api-screenshot` also enables it.
+debug-screenshot = [ "debug-protocol", "dep:xcap", "dep:base64" ]
+
+# Meta feature: every gatable OS API. Disabling this and picking a subset is
+# how custom hosts narrow the attack surface
+# and binary size.
+api-all = [
+    "api-autolaunch",
+    "api-biometric",
+    "api-cli",
+    "api-clipboard",
+    "api-compute",
+    "api-deep-link",
+    "api-dialog",
+    "api-fs",
+    "api-http",
+    "api-keyring",
+    "api-keys",
+    "api-menu",
+    "api-multiwindow",
+    "api-network",
+    "api-notification",
+    "api-power",
+    "api-process",
+    "api-screenshot",
+    "api-shell",
+    "api-shortcuts",
+    "api-sidecar",
+    "api-single-instance",
+    "api-store",
+    "api-system-stats",
+    "api-theme",
+    "api-tray",
+    "api-updater",
+    "api-vault",
+    "api-websocket",
+    "api-window-state",
+]
+
+# Per-API gates. Each feature enables its `host_apis!` row in `src/api.rs` + pulls the
+# crate dependencies it needs. APIs with no external dep list nothing here.
+api-autolaunch      = [ "dep:auto-launch" ]
+api-biometric       = [ "dep:robius-authentication" ]
+api-clipboard       = [ "dep:arboard", "dep:ahash", "dep:base64" ]
+api-compute         = [ "dep:base64", "dep:sha2", "dep:blake3" ]
+api-dialog          = [ "dep:rfd", "dep:raw-window-handle" ]
+api-fs              = [ "dep:camino", "dep:notify-debouncer-full", "dep:trash", "dep:ahash", "dep:base64" ]
+api-http            = [ "dep:ureq", "dep:cookie_store", "dep:base64", "api-fs" ]
+# `zeroize` here wipes the inbound password buffer on drop — same
+# rationale as `api-vault`, so a freed allocation can't leak the
+# cleartext to a later allocator handout.
+api-keyring         = [ "dep:keyring", "dep:zeroize" ]
+# Native menus: application menu bar, popup context menus (`menu.*`,
+# `window.showContextMenu`). Pulls `muda` (and `base64` for inline item icons).
+api-menu            = [ "dep:muda", "dep:base64" ]
+# Secondary windows (`window.create` / `close` / `all`) and child webviews
+# (`webview.*`). Pure logic over wry/tao — no extra dependency, the gate
+# narrows the renderer-facing surface.
+api-multiwindow     = [  ]
+# System tray icon + tray menu (`tray.*`). Pulls `tray-icon` (libappindicator
+# on Linux) and `muda` for the tray menu items.
+api-tray            = [ "dep:tray-icon", "dep:muda", "dep:base64" ]
+api-network         = [ "dep:if-addrs", "dep:ahash" ]
+api-notification    = [ "dep:notify-rust", "dep:zbus", "dep:mac-notification-sys", "dep:ahash" ]
+api-power           = [ "dep:user-idle", "dep:starship-battery", "power-events-mac", "power-events-linux" ]
+# Internal helper sub-features — let the per-target dep tables flip the
+# matching crates on without leaking them on the wrong OS. `Cargo` skips
+# `target.'cfg(...)'.dependencies` entries automatically when their
+# `optional = true` deps aren't enabled, so `dep:zbus` resolves to a
+# no-op on Windows / Linux respectively. `power-events-mac` pulls
+# nothing: the AppKit crates it uses are always on for macOS (see the
+# macOS dependency table); it only gates the NSWorkspace observers.
+power-events-mac    = [  ]
+power-events-linux  = [ "dep:zbus" ]
+api-process         = [ "dep:shared_child", "dep:base64" ]
+api-screenshot      = [ "dep:xcap", "dep:base64" ]
+api-shell           = [ "dep:open" ]
+api-shortcuts       = [ "dep:global-hotkey" ]
+api-sidecar         = [  ]
+api-single-instance = [ "dep:fslock", "dep:interprocess", "dep:blake3", "dep:widestring" ]
+api-store           = [  ]
+api-system-stats    = [ "dep:sysinfo" ]
+api-theme           = [  ]
+api-updater         = [ "dep:ureq", "dep:ed25519-dalek", "dep:self-replace", "dep:bipatch", "dep:zip", "dep:tynd-update-core", "dep:base64", "dep:blake3" ]
+# `cocoon` provides AES-256-GCM file vault — bigger-than-keychain
+# secrets (long tokens, bundled credentials, encrypted plugin state).
+# `zeroize` wipes password buffers on drop so a freed allocation can't
+# leak the cleartext to a future allocator request.
+api-vault           = [ "dep:cocoon", "dep:zeroize", "dep:base64" ]
+api-websocket       = [ "dep:tungstenite", "dep:base64" ]
+# Window-state persistence — promoted from `@tynd/plugin-window-state`.
+# Persistence backend is `redb` (typed ACID embedded KV); the
+# in-memory hot path uses the host's existing `dashmap` dependency.
+api-window-state    = [ "dep:redb" ]
+# Deep-link OS API — scheme registration (HKCU on Windows,
+# LSSetDefaultHandlerForURLScheme on macOS, .desktop on Linux) plus
+# multi-instance URL forwarding (master file lock + local socket, same
+# `fslock`/`interprocess` building blocks as `api-single-instance`).
+# `windows-registry` is the only Windows-only dep — declared optional in
+# the `target.'cfg(target_os = "windows")'.dependencies` table below so
+# it only resolves on Windows builds.
+api-deep-link       = [ "dep:fslock", "dep:interprocess", "dep:windows-registry", "dep:blake3", "dep:widestring" ]
+# Browser key intercept (Ctrl+R, F5, …). Pure logic — no external dep.
+api-keys            = [  ]
+# Process argv parsing exposed to the frontend. Pure logic — no external dep.
+api-cli             = [  ]
+
+# Production observability — strictly opt-in. Both gates are off by
+# default (including in `api-all`) because the OTel + Sentry pipelines
+# pull tokio + reqwest + tonic which would inflate every preset build.
+# Apps that want either pipeline rebuild with `--features obs-otel` or
+# `--features obs-sentry` (or both); at runtime they still need to
+# initialize via `observability::init({ otel, sentry })` so a feature
+# being compiled in doesn't auto-export anything.
+obs-otel = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:tracing-opentelemetry",
+    "dep:tokio",
+]
+obs-sentry = [ "dep:sentry" ]
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Linux-only D-Bus notification backend. Keeping it target-scoped prevents
+# notify-rust's legacy Windows backend from entering Windows host builds.
+notify-rust   = { workspace = true, optional = true }
+# Linux needs the wayland-data-control feature on arboard; re-declared here
+# as optional so it's only pulled with api-clipboard.
+arboard       = { version = "3", features = [ "wayland-data-control" ], optional = true }
+# keyring 4 `v1` keeps the classic `Entry` API; on Linux it selects the
+# Secret Service store (kwallet/gnome-keyring expose the same DBus surface).
+keyring       = { workspace = true, features = [ "v1" ], optional = true }
+gtk.workspace = true
+# WebKitGTK session calls (snapshot, print, mute, data removal). Same pinned
+# version and feature level as wry's own dependency.
+webkit2gtk = { version = "=2.0.2", features = [ "v2_38" ] }
+# systemd-logind DBus signals (PrepareForSleep, Session.Lock/Unlock) for
+# the `api::power` watcher. `default-features = false` + `blocking-api`
+# keeps the async-io runtime out of the dep graph — the watcher runs on
+# its own dedicated `std::thread`.
+zbus = { version = "5.19", default-features = false, features = [ "blocking-api" ], optional = true }
+
+# Window materials for `window.setEffects` (Windows + macOS; Linux has none).
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+window-vibrancy.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# WinRT toast notifications (`api::notification`) and the shell jump list
+# (`app.setJumpList`: ICustomDestinationList / IShellLinkW). Always on:
+# webview2-com already compiles this crate; the shell features only add
+# bindings.
+windows                  = { workspace = true, features = [ "Win32_Foundation", "Win32_Storage_EnhancedStorage", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_Shell_PropertiesSystem" ] }
+# Windows Hello backend. The upstream Linux implementation is incomplete
+# and currently does not compile, so this dependency stays target-scoped.
+robius-authentication    = { workspace = true, optional = true }
+# Keyring on Windows uses Credential Manager + DPAPI via the native
+# windows-native store (selected by the keyring 4 `v1` feature).
+keyring                  = { workspace = true, features = [ "v1" ], optional = true }
+# Per-user `HKCU\Software\Classes\<scheme>` registry write/read for the
+# deep-link OS API. Only consumed in `api::deep_link::registry` (Windows
+# only); kept optional here so non-Windows builds and `api-deep-link`-off
+# builds skip the dep entirely. `windows-registry` replaces the
+# unmaintained `winreg` crate with the typed wrapper from microsoft/windows-rs.
+windows-registry = { workspace = true, optional = true }
+# WebView2 interfaces wry does not wrap (`webview::session`).
+webview2-com     = { workspace = true }
+windows-core     = { workspace = true }
+# Direct Win32 access for runtime-only features tao doesn't surface: DWM
+# system backdrop (Mica/Acrylic/Tabbed) and ITaskbarList3::SetOverlayIcon.
+# 0.61 introduces `windows-link` (raw-dylib resolution) which drops the
+# 6 MB `windows-targets` import-lib bloat the older 0.59 line pulled in.
+#
+# `Win32_System_RemoteDesktop` + `Win32_System_LibraryLoader` +
+# `Win32_Graphics_Gdi` are pulled by the `api::power` watcher: it spawns
+# a hidden message-only window (`HWND_MESSAGE`) and registers
+# `WTSRegisterSessionNotification` against it so `WM_POWERBROADCAST`
+# (suspend/resume) and `WM_WTSSESSION_CHANGE` (lock/unlock) get pumped
+# into the host event bus. `WNDCLASSEXW` references `HBRUSH` (Gdi) and
+# `GetModuleHandleW` lives in `LibraryLoader`.
+windows-sys = { version = "0.61", features = [ "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps", "Win32_UI_Controls", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_ApplicationInstallationAndServicing", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Diagnostics_Debug", "Win32_Globalization", "Win32_System_Memory", "Win32_System_Power", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_RemoteDesktop", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Security", "Win32_Security_Authorization" ] }
+# Wide-string helpers for the Windows SDDL plumbing in `platform::win_security`.
+# `interprocess::os::windows::security_descriptor::SecurityDescriptor::deserialize`
+# takes a `&U16CStr`, so we lean on the same crate it expects rather than
+# rolling a hand-spun UTF-16 NUL-terminator. Pulled transitively via
+# interprocess on Windows already; declared here so the import is explicit.
+# Optional: `platform::win_security` only exists with `api-single-instance` /
+# `api-deep-link`, which enable it.
+widestring = { version = "1", optional = true }
+# Owner window of `rfd` file dialogs (`dialog.*` `parent` option). Only
+# consumed on Windows; pulled with `api-dialog`.
+raw-window-handle = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# WKWebView proxy support for `window.proxy` / `webview.proxy` (links the
+# Network.framework proxy symbols, available from macOS 14, Tynd's minimum).
+wry                  = { workspace = true, features = [ "mac-proxy" ] }
+# Embed Info.plist into the binary's __TEXT,__info_plist section.
+embed_plist          = { workspace = true }
+# WKWebView partition identifiers (`app::util`) hash with BLAKE3 on every
+# macOS build; elsewhere `blake3` stays optional (see `[dependencies]`).
+blake3               = { workspace = true }
+# `.app` bundle archives for `api-updater` (only the macOS installer unzips).
+zip                  = { workspace = true, optional = true }
+mac-notification-sys = { workspace = true, optional = true }
+robius-authentication = { workspace = true, optional = true }
+# Keyring on macOS uses Keychain via the apple-native backend
+# (Security.framework — `SecItemAdd`/`SecItemCopyMatching`).
+keyring              = { workspace = true, features = [ "v1" ], optional = true }
+# AppKit bindings: NSWorkspace.notificationCenter observers for the
+# `api::power` watcher, NSAlert for `dialog.message`, NSDocumentController
+# for `app.addRecentDocument`, NSBeep for `shell.beep`. Always on: wry and
+# tao already compile these crates on macOS, so only the listed bindings
+# are added.
+objc2-foundation = { version = "0.3", default-features = false, features = [ "std", "NSString", "NSNotification", "NSOperation", "NSURL", "NSData", "NSArray", "NSProcessInfo", "NSDate", "NSDictionary", "NSError", "NSSet", "NSLocale", "NSDateFormatter", "NSFormatter", "block2" ] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [ "std", "block2", "NSAccessibility", "NSAlert", "NSApplication", "NSBitmapImageRep", "NSImageRep", "NSButton", "NSCell", "NSColor", "NSColorSpace", "NSControl", "NSDocumentController", "NSGraphics", "NSImage", "NSResponder", "NSRunningApplication", "NSPasteboard", "NSScreen", "NSView", "NSWindow", "NSWorkspace" ] }
+# Main-queue dispatch (`run_on_main`) for the AppKit calls above, which
+# must run on the main thread while IPC calls arrive on pool threads.
+dispatch2 = { version = "0.3", default-features = false, features = [ "std", "objc2" ] }
+# WKWebView session calls (PDF, snapshot, website-data removal) in
+# `webview::session`. Same version wry compiles; only these bindings are added.
+objc2-web-kit = { version = "0.3.2", default-features = false, features = [ "std", "block2", "objc2-app-kit", "objc2-core-foundation", "WKWebView", "WKWebViewConfiguration", "WKWebsiteDataStore", "WKWebsiteDataRecord", "WKPDFConfiguration", "WKSnapshotConfiguration" ] }
+block2 = "0.6"
+# Camera / microphone permission (`os.getMediaAccessStatus`,
+# `os.askForMediaAccess`) and the screen-recording preflight. Same versions
+# xcap and wry already compile on macOS.
+objc2-av-foundation = { version = "0.3", default-features = false, features = [ "std", "block2", "AVCaptureDevice", "AVMediaFormat" ] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = [ "std", "CGWindow" ] }
+# Raw `NSWindow` messages (level, alpha, aspect ratio, movable) for the
+# window frame controls in `api::window_cmd::frame`. Already compiled by
+# tao/wry on macOS.
+objc2 = "0.6"
+

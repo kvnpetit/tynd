@@ -1,0 +1,59 @@
+---
+title: bridge
+description: "@tynd/core/client/bridge — the host bridge every plugin client builds on: osCall, osOn, binary transfer and byte helpers."
+---
+
+# `@tynd/core/client/bridge`
+
+The functions a plugin client uses to reach the Tynd host from the WebView. Every official plugin client is written on top of them, and a community plugin uses the same functions.
+
+App code does not need this module: it imports `@tynd/core/client` and the `@tynd/plugin-*` clients. Use the bridge when you write a plugin client, or a client for a host API that has no package yet.
+
+```ts
+import { osCall, osOn } from "@tynd/core/client/bridge";
+```
+
+## Functions
+
+| Function | Use |
+|---|---|
+| `osCall<T>(api, method, args?, opts?)` | Call a host API method. Resolves with its result. `opts.timeoutMs` rejects after that many milliseconds; there is no deadline by default. |
+| `osOn<T>(name, handler)` | Subscribe to a host event (`fs:change`, `menu:action`, ...). Returns the unsubscribe function. The payload type is a claim: the host sends it untyped. |
+| `osDeadline(timeoutMs)` | Client-side deadline for a request that carries its own `timeoutMs`: that value plus a grace period, so the host's timeout error arrives first. `undefined` when `timeoutMs` is not a positive number. |
+| `binFetch(path, query?)` | GET raw bytes from the `tynd-bin://` scheme. Resolves with a `Uint8Array`. |
+| `binUpload(path, query, body)` | POST raw bytes with no response body (writes). |
+| `binExchangeText(path, query, body)` | POST raw bytes and receive a UTF-8 string (hashes, for example). |
+| `bytesToBase64(bytes)` / `base64ToBytes(b64)` | Convert bytes for JSON payloads. They use the native `Uint8Array.toBase64` / `fromBase64` when the engine has them. |
+| `currentWindowLabel()` / `currentWebviewLabel()` | Label of the window and the webview the code runs in; `"main"` outside a window. |
+| `decodeIpcError(err, fn?)` | Turn a raw bridge rejection into a `TyndIpcError` when it carries one. `osCall` already applies it. |
+
+`osCall` rejects with a `TyndIpcError` (code `BACKEND_DEAD`) when the backend process exits during the call; other host errors reject with a plain `Error`. The `bin*` helpers reject with a plain `Error` that carries the host's message, and abort a request that gets no answer within 30 seconds (plus 1 second per MiB uploaded).
+
+## Example
+
+A client for a native plugin named `counter` whose Rust side exposes `increment` and emits `counter:changed` (events a native plugin emits reach `osOn` listeners):
+
+```ts title="plugins/counter/client.ts"
+import { osCall, osOn } from "@tynd/core/client/bridge";
+
+export interface CounterChanged {
+  value: number;
+}
+
+export const counter = {
+  increment(by = 1): Promise<number> {
+    return osCall<number>("plugin", "counter:increment", { by });
+  },
+  onChanged(handler: (event: CounterChanged) => void): () => void {
+    return osOn<CounterChanged>("counter:changed", handler);
+  },
+};
+```
+
+`@tynd/plugin-sdk` builds its typed native clients (`defineTypedPlugin`) on `osCall`, so they reject the same way.
+
+## Related
+
+- [Official plugins](/docs/v1.0/api/plugins) — the packages built on this module.
+- [RPC helpers](/docs/v1.0/api/rpc-helpers) — `createPluginClient` for plugins whose methods run in the Bun backend.
+- [Backend API](/docs/v1.0/api/backend#subpath-exports) — every `@tynd/core` subpath.

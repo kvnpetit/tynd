@@ -1,0 +1,69 @@
+---
+title: oauth
+description: "One-shot loopback OAuth callback listener running in the Bun backend."
+---
+
+# `oauth`
+
+`@tynd/plugin-oauth` starts a listener on `127.0.0.1`, captures the provider's redirect query and returns the parsed params. It runs in the Bun backend and tears itself down after the redirect. Installing it adds the `network` host feature.
+
+## Install
+
+```bash
+tynd add oauth
+```
+
+or `bun add @tynd/plugin-oauth` and list it in `tynd.config.ts`:
+
+```ts title="tynd.config.ts"
+export default {
+  plugins: ["@tynd/plugin-oauth"],
+}
+```
+
+## Use
+
+Install the required plugin:
+
+```bash
+tynd add shell
+```
+
+```ts
+import { oauth } from "@tynd/plugin-oauth";
+import { shell } from "@tynd/plugin-shell/client";
+
+const state = crypto.randomUUID();
+const flow = await oauth.start({ path: "/callback", expectedState: state });
+
+await shell.open(`https://provider.example/authorize?client_id=ID&redirect_uri=${encodeURIComponent(flow.redirectUri)}&state=${state}`);
+
+const { params } = await flow.wait({ timeoutMs: 120_000 });
+console.log(params.code);
+```
+
+## API
+
+`oauth.start(opts?): Promise<OAuthFlow>`
+
+| Option | Default | Notes |
+|---|---|---|
+| `port` | `0` (OS-picked) | Pin a port when the provider needs a fixed `redirect_uri` |
+| `path` | `"/"` | Single leading `/`, ASCII, at most 256 bytes, no `?` or `#` |
+| `successHtml` | built-in | HTML shown in the browser; at most 4 KiB and ASCII only |
+| `expectedState` | none | CSRF nonce. A callback with a missing, duplicated or different `state` gets HTTP 400 and surfaces as `oauth:error` |
+
+An `OAuthFlow` has `id`, `port`, `redirectUri`, `wait({ timeoutMs? })` (default 5 minutes) and `cancel()`. `oauth.list()` returns the active flow ids.
+
+## Security
+
+- Always pass `expectedState` when the flow uses `state`.
+- `successHtml` is served raw. Never put provider responses, query parameters or other untrusted data in it. The response carries a strict `Content-Security-Policy` that blocks scripts and remote loads as defense in depth.
+- Loopback only. Only `GET` completes a callback (other methods get 405 and leave the flow active), and each `start()` accepts one callback.
+- Call `flow.cancel()` when the user abandons the flow. Otherwise the listener stays until the `wait()` timeout cancels it; a flow nobody waits on is closed 10 minutes after `start()`. At most 16 flows run at once.
+
+## Related
+
+- [Plugins overview](/docs/v1.0/api/plugins)
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [Full README](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone/oauth)

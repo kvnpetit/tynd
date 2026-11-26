@@ -20,11 +20,11 @@ limitations under the License.
 THIRD-PARTY SOFTWARE INCLUDED
 ================================================================================
 
-This distribution includes code from the following projects, each under
-its own license. Full license texts are available on the respective
-project pages.
+This distribution includes code from the following projects, each under its
+own license. Full license texts and the complete resolved graphs are available
+from the project sources and Cargo lockfiles.
 
-## Rust runtime hosts (tynd-host, tynd-full, tynd-lite)
+## Rust runtime hosts (tynd-host, tynd-runtime)
 
 - wry              (Apache-2.0 / MIT) — https://github.com/tauri-apps/wry
 - tao              (Apache-2.0 / MIT) — https://github.com/tauri-apps/tao
@@ -33,25 +33,20 @@ project pages.
 - rfd              (MIT)              — https://github.com/PolyMeilex/rfd
 - arboard          (Apache-2.0 / MIT) — https://github.com/1Password/arboard
 - open             (MIT)              — https://github.com/Byron/open-rs
-- pollster         (Apache-2.0 / MIT) — https://github.com/zesterer/pollster
 - notify-rust      (Apache-2.0 / MIT) — https://github.com/hoodie/notify-rust
 - image            (Apache-2.0 / MIT) — https://github.com/image-rs/image
-- rquickjs         (MIT)              — https://github.com/DelSkayn/rquickjs
 - serde            (Apache-2.0 / MIT) — https://github.com/serde-rs/serde
 - serde_json       (Apache-2.0 / MIT) — https://github.com/serde-rs/json
 - tempfile         (Apache-2.0 / MIT) — https://github.com/Stebalien/tempfile
-- dirs             (Apache-2.0 / MIT) — https://github.com/dirs-dev/dirs-rs
+- dirs             (MIT / Apache-2.0) — https://github.com/dirs-dev/dirs-rs
 - zstd             (MIT)              — https://github.com/gyscos/zstd-rs
-- mimalloc         (MIT)              — https://github.com/purpleprotocol/mimalloc_rust
 - base64           (Apache-2.0 / MIT) — https://github.com/marshallpierce/rust-base64
 - ureq             (Apache-2.0 / MIT) — https://github.com/algesten/ureq
 - portable-pty     (MIT)              — https://github.com/wez/wezterm/tree/main/pty
 - sha2             (Apache-2.0 / MIT) — https://github.com/RustCrypto/hashes
-- hmac             (Apache-2.0 / MIT) — https://github.com/RustCrypto/MACs
 - blake3           (Apache-2.0 / CC0-1.0) — https://github.com/BLAKE3-team/BLAKE3
-- single-instance  (MIT)              — https://github.com/jorgeatgu/single-instance
 - interprocess     (Apache-2.0 / MIT) — https://github.com/kotauskas/interprocess
-- ed25519-dalek    (BSD-3-Clause)     — https://github.com/dalek-cryptography/curve25519-dalek
+- ed25519-dalek    (BSD-3-Clause)     — https://github.com/dalek-cryptography/ed25519-dalek
 - notify           (CC0-1.0 / Artistic-2.0) — https://github.com/notify-rs/notify
 - global-hotkey    (Apache-2.0 / MIT) — https://github.com/tauri-apps/global-hotkey
 - auto-launch      (MIT)              — https://github.com/zzzgydi/auto-launch
@@ -63,33 +58,48 @@ project pages.
 - windows-sys             (Apache-2.0 / MIT) — https://github.com/microsoft/windows-rs
 - rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
 - tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
-- rusqlite         (MIT)              — https://github.com/rusqlite/rusqlite
 - parking_lot      (Apache-2.0 / MIT) — https://github.com/Amanieu/parking_lot
 - dashmap          (MIT)              — https://github.com/xacrimon/dashmap
 - ahash            (Apache-2.0 / MIT) — https://github.com/tkaitchuck/ahash
 
-QuickJS (bundled via rquickjs) is (C) Fabrice Bellard and Charlie Gordon,
-licensed under the MIT License.
+## Rust developer tooling (tynd, tynd-mcp, tynd-bundler)
 
-SQLite (bundled via rusqlite) is in the public domain — https://www.sqlite.org/copyright.html
+- clap             (Apache-2.0 / MIT) — https://github.com/clap-rs/clap
+- anyhow           (Apache-2.0 / MIT) — https://github.com/dtolnay/anyhow
+- tracing          (Apache-2.0 / MIT) — https://github.com/tokio-rs/tracing
+- ctrlc            (Apache-2.0 / MIT) — https://github.com/Detegr/rust-ctrlc
+- regex            (Apache-2.0 / MIT) — https://github.com/rust-lang/regex
+- semver           (Apache-2.0 / MIT) — https://github.com/dtolnay/semver
+- walkdir          (MIT / Unlicense)  — https://github.com/BurntSushi/walkdir
+- zip              (MIT)              — https://github.com/zip-rs/zip2
+- tauri-bundler    (Apache-2.0 / MIT) — https://github.com/tauri-apps/tauri
+- apple-codesign   (MPL-2.0)          — https://github.com/indygreg/apple-platform-rs
+- resvg / usvg     (MPL-2.0)          — https://github.com/linebender/resvg
+- ico              (MIT)              — https://github.com/mdsteele/rust-ico
+- tauri-icns       (Apache-2.0 / MIT) — https://github.com/tauri-apps/icns
+- rpm              (Apache-2.0)       — https://github.com/rpm-rs/rpm
 
-## TypeScript CLI (@tynd/cli)
+## Published JavaScript and TypeScript surfaces
 
-- cac              (MIT)              — https://github.com/cacjs/cac
-- @clack/prompts   (MIT)              — https://github.com/natemoo-re/clack
-- @resvg/resvg-js  (MPL-2.0)          — https://github.com/yisibl/resvg-js
-- resedit          (MIT)              — https://github.com/jet2jet/resedit-js
-- valibot          (MIT)              — https://github.com/fabian-hiller/valibot
-- adm-zip          (MIT)              — https://github.com/cthackers/adm-zip
-- tar-stream       (MIT)              — https://github.com/mafintosh/tar-stream
+`@tynd/cli` publishes a thin native launcher and a dependency-free typed config
+surface. `@tynd/mcp` publishes a thin native launcher and its static catalog.
+`@tynd/core` remains the TypeScript application API.
 
-## TypeScript core (@tynd/core)
+Direct runtime dependencies of the published `@tynd/core` surface:
 
-- valibot          (MIT)              — https://github.com/fabian-hiller/valibot
+- c12              (MIT)              — https://github.com/unjs/c12
+- devalue          (MIT)              — https://github.com/Rich-Harris/devalue
+- pathe            (MIT)              — https://github.com/unjs/pathe
+- valibot          (MIT)              — https://github.com/open-circle/valibot
 
-## Build-time runtime (distributed with tynd-full apps)
+## Application runtime
 
-Applications packaged with `tynd build` and the `full` runtime embed a
-copy of the Bun runtime:
+Applications packaged by `tynd build` contain the selected Bun runtime:
 
 - Bun              (MIT)              — https://github.com/oven-sh/bun
+
+## Tynd native plugins
+
+Native plugins are Rust crates linked into an application-specific host.
+JavaScript plugins run with the application's Bun backend. Official plugins
+live under https://github.com/kvnpetit/tynd/tree/main/plugins/standalone.

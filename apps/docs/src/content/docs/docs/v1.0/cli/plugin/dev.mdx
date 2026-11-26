@@ -1,0 +1,48 @@
+---
+title: tynd plugin dev
+description: "Run a plugin inside a generated scratch app, with tynd dev or a one-off build."
+---
+
+# `tynd plugin dev`
+
+```bash
+tynd plugin dev ./plugins/indexer
+tynd plugin dev @acme/plugin-indexer --no-watch
+tynd plugin dev indexer --scratch ~/scratch/indexer --force
+```
+
+Generates a minimal Tynd app that depends on the plugin, installs it, and starts it.
+
+`<plugin>` is resolved, in order, as a directory (absolute or relative to `--cwd`), `plugins/<plugin>`, `node_modules/<plugin>`, or the package at `--cwd` when its `package.json` name equals `<plugin>`. The directory must hold a `package.json` with a `name`.
+
+The scratch app contains:
+
+- `package.json` with the plugin as a `link:` dependency, `@tynd/core`, and `@tynd/cli` / `@tynd/host-src` as dev dependencies. Each `@tynd/*` package takes the specifier from the plugin's own `devDependencies` or `peerDependencies` when it is local (`file:` or `link:`, a relative path resolved against the plugin directory; `workspace:` becomes a `file:` path to the package the workspace installed) or an exact version, so unpublished packages work; otherwise it gets the CLI's `^<version>` range;
+- `tynd.config.ts` listing the plugin in `plugins`;
+- `backend/main.ts` calling `app.start`, and a placeholder `frontend/index.html`;
+- a `.tynd-plugin-dev` marker file.
+
+The command then runs `bun install` and `tynd dev` in the scratch directory, or `tynd build` with `--no-watch`. The child gets a sanitized environment.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Directory used to resolve `<plugin>` |
+| `--scratch <dir>` | `~/.tynd/plugin-dev/<name>` | Scratch app directory; `<name>` is the package name with every non-alphanumeric character replaced by `-` |
+| `-f, --force` | false | Delete the managed scratch directory and generate it again |
+| `--no-watch` | false | Build once with `tynd build` instead of starting `tynd dev` |
+
+Without `--force`, the generated files are rewritten on each run and other files in the scratch directory are kept.
+
+## What can go wrong
+
+- The scratch directory must be empty or hold the `.tynd-plugin-dev` marker; otherwise the command refuses to touch it.
+- It must be a real directory (not a link), must not contain `.` or `..` segments, and cannot be a filesystem root, the project root, the home directory, or an ancestor of one of them.
+- `plugin "<x>" not found`: pass a plugin directory or an installed package name.
+
+## Related
+
+- [`tynd plugin new`](/docs/v1.0/cli/plugin/new)
+- [`tynd plugin check`](/docs/v1.0/cli/plugin/check)
+- [`tynd plugin types`](/docs/v1.0/cli/plugin/types)

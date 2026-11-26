@@ -1,0 +1,25 @@
+Tynd Plugins
+Copyright 2026 Kevin Petit (@kvnpetit)
+
+This product includes software developed by Kevin Petit (@kvnpetit) and
+the Tynd contributors (https://github.com/kvnpetit/tynd/tree/main/plugins/standalone).
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+================================================================================
+THIRD-PARTY SOFTWARE INCLUDED — by plugin
+================================================================================
+
+## @tynd/plugin-sql
+- SQLite           (public domain; supplied by Bun) — https://www.sqlite.org/copyright.html
+
+## @tynd/plugin-terminal
+- portable-pty     (MIT)              — https://github.com/wez/wezterm/tree/main/pty
+- parking_lot      (Apache-2.0 / MIT) — https://github.com/Amanieu/parking_lot
+- dashmap          (MIT)              — https://github.com/xacrimon/dashmap
+- base64           (Apache-2.0 / MIT) — https://github.com/marshallpierce/rust-base64
+- serde_json       (Apache-2.0 / MIT) — https://github.com/serde-rs/json

@@ -1,0 +1,41 @@
+---
+title: updater
+description: "Signed auto-update runtime. Facade over the core `updater` host API."
+---
+
+# `updater`
+
+`@tynd/plugin-updater` enables the host `updater` API and exposes its typed client. The API itself is documented on the [`updater`](/docs/v1.0/api/os/updater) page.
+
+## Install
+
+```bash
+tynd add updater
+```
+
+```ts
+import { updater } from "@tynd/plugin-updater/client";
+```
+
+Declaring the plugin compiles the matching `api-updater` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-updater` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-updater` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `updater` |
+| Aliases for `tynd add` | `update`, `updates` |
+| Catalog permission labels | `host:updater`, `network`, `local-files` |
+| Estimated size | 340 KB |
+| Client exports | `DEFAULT_UPDATER_CHANNEL`, `DownloadProgress`, `PatchEntry`, `RawUpdateInfo`, `UpdateInfo`, `Updater`, `UpdaterCheckEvent`, `UpdaterCheckOptions`, `UpdaterConfigureConfig`, `UpdaterDownloadOptions`, `UpdaterDownloadResult`, `UpdaterEvent`, `UpdaterInstallOptions`, `UpdaterInstallResult`, `UpdaterPatchDownloadOptions`, `UpdaterPeriodicOptions`, `UpdaterProgress`, `UpdaterRuntimeConfig`, `assertValidChannel`, `updater`, `updaterIpc` |
+
+## Extra exports
+
+Besides `updater` the client re-exports `updaterIpc` and the updater types (`UpdateInfo`, `UpdaterCheckOptions`, `UpdaterDownloadOptions`, `UpdaterInstallOptions`, `UpdaterEvent`, ...). Endpoints, channels, public keys and rollout are configured in the `updater` block of [`tynd.config.ts`](/docs/v1.0/cli/config#updater); see [Auto-updates](/docs/v1.0/guides/auto-updates).
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

@@ -1,0 +1,46 @@
+---
+title: tynd test
+description: "Run the project's end-to-end tests with bun test, prepared for @tynd/test."
+---
+
+# `tynd test`
+
+```bash
+tynd test
+tynd test --update-snapshots e2e/login.test.ts --bail
+```
+
+Finds the project root (nearest config upward from `--cwd`), runs `bun test` there, and prepares the environment that [`@tynd/test`](/docs/v1.0/guides/testing) relies on. Tests are plain `bun test` files that call `launchApp()`; this command does not start the app itself.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Directory to start the project-root search from |
+| `--timeout-ms <ms>` | `180000` | Per-test timeout passed to `bun test --timeout`; ignored if you pass `--timeout` yourself |
+| `--update-snapshots` | false | Rewrite screenshot baselines instead of failing on a mismatch |
+| `[args...]` | none | Everything else is forwarded to `bun test` (file filters, `--bail`, `-t <name>`, ...) |
+
+Put `tynd test` flags before the forwarded arguments. To forward something that looks like a `tynd test` flag, separate it with `--`.
+
+## Environment set for `bun test`
+
+| Variable | Value |
+|---|---|
+| `TYND_TEST` | `1` |
+| `TYND_TEST_PROJECT` | The project root |
+| `TYND_TEST_CLI` | Path of the running `tynd` binary, used by `launchApp()` to run `tynd dev` |
+| `TYND_TEST_TIMEOUT_MS` | The effective per-test timeout: `--timeout-ms`, or the value of a forwarded `--timeout` |
+| `TYND_ENV` | `test`, only when not already set |
+| `TYND_UPDATE_SNAPSHOTS` | `1`, only with `--update-snapshots` |
+
+## What can go wrong
+
+- `Bun executable not found`: install Bun and make sure it is on `PATH`.
+- The command exits with the `bun test` result; a failed test fails the command.
+- The debug server accepts one client at a time, so run E2E files one app at a time (`tynd test --max-concurrency 1`).
+
+## Related
+
+- [Testing guide](/docs/v1.0/guides/testing)
+- [`tynd dev`](/docs/v1.0/cli/dev)

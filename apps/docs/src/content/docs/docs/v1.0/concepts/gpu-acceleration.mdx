@@ -1,0 +1,223 @@
+---
+title: GPU & 3D
+description: "What hardware acceleration Tynd inherits from the OS webview, what 3D / WebGL / WebGPU works out of the box, and how to wire up a Three.js scene."
+---
+
+# GPU acceleration & 3D
+
+Tynd renders inside the **system webview** (WebView2 on Windows,
+WKWebView on macOS, WebKitGTK on Linux). All three engines ship GPU
+compositing, hardware video decode, and WebGL. WebGPU is available when the
+installed OS webview supports it; Tynd enables the available platform path by
+default. **CSS animations, video, and WebGL use the webview GPU path without an
+app flag.**
+
+This page covers what Tynd ships today, the tradeoffs per OS, and how
+to wire up a Three.js scene with your favourite frontend framework.
+
+## What's enabled per OS
+
+| Capability | Windows (WebView2) | macOS (WKWebView) | Linux (WebKitGTK) |
+|---|---|---|---|
+| GPU compositing (CSS, scroll, video) | Yes | Yes | Yes |
+| WebGL 1 + 2 (Three.js, Babylon.js, PixiJS) | Yes | Yes | Yes |
+| WebGPU (compute shaders, modern 3D) | Yes (Chromium 113+) | Yes (Safari 18+ on macOS 15+) | WebKitGTK 2.40+, behind `WEBKIT_USE_WEBGPU=1` (set by the host unless `window.webgpu` is `false`) |
+| Hardware video decode (h264, h265, AV1) | Yes (DXVA / D3D11) | Yes (VideoToolbox) | Yes when the VA-API driver is installed |
+| Canvas 2D GPU acceleration | Yes | Yes | Yes |
+
+The webview is the GPU surface — Tynd wraps it but doesn't proxy or
+buffer GPU calls, so there's no Tynd-specific overhead vs. running the
+same page in Edge / Safari / Epiphany.
+
+## Three.js — quick start
+
+There's no built-in `three` template — use your favourite framework's
+scaffold and add Three.js as a regular npm dependency:
+
+```bash
+bunx @tynd/cli create my-3d-app --framework react
+cd my-3d-app
+bun add three @types/three
+# (see snippet below — save it as src/scene.ts and import it from src/main.tsx)
+bun run dev
+```
+
+A minimal HMR-friendly scene that picks the discrete GPU on dual-GPU
+laptops (Intel + NVIDIA / AMD), caps `devicePixelRatio` at 2 (the
+standard "no-one-can-tell-3x-from-2x" knob), and uses orbit controls:
+
+```ts title="src/scene.ts" {1-2,7-10}
+import * as THREE from "three"
+import { OrbitControls } from "three/addons/controls/OrbitControls.js"
+
+const scene = new THREE.Scene()
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  // Dual-GPU laptops (Hybrid Graphics) — hint the OS to pick the
+  // discrete GPU. Honoured by Chromium, WKWebView and WebKitGTK.
+  powerPreference: "high-performance",
+})
+renderer.setSize(window.innerWidth, window.innerHeight)
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+document.body.appendChild(renderer.domElement)
+
+// Add a lit cube + orbit controls + animation loop here. See the
+// official Three.js "Creating a scene" guide for the full example:
+// https://threejs.org/docs/#manual/en/introduction/Creating-a-scene
+camera.position.z = 5
+const controls = new OrbitControls(camera, renderer.domElement)
+function animate() {
+  requestAnimationFrame(animate)
+  controls.update()
+  renderer.render(scene, camera)
+}
+animate()
+```
+
+Any Vite-based template (`react`, `vue`, `svelte`, `solid`, `preact`,
+`lit`) works the same way — Three.js is rendered into a
+`<canvas>` you mount inside your component tree.
+
+## Knobs you actually have today
+
+Host-level GPU policy lives in `WindowConfig`:
+
+```ts title="backend/main.ts"
+import { app } from "@tynd/core"
+
+app.start({
+  window: {
+    webgpu: true,
+    hardwareAcceleration: "high-performance",
+    preferredFps: "monitor", // or an integer, clamped to 15..480
+    gpu: "discrete",         // or { vendor: "nvidia" | "amd" | "intel" }
+    colorSpace: "p3",        // "srgb" | "p3" | "rec2020" | "linear"
+    hdr: false,
+    vrr: true,
+    contextLostRecovery: true,
+  },
+})
+```
+
+These are platform hints, not guarantees. Windows maps them to WebView2 /
+Chromium arguments. Linux applies WebKitGTK and GPU-offload environment hints
+before creating the first webview; HDR degrades to sRGB with a host warning.
+macOS delegates adapter choice and frame pacing to the OS, while
+`contextLostRecovery` controls web-content-process recovery.
+
+Renderer-level tuning remains useful for Three.js / Babylon.js / your own
+WebGL code:
+
+```ts
+// In src/main.ts (frontend)
+const renderer = new THREE.WebGLRenderer({
+  // Hint to the OS to prefer the discrete GPU on dual-GPU laptops.
+  // Honored by Chromium (Windows / Linux / macOS Hybrid Graphics).
+  powerPreference: "high-performance", // | "low-power" | "default"
+
+  // Trade FXAA-on-the-render-target for free MSAA.
+  antialias: true,
+
+  // Set on iGPU laptops if you can't afford the full DPR — most users
+  // can't tell 1.5x from 2x at typical viewing distances.
+  // (Three.js example uses Math.min(devicePixelRatio, 2).)
+})
+```
+
+```ts
+// Frame pacing — adopt the monitor's refresh rate (default).
+function animate(t: number) {
+  requestAnimationFrame(animate)
+  // ...your render call
+}
+```
+
+The browser's `requestAnimationFrame` is automatically synced to the
+monitor's refresh rate (60, 120, 144, 240+ Hz on appropriate displays),
+so you get free V-Sync without doing anything special.
+
+## WebGPU compute (advanced)
+
+WebGPU support depends on the installed WebView, GPU and driver. Detect it in
+the frontend before using it for ML inference (transformers.js with
+`WebGPUBackend`), image processing, particle systems, or modern 3D
+renderers (Three.js `WebGPURenderer`):
+
+```ts
+const adapter = await navigator.gpu?.requestAdapter()
+const device = await adapter?.requestDevice()
+```
+
+Choose your WebGL renderer when there is no adapter and the required WebGL
+context is available.
+
+On Linux, the host sets `WEBKIT_USE_WEBGPU=1` before WebKitGTK starts when
+`window.webgpu` is not `false`. Older WebKitGTK releases ignore the hint, so
+applications must still detect `navigator.gpu` and keep a WebGL fallback.
+
+## Detecting GPU capabilities
+
+Cleanly degrade when the user's hardware doesn't ship WebGPU or
+hits a WebGL2 limit:
+
+```ts
+function getGPUInfo() {
+  const canvas = document.createElement("canvas")
+  const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl")
+  if (!gl) return null
+
+  const dbg = gl.getExtension("WEBGL_debug_renderer_info")
+  return {
+    vendor: dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : "unknown",
+    renderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "unknown",
+    maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+    webgl2: gl instanceof WebGL2RenderingContext,
+  }
+}
+
+const webgl = getGPUInfo()
+const webgpu = Boolean(await navigator.gpu?.requestAdapter())
+```
+
+`WEBGL_debug_renderer_info` is optional. When the WebView withholds the
+extension, use the context and its limits to choose a rendering preset.
+
+## Performance gotchas
+
+A handful of patterns cost you frames in any webview-based 3D app —
+they're not Tynd-specific, but worth flagging:
+
+- **Don't `console.log` in `requestAnimationFrame`.** The DevTools
+  bridge is synchronous and slow; even a single log per frame caps
+  you near 60 FPS even on 240 Hz monitors. Use a logger that
+  buffers + flushes once per second.
+- **Cap `devicePixelRatio` to 2.** Retina + 4K Windows laptops report
+  3.0+, which quadruples your fragment shader load. `setPixelRatio
+  (Math.min(devicePixelRatio, 2))` is the standard knob.
+- **Disable `OrbitControls.enableDamping` for fixed-camera scenes.**
+  Damping forces a render every frame even when nothing's moving.
+- **Use `renderer.info` to check draw calls + triangles.** Render an
+  on-screen HUD that pulls `renderer.info.render.triangles` and
+  `.calls` — over ~500 K triangles and you're CPU-bound on the JS
+  side, not GPU-bound.
+
+## What Tynd doesn't do (yet)
+
+- **WebXR / OpenXR (VR / AR).** The OS webview controls XR support;
+  WebView2 ships it experimentally, WKWebView doesn't, WebKitGTK
+  doesn't. No Tynd native bridge today.
+- **Direct Vulkan / Metal / D3D12 access without the webview.**
+  Run rendering through WebGPU or WebGL in the system webview.
+- **GPU memory introspection.** Use Chrome DevTools (the webview's
+  built-in inspector) or vendor tools (NVIDIA Nsight, RenderDoc,
+  Xcode Instruments) for the deep dive.
+
+## See also
+
+- [`tynd create`](/docs/v1.0/cli/create) — full CLI reference for the create
+  command (use any framework and `bun add three` for 3D apps).
+- [Architecture](/docs/v1.0/concepts/architecture) — where the WebView fits in the
+  three-surface model.
+- [Runtime](/docs/v1.0/concepts/runtimes) — Bun and native host packaging (all builds ship the same
+  WebView, GPU support is identical).

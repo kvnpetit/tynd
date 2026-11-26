@@ -1,3 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json"
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/lib/config.ts", "src/lib/config.test.ts", "src/lib/config/types.generated.ts"],
+  "exclude": ["node_modules", "bin", "native", "schemas", "templates"]
 }

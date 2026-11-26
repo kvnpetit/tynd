@@ -1,0 +1,830 @@
+{
+  "$defs": {
+    "ApiName": {
+      "description": "Native API that can be enabled in an app-specific Tynd host.",
+      "enum": [
+        "acl",
+        "autolaunch",
+        "biometric",
+        "cli",
+        "clipboard",
+        "compute",
+        "deep-link",
+        "dialog",
+        "fs",
+        "http",
+        "keyring",
+        "keys",
+        "log",
+        "menu",
+        "multiwindow",
+        "network",
+        "notification",
+        "power",
+        "process",
+        "screenshot",
+        "shell",
+        "shortcuts",
+        "sidecar",
+        "single-instance",
+        "store",
+        "system-stats",
+        "theme",
+        "tray",
+        "updater",
+        "vault",
+        "websocket",
+        "window-state"
+      ],
+      "type": "string"
+    },
+    "AppImageBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "bundleXdgOpen": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "BundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "appimage": {
+          "$ref": "#/$defs/AppImageBundleConfig"
+        },
+        "categories": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "copyright": {
+          "type": "string"
+        },
+        "deb": {
+          "$ref": "#/$defs/DebBundleConfig"
+        },
+        "displayName": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "fileAssociations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FileAssociation"
+          },
+          "type": "array"
+        },
+        "identifier": {
+          "pattern": "^[A-Za-z][A-Za-z0-9-]*(?:\\.[A-Za-z0-9-]+){2,}$",
+          "type": "string"
+        },
+        "licenseFile": {
+          "description": "Project-relative license file shown by the Windows installers and shipped by the Linux packages.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "longDescription": {
+          "type": "string"
+        },
+        "macos": {
+          "$ref": "#/$defs/MacosBundleConfig"
+        },
+        "pkgbuild": {
+          "$ref": "#/$defs/PkgbuildBundleConfig"
+        },
+        "resources": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rpm": {
+          "$ref": "#/$defs/RpmBundleConfig"
+        },
+        "shortDescription": {
+          "type": "string"
+        },
+        "sign": {
+          "$ref": "#/$defs/SigningConfig"
+        },
+        "windows": {
+          "$ref": "#/$defs/WindowsBundleConfig"
+        }
+      },
+      "required": ["identifier"],
+      "type": "object"
+    },
+    "ByteSize": {
+      "anyOf": [
+        {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "DebBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "depends": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "desktopTemplate": {
+          "description": "Project-relative Handlebars template replacing the generated `.desktop` entry (also used by the AppImage).",
+          "minLength": 1,
+          "type": "string"
+        },
+        "priority": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "section": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ExecutionLevel": {
+      "enum": ["asInvoker", "highestAvailable", "requireAdministrator"],
+      "type": "string"
+    },
+    "ExportedFileType": {
+      "additionalProperties": false,
+      "properties": {
+        "conformsTo": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "identifier": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["identifier"],
+      "type": "object"
+    },
+    "FileAssociation": {
+      "additionalProperties": false,
+      "properties": {
+        "contentTypes": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "exportedType": {
+          "$ref": "#/$defs/ExportedFileType"
+        },
+        "ext": {
+          "items": {
+            "pattern": "^\\.?[A-Za-z0-9][A-Za-z0-9.+_-]*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "mimeType": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rank": {
+          "$ref": "#/$defs/FileAssociationRank"
+        },
+        "role": {
+          "$ref": "#/$defs/FileAssociationRole"
+        }
+      },
+      "required": ["ext"],
+      "type": "object"
+    },
+    "FileAssociationRank": {
+      "enum": ["Default", "Owner", "Alternate", "None"],
+      "type": "string"
+    },
+    "FileAssociationRole": {
+      "enum": ["Editor", "Viewer", "Shell", "QLGenerator", "None"],
+      "type": "string"
+    },
+    "MacosBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "entitlements": {
+          "description": "Project-relative entitlements plist used when the `.app` is signed.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "infoPlist": {
+          "description": "Project-relative plist merged into the generated `Info.plist`.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "minimumSystemVersion": {
+          "default": "14.0",
+          "description": "`LSMinimumSystemVersion` (default and floor `14.0`).",
+          "pattern": "^\\d+(?:\\.\\d+){0,2}$",
+          "type": "string"
+        },
+        "urlSchemes": {
+          "items": {
+            "pattern": "^[a-zA-Z][a-zA-Z0-9+\\-.]*$",
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "MacosNotarizeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "apiKey": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["apiKey"],
+      "type": "object"
+    },
+    "MacosSigningConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "entitlements": {
+          "type": "string"
+        },
+        "identity": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "notarize": {
+          "$ref": "#/$defs/MacosNotarizeConfig"
+        },
+        "password": {
+          "type": "string"
+        }
+      },
+      "required": ["identity"],
+      "type": "object"
+    },
+    "MsixBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "minVersion": {
+          "description": "`MinVersion` of `Windows.Desktop` (default `10.0.17763.0`, Windows 10 1809).",
+          "pattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$",
+          "type": "string"
+        },
+        "publisher": {
+          "description": "Publisher distinguished name; must equal the subject of the signing certificate (for example `CN=Example Corp, O=Example Corp, C=US`).",
+          "pattern": "^CN=",
+          "type": "string"
+        },
+        "publisherDisplayName": {
+          "description": "Defaults to the package author, else the app name.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "version": {
+          "description": "Four-part package version (each part at most 65535). Defaults to the app version cut to its numeric core, which maps `1.2.3-beta.1` and `1.2.3` to the same `1.2.3.0`. The Microsoft Store requires the fourth part to be 0.",
+          "pattern": "^\\d+\\.\\d+\\.\\d+\\.\\d+$",
+          "type": "string"
+        }
+      },
+      "required": ["publisher"],
+      "type": "object"
+    },
+    "NsisInstallMode": {
+      "enum": ["currentUser", "perMachine", "both"],
+      "type": "string"
+    },
+    "ObservabilityConfig": {
+      "additionalProperties": false,
+      "description": "Opt-in production telemetry. Absent means disabled (no init, no cost). The host compiles `obs-sentry` / `obs-otel` in only for the pipelines you configure.",
+      "properties": {
+        "otel": {
+          "$ref": "#/$defs/OtelObservabilityConfig"
+        },
+        "sentry": {
+          "$ref": "#/$defs/SentryObservabilityConfig"
+        }
+      },
+      "type": "object"
+    },
+    "OtelObservabilityConfig": {
+      "additionalProperties": false,
+      "description": "`OpenTelemetry` OTLP/gRPC trace export. A blank `endpoint` disables the pipeline.",
+      "properties": {
+        "endpoint": {
+          "description": "OTLP/gRPC collector URL. Blank disables the pipeline.",
+          "pattern": "^(?:$|https?://)",
+          "type": "string"
+        },
+        "serviceName": {
+          "description": "Defaults to the executable name.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["endpoint"],
+      "type": "object"
+    },
+    "PkgbuildBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "depends": {
+          "description": "Arch package names added to the default `gtk3` and `webkit2gtk-4.1`.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "PluginConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "apis": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ApiName"
+          },
+          "type": "array"
+        },
+        "features": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "permissions": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-z][a-z0-9-]*:(?:\\*|[a-z][A-Za-z0-9]*)$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pkg": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["pkg"],
+      "type": "object"
+    },
+    "PluginEntry": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/PluginConfig"
+        }
+      ]
+    },
+    "PromptStyle": {
+      "enum": ["modal", "tray", "silent", "manual"],
+      "type": "string"
+    },
+    "RpmBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "desktopTemplate": {
+          "description": "Project-relative Handlebars template replacing the generated `.desktop` entry.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "requires": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "SentryObservabilityConfig": {
+      "additionalProperties": false,
+      "description": "Sentry crash reporting. A blank `dsn` disables the pipeline.",
+      "properties": {
+        "dsn": {
+          "description": "Sentry DSN. Blank disables the pipeline.",
+          "pattern": "^(?:$|https?://)",
+          "type": "string"
+        },
+        "environment": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "release": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sampleRate": {
+          "default": 1,
+          "description": "Fraction of events sent, 0..1 (default 1).",
+          "format": "double",
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": ["dsn"],
+      "type": "object"
+    },
+    "SidecarConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["name", "path"],
+      "type": "object"
+    },
+    "SigningConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "macos": {
+          "$ref": "#/$defs/MacosSigningConfig"
+        },
+        "windows": {
+          "$ref": "#/$defs/WindowsSigningConfig"
+        }
+      },
+      "type": "object"
+    },
+    "UpdaterConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allowPatch": {
+          "default": true,
+          "type": "boolean"
+        },
+        "autoApply": {
+          "default": false,
+          "type": "boolean"
+        },
+        "autoCheck": {
+          "default": true,
+          "description": "Periodic update check every `checkInterval`. `autoCheck`, `checkOnStartup` and `autoDownload` are driven by the frontend: they only run once the main window has imported `@tynd/plugin-updater/client` (an app that never loads that module never checks).",
+          "type": "boolean"
+        },
+        "autoDownload": {
+          "default": true,
+          "description": "Download every update a check finds. Same requirement as `autoCheck`.",
+          "type": "boolean"
+        },
+        "channel": {
+          "default": "stable",
+          "description": "Default release channel (`\"stable\"` when unset): letters, digits, `.`, `_`, `-`, 1..64 characters, not starting with `.`. `updater.setChannel()` overrides it at runtime.",
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$",
+          "type": "string"
+        },
+        "checkInterval": {
+          "default": "12h",
+          "type": "string"
+        },
+        "checkOnStartup": {
+          "default": true,
+          "description": "Run one check at startup. Same requirement as `autoCheck`.",
+          "type": "boolean"
+        },
+        "endpoints": {
+          "description": "Manifest URLs tried in order (fallback on network error, HTTP 5xx, 408 and 429). Each may use `{{channel}}`, `{{target}}` (windows|darwin|linux), `{{arch}}` (`x86_64`|`aarch64`) and `{{current_version}}`.",
+          "items": {
+            "pattern": "^https?://",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "fallbackToFull": {
+          "default": true,
+          "type": "boolean"
+        },
+        "headers": {
+          "additionalProperties": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "description": "Fixed request headers for private update servers (e.g. `Authorization`). Values may use `${env:NAME}`, expanded from the environment / `.env` files when the CLI generates the backend bootstrap, so a token need not be committed. Sent only to the origins of the configured endpoints (at least one endpoint needs a fixed origin), never on a cross-origin redirect. Transport-owned names (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Proxy-Authorization`, ...) are rejected; at most 32 headers, values <= 4096 bytes. Backend-only, like `proxy`. A packaged app carries the expanded value in its backend bundle: use a low-privilege read token.",
+          "maxProperties": 32,
+          "propertyNames": {
+            "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+          },
+          "type": "object"
+        },
+        "maxPatchSize": {
+          "$ref": "#/$defs/ByteSize"
+        },
+        "preferPatch": {
+          "default": true,
+          "type": "boolean"
+        },
+        "promptStyle": {
+          "$ref": "#/$defs/PromptStyle",
+          "default": "modal"
+        },
+        "proxy": {
+          "description": "`http://` or `https://` proxy (`scheme://host[:port]`, no query or fragment) for updater traffic. Without it the host falls back to `HTTPS_PROXY` / `ALL_PROXY`. Backend-only: never injected into the renderer-visible runtime config.",
+          "pattern": "^https?://[^?#]+$",
+          "type": "string"
+        },
+        "publicKeys": {
+          "description": "Trusted Ed25519 public keys (base64). A signature is valid when any key verifies it, so a rotation ships old + new, signs with the new key, then drops the old one.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "requireMajorPrompt": {
+          "default": true,
+          "type": "boolean"
+        },
+        "requireSignature": {
+          "const": true,
+          "default": true,
+          "description": "Signature checks cannot be turned off.",
+          "type": "boolean"
+        }
+      },
+      "required": ["endpoints", "publicKeys"],
+      "type": "object"
+    },
+    "WebView2InstallMode": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "skip",
+              "type": "string"
+            }
+          },
+          "required": ["type"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "silent": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "downloadBootstrapper",
+              "type": "string"
+            }
+          },
+          "required": ["type"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "silent": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "embedBootstrapper",
+              "type": "string"
+            }
+          },
+          "required": ["type"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "silent": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "offlineInstaller",
+              "type": "string"
+            }
+          },
+          "required": ["type"],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "const": "fixedRuntime",
+              "type": "string"
+            }
+          },
+          "required": ["type", "path"],
+          "type": "object"
+        }
+      ]
+    },
+    "WindowsBundleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allowDowngrades": {
+          "type": "boolean"
+        },
+        "installMode": {
+          "$ref": "#/$defs/NsisInstallMode",
+          "default": "currentUser",
+          "description": "NSIS install scope (default `currentUser`: no elevation)."
+        },
+        "minimumWebView2Version": {
+          "pattern": "^\\d+(?:\\.\\d+){3}$",
+          "type": "string"
+        },
+        "msix": {
+          "$ref": "#/$defs/MsixBundleConfig",
+          "description": "MSIX package identity, required by the `msix` bundle target."
+        },
+        "requestedExecutionLevel": {
+          "$ref": "#/$defs/ExecutionLevel",
+          "description": "UAC level of the app executable, embedded as its application manifest. Unset means no manifest (`asInvoker`)."
+        },
+        "webviewInstallMode": {
+          "$ref": "#/$defs/WebView2InstallMode",
+          "default": {
+            "type": "skip"
+          },
+          "description": "Defaults to `{ type: \"skip\" }`; no registry probe or runtime download is performed."
+        }
+      },
+      "type": "object"
+    },
+    "WindowsSigningConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "certificate": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "timestampUrl": {
+          "format": "uri",
+          "pattern": "^https?://",
+          "type": "string"
+        }
+      },
+      "required": ["certificate"],
+      "type": "object"
+    }
+  },
+  "$id": "https://kvnpetit.github.io/tynd/schemas/tynd.config.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Tynd application configuration, as written in `tynd.config.{ts,js,json,jsonc,yaml,toml}`. Full reference: <https://kvnpetit.github.io/tynd/docs/v1.0/cli/config>",
+  "properties": {
+    "$schema": {
+      "description": "Editor-only JSON Schema reference. Ignored by the CLI.",
+      "type": "string"
+    },
+    "apis": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ApiName"
+      },
+      "type": "array"
+    },
+    "backend": {
+      "default": "backend/main.ts",
+      "minLength": 1,
+      "type": "string"
+    },
+    "binaryArgs": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "bundle": {
+      "$ref": "#/$defs/BundleConfig"
+    },
+    "devCommand": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "devCommandArgs": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "devUrl": {
+      "format": "uri",
+      "pattern": "^https?://",
+      "type": "string"
+    },
+    "extends": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "not": {
+            "pattern": "^[A-Za-z][A-Za-z0-9+.-]*://"
+          },
+          "type": "string"
+        },
+        {
+          "items": {
+            "minLength": 1,
+            "not": {
+              "pattern": "^[A-Za-z][A-Za-z0-9+.-]*://"
+            },
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ],
+      "description": "Base config files (local paths or npm packages, no URLs) this file extends; its own values override theirs."
+    },
+    "frontendDir": {
+      "default": "frontend",
+      "minLength": 1,
+      "type": "string"
+    },
+    "icon": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "observability": {
+      "$ref": "#/$defs/ObservabilityConfig"
+    },
+    "plugins": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PluginEntry"
+      },
+      "type": "array"
+    },
+    "protocols": {
+      "default": [],
+      "items": {
+        "pattern": "^[a-zA-Z][a-zA-Z0-9+\\-.]*$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "sidecars": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SidecarConfig"
+      },
+      "type": "array"
+    },
+    "updater": {
+      "$ref": "#/$defs/UpdaterConfig"
+    }
+  },
+  "title": "Tynd configuration",
+  "type": "object"
+}

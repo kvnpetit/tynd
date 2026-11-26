@@ -1,0 +1,101 @@
+---
+title: Comparisons
+description: "Tynd vs Tauri, Electron, Wails — how to choose, what Tynd covers, and what it does not have."
+---
+
+import { Aside, CardGrid } from '@astrojs/starlight/components';
+import DocCard from '@/components/DocCard.astro';
+
+# Comparisons
+
+Tynd sits in the same category as Tauri, Wails, and Electron — a framework for shipping desktop apps with a WebView front. Each makes different tradeoffs on language, runtime packaging, and API surface.
+
+## TL;DR
+
+| | Browser runtime | Language choice | Native surface | Mobile | TS-native? |
+|---|---|---|---|---|---|
+| **Tynd** | System WebView | TypeScript/Bun | Broad OS APIs + official plugins | ❌ | ✅ |
+| **Tauri v2** | System WebView | Rust + JS | Broad official/community plugin catalog | ✅ | ⚠ via bridge |
+| **Wails v3** | System WebView | Go + JS | Go stdlib + bindings | ❌ | ⚠ via bridge |
+| **Electron** | Bundled Chromium | Node.js + JS | Full Chromium + Node stdlib | ❌ | ⚠ via bridge |
+
+<Aside type="note">
+  **Headline:** Tynd is the only option where a TypeScript developer never writes Rust, Go, or Node glue. Same language end-to-end.
+</Aside>
+
+## Pick Tynd when
+
+- You want **TypeScript end-to-end** — no Rust, Go, or Node glue.
+- You prefer a TypeScript/Bun backend and native WebView over bundled Chromium.
+- You want **zero-network IPC** and **zero-codegen typed RPC**, with cancellation and `Channel` push built in.
+- You want security that is deny-by-default for native commands: per-window/webview/origin capabilities, a default filesystem scope with protected locations, and runtime grants from the backend or a file dialog.
+
+## Pick Tauri when
+
+- You want a **more mature permission ecosystem** (more prebuilt resource-scope schemas and production examples).
+- You need **mobile (iOS / Android)** support.
+- You need a specific Tauri plugin from its broader ecosystem that Tynd does not cover, such as NFC or another mobile-focused integration.
+- You need a **universal macOS binary** or **cross-compilation**.
+- You're already a **Rust developer** who prefers writing Rust for the native layer.
+
+## Pick Wails when
+
+- You're a **Go developer** and want to reuse Go libraries on the native side.
+- You need **GTK4 / WebKitGTK 6.0** on Linux (experimental but Wails-first).
+- You want **server mode** (run without a GUI).
+
+## Pick Electron when
+
+- You need **bundled Chromium** — consistent rendering across OSes, no WebView2 / WKWebView / WebKitGTK variance.
+- You need **full Node stdlib** or the entire npm ecosystem in the main process.
+- You need Chromium-level hooks: `desktopCapturer` MediaStreams, **request interception** (`webRequest`), **permission-request handlers**, **download progress / cancel**, basic-auth and certificate handlers, **Chrome extensions**, **Touch Bar** (macOS) or **StoreKit IAP**.
+- Binary size is not a concern.
+
+## What Tynd covers
+
+Every row links to the API page that documents it, including its per-OS limits.
+
+| Area | Tynd 1.0 |
+|---|---|
+| Windows | Primary window plus [`multiwindow`](/docs/v1.0/api/plugins/multiwindow) handles (from frontend and backend), child webviews, [effects](/docs/v1.0/api/os/window) (Mica, Tabbed, Acrylic, Blur, macOS materials), kiosk, frameless drag / resize attributes, per-window menu bar (Windows, Linux), file drag-out, badges, taskbar progress |
+| Menus | [Menu bar](/docs/v1.0/api/os/menu) with runtime mutation by id, programmatic and declarative context menus, macOS Dock menu, Windows jump list, recent documents (Windows, macOS) |
+| Tray | [Several icons](/docs/v1.0/api/os/tray), runtime menu mutation, icon bounds, tray-attached popover window (Windows, macOS) |
+| Dialogs | [File pickers](/docs/v1.0/api/os/dialog) with `grantAccess`, message box with custom buttons and checkbox |
+| Notifications | [Actions, categories, inline reply](/docs/v1.0/api/os/notification), scheduling, delivered-notification management |
+| Webview | [Static permission decisions, cookies, `printToPdf`, `capturePage`, `clearData`, silent print, audio mute, proxy, popup and download policies](/docs/v1.0/api/os/webview) |
+| Protocols | [Asset protocol](/docs/v1.0/api/os/protocols) (`convertFileSrc`, Range seeking) and backend-served schemes (`app.protocol`) |
+| IPC | [Zero-codegen typed RPC](/docs/v1.0/api/backend) with cancellation (`AbortSignal`, timeouts), `Channel<T>`, streaming, a `tynd-bin://` binary path for `fs` |
+| Backend | Window events and preventable close on `getWindow(label)`, middleware, [crash reporter](/docs/v1.0/api/backend) (local JSON reports, no upload) |
+| Security | [Capabilities](/docs/v1.0/concepts/security), [default filesystem scope + protected locations, runtime grants](/docs/v1.0/api/os/security), IPC frame token, auto-injected CSP |
+| Packaging | [NSIS, MSI, MSIX, `.app`, DMG, AppImage, deb, rpm, Flatpak, Snap, PKGBUILD](/docs/v1.0/guides/bundling), BLAKE3 pack integrity, [`tynd icon`](/docs/v1.0/cli/icon) |
+| Updater | [Signed full and patch updates, channels, staged rollout](/docs/v1.0/api/os/updater) |
+
+## What Tynd does not have
+
+- **No mobile**, no **headless / server mode** (every app has a WebView window), no **universal macOS binary** and no **cross-compilation**: `tynd build` builds for the machine it runs on.
+- **HTTP plugin is HTTP/1.1 only**; use Bun's `fetch` for HTTP/2 or HTTP/3.
+- **No request interception**, no **basic-auth or TLS-certificate handlers**, no **runtime permission-request handler** (permissions are decided statically per webview), no **download progress, save dialog or cancel hooks** (start and result events only), no renderer sandbox option.
+- **No Windows thumbnail toolbar** and **no tray balloon**.
+- **No Chromium-specific APIs**: `desktopCapturer` MediaStreams, Chrome extensions, Touch Bar, StoreKit.
+- **Per-OS rejections** — these calls reject instead of silently doing nothing:
+  - Linux: `tray.attachWindow`, `tray.popUpContextMenu`, `setEffects`, `setAspectRatio`, `setMovable`, `getPrinters`, notification inline `reply`, clipboard RTF and custom formats, recent documents. Tray icons report no bounds and no hover events; renderer crashes are not reported.
+  - macOS: `setAudioMuted` / `isAudioMuted`, silent `print`, `getPrinters`, notification `getDelivered` / `remove` / `removeAll`, per-window menu bars (one app-wide bar). `printToPdf` renders one continuous page and ignores layout options.
+  - Windows-only: `setEnabled`, jump list, tray `onDoubleClick`. macOS-only: `app.dock.*`, `askForMediaAccess`, `titleBarStyle`.
+
+## Detailed comparisons
+
+<CardGrid>
+  <DocCard title="vs Tauri v2" href="/docs/v1.0/compare/vs-tauri">
+    Shared stack (wry + tao); Tauri has plugins and mobile, Tynd keeps TS-only and zero-codegen.
+  </DocCard>
+  <DocCard title="vs Electron" href="/docs/v1.0/compare/vs-electron">
+    Tynd's system WebView vs Electron's bundled Chromium — different runtime packaging and API surfaces.
+  </DocCard>
+  <DocCard title="vs Wails" href="/docs/v1.0/compare/vs-wails">
+    Both target native WebView with a non-Rust backend language; different ecosystems, different IPC transports.
+  </DocCard>
+</CardGrid>
+
+## Reading the comparison pages
+
+These pages document the high-signal tradeoffs that affect framework choice: backend language, runtime size, security model, updater behavior, plugin surface, rendering engine, and platform reach. Competitor cells describe each project's documented features as plainly as possible; a feature left out of a table is not compared, not claimed missing. Use the API and guide pages as the source of truth for exact Tynd capabilities.

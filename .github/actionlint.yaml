@@ -1,0 +1,6 @@
+# Runner labels that older actionlint releases did not know. CI pins
+# actionlint 1.7.12 (ci.yml), which knows them; kept for older local installs.
+self-hosted-runner:
+  labels:
+    - macos-15-intel
+    - windows-11-arm

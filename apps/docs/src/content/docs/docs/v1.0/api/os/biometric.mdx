@@ -1,0 +1,30 @@
+---
+title: biometric
+description: "Touch ID / Face ID and Windows Hello authentication prompt."
+---
+
+# `biometric`
+
+Install the required plugin:
+
+```bash
+tynd add biometric
+```
+
+```ts
+import { biometric } from "@tynd/plugin-biometric/client";
+```
+
+Backed by [`robius-authentication`](https://github.com/project-robius/robius-authentication) on macOS and Windows. Linux reports unavailable because the upstream polkit backend is incomplete. `isAvailable()` reports whether platform support is compiled in — the canonical "is biometrics actually usable?" signal is the result of `authenticate`.
+
+## API surface
+
+- `biometric.isAvailable(): Promise<boolean>` — static `true` on macOS and Windows, `false` on Linux.
+- `biometric.authenticate(reason, fallbackTitle?): Promise<boolean>` — prompts the user; resolves `true` on success and `false` when the user cancels or auth fails (never rejects on a normal cancel). It rejects on platform faults (no enrollment, sensor disabled, policy refused) and always on Linux. `fallbackTitle` defaults to `"Authenticate"`.
+
+```ts
+if (await biometric.isAvailable()) {
+  const ok = await biometric.authenticate("Unlock saved password");
+  if (ok) revealSecret();
+}
+```

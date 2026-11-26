@@ -1,0 +1,90 @@
+Tynd
+Copyright 2026 Kevin Petit (@kvnpetit)
+
+This product includes software developed by Kevin Petit (@kvnpetit) and
+the Tynd contributors (https://github.com/kvnpetit/tynd).
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+================================================================================
+THIRD-PARTY SOFTWARE INCLUDED
+================================================================================
+
+This distribution includes code from the following projects, each under
+its own license. Full license texts are available on the respective
+project pages.
+
+## Rust runtime hosts (tynd-host, tynd-runtime)
+
+- wry              (Apache-2.0 / MIT) — https://github.com/tauri-apps/wry
+- tao              (Apache-2.0 / MIT) — https://github.com/tauri-apps/tao
+- muda             (Apache-2.0 / MIT) — https://github.com/tauri-apps/muda
+- tray-icon        (Apache-2.0 / MIT) — https://github.com/tauri-apps/tray-icon
+- rfd              (MIT)              — https://github.com/PolyMeilex/rfd
+- arboard          (Apache-2.0 / MIT) — https://github.com/1Password/arboard
+- open             (MIT)              — https://github.com/Byron/open-rs
+- pollster         (Apache-2.0 / MIT) — https://github.com/zesterer/pollster
+- notify-rust      (Apache-2.0 / MIT) — https://github.com/hoodie/notify-rust
+- image            (Apache-2.0 / MIT) — https://github.com/image-rs/image
+- serde            (Apache-2.0 / MIT) — https://github.com/serde-rs/serde
+- serde_json       (Apache-2.0 / MIT) — https://github.com/serde-rs/json
+- tempfile         (Apache-2.0 / MIT) — https://github.com/Stebalien/tempfile
+- dirs             (Apache-2.0 / MIT) — https://github.com/dirs-dev/dirs-rs
+- zstd             (MIT)              — https://github.com/gyscos/zstd-rs
+- base64           (Apache-2.0 / MIT) — https://github.com/marshallpierce/rust-base64
+- ureq             (Apache-2.0 / MIT) — https://github.com/algesten/ureq
+- portable-pty     (MIT)              — https://github.com/wez/wezterm/tree/main/pty
+- sha2             (Apache-2.0 / MIT) — https://github.com/RustCrypto/hashes
+- hmac             (Apache-2.0 / MIT) — https://github.com/RustCrypto/MACs
+- blake3           (Apache-2.0 / CC0-1.0) — https://github.com/BLAKE3-team/BLAKE3
+- single-instance  (MIT)              — https://github.com/ldm0/single-instance
+- interprocess     (Apache-2.0 / MIT) — https://github.com/kotauskas/interprocess
+- ed25519-dalek    (BSD-3-Clause)     — https://github.com/dalek-cryptography/ed25519-dalek
+- notify           (CC0-1.0 / Artistic-2.0) — https://github.com/notify-rs/notify
+- global-hotkey    (Apache-2.0 / MIT) — https://github.com/tauri-apps/global-hotkey
+- auto-launch      (MIT)              — https://github.com/zzzgydi/auto-launch
+- keyring          (MIT / Apache-2.0) — https://github.com/open-source-cooperative/keyring-rs
+- trash            (MIT)              — https://github.com/Byron/trash-rs
+- user-idle        (MIT)              — https://github.com/olback/user-idle-rs
+- tauri-winrt-notification (Apache-2.0 / MIT) — https://github.com/tauri-apps/winrt-notification
+- mac-notification-sys    (MIT)         — https://github.com/h4llow3En/mac-notification-sys
+- windows-sys             (Apache-2.0 / MIT) — https://github.com/microsoft/windows-rs
+- rand             (Apache-2.0 / MIT) — https://github.com/rust-random/rand
+- tungstenite      (Apache-2.0 / MIT) — https://github.com/snapview/tungstenite-rs
+- parking_lot      (Apache-2.0 / MIT) — https://github.com/Amanieu/parking_lot
+- dashmap          (MIT)              — https://github.com/xacrimon/dashmap
+- ahash            (Apache-2.0 / MIT) — https://github.com/tkaitchuck/ahash
+
+
+## TypeScript core (@tynd/core)
+
+- c12              (MIT)              — https://github.com/unjs/c12
+- devalue          (MIT)              — https://github.com/Rich-Harris/devalue
+- pathe            (MIT)              — https://github.com/unjs/pathe
+- valibot          (MIT)              — https://github.com/fabian-hiller/valibot
+
+## Build-time runtime (distributed with tynd-runtime apps)
+
+Applications packaged with `tynd build` embed a
+copy of the Bun runtime:
+
+- Bun              (MIT)              — https://github.com/oven-sh/bun
+
+## Tynd plugin native crates
+
+Native plugins ship Rust crates and are statically linked into the app's
+host binary when enabled. Bun/TypeScript plugins add no Rust crate. They live
+at https://github.com/kvnpetit/tynd/tree/main/plugins/standalone.
+
+- tynd-plugin-audio
+- tynd-plugin-terminal

@@ -1,0 +1,62 @@
+[package]
+name                    = "tynd-runtime"
+description             = "Tynd Bun runtime and native desktop host"
+publish                 = false
+version.workspace       = true
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+readme                  = "README.md"
+
+[lib]
+name    = "tynd_runtime"
+path    = "src/lib.rs"
+doctest = false
+
+[[bin]]
+name = "tynd-runtime"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Host keeps default features off so `tynd-runtime` can select the
+# preset or a slim custom API set. `acl` and `log` are always compiled into the
+# host, so the renderer capability check is never a build option.
+# Custom example:
+# `cargo build -p tynd-runtime --no-default-features --features "tynd-host/api-fs"`
+# the way the CLI does for apps requiring a custom host.
+#
+# NOTE: `tynd-runtime` ships with NO bundled plugins by default — keeps the base
+# binary lightweight. Apps that need plugins (sql, terminal, audio, etc.)
+# declare them in `tynd.config.ts`; the CLI generates a custom Cargo.toml
+# under `.tynd/build/` that pulls only the plugins the app actually uses.
+tynd-host            = { path = "../host", version = "1.0.0", default-features = false }
+tynd-pack-format.workspace = true
+tynd-protocol.workspace = true
+serde.workspace      = true
+serde_json.workspace = true
+zstd.workspace       = true
+dirs.workspace       = true
+crossbeam-channel.workspace = true
+blake3.workspace     = true
+# Encodes backend custom-protocol bodies (`app.protocol`) on the JSON wire.
+base64.workspace     = true
+
+[target.'cfg(unix)'.dependencies]
+# `geteuid` for the Bun cache ownership check (`embed::ensure_private_dir`).
+libc.workspace       = true
+
+[features]
+default = ["preset"]
+# The shipped preset: the minimal host core (which always has `acl` + `log`), the debug protocol and Bun. Plugins are
+# NOT bundled — apps pick advanced native capabilities via the CLI custom-build
+# pipeline instead of every preset carrying the whole host surface.
+preset  = ["tynd-host/debug-protocol", "tynd-host/debug-screenshot"]

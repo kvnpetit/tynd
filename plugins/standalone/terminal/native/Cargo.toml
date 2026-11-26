@@ -1,0 +1,37 @@
+[package]
+name         = "tynd-plugin-terminal"
+description  = "Embedded PTY plugin for the Tynd framework."
+publish.workspace       = true
+version                 = "1.0.0"
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest    = false
+
+[[bin]]
+name = "tynd-plugin-terminal-gen-types"
+path = "src/bin/gen-types.rs"
+
+[dependencies]
+tynd-plugin-sdk    = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+portable-pty       = { workspace = true }
+parking_lot        = { workspace = true }
+base64             = { workspace = true }
+specta             = { workspace = true }
+tracing            = { workspace = true }
+crossbeam-channel  = "0.5"
+

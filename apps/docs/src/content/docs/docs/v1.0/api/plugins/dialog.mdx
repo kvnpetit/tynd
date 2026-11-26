@@ -1,0 +1,38 @@
+---
+title: dialog
+description: "Native file pickers and message dialogs. Facade over the `dialog` host API."
+---
+
+# `dialog`
+
+`@tynd/plugin-dialog` enables the host `dialog` API and exposes its typed client. The API itself is documented on the [`dialog`](/docs/v1.0/api/os/dialog) page.
+
+## Install
+
+```bash
+tynd add dialog
+```
+
+```ts
+import { dialog } from "@tynd/plugin-dialog/client";
+```
+
+Declaring the plugin compiles the matching `api-dialog` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-dialog` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-dialog`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-dialog` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `dialog` |
+| Aliases for `tynd add` | `dialogs`, `file-picker` |
+| Catalog permission labels | `host:dialog` |
+| Estimated size | 130 KB |
+| Client exports | `ConfirmOptions`, `FileFilter`, `MessageKind`, `MessageOptions`, `MessageResult`, `OpenDirectoryOptions`, `OpenFileOptions`, `PickerOptions`, `SaveFileOptions`, `dialog` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

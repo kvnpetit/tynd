@@ -1,0 +1,265 @@
+---
+title: Persistence
+description: "Store app state — plain k/v with `store`, relational with `sql`, secrets with `keyring`, arbitrary files with `fs`."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Persistence
+
+Four layers, pick the right one for the data you're persisting.
+
+| Data shape | API | Backing |
+|---|---|---|
+| Non-sensitive k/v (theme, recent files, preferences) | `createStore(ns)` | JSON file at `<appConfigDir>/<ns>/store.json` |
+| Relational / SQL | `sql.open(path)` | Bundled SQLite (the SQLite driver) |
+| Secrets (tokens, passwords) | `keyring.set/get` | OS credential manager (Keychain / DPAPI / Secret Service) |
+| Arbitrary files (documents, images, logs) | `fs.*` | Filesystem |
+
+## Key-value — `store`
+
+Install the required plugin:
+
+```bash
+tynd add store
+```
+
+```ts
+import { createStore } from "@tynd/plugin-store/client";
+
+const prefs = createStore("com.example.myapp");
+
+await prefs.set("theme", "dark");
+await prefs.set("recentFiles", ["/tmp/a.md", "/tmp/b.md"]);
+
+const theme  = await prefs.get<string>("theme");
+const keys   = await prefs.keys();               // string[]
+const hasKey = await prefs.has("theme");          // boolean
+
+await prefs.delete("theme");
+await prefs.clear();
+```
+
+- Namespaced per `createStore(ns)` — each namespace maps to `<config_dir>/<app>/<ns>/store.json`, inside `os.appConfigDir()` (`<app>` is `bundle.identifier`, the executable name when unset).
+- Writes are debounced: persisted about 100 ms after the last `set` / `delete` / `clear`, and flushed on graceful exit. A crash in that window loses them; a resolved write is not yet durable.
+- JSON-serializable values only — no functions, no class instances, no cycles.
+
+<Aside type="caution">
+  **Not encrypted.** Anything on disk under the user's config dir is readable by any process with user-level access. Don't put tokens / passwords / session cookies in `store` — use `keyring`.
+</Aside>
+
+## Secrets — `keyring`
+
+Install the required plugins:
+
+```bash
+tynd add keyring
+tynd add sql
+tynd add fs
+```
+
+```ts
+import { keyring } from "@tynd/plugin-keyring/client";
+
+const entry = { service: "com.example.myapp", account: "alice" };
+
+await keyring.set(entry, "s3cr3t-token");
+const token = await keyring.get(entry);   // string | null
+await keyring.delete(entry);               // true if it existed
+```
+
+Backing per OS:
+
+- **macOS** — Keychain (encrypted with the user's login password).
+- **Windows** — Credential Manager + DPAPI.
+- **Linux** — Secret Service API (GNOME Keyring / KWallet).
+
+Anything in `keyring` is encrypted at rest and only accessible when the user is logged in. Strictly better than `store` for OAuth tokens, API keys, session cookies, passwords.
+
+## Relational — `sql`
+
+Bundled SQLite (no system dependency):
+
+```ts
+import { sql } from "@tynd/plugin-sql/client";
+
+const db = await sql.open("./data.db");   // or ":memory:"
+
+await db.exec(`
+  CREATE TABLE IF NOT EXISTS users(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE
+  )
+`);
+
+const { changes, lastInsertId } = await db.exec(
+  "INSERT INTO users(name, email) VALUES (?1, ?2)",
+  ["Alice", "alice@example.com"],
+);
+
+const rows = await db.query<{ id: number; name: string; email: string }>(
+  "SELECT * FROM users WHERE name LIKE ?1",
+  ["A%"],
+);
+
+const one = await db.queryOne<{ count: number }>(
+  "SELECT COUNT(*) AS count FROM users",
+);
+
+await db.close();
+```
+
+### Params
+
+- Strings, numbers, booleans, nulls.
+- Arrays / objects → stored as JSON text (use `json_extract` in SQL to read back).
+
+### BLOBs
+
+- Stored as base64 strings on the JSON IPC channel (not zero-copy).
+- Fine for small BLOBs (icons, thumbnails). For large ones, prefer `fs.writeBinary` + store the path.
+
+### Storing the DB in the right place
+
+Use the app's own data directory (created on first call, inside the default fs scope):
+
+```ts
+import { os, path } from "@tynd/core/client";
+
+const dbPath = path.join(await os.appDataDir(), "data.db");
+const db = await sql.open(dbPath);
+```
+
+### Migrations
+
+There's no built-in migrator. Pin schema version in a table:
+
+```ts
+await db.exec(`CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)`);
+const versionRow = await db.queryOne<{ v: string }>("SELECT v FROM meta WHERE k='schema_version'");
+const version = versionRow ? parseInt(versionRow.v) : 0;
+
+const migrations: Array<() => Promise<void>> = [
+  async () => {
+    await db.exec(`CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT)`);
+  },
+  async () => {
+    await db.exec(`ALTER TABLE notes ADD COLUMN created_at INTEGER`);
+  },
+];
+
+for (let i = version; i < migrations.length; i++) {
+  await migrations[i]();
+  await db.exec("INSERT OR REPLACE INTO meta VALUES('schema_version', ?1)", [String(i + 1)]);
+}
+```
+
+## Files — `fs`
+
+Paths must sit inside the fs scope: by default the app's own directories (`os.appDataDir()`, `os.appConfigDir()`, `os.appCacheDir()`, `os.appTempDir()`). Relative paths resolve against the working directory, which a packaged app cannot reach.
+
+```ts
+import { os, path } from "@tynd/core/client";
+import { fs } from "@tynd/plugin-fs/client";
+
+const data = await os.appDataDir();
+const notes = path.join(data, "notes");
+const hello = path.join(notes, "hello.md");
+
+// text
+await fs.writeText(hello, "# Hi\n", { createDirs: true });
+const body = await fs.readText(hello);
+
+// binary
+const bytes = await fs.readBinary(path.join(data, "logo.png"));
+await fs.writeBinary(path.join(await os.appCacheDir(), "logo-copy.png"), bytes);
+
+// metadata
+const info = await fs.stat(hello);
+// { size, isFile, isDir, isSymlink, mtime }
+
+// directories
+await fs.mkdir(path.join(notes, "archive"), { recursive: true });
+const entries = await fs.readDir(notes);
+// [{ name, isFile, isDir, isSymlink }, ...]
+
+await fs.copy(hello, path.join(notes, "copy.md"));
+await fs.rename(path.join(notes, "copy.md"), path.join(notes, "renamed.md"));
+await fs.remove(path.join(notes, "renamed.md"));
+
+// watch
+const watcher = await fs.watch(notes, { recursive: true }, (event) => {
+  console.log(event.kind, event.path);
+});
+// later
+await watcher.unwatch();
+```
+
+`fs.watch` uses `ReadDirectoryChangesW` (Windows), `FSEvents` (macOS), `inotify` (Linux).
+
+## Where to put files
+
+Use the app's own directories. Each is `<OS dir>/<app>`, where `<app>` is `bundle.identifier` (for example `com.example.myapp`; the executable name when unset). Each is created on first call and sits inside the default fs scope:
+
+```ts
+import { os } from "@tynd/core/client";
+
+const configDir = await os.appConfigDir(); // ~/.config/<app>, %APPDATA%\<app>
+const dataDir   = await os.appDataDir();   // ~/.local/share/<app>, ~/Library/Application Support/<app>
+const cacheDir  = await os.appCacheDir();  // ~/.cache/<app>, %LOCALAPPDATA%\<app>
+const tmpDir    = await os.appTempDir();   // <system temp>/<app>
+const logDir    = await os.appLogDir();    // <cacheDir>/logs, where `log` writes app.log
+```
+
+Convention:
+
+- **`appConfigDir`** — user-editable settings, YAML/TOML/JSON.
+- **`appDataDir`** — databases, caches the app rebuilds on demand, user-authored documents.
+- **`appCacheDir`** — purely derived data; OK to lose.
+- **`appTempDir`** — ephemeral, don't expect anything to survive a reboot.
+
+The shared roots (`os.homeDir()`, `os.dataDir()`, `os.downloadsDir()`, …) are outside the default scope. To reach a file there, open it through a dialog with `grantAccess: true`, or name the folder in `security.fs.allow`.
+
+## Export / import
+
+To let users back up and restore:
+
+Install the required plugin:
+
+```bash
+tynd add dialog
+```
+
+```ts
+import { fs } from "@tynd/plugin-fs/client";
+import { dialog } from "@tynd/plugin-dialog/client";
+import { sql } from "@tynd/plugin-sql/client";
+
+async function exportBackup() {
+  // grantAccess: the target is wherever the user chose, outside the default scope.
+  const dest = await dialog.saveFile({ defaultName: "backup.db", grantAccess: true });
+  if (!dest) return;
+
+  // Close the db to ensure journal is flushed
+  await db.close();
+  await fs.copy(dbPath, dest);
+  db = await sql.open(dbPath);
+}
+
+async function importBackup() {
+  const src = await dialog.openFile({ grantAccess: true });
+  if (!src) return;
+
+  await db.close();
+  await fs.copy(src, dbPath);
+  db = await sql.open(dbPath);
+}
+```
+
+## Next
+
+- [fs API](/docs/v1.0/api/os/fs)
+- [sql API](/docs/v1.0/api/plugins/sql)
+- [store API](/docs/v1.0/api/os/store)
+- [keyring API](/docs/v1.0/api/os/keyring)

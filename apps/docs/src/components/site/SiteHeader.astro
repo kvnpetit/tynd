@@ -1,0 +1,66 @@
+---
+import { navLinkAttrs, TOP_NAV } from "../../lib/nav";
+import { SITE, withBase } from "../../lib/site";
+import Container from "./Container.astro";
+import ThemeToggle from "./ThemeToggle.astro";
+---
+
+<header>
+  <!-- WCAG 2.4.1 - Bypass Blocks. Visible only on keyboard focus. -->
+  <a href="#main-content" class="skip">Skip to content</a>
+  <Container class="bar">
+    <a href={withBase("/")} class="brand">{SITE.name}</a>
+    <nav>
+      {
+        TOP_NAV.map((item) => (
+          <a {...navLinkAttrs(item)}>{item.label}</a>
+        ))
+      }
+      <ThemeToggle />
+    </nav>
+  </Container>
+</header>
+
+<style>
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid var(--border);
+    background: var(--header-bg);
+    backdrop-filter: blur(8px);
+  }
+  header :global(.bar) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block: 1rem;
+  }
+  .brand {
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+  nav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    font-size: 0.875rem;
+  }
+  nav a:hover {
+    color: var(--accent-text);
+  }
+  .skip {
+    position: absolute;
+    left: 1rem;
+    top: 1rem;
+    z-index: 60;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    background: var(--accent);
+    color: #fff;
+    transform: translateY(-300%);
+  }
+  .skip:focus {
+    transform: none;
+  }
+</style>

@@ -1,0 +1,172 @@
+---
+title: File Browser
+description: "Build a file browser with directory walking, image thumbnails via zero-copy binary IPC, and reveal-in-folder."
+---
+
+# File Browser
+
+A working cross-platform file browser: directory tree, image thumbnails, double-click to open with the OS default handler, right-click to reveal.
+
+Exercises: [`fs.readDir`](/docs/v1.0/api/os/fs), [`fs.readBinary`](/docs/v1.0/api/os/fs) (zero-copy), [`shell.openPath`](/docs/v1.0/api/os/shell), [`shell.revealInFolder`](/docs/v1.0/api/os/shell), [`dialog.openDirectory`](/docs/v1.0/api/os/dialog) with `grantAccess`, [`path.join`](/docs/v1.0/api/os/path).
+
+## Scaffold
+
+```bash
+bunx @tynd/cli create file-browser --framework react
+cd file-browser
+```
+
+## Backend — minimal
+
+No RPC needed — every operation is an OS call from the frontend.
+
+```ts title="backend/main.ts"
+import { app } from "@tynd/core";
+
+app.start({
+  window: { title: "Files", width: 1100, height: 720, center: true },
+});
+```
+
+## Frontend
+
+Install the required plugins:
+
+```bash
+tynd add fs shell dialog
+```
+
+The fs API only reaches the app's own directories by default, not the home folder. The user picks the folder to browse in a dialog opened with `grantAccess: true`, which grants read access to that folder and its whole subtree; browsing stays inside it.
+
+```tsx title="src/App.tsx"
+import { useEffect, useState } from "react";
+import { dialog } from "@tynd/plugin-dialog/client";
+import { fs } from "@tynd/plugin-fs/client";
+import { path } from "@tynd/core/client";
+import { shell } from "@tynd/plugin-shell/client";
+
+interface Entry {
+  name: string;
+  path: string;
+  isDir: boolean;
+}
+
+export default function App() {
+  // The folder the user granted; browsing never goes above it.
+  const [root, setRoot] = useState<string>("");
+  const [cwd, setCwd] = useState<string>("");
+  const [entries, setEntries] = useState<Entry[]>([]);
+
+  async function pickRoot() {
+    const picked = await dialog.openDirectory({ grantAccess: true });
+    if (!picked) return;
+    setRoot(picked);
+    setCwd(picked);
+  }
+
+  useEffect(() => {
+    if (!cwd) return;
+    fs.readDir(cwd).then((dirEntries) => {
+      const items = dirEntries.map((d) => ({
+        name: d.name,
+        path: path.join(cwd, d.name),
+        isDir: d.isDir,
+      }));
+      items.sort((a, b) =>
+        a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1,
+      );
+      setEntries(items);
+    });
+  }, [cwd]);
+
+  function goUp() {
+    if (cwd !== root) setCwd(path.dirname(cwd));
+  }
+
+  async function onOpen(e: Entry) {
+    if (e.isDir) setCwd(e.path);
+    else await shell.openPath(e.path);
+  }
+
+  return (
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <header style={{ display: "flex", gap: 8, padding: 8, borderBottom: "1px solid #ddd" }}>
+        <button onClick={pickRoot}>Open folder…</button>
+        <button onClick={goUp} disabled={!cwd || cwd === root}>↑</button>
+        <code style={{ flex: 1, padding: "4px 8px", background: "#f4f4f4" }}>{cwd}</code>
+      </header>
+
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, overflow: "auto" }}>
+        {entries.map((e) => (
+          <li
+            key={e.path}
+            onDoubleClick={() => onOpen(e)}
+            onContextMenu={(ev) => {
+              ev.preventDefault();
+              shell.revealInFolder(e.path);
+            }}
+            style={{
+              padding: "8px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              cursor: "pointer",
+            }}
+          >
+            {e.isDir ? "📁" : isImage(e.name) ? <Thumbnail path={e.path} /> : "📄"}
+            <span>{e.name}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function isImage(name: string) {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
+}
+
+function Thumbnail({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let dead = false;
+    fs.readBinary(path).then((bytes) => {
+      if (dead) return;
+      const blob = new Blob([bytes]);
+      setUrl(URL.createObjectURL(blob));
+    });
+    return () => {
+      dead = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [path]);
+  return url ? <img src={url} alt="" width={32} height={32} style={{ objectFit: "cover" }} /> : <span>🖼️</span>;
+}
+```
+
+## Why this matters
+
+- **`fs.readBinary`** goes through the `tynd-bin://` zero-copy channel — multi-MB thumbnails don't stall the main thread.
+- **`shell.openPath`** delegates to the OS default handler — PDFs open in Preview/Acrobat, images in your image viewer, etc. No need to build your own viewer.
+- **No backend RPC.** Every operation is a direct OS call from the frontend. The backend is essentially a config file.
+
+## Build
+
+```bash
+tynd build
+```
+
+The packaged app includes Bun. Each launch starts with the folder picker: a [runtime grant](/docs/v1.0/api/os/security#runtime-grants-backend) lasts for the session unless `security.persistGrants` is on.
+
+## Next ideas
+
+- **Watch the current directory** — `fs.watch(cwd, { recursive: false }, reload)` (returns a handle; call `unwatch()` when leaving the directory) to pick up changes from other apps.
+- **Search** — recursive walk with [`async function*`](/docs/v1.0/guides/streaming) yielding matches as they're found.
+- **Copy / move / delete** — `fs.copy`, `fs.rename`, `fs.remove` (or `fs.trash`), wrapped with a `dialog.confirm` for destructive ops.
+- **Drag-drop to add files** — frontend HTML5 drag-drop; the dropped paths are returned as native file paths.
+
+## Related
+
+- [fs API](/docs/v1.0/api/os/fs).
+- [Binary Data guide](/docs/v1.0/guides/binary-data) — why `fs.readBinary` is fast.
+- [shell API](/docs/v1.0/api/os/shell).

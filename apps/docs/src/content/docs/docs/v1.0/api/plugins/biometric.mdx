@@ -1,0 +1,38 @@
+---
+title: biometric
+description: "Biometric prompts. Facade over the core `biometric` host API."
+---
+
+# `biometric`
+
+`@tynd/plugin-biometric` enables the host `biometric` API and exposes its typed client. The API itself is documented on the [`biometric`](/docs/v1.0/api/os/biometric) page.
+
+## Install
+
+```bash
+tynd add biometric
+```
+
+```ts
+import { biometric } from "@tynd/plugin-biometric/client";
+```
+
+Declaring the plugin compiles the matching `api-biometric` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-biometric` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-biometric` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `biometric` |
+| Aliases for `tynd add` | `biometrics` |
+| Catalog permission labels | `host:biometric`, `os-authentication` |
+| Estimated size | 170 KB |
+| Client exports | `biometric` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

@@ -1,0 +1,45 @@
+---
+title: tynd upgrade
+description: "Upgrade core Tynd packages and optionally configured plugins with Bun."
+---
+
+# `tynd upgrade`
+
+```bash
+tynd upgrade
+tynd upgrade --all
+```
+
+The command is non-interactive and runs `bun add` for runtime packages, then `bun add -d` for build tools.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `--all` | Also upgrade plugin packages currently listed in resolved config |
+
+There is no confirmation/`--yes` flag.
+
+## Packages
+
+Always requests the `@latest` release of:
+
+- `@tynd/core` with `bun add`;
+- `@tynd/cli` and `@tynd/host-src` (the Rust sources the app host is compiled from) with `bun add -d`. A package the app already lists in `dependencies` stays there and is upgraded with `bun add` instead.
+
+With `--all`, the configured plugin packages are added to the `bun add` call. Bun updates `package.json`, lock data, and the matching `@tynd/tooling-<os>-<arch>` optional package according to its normal `add` behavior. The next `tynd dev` or `tynd build` recompiles the host from the new sources.
+
+After a tooling/runtime upgrade, run project checks and rebuild explicitly:
+
+```bash
+tynd validate --ci
+tynd clean --dry-run
+tynd clean --yes
+tynd build
+```
+
+## Related
+
+- [`tynd clean`](/docs/v1.0/cli/clean)
+- [Troubleshooting](/docs/v1.0/troubleshooting)

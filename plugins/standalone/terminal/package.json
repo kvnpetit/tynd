@@ -1,0 +1,73 @@
+{
+  "name": "@tynd/plugin-terminal",
+  "version": "1.0.0",
+  "description": "Embedded PTY for Tynd apps — spawn shells, stream output, resize, kill. Native via portable-pty.",
+  "license": "Apache-2.0",
+  "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
+  "homepage": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/terminal",
+  "funding": "https://github.com/sponsors/kvnpetit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
+    "directory": "plugins/standalone/terminal"
+  },
+  "bugs": {
+    "url": "https://github.com/kvnpetit/tynd/issues"
+  },
+  "keywords": [
+    "tynd",
+    "plugin",
+    "terminal",
+    "pty",
+    "shell",
+    "native"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "private": false,
+  "type": "module",
+  "main": "./client.ts",
+  "exports": {
+    ".": "./client.ts",
+    "./client": "./client.ts"
+  },
+  "tynd": {
+    "kind": "standalone",
+    "apis": [],
+    "native": {
+      "path": "./native",
+      "crateName": "tynd-plugin-terminal"
+    }
+  },
+  "peerDependencies": {
+    "@tynd/core": "^1.0.0",
+    "@tynd/plugin-sdk": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tynd/core": {
+      "optional": true
+    },
+    "@tynd/plugin-sdk": {
+      "optional": true
+    }
+  },
+  "files": [
+    "client.ts",
+    "terminal.gen.ts",
+    "native/**",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md"
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "2.6.8",
+    "@types/bun": "1.4.5",
+    "typescript": "~7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false
+}

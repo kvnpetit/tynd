@@ -1,0 +1,38 @@
+---
+title: theme
+description: "OS color scheme, appearance preferences and light/dark palettes. Facade over the `theme` host API."
+---
+
+# `theme`
+
+`@tynd/plugin-theme` enables the host `theme` API and exposes its typed client. The API itself is documented on the [`theme`](/docs/v1.0/api/os/theme) page.
+
+## Install
+
+```bash
+tynd add theme
+```
+
+```ts
+import { theme } from "@tynd/plugin-theme/client";
+```
+
+Declaring the plugin compiles the matching `api-theme` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-theme` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-theme`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-theme` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `theme` |
+| Aliases for `tynd add` | `themes`, `dark-mode` |
+| Catalog permission labels | `host:theme` |
+| Estimated size | 30 KB |
+| Client exports | `ConfigureOptions`, `EffectiveTheme`, `Palette`, `SystemPreferences`, `ThemePreference`, `ThemeSubscription`, `theme` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

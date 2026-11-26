@@ -1,0 +1,18 @@
+{
+  "title": "Recipes",
+  "pages": [
+    "index",
+    "remember-window-size",
+    "minimize-to-tray",
+    "launch-on-boot",
+    "handle-deep-link",
+    "detect-online",
+    "copy-to-clipboard",
+    "progress-download",
+    "run-shell-command",
+    "embed-sidecar",
+    "dark-mode-sync",
+    "single-instance-argv",
+    "confirm-before-quit"
+  ]
+}

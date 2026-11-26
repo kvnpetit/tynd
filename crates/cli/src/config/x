@@ -1,0 +1,44 @@
+pub(crate) struct UpdaterConfig {
+    /// Mirrors tried in order; may use `{{channel}}`, `{{target}}`, `{{arch}}`
+    /// and `{{current_version}}`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub endpoints: Vec<String>,
+    /// Trusted Ed25519 keys (rotation: ship the old and the new key).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub public_keys: Vec<String>,
+    /// Default release channel (`stable` when unset).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel: Option<String>,
+    /// `http(s)://host[:port]` proxy for updater traffic. Backend-only: it is
+    /// never injected into the renderer-visible runtime config.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<String>,
+    /// Fixed request headers for private update servers. Values may use
+    /// `${env:NAME}`, expanded when the CLI generates the backend bootstrap.
+    /// Backend-only, like `proxy`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub headers: BTreeMap<String, String>,
+    #[serde(default = "yes")]
+    pub prefer_patch: bool,
+    #[serde(default = "yes")]
+    pub allow_patch: bool,
+    pub max_patch_size: Option<ByteSize>,
+    #[serde(default = "yes")]
+    pub fallback_to_full: bool,
+    #[serde(default = "yes")]
+    pub auto_check: bool,
+    #[serde(default = "default_check_interval")]
+    pub check_interval: String,
+    #[serde(default = "yes")]
+    pub check_on_startup: bool,
+    #[serde(default = "yes")]
+    pub auto_download: bool,
+    #[serde(default)]
+    pub auto_apply: bool,
+    #[serde(default)]
+    pub prompt_style: PromptStyle,
+    #[serde(default = "yes")]
+    pub require_signature: bool,
+    #[serde(default = "yes")]
+    pub require_major_prompt: bool,
+}

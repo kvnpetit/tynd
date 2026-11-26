@@ -1,0 +1,55 @@
+[package]
+name         = "tynd-plugin-audio"
+description  = "Audio capture & playback (cpal) + WAV I/O (hound) for the Tynd framework."
+publish.workspace       = true
+version                 = "1.0.0"
+edition.workspace       = true
+rust-version.workspace  = true
+license.workspace       = true
+repository.workspace    = true
+homepage.workspace      = true
+documentation.workspace = true
+authors.workspace       = true
+keywords.workspace      = true
+categories.workspace    = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest    = false
+
+[[bin]]
+name = "tynd-plugin-audio-gen-types"
+path = "src/bin/gen-types.rs"
+
+[dependencies]
+tynd-plugin-sdk    = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+parking_lot        = { workspace = true }
+specta             = { workspace = true }
+crossbeam-channel  = "0.5"
+bon                = { workspace = true }
+tracing            = { workspace = true }
+# `audio:samples` wire encoding (f32 lanes cast to bytes, then base64);
+# only the `capture` backend emits samples.
+base64             = { workspace = true, optional = true }
+bytemuck           = { workspace = true, optional = true }
+
+# Optional native backends — opt-in via `--features capture,wav` so the
+# default build stays lean and platform-portable. cpal pulls in CoreAudio /
+# ALSA / WASAPI bindings; hound carries WAV (RIFF) parser/encoder code.
+cpal               = { version = "0.18", optional = true }
+hound              = { version = "3.5", optional = true }
+
+[features]
+default = []
+# `capture` enables the cpal-backed input/output streaming path.
+# `playFile` reads WAV data on the fly, so flipping `capture` on
+# automatically enables `wav` to keep the feature surface coherent
+# (a capture-only build with no WAV decoder couldn't replay files).
+capture = ["dep:cpal", "dep:hound", "dep:base64", "dep:bytemuck"]
+wav     = ["dep:hound"]
+

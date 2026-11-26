@@ -1,0 +1,49 @@
+# cargo-deny — supply-chain policy.
+#
+# Run: `cargo deny check` (advisories + bans + licenses + sources).
+# CI: github action `EmbarkStudios/cargo-deny-action@v2`.
+
+[graph]
+all-features = true
+
+[advisories]
+db-urls       = ["https://github.com/rustsec/advisory-db"]
+yanked        = "deny"
+ignore        = []  # add RUSTSEC-XXXX-NNNN strings here when accepting risk
+
+[licenses]
+# Apache-2.0 / MIT / BSD-3 / ISC / Unicode-DFS-2016 dual-OK across the stack.
+# MPL-2.0 file-level copyleft is OK for indirect deps but flagged so we know.
+# AGPL / GPL / SSPL / BSL block — license incompatible with shipping.
+allow                  = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "ISC",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "Unicode-DFS-2016",
+  "Unicode-3.0",
+  "CC0-1.0",
+  "Zlib",
+  "MPL-2.0",
+]
+confidence-threshold   = 0.93
+exceptions = []
+
+[bans]
+multiple-versions = "warn"
+wildcards         = "deny"
+deny = [
+  # Prefer rustls everywhere — avoids OpenSSL ABI fights on Windows.
+  { name = "openssl-sys", reason = "use rustls instead" },
+  { name = "openssl",     reason = "use rustls instead" },
+  # Sled has corruption history; tynd uses redb/fjall instead.
+  { name = "sled",        reason = "use redb / fjall" },
+  # async-std deprecated March 2025.
+  { name = "async-std",   reason = "deprecated; use smol or tokio" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git      = "deny"

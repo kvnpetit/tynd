@@ -1,0 +1,32 @@
+---
+// Numbered steps: every `###` heading inside becomes a step.
+---
+
+<div class="steps"><slot /></div>
+
+<style>
+  .steps {
+    counter-reset: step;
+    margin: 1.5rem 0;
+    padding-inline-start: 1.5rem;
+    border-inline-start: 1px solid var(--sl-color-gray-5);
+  }
+  .steps :global(h3) {
+    counter-increment: step;
+  }
+  .steps :global(h3)::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-inline-end: 0.5rem;
+    border-radius: 9999px;
+    background-color: var(--sl-color-accent);
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-xs);
+    font-weight: 500;
+    vertical-align: middle;
+  }
+</style>

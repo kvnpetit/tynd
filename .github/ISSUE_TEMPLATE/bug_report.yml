@@ -1,0 +1,100 @@
+name: Bug report
+description: Report a reproducible bug in Tynd
+title: "[bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out the form below — the more detail, the faster we can fix it.
+
+        For security vulnerabilities, do **not** file a public issue — see [`SECURITY.md`](https://github.com/kvnpetit/tynd/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear, concise description of what the bug is.
+      placeholder: When I run `tynd build`, the host crashes with ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Step-by-step instructions, ideally with a minimal repro repo or playground app.
+      placeholder: |
+        1. `bunx @tynd/cli create my-app`
+        2. `cd my-app && bun run dev`
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include error messages and stack traces if any.
+    validations:
+      required: true
+
+  - type: input
+    id: tynd-version
+    attributes:
+      label: Tynd version
+      description: Output of `tynd --version` and the relevant `@tynd/*` packages.
+      placeholder: "@tynd/cli 1.0.0, @tynd/core 1.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: info
+    attributes:
+      label: Environment
+      description: Output of `tynd info` run in the project (versions, toolchain, plugins and host APIs).
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / Architecture
+      description: e.g. macOS 14.5 (arm64), Windows 11 (x86_64), Ubuntu 22.04 (x86_64).
+    validations:
+      required: true
+
+  - type: input
+    id: bun-version
+    attributes:
+      label: Bun version
+      description: Output of `bun --version`.
+      placeholder: "1.4.5"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Paste relevant logs, stack traces, or `TYND_LOG=debug` / `tynd dev --verbose` output. Use a code fence.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Anything else that might help — screenshots, related issues, workarounds.
+    validations:
+      required: false

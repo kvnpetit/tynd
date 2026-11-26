@@ -1,0 +1,144 @@
+---
+title: clipboard
+description: "Read / write text, HTML, RTF, files, base64-PNG images and custom formats on the system clipboard."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# `clipboard`
+
+Install the required plugin:
+
+```bash
+tynd add clipboard
+```
+
+```ts
+import { clipboard } from "@tynd/plugin-clipboard/client";
+```
+
+## Text
+
+```ts
+const text = await clipboard.readText();
+await clipboard.writeText("Hello!");
+```
+
+## HTML
+
+```ts
+await clipboard.writeHtml(`<p><b>Hello</b> world</p>`);
+await clipboard.writeHtml(`<p>rich</p>`, "rich");   // optional plain-text fallback
+
+const html = await clipboard.readHtml();   // string | null
+```
+
+`writeHtml` sets both `text/html` and (optionally) a plain-text variant.
+`readHtml` returns the native HTML representation on Windows, macOS, X11, and
+Wayland, or `null` when none exists.
+
+## RTF
+
+```ts
+await clipboard.writeRtf(String.raw`{\rtf1\ansi {\b Hello} world}`, "Hello world");
+const rtf = await clipboard.readRtf();   // string | null
+```
+
+`writeRtf` replaces the clipboard with RTF and an optional plain-text fallback. Windows and macOS.
+
+## Custom formats
+
+Read and write any representation by MIME type. Common types map to the native name: `text/plain`, `text/rtf`, `image/png`, `image/tiff` (macOS), `text/uri-list`. Any other string is used as the Windows registered format name or the macOS pasteboard type (UTI), so `application/x-my-app` or `com.example.item` work as is.
+
+```ts
+await clipboard.writeFormats({
+  "application/x-my-app": new Uint8Array([1, 2, 3]),
+  "text/plain": "fallback for other apps",
+});
+
+const formats = await clipboard.availableFormats();         // string[]
+const bytes = await clipboard.readFormat("application/x-my-app"); // Uint8Array | null
+```
+
+| Method | Description |
+|---|---|
+| `availableFormats()` | Formats on the clipboard, as MIME types where one is known, else the native name. |
+| `readFormat(format)` | Bytes of `format`, or `null` when absent. |
+| `writeFormat(format, data)` | Replace the clipboard with one format. |
+| `writeFormats(record)` | Replace the clipboard with up to 32 formats at once. |
+
+`data` is a `Uint8Array` or a string (sent as UTF-8). Each format name has 1–256 characters, without control characters; each payload is at most 64 MiB. `text/html` is refused: use `readHtml` / `writeHtml`, which write the platform's HTML envelope. File-reference formats are refused for writing too, compared case-insensitively: `text/uri-list`, `public.file-url`, `NSFilenamesPboardType`, the `com.apple.pasteboard.promised-file-*` types, every macOS dynamic type (`dyn.*`, which can alias any of these), `CF_HDROP`, `FileName` / `FileNameW`, `Shell IDList Array`, `FileGroupDescriptor(W)`, `FileContents`, `x-special/gnome-copied-files`, `x-special/nautilus-clipboard`, `application/x-kde-cutselection`... Use `writeFiles`, which checks every path against the filesystem policy. URL formats are refused as well (`public.url`, `Apple URL pasteboard type`, `UniformResourceLocator(W)`, `text/x-moz-url`): they carry `file:` URLs as readily as web ones and a file manager turns a pasted one into a shortcut; write a plain URL with `writeText`. Reading all of them stays allowed.
+
+## Platform support
+
+| Feature | Windows | macOS | Linux |
+|---|---|---|---|
+| Text, HTML, files, image, clear, `onChange` | ✓ | ✓ | ✓ |
+| RTF, `availableFormats`, `readFormat`, `writeFormat(s)` | ✓ | ✓ | rejects ("not supported on linux") |
+
+## Files
+
+```ts
+const paths = await clipboard.readFiles(); // string[]
+await clipboard.writeFiles([
+  "/home/user/Documents/report.pdf",
+  "/home/user/Pictures/diagram.png",
+]);
+```
+
+File references use the OS clipboard's native file-list format. `readFiles`
+returns `[]` when no file list exists. `writeFiles` requires 1–1024 non-empty,
+NUL-free paths; it copies references, not file contents. Every path goes
+through the [filesystem policy](/docs/v1.0/concepts/security) (scope, deny rules,
+capability roots) like any `fs` call, and the resolved canonical path is what is
+written; the first refused path rejects the whole call.
+
+## Image
+
+```ts
+interface ClipboardImage {
+  png:    string;   // base64-encoded PNG bytes
+  width:  number;
+  height: number;
+}
+
+const img = await clipboard.readImage();   // ClipboardImage | null
+if (img) {
+  // Decode: atob(img.png) → binary string → Uint8Array → <img> src
+  const bin = atob(img.png);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+  document.querySelector("img")!.src = url;
+}
+
+await clipboard.writeImage(pngBase64);   // string — base64 PNG
+```
+
+<Aside type="note">
+  **Image format is base64 PNG, not RGBA.** `writeImage` takes a base64-encoded PNG string; `readImage` returns `{ png, width, height }` where `png` is base64. Convert to/from `Uint8Array` via `atob`/`btoa` or use a Blob.
+</Aside>
+
+## Clear
+
+```ts
+await clipboard.clear();
+```
+
+## Change monitoring
+
+Polled cross-OS — no native event API exists without heavy platform code. Default poll interval 200 ms; pass `{ intervalMs }` as the second argument to change it (minimum 50). The first subscriber's interval applies to every subscriber. `clipboard:change` events carry the clipboard text, so they reach app-local webviews only, never a webview showing remote content.
+
+```ts
+const unsub = await clipboard.onChange(({ text }) => updateSnippetPreview(text));
+// later: await unsub();
+```
+
+## Notes
+
+- Clipboard state is shared with the rest of the OS — writes replace whatever the user had copied.
+- On Wayland, clipboard semantics vary by compositor; a few (without `wlr_data_control`) may return empty.
+
+## Related
+
+- [shell.openExternal](/docs/v1.0/api/os/shell) — for "copy link + open" flows.

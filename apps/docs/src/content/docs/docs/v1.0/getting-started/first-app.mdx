@@ -1,0 +1,174 @@
+---
+title: Your First App
+description: "Build a minimal Tynd app from scratch — backend function, frontend call, typed RPC, and a production binary."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# Your First App
+
+Walk through every surface of Tynd — the TypeScript backend, the typed RPC proxy on the frontend, and the native OS APIs that the frontend can call directly.
+
+## Scaffold
+
+```bash
+bunx @tynd/cli create hello-tynd --framework react
+cd hello-tynd
+```
+
+`--framework` accepts `react` (default), `vue`, `svelte`, `solid`, `preact`, `lit`, or `angular`; any other value fails with `unknown framework`. Examples below use framework-agnostic TypeScript — swap `document.getElementById` for your framework's idiomatic equivalent (`useState` in React, `ref()` in Vue, `$state` in Svelte, etc.).
+
+## Backend — your TypeScript functions
+
+```ts title="backend/main.ts"
+import { app, createEmitter } from "@tynd/core";
+
+export const events = createEmitter<{
+  tick: { count: number };
+}>();
+
+export async function greet(name: string): Promise<string> {
+  return `Hello, ${name}!`;
+}
+
+export async function add(a: number, b: number): Promise<number> {
+  return a + b;
+}
+
+app.onReady(() => {
+  let count = 0;
+  setInterval(() => {
+    count += 1;
+    events.emit("tick", { count });
+  }, 1000);
+});
+
+app.start({
+  frontendDir: import.meta.dir + "/../dist",
+  window: {
+    title: "Hello Tynd",
+    width: 1000,
+    height: 700,
+    center: true,
+  },
+});
+```
+
+Every exported function and emitter is **automatically callable from the frontend** — no hand-written glue.
+
+## Frontend — typed RPC proxy
+
+```ts title="src/main.ts"
+import { createBackend } from "@tynd/core/client";
+import type * as backend from "../backend/main";
+
+const api = createBackend<typeof backend>();
+
+async function render() {
+  const greeting = await api.greet("Alice");
+  document.getElementById("greeting")!.textContent = greeting;
+
+  const sum = await api.add(2, 3);
+  document.getElementById("sum")!.textContent = String(sum);
+}
+
+api.on("tick", ({ count }) => {
+  document.getElementById("count")!.textContent = String(count);
+});
+
+render();
+```
+
+Types come from `typeof backend` through the `@tynd/core` package exports; no file is generated. Rename `greet` to `sayHello` in the backend — the compiler lights up every stale call on the frontend.
+
+## OS APIs — no round-trip to the backend
+
+Native things (dialogs, clipboard, notifications) are callable directly from the frontend. No IPC round-trip through your backend, no boilerplate:
+
+Install the required plugins:
+
+```bash
+tynd add notification dialog clipboard
+```
+
+```ts title="src/main.ts"
+import { tyndWindow } from "@tynd/core/client";
+import { dialog } from "@tynd/plugin-dialog/client";
+import { clipboard } from "@tynd/plugin-clipboard/client";
+import { notification } from "@tynd/plugin-notification/client";
+
+document.getElementById("open")!.addEventListener("click", async () => {
+  const path = await dialog.openFile({
+    filters: [{ name: "Text", extensions: ["txt", "md"] }],
+  });
+  if (path) {
+    await notification.send("File picked", { body: path });
+    await clipboard.writeText(path);
+  }
+});
+
+document.getElementById("max")!.addEventListener("click", async () => {
+  await tyndWindow.toggleMaximize();
+});
+```
+
+<Aside type="note">
+  OS calls bypass the TypeScript backend entirely — the frontend talks straight to the Rust host over the native IPC channel. See [IPC Model](/docs/v1.0/concepts/ipc).
+</Aside>
+
+## Run it
+
+```bash
+tynd dev
+```
+
+A native window opens. Save `backend/main.ts` — the backend hot-reloads without tearing down the window. Save frontend files — the frontend HMR reloads in place.
+
+## Build it
+
+```bash
+tynd build
+```
+
+Packed executable under `release/<platform>-<arch>/`. It contains the native
+host, exact Bun runtime, backend bundle, and frontend assets. End users do not
+install Node or Bun separately.
+
+Run `tynd doctor` after this first build: before it, the frontend output does not exist yet, so `doctor` reports `frontend assets` as missing.
+
+### Ship it as an installer
+
+Installers need a `bundle` section in `tynd.config.ts`; without it, `--bundle` stops with ``installer bundles require a `bundle` section with `bundle.identifier` in tynd.config.ts``. `identifier` is the only required key: a reverse-DNS id with at least three dot-separated parts.
+
+```ts title="tynd.config.ts"
+import { defineConfig } from "@tynd/cli";
+
+export default defineConfig({
+  // ...existing keys
+  bundle: {
+    identifier: "com.example.hellotynd",
+    displayName: "Hello Tynd",          // optional, defaults to the package name
+    shortDescription: "My first Tynd app", // optional
+  },
+});
+```
+
+```bash
+tynd build --bundle all
+```
+
+Produces platform-native installers:
+
+| Host OS | Output |
+|---|---|
+| macOS | `MyApp.app` + `MyApp_1.0.0_<arch>.dmg` (`x64` or `aarch64`) |
+| Linux | `.deb` + `.rpm` (if `rpmbuild` is available) + `.AppImage` |
+| Windows | NSIS `.exe` setup + `.msi` |
+
+See [Bundling & Distribution](/docs/v1.0/guides/bundling) for the full workflow.
+
+## Next
+
+- [Project Structure](/docs/v1.0/getting-started/project-structure)
+- [Backend RPC guide](/docs/v1.0/guides/backend-rpc)
+- [API Reference](/docs/v1.0/api)

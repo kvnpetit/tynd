@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@tynd/core": ["../core/src/index.ts"],
+      "@tynd/core/client": ["../core/src/client.ts"],
+      "@tynd/core/client/bridge": ["../core/src/client/bridge.ts"],
+      "@tynd/core/plugin": ["../core/src/plugin.ts"]
+    }
+  },
+  "exclude": ["node_modules", "dist"]
+}

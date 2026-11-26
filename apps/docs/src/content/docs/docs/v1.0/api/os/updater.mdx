@@ -1,0 +1,289 @@
+---
+title: updater
+description: "High-level auto-update facade plus low-level signed manifest, artifact, and patch primitives."
+---
+
+# `updater`
+
+Install the required plugin:
+
+```bash
+tynd add updater
+```
+
+```ts
+import { updater, updaterIpc } from "@tynd/plugin-updater/client";
+```
+
+`updater` is the application-facing facade. It reads `tynd.config.ts::updater`,
+checks the signed manifest, chooses patch vs full download from the configured
+preferences, verifies the downloaded bytes, stages the update, and applies it.
+
+`updaterIpc` is the low-level host mirror. Use it for custom update UX,
+tests, or tooling that wants direct access to the manifest/download/install
+steps.
+
+## Trust model
+
+The host only trusts the app version and the updater configuration that the **backend sends at startup**: `app.setInfo({ version })` and `updater.configure(config)`. Tynd's Bun runtime does both from the build-injected values (`package.json` version and the `tynd.config.ts` `updater` block); app code does not call them. Renderer calls to `app.setInfo` with a `version` (the client `AppInfo` type has no `version`), and to `updater.configure`, are refused.
+
+The `updaterIpc` calls (`check`, `downloadAndVerify`, `downloadAndPatch`, `startPeriodicCheck`) take no version, endpoint, key, `headers` or `proxy` option: the check always compares against the backend-set version and fetches the backend-configured endpoints, on the channel chosen by `setChannel` or the config default. A renderer, or a remote page that reaches it, cannot redirect the check to another server, swap the verification key, route traffic through its own proxy, add request headers or pretend to be an older version. Only the `publicKeys` of the backend-configured `updater` block verify signatures, and they must also match the host's compiled-in `TYND_UPDATER_PUBKEY` pin. Request headers and the proxy come only from the backend-configured `updater.headers` and `updater.proxy` (see [`updater` config](/docs/v1.0/cli/config#updater)); with no `proxy`, the process environment (`HTTPS_PROXY` / `ALL_PROXY`) applies. Headers are sent only to the origins of the configured endpoints, never to a redirect target on another origin, and are never exposed to the renderer. If the backend never sent the configuration, `check` fails with "no host-trusted updater configuration"; if it never sent the version, with "the app version is unknown".
+
+## High-level API
+
+```ts
+const off = updater.on("download-progress", (p) => {
+  progress.value = p.percent; // 0..1
+});
+
+const info = await updater.checkForUpdates();
+if (info.available) {
+  await updater.download(); // patch or full binary, verified before staging
+  await updater.apply();    // self-replace + relaunch
+}
+
+off();
+```
+
+## `checkForUpdates(): Promise<UpdateInfo>`
+
+Fetches the configured manifest, verifies the manifest signature, compares it
+against the current app version, chooses the download route, and emits either
+`"update-available"` or `"update-not-available"`.
+
+```ts
+interface UpdateInfo {
+  available: boolean;
+  currentVersion: string;
+  version?: string;
+  isMajorBump?: boolean;
+  downloadType?: "patch" | "full";
+  patchSize?: number;
+  fullSize?: number;
+  fromVersion?: string;
+  notes?: string | null;
+  pubDate?: string | null;
+}
+```
+
+If no `updater` block exists in `tynd.config.ts`, this throws and emits
+`"error"` with a message telling you to configure `{ endpoints, publicKeys }`.
+
+The check tries each configured endpoint in order (falling through on network
+errors, 5xx, 408 and 429), substitutes `{{channel}}`, `{{target}}`, `{{arch}}`
+and `{{current_version}}`, and accepts a signature from any trusted key. It
+errors when the manifest names a channel other than the one this install
+follows. When the manifest carries a `rollout` percentage and this install is
+outside it, the result is `available: false`.
+
+## Channels
+
+```ts
+await updater.getChannel();          // "stable" unless configured or switched
+await updater.setChannel("beta");    // persisted per install, drops a pending update
+```
+
+`setChannel` accepts letters, digits, `.`, `_`, `-` (max 64 characters, not
+starting with `.`) and rejects anything else.
+
+## `download(): Promise<void>`
+
+Requires a prior successful `checkForUpdates()`. Downloads the selected route:
+
+- `patch` route: downloads the patch, verifies the patch signature, reconstructs
+  the release binary, verifies the reconstructed release signature, and stages
+  the result.
+- `full` route: downloads the full artifact, verifies its Ed25519 signature,
+  and stages the result.
+
+Emits `"download-progress"` and then `"update-downloaded"`.
+
+## `apply(): Promise<void>`
+
+Installs the staged update and relaunches the app. Requires a prior
+`download()`. The host rechecks the staged file hash before swapping the binary.
+
+## `cancel(): Promise<void>`
+
+Stops periodic checks, unsubscribes local progress handlers, and clears staged
+state. Mid-stream network cancellation is best-effort; the host download path
+may continue until its current read times out.
+
+## State helpers
+
+```ts
+await updater.getCurrentVersion();       // string
+await updater.getAvailableVersion();     // string | null
+updater.getDownloadProgress();           // { downloaded, total } | null
+updater.getConfig();                     // UpdaterRuntimeConfig | null
+```
+
+## Events
+
+```ts
+updater.on("checking", () => {});
+updater.on("update-available", (info) => {});
+updater.on("update-not-available", () => {});
+updater.on("download-progress", ({ percent, loaded, total, bytesPerSecond }) => {});
+updater.on("update-downloaded", (info) => {});
+updater.on("update-applied", () => {});
+updater.on("error", (err) => {});
+```
+
+## Low-level `updaterIpc`
+
+Direct host calls. These bypass preference handling and the high-level event
+model.
+
+```ts
+const raw = await updaterIpc.check({
+  requireSignature: true,
+});
+
+if (raw) {
+  const staged = raw.patch
+    ? await updaterIpc.downloadAndPatch({
+        url: raw.patch.url,
+        signature: raw.patch.signature,
+        releaseSignature: raw.signature,
+        expectedBlake3: raw.patch.blake3,
+        compression: raw.patch.compression,
+      })
+    : await updaterIpc.downloadAndVerify({
+        url: raw.url,
+        signature: raw.signature,
+        format: raw.format,
+      });
+
+  await updaterIpc.install({
+    handle: staged.handle,
+    relaunch: true,
+  });
+}
+```
+
+### Other `updaterIpc` calls
+
+- `startPeriodicCheck({ intervalMs? }): Promise<number>` / `stopPeriodicCheck(): Promise<void>` — host-side periodic checks; each result fires `onCheck`.
+- `onCheck(handler): () => void` — `{ id, ok: true, info }` or `{ id, ok: false, error }`.
+- `onProgress(handler): () => void` — `{ id?, phase: "download" | "verified" | "verified-patch" | "applying", loaded, total }`.
+- `getChannel(defaultChannel?)` / `setChannel(channel)` — the persisted release channel.
+- `validateConfig(cfg)` — ask the host to validate an `UpdaterRuntimeConfig`.
+
+### `UpdaterCheckOptions`
+
+Endpoints, channel and the current version always come from the host-trusted configuration and `app.setInfo`; the only option is the signature requirement, which cannot be relaxed.
+
+```ts
+interface UpdaterCheckOptions {
+  requireSignature?: true; // always enforced; defaults true
+}
+```
+
+### Low-level result shapes
+
+```ts
+interface RawUpdateInfo {
+  version: string;
+  notes: string | null;
+  pubDate: string | null;
+  url: string;
+  signature: string;
+  platform: string;
+  format: "binary" | "app-archive";
+  patch: PatchEntry | null;
+  size?: number;
+  channel?: string | null;   // channel the manifest was published to
+  rollout?: number | null;   // staged-rollout percentage (0..100)
+}
+
+interface PatchEntry {
+  from: string;
+  url: string;
+  signature: string;
+  size?: number;
+  blake3?: string;
+  compression?: "zstd" | "none";
+}
+
+interface UpdaterDownloadResult {
+  handle: string;    // opaque, process-local, single-use
+  size: number;
+  patchSize?: number;
+}
+```
+
+A staged update belongs to the webview that downloaded it: another webview's `handle` answers like an unknown one. When that webview reloads, navigates or closes, the staged update is re-owned by the backend, so only the backend and app-local webviews can install it. An update staged by a call that finishes after that is owned by the backend from the start.
+
+## Manifest format
+
+The platform map follows the common Tauri updater shape, with Tynd artifact-format and patch extensions.
+`tynd updater publish` signs both the manifest JSON and every artifact.
+
+```json
+{
+  "version": "1.2.3",
+  "notes": "Bug fixes & perf.",
+  "pub_date": "2026-04-19T12:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://updates.example.com/MyApp-1.2.3.exe",
+      "signature": "<base64 Ed25519 over full binary>",
+      "format": "binary",
+      "size": 47000000,
+      "patches": [{
+        "from": "1.2.2",
+        "url": "https://updates.example.com/MyApp-1.2.2-to-1.2.3.bsdiff.zst",
+        "signature": "<base64 Ed25519 over patch bytes>",
+        "size": 215000,
+        "blake3": "<hex of reconstructed binary>",
+        "compression": "zstd"
+      }]
+    }
+  }
+}
+```
+
+Platform key: `<os>-<arch>`, where `os` is `windows`, `darwin`, or `linux`,
+and `arch` is `x86_64` or `aarch64`.
+
+## Signature checks
+
+The [trust model](#trust-model) above covers what the host accepts from the renderer. On top of it:
+
+- The manifest body is verified against `<endpoint>.sig` before parsing.
+- The full artifact is verified against the per-platform release signature.
+- Patches are double-checked: patch bytes verify first, then the reconstructed
+  release binary verifies against the full release signature and optional BLAKE3.
+- The public key is baked into the app via `tynd.config.ts::updater.publicKeys`.
+  For key rotation list several in `updater.publicKeys`: a signature is valid
+  when any of them verifies it.
+
+## Self-updatable installs
+
+The swap writes next to the running executable (Windows, Linux) or next to the
+`.app` bundle (macOS). Before downloading, `downloadAndVerify` and
+`downloadAndPatch` check that this directory is writable by the current user
+and otherwise reject with `not a self-updatable install`. Apps installed per
+machine (for example under `Program Files`) or by a system package manager must
+be updated by that installer.
+
+`install` reports success once the swap is done. If starting the new version
+then fails, it still resolves with `installed: true`, `relaunch: false` and a
+`relaunchError` message (also logged); the new version runs on the next launch.
+
+## Platform semantics
+
+- **Windows** — `self-replace` performs the locked executable swap, then starts
+  the replacement.
+- **Linux** — atomically renames the staged single-file binary, chmods it
+  executable, then relaunches.
+- **macOS** — installs a signed `app-archive`, verifies bundle id and code
+  signature, swaps the whole `.app` transactionally with rollback, then cleans
+  the backup and relaunches after the old PID exits.
+
+## Related
+
+- [Auto-Updates guide](/docs/v1.0/guides/auto-updates)
+- [`tynd updater keygen`](/docs/v1.0/cli/updater/keygen)
+- [`tynd updater publish`](/docs/v1.0/cli/updater/publish)

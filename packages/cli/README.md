@@ -1,20 +1,41 @@
 # @tynd/cli
 
-The CLI for [Tynd](https://github.com/kvnpetit/tynd) — scaffold, dev, build, and ship native desktop apps in TypeScript.
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![CI](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@tynd/cli.svg)](https://www.npmjs.com/package/@tynd/cli)
 
-## Prerequisites
+The native Rust CLI for [Tynd](https://github.com/kvnpetit/tynd): scaffold,
+develop, build, and ship desktop apps whose application code stays TypeScript.
 
-**[Bun](https://bun.sh) is required.** The CLI binary has a `#!/usr/bin/env bun` shebang and uses Bun-native APIs (`Bun.build`, `Bun.file`, `Bun.spawn`, `Bun.hash`) — it will not run under Node.js.
+## Runtime model
+
+The published npm package contains:
+
+- a small launcher for the native `tynd` executable;
+- the dependency-free public `TyndConfig` TypeScript surface;
+- the config JSON Schema (`schemas/tynd.config.json`).
+
+The launcher resolves the current platform through `@tynd/tooling` and forwards
+arguments, stdio, signals, and exit status to Rust. There is no install script
+and no binary download: npm optional dependencies supply the platform package.
+
+[Bun](https://bun.sh) and [Rust](https://rustup.rs) 1.95 or newer remain
+required by Tynd application projects: Cargo compiles each app's host. Bun runs
+user backend TypeScript, frontend commands, package scripts, and bundled
+application code. CLI orchestration, project inspection, and native packaging
+execute in Rust.
+
+End users of packaged applications do not install Bun separately; Tynd embeds
+the matching runtime in the application.
+
+## Install
 
 ```bash
-# macOS / Linux / WSL
-curl -fsSL https://bun.sh/install | bash
+bun add --global @tynd/cli
 
-# Windows (PowerShell)
-powershell -c "irm bun.sh/install.ps1 | iex"
+# One-shot
+bunx @tynd/cli
 ```
-
-End users of apps you ship with `tynd build` do **not** need Bun — it's packed into the final binary (full mode) or replaced by an embedded JS engine (lite mode).
 
 ## Quick start
 
@@ -24,82 +45,120 @@ cd my-app
 tynd dev
 ```
 
+## Native package layout
+
+```text
+@tynd/cli/bin/index.js
+  └─ @tynd/tooling
+       └─ @tynd/tooling-<os>-<arch>/bin/
+            ├─ tynd[.exe]
+            ├─ tynd-mcp[.exe]
+            └─ tynd-bundler[.exe]
+```
+
+Supported targets are macOS, Linux, and Windows on x64 and ARM64.
+
 ## Commands
 
+The Rust command surface is:
+
+```text
+Project:     create, init, add, remove, dev, start, test, build, clean, upgrade
+Inspect:     validate, doctor, info, size, explain, config show, report, profile
+Plugins:     plugin new, plugin check, plugin dev, plugin list, plugin types
+Updater:     updater keygen, updater sign, updater publish, updater release,
+             updater server
+Shell:       completions
+```
+
+Common examples:
+
 ```bash
-tynd create [name]           # Scaffold a new project (interactive if no args)
-  --framework <fw>           # react | vue | svelte | solid | preact | lit | angular
-  --runtime   <r>            # lite (recommended) | full
-
-tynd dev                     # Dev mode: HMR frontend + hot-reload backend
-tynd start                   # Run from cached bundles, no rebuild, no watcher
-tynd build                   # Single-file distributable binary
-  --bundle [targets]         # + native installers: app,dmg,deb,rpm,appimage,nsis,msi
-  --outfile <path>           # Custom output path (default: release/<name>[.exe])
-
-tynd init                    # Add Tynd to an existing project
-tynd clean                   # Remove build artifacts (.tynd/cache, release/)
-tynd validate                # Check config + binary availability
-tynd info [--json]           # Environment diagnostics (Bun version, WebView, paths)
-tynd upgrade                 # Bump @tynd/* deps to latest
-tynd keygen [--out <base>]   # Generate an Ed25519 keypair for the auto-updater
-tynd sign <file> --key <k>   # Sign a file with an updater private key
-
-# Global flags
-tynd --verbose <cmd>         # Debug-level logs (also sets TYND_LOG=debug in host)
-tynd --quiet <cmd>           # Errors only
+tynd create my-app --framework react
+tynd add fs
+tynd dev
+tynd start
+tynd build --bundle all
+tynd validate --ci
+tynd info --json
+tynd doctor --fix
+tynd config show --json
+tynd plugin new example --native
+tynd updater publish 1.2.3 --target manifest-only
+tynd completions powershell
 ```
 
-## Scaffolded layout
+`tynd completions` generates a completion script at runtime; static completion
+files are not included in the npm package. Run `tynd <command> --help` for the
+authoritative arguments of a command.
 
-```
-my-app/
-├── tynd.config.ts        ← runtime + paths + bundle metadata
-├── package.json
-├── backend/
-│   └── main.ts           ← backend entry — app.start() here
-└── src/
-    └── main.tsx          ← frontend source (React/Vue/…)
-```
-
-## Supported frameworks
-
-React, Vue, Svelte, Solid, Preact, Lit, Angular. Vite-backed except Angular (uses Angular CLI). Any SPA works via `tynd init`.
-
-**Blocked (SSR):** Next.js, Nuxt, SvelteKit, Remix, Gatsby, SolidStart, Angular Universal, Qwik City, Astro, TanStack Start, Vike. Use the pure-SPA variant.
-
-See [FRAMEWORKS.md](https://github.com/kvnpetit/tynd/blob/main/FRAMEWORKS.md).
+Global flags include `--verbose`, `--quiet`, `--no-color`, `--env`,
+`--log-format`, and `--log-file`.
 
 ## Typed config
 
+JSON, YAML, and TOML users can reference the published JSON Schema. TypeScript
+users keep the public `@tynd/cli` type:
+
 ```ts
-import type { TyndConfig } from "@tynd/cli"
+import type { TyndConfig } from "@tynd/cli";
 
 export default {
-  runtime: "lite",
   backend: "backend/main.ts",
   frontendDir: "dist",
-  window: { title: "My App", width: 1200, height: 800 },
-  bundle: { identifier: "com.example.myapp" },  // required for --bundle
-} satisfies TyndConfig
+  bundle: {
+    identifier: "com.example.myapp",
+  },
+} satisfies TyndConfig;
 ```
 
-## Installers (`tynd build --bundle`)
+The config type remains TypeScript even though command execution is Rust.
+
+## Application runtime and native APIs
+
+Tynd runs backend TypeScript on Bun. Every app runs on a Rust host that
+`tynd dev` (cargo dev profile) and `tynd build` (release) compile from
+`@tynd/host-src`, so Rust 1.95 or newer is required. `tynd start` runs the
+binary from a previous `tynd build`.
+
+The host core covers the window, WebView, `tynd://`, IPC, lifecycle, logging,
+and ACL. Every other host API (clipboard, dialog, fs, menu, tray, ...) is an
+official plugin: `tynd add <name>` installs `@tynd/plugin-<name>` and lists it in
+`plugins`. `apis` adds extra host APIs, and native plugin permission lists are
+compiled into the host as well.
+
+## Installers
+
+`tynd build --bundle <targets>` delegates packaging to the Rust `tynd-bundler` executable
+shipped beside `tynd`.
 
 | Host OS | Formats |
-|---|---|
+| --- | --- |
 | macOS | `.app`, `.dmg` |
-| Linux | `.deb`, `.rpm` (needs `rpmbuild`), `.AppImage` |
-| Windows | NSIS `.exe` setup, `.msi` (via WiX v3) |
+| Linux | `.deb`, `.rpm`, `.AppImage` |
+| Windows | NSIS `.exe`, `.msi` |
 
-Build tools (NSIS, WiX, appimagetool) auto-download to `.tynd/cache/tools/` on first use. Cross-compilation is **not** supported — run on each target host (see the `build-host.yml` workflow in the repo).
+Some formats require their platform toolchain, such as WiX, NSIS, `rpmbuild`,
+or AppImage utilities. The bundler reports a missing format-specific
+prerequisite only when that format is requested.
 
-**Code signing** is post-build — see [SIGNING.md](https://github.com/kvnpetit/tynd/blob/main/SIGNING.md).
+## Build from source
+
+From the repository root:
+
+```bash
+cargo build --release -p tynd-cli --bins
+cargo build --release -p tynd-bundler
+```
 
 ## Related packages
 
-- [`@tynd/core`](https://www.npmjs.com/package/@tynd/core) — backend + frontend API surface
-- [`@tynd/host`](https://www.npmjs.com/package/@tynd/host) — prebuilt native binaries (auto-installed)
+- [`@tynd/tooling`](https://www.npmjs.com/package/@tynd/tooling) — native
+  `tynd`, `tynd-mcp`, and `tynd-bundler` distribution
+- [`@tynd/core`](https://www.npmjs.com/package/@tynd/core) — application API
+- [`@tynd/host-src`](https://www.npmjs.com/package/@tynd/host-src) — Rust
+  host sources compiled into each app's host
+- [`@tynd/mcp`](https://www.npmjs.com/package/@tynd/mcp) — native MCP server
 
 ## License
 

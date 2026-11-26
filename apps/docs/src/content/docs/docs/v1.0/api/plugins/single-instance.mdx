@@ -1,0 +1,38 @@
+---
+title: single-instance
+description: "Single-instance lock with argv forwarding. Facade over the `single-instance` host API."
+---
+
+# `single-instance`
+
+`@tynd/plugin-single-instance` enables the host `single-instance` API and exposes its typed client. The API itself is documented on the [`single-instance`](/docs/v1.0/api/os/single-instance) page.
+
+## Install
+
+```bash
+tynd add single-instance
+```
+
+```ts
+import { singleInstance } from "@tynd/plugin-single-instance/client";
+```
+
+Declaring the plugin compiles the matching `api-single-instance` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-single-instance` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-single-instance`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-single-instance` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `single-instance` |
+| Aliases for `tynd add` | `singleinstance`, `single` |
+| Catalog permission labels | `host:single-instance` |
+| Estimated size | 50 KB |
+| Client exports | `SecondLaunchPayload`, `SingleInstanceResult`, `singleInstance` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

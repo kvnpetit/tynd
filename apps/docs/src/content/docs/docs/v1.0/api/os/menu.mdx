@@ -1,0 +1,237 @@
+---
+title: menu
+description: "Native app menu bar, runtime menu mutations, popup and declarative context menus."
+---
+
+# `menu`
+
+Install the required plugin:
+
+```bash
+tynd add menu
+```
+
+```ts
+import { menu } from "@tynd/plugin-menu/client";
+```
+
+The menu bar is declared in `app.start({ menu: … })` on the backend, or set at runtime with `menu.setMenu`. This module subscribes to menu-item clicks (menu bar, tray and context menus), mutates the bar by item `id`, and opens context menus.
+
+## Declare the menu
+
+```ts title="backend/main.ts"
+app.start({
+  menu: [
+    {
+      type: "submenu",
+      id: "file",
+      label: "File",
+      items: [
+        { label: "New",   id: "file.new",   accelerator: "CmdOrCtrl+N" },
+        { label: "Open",  id: "file.open",  accelerator: "CmdOrCtrl+O", nativeIcon: "folder" },
+        { label: "Save",  id: "file.save",  accelerator: "CmdOrCtrl+S", icon: "assets/save.png" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    {
+      type: "submenu",
+      label: "View",
+      items: [
+        { type: "radio", label: "Small", id: "view.small", checked: true },
+        { type: "radio", label: "Large", id: "view.large" },
+        { type: "separator" },
+        { type: "checkbox", label: "Dark Theme", id: "view.theme" },
+      ],
+    },
+  ],
+  // ...
+});
+```
+
+### Standard menu in one line
+
+`menu.defaultAppMenu()` returns the OS's standard bar built from native roles, ready to pass to `app.start({ menu })` or `menu.setMenu`, or to extend first:
+
+```ts
+import { menu } from "@tynd/plugin-menu";
+
+app.start({ menu: menu.defaultAppMenu({ appName: "Notes" }) });
+```
+
+| OS | Template |
+|---|---|
+| macOS | App (About, Services, Hide, Hide Others, Show All, Quit), File (Close), Edit, View (Full Screen), Window (Minimize, Zoom, Bring All to Front) |
+| Windows | File (Quit), Edit, Window (Minimize, Maximize, Close) |
+| Linux | Edit (GTK has no native window roles) |
+
+Edit is Undo, Redo, Cut, Copy, Paste and Select All on every OS. Each submenu has an `id` (`app`, `file`, `edit`, `view`, `window`), so you can `menu.append` to it later. `platform` overrides the detected OS.
+
+## Subscribe to clicks
+
+```ts
+const off = menu.onClick("file.new", () => createDocument());
+menu.onAction((event) => console.log("clicked", event.id));
+```
+
+Handlers receive `{ id, contextMenu?, data? }` (`contextMenu` and `data` are set for clicks in a [registered context menu](#declarative-context-menus)). Each call returns `unsubscribe()`.
+
+## Item shapes
+
+`app.start()` validates every item against one of five shapes. Top-level `menu` entries must be submenus.
+
+| Shape | Fields |
+|---|---|
+| Item | `{ type?: "item", label?, id?, enabled?, role?, accelerator?, icon?, nativeIcon? }` |
+| Checkbox | `{ type: "checkbox", label, id?, enabled?, checked?, accelerator? }` |
+| Radio | `{ type: "radio", label, id?, enabled?, checked?, accelerator? }` |
+| Separator | `{ type: "separator" }` |
+| Submenu | `{ type: "submenu", label, id?, enabled?, icon?, nativeIcon?, items }` |
+
+- `label` is required on every item, except role items (the OS supplies the label; a `label` overrides it).
+- `id` defaults to `label`; it is the value `menu.onClick` and `menu.item(id)` match.
+- Give every item an `id` unique across all of the app's menus (application bar, window bars, the Dock menu, tray menus and context menus): the OS reports a click by id only, so an id held by several menus cannot be traced to the one it came from. The host logs a warning the first time such an id is clicked.
+- Adjacent radio items in the same submenu form a group: a separator or another item type ends it. Clicking a radio, or `setChecked(true)` on it, unchecks the rest of its group.
+
+### Role
+
+OS-native actions, managed by the OS. A role that an OS lacks renders nothing there.
+
+| Role | macOS | Windows | Linux |
+|---|---|---|---|
+| `undo`, `redo`, `cut`, `copy`, `paste`, `selectAll`, `separator` | Yes | Yes | Yes |
+| `quit`, `about`, `close`, `minimize`, `maximize`, `hide` | Yes | Yes | No |
+| `fullscreen`, `hideOthers`, `showAll`, `services`, `bringAllToFront` | Yes | No | No |
+
+`maximize` is the macOS "Zoom" item. `hide` hides the app on macOS and the window on Windows.
+
+### Icons
+
+Regular items and submenus can show an image (`icon`) or a platform icon (`nativeIcon`), not both. Checkbox, radio and role items cannot.
+
+| `icon` form | Meaning |
+|---|---|
+| `"assets/save.png"` | Image file, read through the [fs allow-list](/docs/v1.0/concepts/security) |
+| `{ png: "<base64>" }` | PNG bytes |
+| `{ rgba: "<base64>", width, height }` | Raw RGBA pixels |
+
+At runtime the client also accepts `Uint8Array` for `png` / `rgba`. Icons are at most 512×512 px. `nativeIcon` takes a camelCase name (`"add"`, `"folder"`, `"trashFull"`, …, type `MenuNativeIcon`): the AppKit image on macOS, the shell stock icon on Windows, the freedesktop theme icon on Linux, where an equivalent exists.
+
+## Accelerators
+
+Accelerators use the muda format. In `app.start` an invalid one is logged and dropped; `setAccelerator` rejects it.
+
+- `CmdOrCtrl+S` — ⌘S on macOS, Ctrl+S elsewhere
+- `Alt+F4`
+- `Shift+Space`
+
+Accelerators on menu items fire **only when your app is focused** (unlike `shortcuts.register` which is global).
+
+## Mutate the menu bar at runtime
+
+`menu.item(id)` returns a typed handle on a menu-bar item. Calls reject if the `id` is unknown, with the reason when the item type cannot take the change.
+
+```ts
+const save = menu.item("file.save");
+await save.setEnabled(false);
+await save.setLabel("Save As…");
+await save.setAccelerator("CmdOrCtrl+Shift+S");   // null removes it
+await save.setIcon({ native: "folder" });         // an icon, { native }, or null
+await save.setVisible(false);                     // detached, re-inserted near its old position
+await menu.item("view.large").setChecked(true);   // unchecks view.small
+
+await menu.append({ id: "file.recent", label: "Recent" }, { parent: "file", index: 2 });
+await menu.append({ type: "submenu", id: "help", label: "Help", items: [] });   // new top-level menu
+await menu.remove("file.recent");
+
+await menu.setMenu(menu.defaultAppMenu());   // replace the whole bar
+```
+
+| Method | Signature |
+| --- | --- |
+| `item` | `(id: string): MenuItemHandle` |
+| `append` | `(item, options?: { parent?: string; index?: number }): Promise<void>` |
+| `remove` | `(id: string): Promise<void>` |
+| `setMenu` | `(items: MenuItem[]): Promise<void>` |
+| `defaultAppMenu` | `(options?: { appName?: string; platform?: "macos" \| "windows" \| "linux" }): MenuSubmenu[]` |
+| `update` | `(id: string, partial: { label?; enabled?; checked?; visible? }): Promise<void>` |
+| `setItemEnabled` / `setItemLabel` / `setItemChecked` / `setItemVisible` | `(id: string, value): Promise<void>` |
+
+`MenuItemHandle` has `update`, `setEnabled`, `setLabel`, `setChecked`, `setVisible`, `setAccelerator`, `setIcon`, `remove`, `append(item, { index? })` (submenus) and `onClick`.
+
+- `append` without `parent` adds a top-level submenu; an item there is rejected. A duplicate `id` or an `index` past the end is rejected.
+- `remove` on a submenu removes its children too.
+- `setMenu` checks the whole template before touching the live bar, and attaches a bar to the main window when the app started without one.
+
+## Context menus
+
+### Programmatic
+
+Show a native popup anchored on the current window. `x` / `y` are window-relative logical pixels; omit both to anchor on the cursor.
+
+```ts
+await menu.showContextMenu(
+  [
+    { role: "copy" },
+    { type: "separator" },
+    { id: "delete", label: "Delete selection", nativeIcon: "remove" },
+  ],
+  { x: 120, y: 240 },
+);
+
+menu.onClick("delete", () => deleteSelection());
+```
+
+### Declarative context menus
+
+Register a menu once, then mark elements with `data-tynd-contextmenu`. A right-click opens the native menu at the cursor; the click event carries `contextMenu` and the element's `data-tynd-contextmenu-data`.
+
+```ts
+await menu.registerContextMenu("row", [
+  { id: "row.open", label: "Open" },
+  { id: "row.delete", label: "Delete" },
+]);
+
+menu.onClick("row.delete", (event) => deleteRow(event.data));
+```
+
+```html
+<li data-tynd-contextmenu="row" data-tynd-contextmenu-data="42">Invoice #42</li>
+```
+
+| Attribute value | Right-click on the element (or a descendant) |
+|---|---|
+| `"<menuId>"` | Opens the registered menu |
+| `"none"` | No context menu at all |
+| `"default"` | The webview's own menu, even under a `"none"` ancestor |
+
+To turn off the webview context menu for the whole page, put `data-tynd-contextmenu="none"` on `<html>` or call `menu.setDefaultContextMenu(false)`. An app handler that calls `event.preventDefault()` on `contextmenu` takes precedence.
+
+| Method | Signature |
+| --- | --- |
+| `registerContextMenu` | `(id: string, items: ContextMenuItem[]): Promise<void>` |
+| `unregisterContextMenu` | `(id: string): Promise<void>` |
+| `popupContextMenu` | `(id: string, options?: { data?: string; x?: number; y?: number }): Promise<void>` |
+| `setDefaultContextMenu` | `(enabled: boolean): void` |
+| `showContextMenu` | `(items: ContextMenuItem[], position?: { x: number; y: number }): Promise<void>` |
+
+Menu ids are 1-128 characters; `none` and `default` are reserved. `data` is a string of at most 4096 bytes. Registered menus are shared by every window and survive page reloads.
+
+## Platform support
+
+| Feature | macOS | Windows | Linux |
+|---|---|---|---|
+| Menu bar, runtime mutations, `setMenu` | Yes (app-wide) | Yes (main window) | Yes (main window) |
+| Item and submenu icons | Yes | Yes | Yes |
+| Context menus | Yes | Yes | Yes |
+
+## Notes
+
+- Menu item clicks are broadcast — a single `menu.onClick` handler fires from any window or the backend.
+- `menu.set` targets the main window's bar on Windows and Linux. A secondary window gets its own bar with `win.setMenu(template)` (Windows and Linux; rejects on macOS, where the bar is application-wide).
+- Requires `@tynd/plugin-menu` in your dependencies and in `plugins` (`tynd add menu`), which compiles the menu API into the app host. Without it, `menu.*` and `showContextMenu` reject and a configured `menu` bar stops app startup, both with an error naming `@tynd/plugin-menu`. Calls are also subject to the `menu:<method>` / `window:showContextMenu` [ACL rules](/docs/v1.0/concepts/security).
+
+## Related
+
+- [tray](/docs/v1.0/api/os/tray) — tray menu handlers share the same `menu.onClick` dispatcher.
+- [shortcuts](/docs/v1.0/api/os/shortcuts) — global hotkeys (fire unfocused).

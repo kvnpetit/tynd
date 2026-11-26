@@ -1,0 +1,42 @@
+---
+title: tynd start
+description: "Run an app from existing frontend and backend build outputs."
+---
+
+# `tynd start`
+
+```bash
+tynd start
+```
+
+Runs the native host from already-built frontend assets and an existing cached backend bundle. It performs no frontend build, backend build, watcher, or pack step.
+
+## When to use
+
+- Launch the exact outputs produced by a previous build.
+- Profile production-shaped startup without creating another artifact.
+- Separate build failures from runtime failures.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Run against a project in another directory |
+
+Global flags include `--verbose`, `--quiet`, `--log-format`, and `--log-file`.
+
+## Required outputs
+
+The command accepts:
+
+- `.tynd/cache/bundle.dist.js` for the production backend;
+- the configured frontend directory when it exists, otherwise the detected framework output;
+- the release host compiled by `tynd build` at `.tynd/build/bin/release/<app>`.
+
+When any required output is absent, `tynd start` fails with an explicit instruction to run `tynd build`. A host compiled only by `tynd dev` (Cargo `dev` profile) does not count. It never installs, downloads, or compiles dependencies on demand.
+
+## Related
+
+- [`tynd dev`](/docs/v1.0/cli/dev) — live development.
+- [`tynd build`](/docs/v1.0/cli/build) — produce build outputs and a release binary.
+- [`tynd clean`](/docs/v1.0/cli/clean) — remove generated outputs.

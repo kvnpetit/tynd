@@ -1,0 +1,25 @@
+# Linker tuning. Windows keeps the default MSVC `link.exe` (LLD is not
+# guaranteed on every build host, and `-fuse-ld=lld` is a GNU-style flag that
+# link.exe ignores); `/Brepro` makes its output deterministic. Linux
+# deliberately keeps the platform/default linker so user builds and cross
+# containers do not acquire an undocumented `mold` dependency; suppressing the
+# variable ELF build-id is sufficient for the same-directory reproducibility
+# gate. Production builds use the same linkers.
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/Brepro"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/Brepro"]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,--build-id=none"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,--build-id=none"]
+
+# Tynd's minimum macOS (see `tynd_bundle_contract::MACOS_MINIMUM_SYSTEM_VERSION`):
+# the host links WKWebView proxy symbols that exist from macOS 14. `[env]`
+# never overrides a value already set in the environment.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "14.0"

@@ -1,0 +1,38 @@
+---
+title: system-stats
+description: "CPU, memory, disk and process metrics. Facade over the core `system-stats` host API."
+---
+
+# `system-stats`
+
+`@tynd/plugin-system-stats` enables the host `system-stats` API and exposes its typed client. The API itself is documented on the [`systemStats`](/docs/v1.0/api/os/systemStats) page.
+
+## Install
+
+```bash
+tynd add system-stats
+```
+
+```ts
+import { systemStats } from "@tynd/plugin-system-stats/client";
+```
+
+Declaring the plugin compiles the matching `api-system-stats` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-system-stats` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-system-stats` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `system-stats` |
+| Aliases for `tynd add` | `stats`, `systemstats` |
+| Catalog permission labels | `host:system-stats` |
+| Estimated size | 130 KB |
+| Client exports | `CpuStats`, `DiskInfo`, `MemoryStats`, `ProcessInfo`, `systemStats`, `UptimeStats` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

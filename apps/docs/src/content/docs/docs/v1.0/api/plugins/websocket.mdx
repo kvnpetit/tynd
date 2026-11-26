@@ -1,0 +1,38 @@
+---
+title: websocket
+description: "Native WebSocket client. Facade over the core `websocket` host API."
+---
+
+# `websocket`
+
+`@tynd/plugin-websocket` enables the host `websocket` API and exposes its typed client. The API itself is documented on the [`websocket`](/docs/v1.0/api/os/websocket) page.
+
+## Install
+
+```bash
+tynd add websocket
+```
+
+```ts
+import { websocket } from "@tynd/plugin-websocket/client";
+```
+
+Declaring the plugin compiles the matching `api-websocket` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-websocket` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-websocket` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `websocket` |
+| Aliases for `tynd add` | `ws`, `socket` |
+| Catalog permission labels | `host:websocket`, `network` |
+| Estimated size | 170 KB |
+| Client exports | `WebSocketHandle`, `WebSocketMessage`, `websocket` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

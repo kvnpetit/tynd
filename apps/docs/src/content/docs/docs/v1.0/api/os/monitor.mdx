@@ -1,0 +1,126 @@
+---
+title: monitors
+description: "Enumerate displays; read per-monitor scale, bounds and work area; react to display changes."
+---
+
+# `monitors`
+
+```ts
+import { monitors } from "@tynd/core/client";
+```
+
+Inspect connected displays.
+
+## `monitors.all(): Promise<Monitor[]>`
+
+Every monitor connected to the machine.
+
+```ts
+const all = await monitors.all();
+```
+
+## `monitors.primary(): Promise<Monitor | null>`
+
+The OS's "primary" display (menu bar on macOS, taskbar start on Windows). `null` on headless / unusual setups.
+
+```ts
+const primary = await monitors.primary();
+```
+
+## `monitors.current(): Promise<Monitor | null>`
+
+Monitor hosting the primary window. `null` if the window isn't placed yet.
+
+```ts
+const current = await monitors.current();
+```
+
+## `Monitor` shape
+
+```ts
+interface Monitor {
+  id:        string;            // stable while the display stays connected
+  name:      string | null;     // null on some Linux setups
+  position:  { x: number; y: number };
+  size:      { width: number; height: number };
+  workArea:  { x: number; y: number; width: number; height: number };
+  scale:     number;            // 1.0 / 1.5 / 2.0
+  isPrimary: boolean;
+}
+```
+
+`position`, `size` and `workArea` are **physical pixels**. Divide by `scale` for logical pixels (what `tyndWindow.setSize` / `setPosition` use).
+
+`workArea` is the part of the monitor not covered by the taskbar, menu bar, Dock or panels: place windows inside it so they never slide under a bar.
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| `id` | Adapter device name (`\\.\DISPLAY1`) | `CGDirectDisplayID` | Model name + rank among identical models (`DELL U2720Q#0`) |
+| `workArea` | `GetMonitorInfo` (`rcWork`) | `NSScreen.visibleFrame` | GDK monitor work area (`_NET_WORKAREA` on X11; the full monitor on most Wayland compositors) |
+
+## Example — centre on the current monitor
+
+```ts
+import { monitors, tyndWindow } from "@tynd/core/client";
+
+const m = await monitors.current();
+if (m) {
+  const [winW, winH] = [800, 600];
+  const logicalW = m.size.width  / m.scale;
+  const logicalH = m.size.height / m.scale;
+  await tyndWindow.setSize(winW, winH);
+  await tyndWindow.setPosition(
+    Math.round((logicalW - winW) / 2 + m.position.x / m.scale),
+    Math.round((logicalH - winH) / 2 + m.position.y / m.scale),
+  );
+}
+```
+
+Or just `tyndWindow.center()` — the Rust side does the math.
+
+## `monitors.fromPoint(x, y): Promise<Monitor | null>`
+
+Monitor containing a virtual-desktop point (physical pixels). Returns `null` if the point is outside every known monitor.
+
+```ts
+const m = await monitors.fromPoint(2200, 400);
+```
+
+## `monitors.cursorPosition(): Promise<{ x, y }>`
+
+Global cursor position in physical pixels.
+
+```ts
+const { x, y } = await monitors.cursorPosition();
+const under = await monitors.fromPoint(x, y);
+```
+
+## `monitors.onChange(handler): Promise<{ dispose() }>`
+
+Fires when a display is connected or disconnected, or when one changes resolution, position, scale factor or work area (taskbar or Dock moved, resized or auto-hidden). Monitors are matched by `id`; an event is only sent when something in the list actually changed. Resolves once the host watches the displays.
+
+```ts
+const sub = await monitors.onChange(({ added, removed, changed, monitors: all }) => {
+  if (removed.length > 0) tyndWindow.center(); // the window's display may be gone
+  console.log(`${all.length} displays`, { added, changed });
+});
+// later
+sub.dispose();
+```
+
+```ts
+interface MonitorChange {
+  added:    Monitor[];  // connected since the previous event
+  removed:  Monitor[];  // disconnected since the previous event
+  changed:  Monitor[];  // position, size, scale, work area or primary flag changed
+  monitors: Monitor[];  // every display after the change
+}
+```
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Source | `WM_DISPLAYCHANGE`, `WM_DPICHANGED`, `WM_SETTINGCHANGE` (`SPI_SETWORKAREA`), plus the window scale-factor change | `NSApplicationDidChangeScreenParametersNotification` | GDK `monitors-changed`, `size-changed`, monitor added / removed, per-monitor work area and scale |
+
+## Related
+
+- [tyndWindow](/docs/v1.0/api/os/window) — `setPosition`, `setSize`, `scaleFactor`, `center`.

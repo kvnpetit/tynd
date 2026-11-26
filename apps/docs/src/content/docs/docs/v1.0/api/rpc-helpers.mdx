@@ -1,0 +1,86 @@
+---
+title: RPC helpers
+description: "withTimeout, abortable, once, listenN, createPluginClient and base64 helpers on top of createBackend."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+# RPC helpers
+
+```ts
+import { withTimeout, abortable, once, listenN, RpcTimeoutError } from "@tynd/core/client";
+```
+
+Utilities layered on top of [`createBackend`](/docs/v1.0/api/backend) / [`createEmitter`](/docs/v1.0/api/backend) — they don't change the public API shape, they just make common call-site patterns terser.
+
+## `withTimeout(promise, ms)`
+
+Reject with `RpcTimeoutError` if the promise hasn't settled within `ms` ms.
+
+```ts
+try {
+  const user = await withTimeout(api.getUser("alice"), 2000);
+} catch (err) {
+  if (err instanceof RpcTimeoutError) retryLater();
+  else throw err;
+}
+```
+
+<Aside type="caution">
+  Non-streaming calls in Tynd don't propagate cancellation to the backend mid-call today. `withTimeout` rejects *on the frontend* — the backend keeps running until the handler returns. For true work-stoppage, use streaming + `handle.cancel()`.
+</Aside>
+
+## `abortable(promise, signal)`
+
+Race a promise against an `AbortSignal`. Rejects with the signal's `reason` (or a generic `AbortError`) when `abort()` fires.
+
+```ts
+const ctrl = new AbortController();
+document.querySelector("#cancel")?.addEventListener("click", () => ctrl.abort());
+
+try {
+  const result = await abortable(api.compute(), ctrl.signal);
+} catch (err) {
+  if ((err as DOMException).name === "AbortError") {
+    // user cancelled
+  }
+}
+```
+
+## `once(event, handler)` / `listenN(event, n, handler)`
+
+Auto-unsubscribe after the first (`once`) or `n`th (`listenN`) invocation. Both return a manual unsubscribe for early opt-out.
+
+```ts
+once("ready", () => hideSplash());
+
+const off = listenN<Progress>("progress", 100, (p) => render(p));
+// off() can stop the subscription before 100 events land.
+```
+
+Both subscribe to backend emitter events by name, untyped. `createBackend` already exposes a typed `.once()` for the same events. Native OS events (`window:focused`, `tray:click`, `clipboard:change`, …) don't reach these helpers: use the plugin client's `on*` method, or `osOn` from [`@tynd/core/client/bridge`](/docs/v1.0/api/plugins/bridge).
+
+`listenN` throws a `RangeError` when `n` is not a finite number of at least 1.
+
+## `createPluginClient<P>(name)`
+
+Typed proxy for a JavaScript plugin declared with [`definePlugin`](/docs/v1.0/api/backend#plugins--defineplugin). Calling `client.method(a, b)` sends the RPC `$plugin$<name>$<method>` with `[a, b]`. Generator methods return streaming handles, as with [streaming RPC](/docs/v1.0/api/streaming-rpc).
+
+```ts title="plugin/client.ts"
+import { createPluginClient } from "@tynd/core/client";
+import type Counter from "./backend";
+
+export const counter = createPluginClient<typeof Counter>("counter");
+await counter.increment();
+```
+
+## `bytesToBase64(bytes)` / `base64ToBytes(b64)`
+
+Convert between `Uint8Array` and standard base64. They use the native `Uint8Array.toBase64` / `fromBase64` when the engine has them, and a chunked `btoa` / `atob` fallback otherwise.
+
+```ts
+import { base64ToBytes, bytesToBase64 } from "@tynd/core/client";
+
+const b64 = bytesToBase64(new Uint8Array([1, 2, 3])); // "AQID"
+const bytes = base64ToBytes(b64);
+```

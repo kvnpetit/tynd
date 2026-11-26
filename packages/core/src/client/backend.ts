@@ -1,16 +1,20 @@
-import { tynd } from "../logger.js"
-import type { Emitter } from "../types.js"
-import "./_internal.js"
+import { tynd } from "../logger";
+import type { Channel as BackendChannel } from "../runtime/channel";
+import type { Emitter } from "../types";
+import { type CallOptions, checkCallOptions, createCallProxy } from "./_internal";
+import type { Channel } from "./channel";
+
+export type { CallOptions } from "./_internal";
 
 type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
   k: infer I,
 ) => void
   ? I
-  : never
+  : never;
 
 type ModuleEvents<T> = UnionToIntersection<
   { [K in keyof T]: T[K] extends Emitter<infer E> ? E : never }[keyof T]
->
+>;
 
 /**
  * Awaitable + async-iterable handle for a streaming backend call.
@@ -20,72 +24,86 @@ type ModuleEvents<T> = UnionToIntersection<
  */
 export type StreamCall<Y, R> = PromiseLike<Awaited<R>> &
   AsyncIterable<Y> & {
-    cancel(): Promise<IteratorResult<Y>>
-  }
+    cancel(): Promise<IteratorResult<Y>>;
+  };
+
+/** Backend `Channel<M>` parameters become frontend `Channel<M>` arguments. */
+type ClientArgs<A extends unknown[]> = {
+  [I in keyof A]: A[I] extends BackendChannel<infer M> ? Channel<M> : A[I];
+};
 
 type ModuleFunctions<T> = {
   [K in keyof T as T[K] extends (...args: infer _A) => infer _R ? K : never]: T[K] extends (
     ...args: infer A
   ) => AsyncGenerator<infer Y, infer R, unknown>
-    ? (...args: A) => StreamCall<Y, R>
+    ? (...args: ClientArgs<A>) => StreamCall<Y, R>
     : T[K] extends (...args: infer A) => AsyncIterable<infer Y>
-      ? (...args: A) => StreamCall<Y, void>
+      ? (...args: ClientArgs<A>) => StreamCall<Y, void>
       : T[K] extends (...args: infer A) => infer R
-        ? (...args: A) => Promise<Awaited<R>>
-        : never
-}
+        ? (...args: ClientArgs<A>) => Promise<Awaited<R>>
+        : never;
+};
 
 export type BackendClient<T> = ModuleFunctions<T> & {
+  /**
+   * The same functions, with a cancel signal and/or a deadline applied to
+   * every call made through the returned object.
+   * @example
+   * const ac = new AbortController()
+   * const hits = await api.withOptions({ signal: ac.signal, timeout: 5_000 }).search("tynd")
+   */
+  withOptions(options: CallOptions): ModuleFunctions<T>;
   on<K extends keyof ModuleEvents<T> & string>(
     event: K,
     handler: (payload: ModuleEvents<T>[K]) => void,
-  ): () => void
+  ): () => void;
   once<K extends keyof ModuleEvents<T> & string>(
     event: K,
     handler: (payload: ModuleEvents<T>[K]) => void,
-  ): () => void
-}
+  ): () => void;
+};
 
 /**
  * Create a fully type-safe proxy to the backend.
- *
  * @example
  * import type * as backend from "../backend/main"
  * const api = createBackend<typeof backend>()
  * await api.greet("Alice")
  */
 export function createBackend<T>(): BackendClient<T> {
-  return new Proxy({} as BackendClient<T>, {
-    get(_target, prop: string | symbol) {
-      if (typeof prop !== "string") return undefined
-      // A thenable Proxy would make `await api` invoke `api.then()` as a backend call.
-      if (prop === "then" || prop === "catch" || prop === "finally") return undefined
-
-      if (!window.__tynd__) {
-        tynd.error("window.__tynd__ is not available — are you running outside a tynd app?")
-        return () => Promise.reject(new Error("[tynd] not in a tynd app context"))
+  return createCallProxy<BackendClient<T>>(
+    // Backend RPC: prop name == wire fn name.
+    (prop) => prop,
+    // Subscription helpers (`on`/`once`) are not RPC calls — handled here
+    // before the default `(...args) => window.__tynd__.call(...)` path runs.
+    (prop) => {
+      if (prop === "withOptions") {
+        return (options: CallOptions) =>
+          createCallProxy<ModuleFunctions<T>>((name) => name, undefined, checkCallOptions(options));
       }
-
       if (prop === "on") {
-        return (event: string, handler: (p: unknown) => void) => window.__tynd__.on(event, handler)
+        return (event: string, handler: (p: unknown) => void) => window.__tynd__.on(event, handler);
       }
-
       if (prop === "once") {
         return (event: string, handler: (p: unknown) => void) => {
-          let called = false
+          let called = false;
           const wrapper = (p: unknown) => {
-            if (!called) {
-              called = true
-              window.__tynd__.off(event, wrapper)
-              handler(p)
+            if (called) {
+              // Extra fires usually mean emitter/receiver disagree on multiplicity — surface them.
+              tynd.warn(
+                `on.once(${JSON.stringify(event)}): handler fired more than once — extra invocation ignored`,
+              );
+              return;
             }
-          }
-          window.__tynd__.on(event, wrapper)
-          return () => window.__tynd__.off(event, wrapper)
-        }
+            called = true;
+            window.__tynd__.off(event, wrapper);
+            handler(p);
+          };
+          window.__tynd__.on(event, wrapper);
+          return () => window.__tynd__.off(event, wrapper);
+        };
       }
-
-      return (...args: unknown[]) => window.__tynd__.call(prop, args)
+      return;
     },
-  })
+  );
 }

@@ -1,0 +1,123 @@
+---
+title: Architecture
+description: "How Tynd splits an app across three surfaces — frontend WebView, Rust host, and TypeScript backend — and what each one owns."
+---
+
+# Architecture
+
+A Tynd app has **three surfaces**:
+
+```
+┌──────────────────────────┐        ┌──────────────────────────┐        ┌──────────────────────────┐
+│      Frontend            │        │      Rust Host           │        │      TS Backend          │
+│  (WebView)               │◄──IPC─►│  (native layer)          │◄──IPC─►│  (Bun)                   │
+│                          │        │                          │        │                          │
+│  • Your UI               │        │  • Window + event loop   │        │  • Your exported fns     │
+│  • @tynd/core/client     │        │  • Core + plugin APIs    │        │  • createEmitter         │
+│  • createBackend<T>()    │        │  • tynd:// + tynd-bin:// │        │  • app.start(config)     │
+│  • OS calls (direct)     │        │  • Streaming RPC         │        │  • Lifecycle hooks       │
+└──────────────────────────┘        └──────────────────────────┘        └──────────────────────────┘
+```
+
+Each surface has a single, narrow responsibility. The glue between them is **typed, zero-codegen, and transport-agnostic** (no HTTP, no WebSocket, no TCP).
+
+## The three surfaces
+
+### 1. Frontend — your UI
+
+A pure SPA. Whatever framework you picked (React, Vue, Svelte, Solid, Preact, Lit, Angular) emits static assets into `dist/`. Tynd serves those through the `tynd://localhost/` custom scheme — `window.location.origin` is `tynd://localhost` (no `http://localhost:xxxx`, no TCP port, no firewall prompt).
+
+Typical imports:
+
+- `import { createBackend } from "@tynd/core/client"` — typed RPC proxy to your backend.
+- `import { tyndWindow, path } from "@tynd/core/client"` — core host primitives.
+- `import { dialog } from "@tynd/plugin-dialog/client"` — a capability from its official plugin.
+
+### 2. Rust host — the native layer
+
+The runtime-facing native surface has two entry points:
+
+- **`tynd-host`** (library) — the native event loop, the IPC bridge, and the core OS APIs.
+- **The app host** — an executable Tynd generates for each app and compiles with Cargo from `@tynd/host-src`. It launches the Bun backend.
+
+Internally, stable contracts are isolated from the platform-heavy host:
+
+| Crate | Responsibility |
+| --- | --- |
+| `tynd-protocol` | Shared process protocol types and the IPC frame limit (8 MiB) |
+| `tynd-capabilities` / `tynd-security-policy` | Capability model and native policy checks |
+| `tynd-pack-format` / `tynd-update-core` | Package and updater contracts shared with tooling |
+| `tynd-debug-protocol` | Optional debug transport |
+| `tynd-host-macros` | Typed Rust dispatch generation |
+| `tynd-host` | Wry/Tao orchestration, IPC, the webview JS shim, and feature-gated OS implementations |
+| `tynd-runtime` | Executable bootstrap that launches the embedded Bun runtime |
+
+### 3. Backend — your TypeScript
+
+Your exported functions, typed emitters, and lifecycle hooks run in Bun. You get Bun + Node.js globals (`fetch`, `Bun.*`, `node:*`), JIT, and native npm bindings.
+
+The host carries the core plus the APIs of the declared host-backed plugins and the native crates of the declared standalone plugins; `tynd dev` and `tynd build` compile it for the app. The JavaScript runtime is always Bun. See [Runtime](/docs/v1.0/concepts/runtimes).
+
+## Minimal core and composition
+
+The host is a minimal core plus the APIs your app declares.
+
+The core is always compiled in: the window and its webview, the `tynd://` and
+`tynd-bin://` schemes, IPC, RPC and events, the app lifecycle, the debug
+protocol, and the `acl` and `log` APIs (no Cargo feature: they cannot be built
+out). Its clients come from `@tynd/core/client`: `app`, `tyndWindow` and
+`tyndWebview` (current window and webview only), `os`, `path`, `monitors`,
+`security`, `log`, `workers`, and the RPC and event helpers.
+
+Every other host API (dialog, clipboard, menu, tray, multiwindow, fs, http,
+updater, ...) is a host-backed official plugin `@tynd/plugin-<name>`. Such a plugin selects
+the matching `api-<name>` Cargo feature and exposes the typed client from
+`@tynd/plugin-<name>/client`; it does not ship a second native implementation.
+`tynd add <name>` installs the package and lists it in `plugins`, and the CLI
+compiles those features into the app host on the next `tynd dev` or
+`tynd build`. A host built without an API rejects its calls with an error naming
+`@tynd/plugin-<name>`; a `menu` or `tray` in `app.start` without its plugin
+stops startup with the same message.
+
+Workload-specific extensions such as terminal and local AI are official
+plugins with their own native crates. SQL runs in the Bun backend through
+`bun:sqlite`.
+
+## Runtime topology
+
+```
+Frontend (WebView)  ──postMessage──►  Rust host (IPC handler)  ──stdin JSON──►  Bun backend
+            ▲                                    ▲                                       │
+            │  evaluate_script                   │           stdout JSON ◄───────────────┘
+```
+
+- Frontend → backend calls travel over the WebView's `window.ipc.postMessage` → Rust parses → stdin JSON → Bun reads a line, dispatches, writes stdout JSON → Rust evaluates the response on the originating webview.
+- OS calls take a shortcut: frontend → Rust (direct), Rust → frontend (direct). Backend never sees them.
+
+## What's shared
+
+- Core bootstrap, RPC, event, and plugin-loading contracts.
+- Installed plugin APIs; availability follows app configuration, not runtime name.
+- The RPC wire format (`{ type: "call", id, fn, args }` / `{ type: "return", id, value }`).
+- The streaming RPC mechanism (per-stream credit, yield batching, cancellation on window close).
+- The `tynd://` frontend scheme + the `tynd-bin://` binary IPC scheme.
+- TYNDPKG packing (how your built binary embeds the frontend + backend + assets + sidecars).
+
+- Trusted backend workers use `Bun.Worker`; renderer workers remain sandboxed Web Workers.
+- Release packages include Bun and the app bundle.
+- Host-backed plugins and standalone plugins with a native crate only change how the Rust host is built.
+
+## Why this split matters
+
+- **No HTTP, no TCP.** Frontend assets and IPC ride a native custom scheme. No loopback port, no firewall prompt on first launch, no MITM window for an attacker on the same machine.
+- **No Rust in your code.** You never write or maintain Rust application code — Tynd generates the host and compiles it with your installed Rust toolchain.
+- **OS APIs stay off the renderer.** Blocking native calls run outside the
+  WebView; PTYs keep dedicated native threads and SQLite lives in Bun.
+  Renderer worker code deliberately stays inside the WebView sandbox.
+- **One JavaScript runtime.** Development and production use Bun, avoiding engine-specific behavior.
+
+## Next
+
+- [Runtime](/docs/v1.0/concepts/runtimes) — Bun and custom native hosts.
+- [IPC Model](/docs/v1.0/concepts/ipc) — call / event / stream flow in detail.
+- [Security](/docs/v1.0/concepts/security) — CSP, scheme allowlists, structural model.

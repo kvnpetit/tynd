@@ -1,0 +1,28 @@
+---
+interface Props {
+  title: string;
+  description: string;
+}
+const { title, description } = Astro.props;
+---
+
+<div class="card">
+  <h3>{title}</h3>
+  <p>{description}</p>
+</div>
+
+<style>
+  .card {
+    display: grid;
+    gap: 0.5rem;
+  }
+  h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+  p {
+    font-size: 0.875rem;
+    line-height: 1.625;
+    color: var(--fg-muted);
+  }
+</style>

@@ -1,0 +1,44 @@
+---
+title: keyring
+description: "OS credential store. Facade over the core `keyring` host API."
+---
+
+# `keyring`
+
+`@tynd/plugin-keyring` enables the host `keyring` API and exposes its typed client. The API itself is documented on the [`keyring`](/docs/v1.0/api/os/keyring) page.
+
+## Install
+
+```bash
+tynd add keyring
+```
+
+```ts
+import { keyring } from "@tynd/plugin-keyring/client";
+```
+
+Declaring the plugin compiles the matching `api-keyring` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-keyring` and list it in `plugins` in `tynd.config.ts`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-keyring` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `keyring` |
+| Aliases for `tynd add` | `secret`, `secrets` |
+| Catalog permission labels | `host:keyring`, `os-credentials` |
+| Estimated size | 260 KB |
+| Client exports | `keyring`, `KeyringEntry` |
+
+## Differences from the core client
+
+`@tynd/plugin-keyring` wraps the core [`keyring`](/docs/v1.0/api/os/keyring) client:
+
+- Every method takes an entry object: `keyring.set({ service, account }, password)`, `keyring.get({ service, account })`, `keyring.delete({ service, account })`.
+- The package also has a default export, and the same import works in `tynd.config.ts` and in frontend code. There is a single native implementation, in the core host; no second crate is linked.
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

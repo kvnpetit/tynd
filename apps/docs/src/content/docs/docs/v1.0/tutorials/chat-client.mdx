@@ -1,0 +1,211 @@
+---
+title: LLM Chat Client
+description: "Build a streaming LLM chat — backend proxies token-by-token via `async function*`, frontend renders progressively with a cancel button."
+---
+
+# LLM Chat Client
+
+A native chat app backed by any OpenAI-compatible endpoint (OpenAI, Anthropic, Ollama, etc.). Demonstrates streaming RPC, cancellation, and keyring-stored API keys.
+
+Exercises: [async-generator RPC](/docs/v1.0/guides/streaming), [`keyring`](/docs/v1.0/api/os/keyring), [`fetch`](/docs/v1.0/api).
+
+## Scaffold
+
+```bash
+bunx @tynd/cli create chat --framework react
+cd chat
+```
+
+## Backend — streaming proxy
+
+```ts title="backend/main.ts"
+import { app } from "@tynd/core";
+
+export async function* chat(
+  key: string,
+  messages: Array<{ role: string; content: string }>,
+) {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages,
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    let nl = buf.indexOf("\n");
+    while (nl !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      nl = buf.indexOf("\n");
+
+      if (!line.startsWith("data: ")) continue;
+      const data = line.slice("data: ".length);
+      if (data === "[DONE]") return;
+
+      try {
+        const parsed = JSON.parse(data);
+        const delta = parsed.choices?.[0]?.delta?.content;
+        if (delta) yield delta as string;
+      } catch {
+        // ignore malformed chunks
+      }
+    }
+  }
+}
+
+app.start({
+  window: { title: "Chat", width: 900, height: 700, center: true },
+});
+```
+
+Key points:
+
+- **`async function*`** — yields one token at a time. Tynd batches yields (10ms / 64 items) to keep the UI smooth even at 10k+ tokens/s.
+- **Cancellation** — if the frontend calls `stream.cancel()`, the runtime calls the generator's `return()`: it stops at the current `yield` and the SSE reader is abandoned.
+
+## Frontend
+
+The API key lives in the OS keyring. Plugin clients such as `keyring` run in the frontend; the frontend reads the key and passes it to the backend call. Install the plugin:
+
+```bash
+tynd add keyring
+```
+
+```tsx title="src/App.tsx"
+import { useRef, useState } from "react";
+import { createBackend } from "@tynd/core/client";
+import { keyring } from "@tynd/plugin-keyring/client";
+import type * as backend from "../backend/main";
+
+const api = createBackend<typeof backend>();
+
+const KEYRING = { service: "com.example.chat", account: "openai_api_key" };
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export default function App() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const streamRef = useRef<ReturnType<typeof api.chat> | null>(null);
+  const [streaming, setStreaming] = useState(false);
+
+  async function send() {
+    if (!input.trim()) return;
+    const user: Message = { role: "user", content: input };
+    const assistant: Message = { role: "assistant", content: "" };
+    const next = [...messages, user, assistant];
+    setMessages(next);
+    setInput("");
+    setStreaming(true);
+
+    try {
+      const key = await keyring.get(KEYRING);
+      if (!key) throw new Error("API key not set");
+      const stream = api.chat(key, next.slice(0, -1));
+      streamRef.current = stream;
+
+      for await (const chunk of stream) {
+        assistant.content += chunk;
+        setMessages([...next]);   // force re-render
+      }
+    } catch (err) {
+      assistant.content += `\n\n[error: ${(err as Error).message}]`;
+      setMessages([...next]);
+    } finally {
+      setStreaming(false);
+      streamRef.current = null;
+    }
+  }
+
+  async function cancel() {
+    await streamRef.current?.cancel();
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+      <main style={{ flex: 1, overflow: "auto", padding: 16 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ margin: "1rem 0" }}>
+            <strong>{m.role}:</strong> {m.content}
+          </div>
+        ))}
+      </main>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); void send(); }}
+        style={{ display: "flex", gap: 8, padding: 12, borderTop: "1px solid #ddd" }}
+      >
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Say something…"
+          disabled={streaming}
+          style={{ flex: 1, padding: 8 }}
+        />
+        {streaming ? (
+          <button type="button" onClick={cancel}>Stop</button>
+        ) : (
+          <button type="submit">Send</button>
+        )}
+      </form>
+    </div>
+  );
+}
+```
+
+## Setting the API key
+
+First launch — add a small settings modal that calls `await keyring.set(KEYRING, key)`. Or prompt for local testing:
+
+```ts
+if ((await keyring.get(KEYRING)) == null) {
+  await keyring.set(KEYRING, prompt("OpenAI API key?")!);
+}
+```
+
+## Build
+
+```bash
+tynd build
+```
+
+Inspect the signed artifact produced for your target. The API key lives in the OS Keychain / Credential Manager — safe at rest.
+
+## Why this pattern
+
+- **Streaming RPC** is tuned for this — 10k+ tokens/s flow to the UI without blocking.
+- **Cancellation propagates end-to-end.** `stream.cancel()` → backend generator returns → the SSE reader stops being read.
+- **`keyring` > `store`** for secrets. A curious user digging through `<config dir>/<app id>/<ns>/store.json` won't find the API key.
+
+## Next ideas
+
+- **Save conversations** — JSON in `os.appDataDir()` + `fs.writeText`.
+- **Model picker** — store the selected model in `createStore`.
+- **Multi-window** — one conversation per `multiwindow.create({ label: convoId })` (`tynd add multiwindow`).
+- **System tray** — minimize to tray for quick ⌘-Space access with a [global shortcut](/docs/v1.0/guides/keyboard-shortcuts).
+
+## Related
+
+- [Streaming RPC guide](/docs/v1.0/guides/streaming).
+- [keyring API](/docs/v1.0/api/os/keyring).
+- [Persistence guide](/docs/v1.0/guides/persistence).

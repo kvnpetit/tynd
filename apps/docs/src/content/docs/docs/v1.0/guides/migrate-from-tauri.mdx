@@ -1,0 +1,275 @@
+---
+title: Migrate from Tauri
+description: "Move a Tauri v2 app to Tynd — rewrite `#[tauri::command]`s as backend `export`s, port events to `createEmitter`, keep Rust out of your source tree."
+---
+
+import Steps from '@/components/Steps.astro';
+
+# Migrating from Tauri v2
+
+Tauri and Tynd share the **same native stack** (wry + tao) and many of the same IPC primitives. The biggest change is the backend language: **Rust → TypeScript**. You stop maintaining two languages.
+
+## What changes
+
+| Tauri v2 | Tynd |
+|---|---|
+| `#[tauri::command] fn greet(name: String) -> String` | `export async function greet(name: string): Promise<string>` |
+| `invoke("greet", { name })` | `await api.greet(name)` (typed via `typeof backend`) |
+| `app.emit("event", payload)` | `events.emit("event", payload)` (typed via `createEmitter`) |
+| `await listen("event", handler)` | `api.on("event", handler)` |
+| Capability ACLs in `capabilities/*.json` | `app.start({ capabilities: [...] })`; native plugins expose generated `allow-*` names, core commands use inline permissions, and path/URL scopes live in `security`. |
+| Plugins (fs, http, process, …) | Install the matching Tynd plugin and import its package-owned client entry point. |
+| `src-tauri/` with `Cargo.toml` | **Removed.** TypeScript only. |
+| `tauri.conf.json` | `tynd.config.ts` (typed TypeScript DX, loaded and validated by native Rust tooling). |
+
+## What stays the same
+
+- **Native WebView** (WebView2 / WKWebView / WebKitGTK) — identical rendering target.
+- **Zero-network IPC** — custom scheme, no TCP port, no firewall prompt.
+- **Code signing primitives** — Windows still uses `signtool`; macOS still produces Developer ID signed/notarized artifacts, but Tynd's built-in flow uses a P12 certificate and App Store Connect API-key JSON.
+- **Updater primitives** — both use signed manifests and Ed25519 artifact signatures. Tynd adds its own manifest metadata, patch routes, and macOS app-archive rules; generate manifests with `tynd updater publish` instead of reusing them unchanged.
+- **Ed25519 update signatures** — the same cryptographic primitive, enforced by Tynd's native updater implementation.
+
+## Step-by-step
+
+<Steps>
+
+### Init Tynd next to Tauri
+
+Don't delete `src-tauri/` yet. Run:
+
+```bash
+bunx @tynd/cli init
+```
+
+This:
+
+- Adds `@tynd/core`, `@tynd/cli`, and `@tynd/host-src` to `package.json`.
+- Writes `tynd.config.ts` pointing at your existing frontend `outDir`.
+- Scaffolds `backend/main.ts` with a minimal `app.start`.
+
+### Port commands
+
+For each `#[tauri::command]` in `src-tauri/src/`, write a TypeScript equivalent in `backend/main.ts`:
+
+```rust
+// src-tauri/src/lib.rs — OLD
+#[tauri::command]
+async fn greet(name: String) -> Result<String, String> {
+    Ok(format!("Hello, {}!", name))
+}
+
+#[tauri::command]
+async fn read_config(app: AppHandle) -> Result<Config, String> {
+    let path = app.path().app_config_dir().unwrap().join("config.json");
+    let body = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&body).map_err(|e| e.to_string())
+}
+```
+
+```ts title="backend/main.ts — NEW"
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { app, hostCall } from "@tynd/core";
+
+export async function greet(name: string): Promise<string> {
+  return `Hello, ${name}!`;
+}
+
+export async function readConfig(): Promise<Config> {
+  const configDir = await hostCall<string | null>("os", "configDir");
+  const p = join(configDir ?? "", "myapp", "config.json");
+  return JSON.parse(await readFile(p, "utf8"));
+}
+
+app.start({
+  window: { title: "My App", width: 1200, height: 800 },
+});
+```
+
+Notice:
+
+- No `Result<T, E>` — throw exceptions; they reject the frontend promise.
+- No `#[derive(Serialize, Deserialize)]` — `T` flows through `typeof backend`.
+- No `AppHandle` — the backend uses Bun/Node APIs directly and reaches a native host API with `hostCall`. In the frontend, the core clients and official plugin clients are free functions (`os.configDir()`, `path.join(...)`, `fs.readText(...)`).
+
+### Port frontend calls
+
+```ts
+// OLD
+import { invoke } from "@tauri-apps/api/core";
+const msg = await invoke<string>("greet", { name: "Alice" });
+
+// NEW
+import { createBackend } from "@tynd/core/client";
+import type * as backend from "../backend/main";
+
+const api = createBackend<typeof backend>();
+const msg = await api.greet("Alice");
+```
+
+The Tynd version is typed from `typeof backend` — no `<string>` annotation needed.
+
+### Port events
+
+```rust
+// OLD — backend
+app.emit("user-created", serde_json::json!({ "id": "1", "name": "Alice" }))?;
+```
+
+```ts
+// NEW — backend/main.ts
+import { createEmitter } from "@tynd/core";
+
+export const events = createEmitter<{
+  userCreated: { id: string; name: string };
+}>();
+
+events.emit("userCreated", { id: "1", name: "Alice" });
+```
+
+```ts
+// OLD — frontend
+import { listen } from "@tauri-apps/api/event";
+await listen<{ id: string; name: string }>("user-created", (e) => { /* e.payload.id */ });
+
+// NEW — frontend
+api.on("userCreated", (user) => { /* user.id, user.name — typed */ });
+```
+
+### Port plugin calls
+
+| Tauri plugin | Tynd equivalent |
+|---|---|
+| `@tauri-apps/plugin-fs` | [`fs`](/docs/v1.0/api/os/fs) |
+| `@tauri-apps/plugin-http` | [`http`](/docs/v1.0/api/os/http) (or `fetch`) |
+| `@tauri-apps/plugin-shell` | [`shell`](/docs/v1.0/api/os/shell) + [`process`](/docs/v1.0/api/os/process) |
+| `@tauri-apps/plugin-dialog` | [`dialog`](/docs/v1.0/api/os/dialog) |
+| `@tauri-apps/plugin-clipboard-manager` | [`clipboard`](/docs/v1.0/api/os/clipboard) |
+| `@tauri-apps/plugin-notification` | [`notification`](/docs/v1.0/api/os/notification) |
+| `@tauri-apps/plugin-os` | [`os`](/docs/v1.0/api/os/os) |
+| `@tauri-apps/plugin-process` | [`process`](/docs/v1.0/api/os/process) + [`app.exit`](/docs/v1.0/api/os/app) |
+| `@tauri-apps/plugin-global-shortcut` | [`shortcuts`](/docs/v1.0/api/os/shortcuts) |
+| `@tauri-apps/plugin-autostart` | [`autolaunch`](/docs/v1.0/api/os/autolaunch) |
+| `@tauri-apps/plugin-deep-link` | [`singleInstance.onOpenUrl`](/docs/v1.0/api/os/single-instance) + `protocols` in config |
+| `@tauri-apps/plugin-single-instance` | [`singleInstance`](/docs/v1.0/api/os/single-instance) |
+| `@tauri-apps/plugin-updater` | [`updater`](/docs/v1.0/api/os/updater) — migrate to the Tynd signed manifest and its artifact/patch fields |
+| `@tauri-apps/plugin-store` | [`store`](/docs/v1.0/api/os/store) |
+| `@tauri-apps/plugin-sql` | [`sql`](/docs/v1.0/api/plugins/sql) (bundled SQLite) |
+| `@tauri-apps/plugin-websocket` | [`websocket`](/docs/v1.0/api/os/websocket) (or native `WebSocket`) |
+
+Use `keyring` or `vault` for Stronghold-style secret storage, `tyndWindow.positionAt(...)` for positioner presets, and the startup `security` policy for FS/HTTP scopes (there are no runtime grants). NFC has no direct desktop equivalent; use a Bun-native package or a custom Tynd plugin.
+
+### Port window config
+
+```json
+// OLD tauri.conf.json
+{
+  "app": {
+    "windows": [
+      {
+        "title": "My App",
+        "width": 1200,
+        "height": 800,
+        "center": true,
+        "resizable": true
+      }
+    ]
+  }
+}
+```
+
+```ts
+// NEW tynd.config.ts (or app.start config)
+app.start({
+  window: {
+    title: "My App",
+    width: 1200,
+    height: 800,
+    center: true,
+    resizable: true,
+  },
+});
+```
+
+### Port menu + tray
+
+Menus and trays are declared in `app.start(config)`:
+
+```ts title="backend/main.ts"
+app.start({
+  menu: [
+    {
+      type: "submenu",
+      label: "File",
+      items: [
+        { label: "New",  id: "file.new",  accelerator: "CmdOrCtrl+N" },
+        { label: "Open", id: "file.open", accelerator: "CmdOrCtrl+O" },
+        { type: "separator" },
+        { label: "Quit", role: "quit" },
+      ],
+    },
+  ],
+  tray: {
+    icon: import.meta.dir + "/../assets/tray.png",
+    tooltip: "My App",
+    menu: [
+      { label: "Show", id: "show" },
+      { label: "Quit", id: "quit" },
+    ],
+  },
+  window: { /* ... */ },
+});
+```
+
+Handle clicks in the frontend:
+
+Install the required plugins:
+
+```bash
+tynd add menu tray
+```
+
+```ts
+import { app } from "@tynd/core/client";
+import { menu } from "@tynd/plugin-menu/client";
+import { tray } from "@tynd/plugin-tray/client";
+menu.onClick("file.new", () => createDocument());
+tray.onMenu("quit", () => app.exit(0));
+```
+
+### Delete `src-tauri/`
+
+Once the Tynd app builds and runs, remove the Tauri sub-crate and any Tauri-specific plugins from `package.json`.
+
+### Update CI
+
+Replace `tauri-apps/tauri-action` with a direct `tynd build --bundle all` step:
+
+```yaml
+- run: bunx @tynd/cli build --bundle all
+```
+
+Keep the Rust toolchain in CI: Tynd compiles the native host for each app. See [CI shape](/docs/v1.0/guides/testing#ci-shape) for caching the shared host build cache, and run the build once per target OS.
+
+</Steps>
+
+## What you lose
+
+- **Tauri permission-manifest ecosystem.** Tynd enforces per-command/window/webview/origin capabilities, but does not yet ship Tauri's breadth of named plugin permission manifests and scope schemas. Port grants inline and keep app-specific authorization in backend logic.
+- **Mobile (iOS + Android).** Tynd is desktop-only.
+- **Official plugin ecosystem.** The 30+ Tauri plugins don't have 1:1 Tynd equivalents. Check the table above; for missing ones, use pure-JS libs or implement on the Tynd primitives.
+- **Cross-compilation.** Tauri builds Windows binaries from Linux. Tynd requires the target host OS.
+- **Updater ecosystem maturity.** Tynd supports signed full releases and patch entries, but Tauri's updater has more production history.
+
+## What you gain
+
+- **TypeScript end-to-end.** No Rust in your source tree.
+- **Zero-codegen typed RPC.** `typeof backend` — rename a function and the compiler catches every stale call.
+- **Bun runtime.** TypeScript backend with Bun and Node-compatible APIs. No Rust application code required.
+- **Layered security model.** Export = backend RPC exposure; `app.start({ capabilities })` gates native renderer commands; `security` adds path/URL/process rules.
+
+## Related
+
+- [vs Tauri comparison](/docs/v1.0/compare/vs-tauri).
+- [Security concept](/docs/v1.0/concepts/security).

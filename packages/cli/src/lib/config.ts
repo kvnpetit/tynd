@@ -1,201 +1,25 @@
-import path from "node:path"
-import * as v from "valibot"
+// The config types are generated from the Rust config model (crates/cli/src/config/model.rs);
+// run `bun scripts/gen-api-catalog.ts` after changing it.
+export type * from "./config/types.generated";
 
-export type Runtime = "full" | "lite"
+import type { TyndConfig } from "./config/types.generated";
 
-// Reverse-DNS: ≥ 2 segments, each starting with a letter (MSI + CFBundleIdentifier).
-const REVERSE_DNS = /^[a-zA-Z][a-zA-Z0-9_-]*(\.[a-zA-Z][a-zA-Z0-9_-]*)+$/
-
-// URL scheme: starts with a letter, then letters / digits / +-. (RFC 3986 §3.1).
-// Must avoid reserved schemes (http/https/file/ftp) — those are rejected with
-// a clearer message than a generic regex failure.
-const URL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+\-.]*$/
-const RESERVED_SCHEMES = new Set([
-  "http",
-  "https",
-  "file",
-  "ftp",
-  "mailto",
-  "javascript",
-  "data",
-  "about",
-  "blob",
-  "tynd",
-  "tynd-bin",
-])
-
-const BundleSchema = v.object({
-  identifier: v.pipe(
-    v.string(),
-    v.regex(REVERSE_DNS, "must be reverse-DNS (e.g. com.example.myapp)"),
-  ),
-  displayName: v.optional(v.pipe(v.string(), v.minLength(1))),
-  categories: v.optional(v.array(v.pipe(v.string(), v.minLength(1)))),
-  shortDescription: v.optional(v.string()),
-  longDescription: v.optional(v.string()),
-  copyright: v.optional(v.string()),
-  deb: v.optional(
-    v.object({
-      depends: v.optional(v.array(v.pipe(v.string(), v.minLength(1)))),
-      section: v.optional(v.pipe(v.string(), v.minLength(1))),
-      priority: v.optional(v.pipe(v.string(), v.minLength(1))),
-    }),
-  ),
-  rpm: v.optional(
-    v.object({
-      license: v.optional(v.pipe(v.string(), v.minLength(1))),
-      requires: v.optional(v.array(v.pipe(v.string(), v.minLength(1)))),
-    }),
-  ),
-  appimage: v.optional(v.object({})),
-  nsis: v.optional(
-    v.object({
-      installMode: v.optional(
-        v.union([v.literal("currentUser"), v.literal("perMachine"), v.literal("both")]),
-      ),
-    }),
-  ),
-  msi: v.optional(
-    v.object({
-      upgradeCode: v.optional(v.string()),
-    }),
-  ),
-  /**
-   * Code signing for distribution. Values marked `env:NAME` are resolved at
-   * build time from `process.env.NAME` — never put secrets directly in
-   * source control. Signing is opt-in: omit the block and builds stay
-   * unsigned (fine for dev / CI smoke tests).
-   */
-  sign: v.optional(
-    v.object({
-      windows: v.optional(
-        v.object({
-          /** Path to a `.pfx` / `.p12` file OR `cert:subject=...` for Windows cert store. */
-          certificate: v.pipe(v.string(), v.minLength(1)),
-          /** Password protecting the PFX. Use `env:NAME` to read from the environment. */
-          password: v.optional(v.string()),
-          /** RFC 3161 timestamp server. Defaults to http://timestamp.digicert.com. */
-          timestampUrl: v.optional(v.pipe(v.string(), v.url())),
-        }),
-      ),
-      macos: v.optional(
-        v.object({
-          /** "Developer ID Application: Name (TEAMID)" or a SHA-1 hash. */
-          identity: v.pipe(v.string(), v.minLength(1)),
-          /** Path to an entitlements `.plist` (required for some sandboxed features). */
-          entitlements: v.optional(v.string()),
-          /** If set, submits the signed `.app` to Apple notary service after codesign. */
-          notarize: v.optional(
-            v.object({
-              appleId: v.string(),
-              password: v.string(),
-              teamId: v.string(),
-            }),
-          ),
-        }),
-      ),
-    }),
-  ),
-})
-
-// Window/menu/tray config lives in the backend (app.start({ window: {...} }))
-// because each spawned window can define its own settings programmatically.
-// tynd.config.ts only covers build/CLI concerns.
-const ConfigSchema = v.object({
-  runtime: v.union([v.literal("full"), v.literal("lite")]),
-  backend: v.pipe(v.string(), v.minLength(1)),
-  frontendDir: v.pipe(v.string(), v.minLength(1)),
-  frontendEntry: v.optional(v.pipe(v.string(), v.minLength(1))),
-  devUrl: v.optional(v.pipe(v.string(), v.url())),
-  devCommand: v.optional(v.pipe(v.string(), v.minLength(1))),
-  icon: v.optional(v.pipe(v.string(), v.minLength(1))),
-  binaryArgs: v.optional(v.array(v.string())),
-  /**
-   * Custom URL schemes (e.g. `["myapp"]`) the built app should register with
-   * the OS. `myapp://...` links then launch the installed app and fire an
-   * `app:open-url` event. Reserved schemes (http, https, file, …) rejected.
-   */
-  protocols: v.optional(
-    v.array(
-      v.pipe(
-        v.string(),
-        v.regex(URL_SCHEME, "must be a valid URL scheme (letters, digits, +-.)"),
-        v.check((s) => !RESERVED_SCHEMES.has(s.toLowerCase()), "reserved scheme"),
-      ),
-    ),
-  ),
-  bundle: v.optional(BundleSchema),
-  sidecars: v.optional(
-    v.array(
-      v.object({
-        name: v.pipe(v.string(), v.minLength(1)),
-        path: v.pipe(v.string(), v.minLength(1)),
-      }),
-    ),
-  ),
-})
-
-export type BundleConfig = v.InferOutput<typeof BundleSchema>
-
-/**
- * Tynd configuration — runtime-validated via valibot.
- *
- * Prefer editing JSDoc on the schema fields above rather than duplicating
- * them here. Types are inferred from the schema so they never drift.
- */
-export type TyndConfig = v.InferOutput<typeof ConfigSchema>
-
-const DEFAULTS: TyndConfig = {
-  runtime: "full",
-  backend: "backend/main.ts",
-  frontendDir: "frontend",
+export interface TyndConfigContext {
+  /** Value selected through `tynd --env`, or `development` by default. */
+  envName: string;
 }
 
-export class ConfigError extends Error {
-  readonly issues: readonly string[]
-  constructor(issues: string[]) {
-    super(`Invalid tynd.config: ${issues.length} issue${issues.length > 1 ? "s" : ""}`)
-    this.name = "ConfigError"
-    this.issues = issues
-  }
-}
+export type TyndConfigFactory<T extends TyndConfig = TyndConfig> = (
+  context: TyndConfigContext,
+) => T | Promise<T>;
 
-/** Load tynd.config.ts from the project directory (defaults to cwd). */
-export async function loadConfig(cwd = process.cwd()): Promise<TyndConfig> {
-  const candidates = [path.resolve(cwd, "tynd.config.ts"), path.resolve(cwd, "tynd.config.js")]
+export type TyndConfigExport<T extends TyndConfig = TyndConfig> = T | TyndConfigFactory<T>;
 
-  for (const file of candidates) {
-    if (await Bun.file(file).exists()) {
-      const mod = (await import(file)) as { default?: unknown }
-      const merged = { ...DEFAULTS, ...((mod.default ?? {}) as Partial<TyndConfig>) }
-      return validateConfig(merged)
-    }
-  }
-
-  return { ...DEFAULTS }
-}
-
-/** Resolve config paths relative to cwd. */
-export function resolvePaths(cfg: TyndConfig, cwd: string): TyndConfig {
-  return {
-    ...cfg,
-    backend: path.resolve(cwd, cfg.backend),
-    frontendDir: path.resolve(cwd, cfg.frontendDir),
-    sidecars: cfg.sidecars?.map((s) => ({ name: s.name, path: path.resolve(cwd, s.path) })),
-  }
-}
-
-/**
- * Runtime-validate a freshly-loaded config. Throws ConfigError listing every
- * bad field so users fix them all in one edit cycle.
- */
-export function validateConfig(raw: unknown): TyndConfig {
-  const result = v.safeParse(ConfigSchema, raw)
-  if (result.success) return result.output
-
-  const issues = result.issues.map((i) => {
-    const path = i.path?.map((p) => p.key).join(".") ?? ""
-    return path ? `${path}: ${i.message}` : i.message
-  })
-  throw new ConfigError(issues)
+/** Preserve literal types while checking a static or environment-aware config. */
+export function defineConfig<const T extends TyndConfig>(config: T): T;
+export function defineConfig<const T extends TyndConfig>(
+  config: TyndConfigFactory<T>,
+): TyndConfigFactory<T>;
+export function defineConfig(config: TyndConfigExport): TyndConfigExport {
+  return config;
 }

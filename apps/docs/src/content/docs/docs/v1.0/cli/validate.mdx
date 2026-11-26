@@ -1,0 +1,59 @@
+---
+title: tynd validate
+description: "Validate config and project inputs; add native build reproducibility checks in CI mode."
+---
+
+# `tynd validate`
+
+```bash
+tynd validate
+tynd validate --ci
+tynd validate --json
+```
+
+Validation is project-scoped. It does not probe WebView, registry, network, or globally installed installer/signing tools.
+
+## Local mode
+
+Errors:
+
+- no supported `tynd.config.*` file;
+- config cannot load, merge, or validate;
+- configured backend file is missing.
+
+Warnings:
+
+- configured `frontendDir` directory is missing;
+- `package.json` is missing;
+- a source file value-imports `@tynd/plugin-<api>` (or its `/client`) while that plugin is not declared in `plugins`; the call would fail at runtime with `api_disabled`, and the warning suggests `tynd add <api>`. Type-only imports are ignored;
+- the app uses `fs`, `http`, `process` or `shell` APIs (declared in `apis`/`plugins` or imported from `@tynd/plugin-<api>`) or a plugin other than the host-backed official plugins (any `@tynd/plugin-*` package outside the API catalog, such as `@tynd/plugin-sql`), and no `security` policy is configured, so resource scopes are open. The warning goes away once a source file passes `security` to `app.start`. Configure `allow` lists, see [Security](/docs/v1.0/concepts/security).
+
+Warnings do not fail local validation.
+
+## `--ci`
+
+CI mode promotes missing frontend/package inputs to errors and additionally requires:
+
+- `.bun-version` exists;
+- Bun resolves and matches the pin;
+- the effective native host plan resolves;
+- the Tynd host sources (`@tynd/host-src`) are installed, otherwise it reports `Tynd host sources are not installed` with the install command;
+- `tynd-bundler` resolves.
+
+`validate --ci` does not require a compiled host (the host is compiled by `tynd build`), and does not validate `bun.lock`, run an application typechecker, build frontend/backend assets, invoke Cargo, check the Rust version, or inspect installer toolchains.
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--cwd <dir>` | Project directory |
+| `--json` | Emit `{ ok, mode, errors, warnings }` |
+| `--ci` | Require reproducible native build inputs |
+
+Any error produces a non-zero exit code.
+
+## Related
+
+- [tynd.config reference](/docs/v1.0/cli/config).
+- [`tynd doctor`](/docs/v1.0/cli/doctor).
+- [`tynd info`](/docs/v1.0/cli/info).

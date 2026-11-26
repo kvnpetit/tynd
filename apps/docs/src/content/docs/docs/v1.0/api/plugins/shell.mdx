@@ -1,0 +1,38 @@
+---
+title: shell
+description: "Open URLs and files with the OS default handler. Facade over the `shell` host API."
+---
+
+# `shell`
+
+`@tynd/plugin-shell` enables the host `shell` API and exposes its typed client. The API itself is documented on the [`shell`](/docs/v1.0/api/os/shell) page.
+
+## Install
+
+```bash
+tynd add shell
+```
+
+```ts
+import { shell } from "@tynd/plugin-shell/client";
+```
+
+Declaring the plugin compiles the matching `api-shell` Cargo feature into the app host on the next `tynd dev` or `tynd build`. Or by hand: `bun add @tynd/plugin-shell` and list it in `plugins` in `tynd.config.ts`. Without it, calls reject with an error naming `@tynd/plugin-shell`.
+
+## Package
+
+| | |
+|---|---|
+| Package | `@tynd/plugin-shell` |
+| Kind | Host-backed official plugin (facade over a host API) |
+| Host API | `shell` |
+| Aliases for `tynd add` | `open`, `open-external` |
+| Catalog permission labels | `host:shell` |
+| Estimated size | 30 KB |
+| Client exports | `shell` |
+
+
+## Related
+
+- [Plugin catalog](/docs/v1.0/api/plugin-catalog)
+- [`tynd add`](/docs/v1.0/cli/add)

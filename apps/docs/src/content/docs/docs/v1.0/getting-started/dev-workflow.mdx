@@ -1,0 +1,81 @@
+---
+title: Development Workflow
+description: "The day-to-day loop with native Rust tooling and a TypeScript application."
+---
+
+# Development Workflow
+
+Tynd keeps application development in TypeScript while the CLI, MCP server, host, and packager run as native Rust binaries.
+
+## `tynd dev` — live development
+
+```bash
+bun run dev        # commonly aliases `tynd dev`
+```
+
+`tynd dev` starts the frontend framework's normal development server, waits until it is reachable, compiles the app's native host with the Cargo `dev` profile (a few minutes the first time, skipped when nothing changed), then launches it with the project's pinned Bun executable.
+
+- The frontend framework owns HMR.
+- Tynd watches backend, plugin, config, and environment inputs.
+- Backend source changes reload the Bun backend while the WebView stays alive.
+- A configuration change that affects native capabilities, environment, plugins, or host arguments asks you to restart `tynd dev`.
+
+Use `--inspect` or `--inspect-brk` for the Bun inspector. Use `--no-debug` when the MCP/debug socket should not be exposed.
+
+## `tynd start` — run existing production assets
+
+```bash
+tynd start
+```
+
+`start` does not rebuild anything. It launches the release host compiled by `tynd build` with the existing frontend output and production backend artifact `.tynd/cache/bundle.dist.js`. If an artifact or the release host is missing, the command stops and tells you to run `tynd build`.
+
+This makes `start` useful for repeatable production-shaped launches: build explicitly, then start exactly those outputs.
+
+## `tynd build` — release output
+
+```bash
+tynd build                 # packed native executable
+tynd build --bundle all    # supported installers for this host OS
+```
+
+`build` runs the framework production build, bundles the backend through the pinned Bun runtime, compiles the host with the Cargo `release` profile, and asks the Rust `tynd-bundler` to create a native package under `release/<platform>-<arch>/`.
+
+Commit `.bun-version` and your package lock. `tynd validate --ci` requires the Bun pin, resolves that exact Bun runtime, and checks native host/bundler availability. Package-lock validation remains the project/CI package manager's job.
+
+Installer formats are host-specific:
+
+| Host OS | Output |
+|---|---|
+| macOS | `.app`, `.dmg` |
+| Linux | `.deb`, `.rpm`, `.AppImage` |
+| Windows | NSIS setup, `.msi` |
+
+A format-specific external prerequisite is checked only when that format is requested.
+
+## Generated state
+
+`.tynd/cache/` and `.tynd/build/` contain generated staging data. Tynd does not claim source-hash build skipping: `build` performs its required build steps and `start` is explicitly cache-only.
+
+```bash
+tynd clean --dry-run    # show exact targets
+tynd clean --yes        # remove .tynd/cache, .tynd/build, and release
+tynd clean --yes --cache  # also remove the shared host build cache
+```
+
+## Project checks
+
+Tynd does not impose an application linter or typechecker. Use the ones selected by your frontend project, for example:
+
+```bash
+bunx tsc --noEmit
+bunx biome check .
+```
+
+`tynd info`, `tynd validate`, and `tynd doctor` inspect project state without registry, WebView, or broad toolchain preflight probes. Missing optional tooling is reported by the command that actually needs it.
+
+## Next
+
+- [Backend RPC guide](/docs/v1.0/guides/backend-rpc)
+- [Build Pipeline](/docs/v1.0/concepts/build-pipeline)
+- [Troubleshooting](/docs/v1.0/troubleshooting)

@@ -1,11 +1,10 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
   "vcs": {
-    "enabled": true,
-    "clientKind": "git",
-    "useIgnoreFile": true
+    "enabled": false
   },
   "files": {
+    "ignoreUnknown": true,
     "includes": [
       "**/*.{js,mjs,cjs,jsx,ts,tsx,json,jsonc}",
       "!**/node_modules",
@@ -15,8 +14,8 @@
       "!**/bin/index.js",
       "!**/bun.lock",
       "!**/release",
-      "!packages/lite/src/polyfills/*.js",
-      "!packages/lite/src/quickjs/*.js"
+      "!packages/host-src/native",
+      "!crates/host/src/webview/shim/devalue.bundle.js"
     ]
   },
   "formatter": {
@@ -29,7 +28,7 @@
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
-      "semicolons": "asNeeded",
+      "semicolons": "always",
       "trailingCommas": "all",
       "arrowParentheses": "always",
       "bracketSameLine": false,
@@ -49,24 +48,22 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
         "noUnusedImports": "error",
         "noUnusedVariables": "error",
-        "noUnusedFunctionParameters": "warn",
+        "noUnusedFunctionParameters": "error",
         "noUnusedPrivateClassMembers": "error",
-        "noUndeclaredVariables": "error",
-        "useExhaustiveDependencies": "warn",
-        "useHookAtTopLevel": "error"
+        "noUndeclaredVariables": "error"
       },
       "style": {
-        "noNonNullAssertion": "off",
+        "noNonNullAssertion": "error",
         "useImportType": "error",
+        "useExportType": "error",
         "useNodejsImportProtocol": "error",
         "useConst": "error",
         "useTemplate": "error",
         "useShorthandAssign": "error",
-        "useSelfClosingElements": "error",
         "noParameterAssign": "error",
         "noUselessElse": "error",
         "useNumberNamespace": "error"
@@ -76,28 +73,27 @@
         "noDoubleEquals": "error",
         "noEmptyBlockStatements": "error",
         "noImplicitAnyLet": "error",
-        "noArrayIndexKey": "warn",
-        "noConsole": "off",
+        "noConsole": "error",
         "noConfusingVoidType": "error",
         "noMisleadingCharacterClass": "error"
       },
       "complexity": {
         "noBannedTypes": "error",
+        "noExcessiveCognitiveComplexity": "error",
+        "noExcessiveLinesPerFunction": "error",
         "noUselessTypeConstraint": "error",
+        "noUselessUndefined": "error",
         "noForEach": "off",
-        "useOptionalChain": "error",
-        "useLiteralKeys": "off"
+        "useLiteralKeys": "error",
+        "useMaxParams": "error",
+        "useOptionalChain": "error"
       },
       "performance": {
         "noAccumulatingSpread": "error",
         "noDelete": "error"
       },
       "security": {
-        "noDangerouslySetInnerHtml": "error",
         "noGlobalEval": "error"
-      },
-      "a11y": {
-        "recommended": true
       }
     }
   },
@@ -111,9 +107,48 @@
   },
   "overrides": [
     {
-      "includes": ["packages/cli/bin/**"],
-      "linter": { "enabled": false },
-      "formatter": { "enabled": false }
+      "includes": ["crates/**/*.js"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noArguments": "off",
+            "noExcessiveCognitiveComplexity": "off",
+            "noExcessiveLinesPerFunction": "off",
+            "useArrowFunction": "off",
+            "useOptionalChain": "off"
+          },
+          "correctness": {
+            "noInnerDeclarations": "off"
+          },
+          "style": {
+            "noParameterAssign": "off",
+            "useTemplate": "off"
+          },
+          "suspicious": {
+            "noRedundantUseStrict": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["crates/host/src/debug/debug_helper.js"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/core/src/client/log.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ]
 }

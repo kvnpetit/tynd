@@ -1,0 +1,123 @@
+---
+title: Code Signing
+description: "Configure current-host Windows Authenticode and macOS PKCS#12 signing/notarization in the native Rust build pipeline."
+---
+
+# Code Signing
+
+Signing runs only when a matching `bundle.sign` block exists. Missing credentials or tools fail the build; Tynd never silently falls back to unsigned output.
+
+This platform signing is separate from Ed25519 updater signatures. See [Auto-Updates](https://kvnpetit.github.io/tynd/docs/v1.0/guides/auto-updates) for updater trust.
+
+## Windows
+
+```ts filename="tynd.config.ts"
+import { defineConfig } from "@tynd/cli";
+
+export default defineConfig({
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  bundle: {
+    identifier: "com.example.myapp",
+    sign: {
+      windows: {
+        certificate: "certs/windows-signing.pfx",
+        password: "env:WINDOWS_CERT_PASSWORD",
+        timestampUrl: "http://timestamp.digicert.com",
+      },
+    },
+  },
+});
+```
+
+On Windows, Tynd finds `signtool` on `PATH`. It does not search the registry, inspect Windows SDK directories itself, or read a `SIGNTOOL` override.
+
+Supported `certificate` values:
+
+- project-relative/absolute `.pfx` or `.p12` file path;
+- `cert:subject=<certificate subject>`;
+- `cert:<certificate subject>`;
+- `cert:sha1=<40 hexadecimal characters>`;
+- a bare 40-character SHA-1 thumbprint.
+
+`password` can be a literal or `env:NAME`; environment references are recommended. `timestampUrl` defaults to `http://timestamp.digicert.com`.
+
+The raw `.exe` is signed before installer creation. Eligible `.exe`, `.msi`, and `.msix` installer artifacts returned by the bundler are signed afterward.
+
+Verify exact platform output:
+
+```powershell
+signtool verify /pa /v release\windows-x64\MyApp.exe
+```
+
+## macOS
+
+```ts filename="tynd.config.ts"
+export default defineConfig({
+  backend: "backend/main.ts",
+  frontendDir: "dist",
+  bundle: {
+    identifier: "com.example.myapp",
+    sign: {
+      macos: {
+        identity: "certs/DeveloperIDApplication.p12",
+        password: "env:MACOS_P12_PASSWORD",
+        entitlements: "certs/entitlements.plist",
+        notarize: {
+          apiKey: "env:APP_STORE_CONNECT_API_KEY_JSON",
+        },
+      },
+    },
+  },
+});
+```
+
+- `identity` is a project-relative or absolute PKCS#12 (`.p12`/`.pfx`) file.
+- `password` is optional and accepts `env:NAME`.
+- `entitlements` is optional UTF-8 plist input.
+- `notarize.apiKey` is a path, or `env:NAME`, to App Store Connect API-key JSON accepted by the Rust signer.
+
+The native `tynd-bundler` uses Rust `apple-codesign`. Signing enables hardened-runtime flags. Notarization submits to Apple, waits up to 15 minutes, requires an accepted response, and staples the ticket; rejection/timeout fails by default.
+
+For application distribution, Tynd signs/notarizes/staples the `.app`, archives that signed app as:
+
+```text
+<binary>-<version>-macos.zip
+```
+
+The archive is the macOS updater payload. DMG output is signed/notarized/stapled as its own artifact.
+
+Useful host verification:
+
+```bash
+codesign --verify --deep --strict release/macos-arm64/MyApp.app
+spctl --assess --type execute --verbose release/macos-arm64/MyApp.app
+```
+
+## Linux
+
+Tynd does not currently apply a built-in Linux package signature. Sign/checksum final `.deb`, `.rpm`, `.AppImage`, or raw binaries with your distribution workflow when required.
+
+## Secret handling
+
+- Keep certificate files and updater private keys out of source control.
+- Prefer `env:NAME` for passwords and notarization-key paths.
+- Missing referenced environment variables are errors.
+- CLI process logging redacts marked secret arguments; never print secrets from project scripts.
+
+## CI outline
+
+Run signing on the target host whose artifacts are being produced:
+
+```bash
+tynd validate --ci
+tynd build --bundle all
+```
+
+Then verify and publish files from `release/<platform>-<arch>/`. Tynd performs no global signing-tool preflight during unrelated commands.
+
+## Related
+
+- [Bundling](https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling)
+- [Auto-Updates](https://kvnpetit.github.io/tynd/docs/v1.0/guides/auto-updates)
+- [Security](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/security)

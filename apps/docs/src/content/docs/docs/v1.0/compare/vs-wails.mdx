@@ -1,0 +1,81 @@
+---
+title: Tynd vs Wails v3
+description: "Both target native WebView with a non-Rust backend language. Wails uses Go; Tynd uses TypeScript."
+---
+
+# Tynd vs Wails v3
+
+Wails targets the same niche as Tynd — a **native WebView** desktop framework without bundled Chromium — but uses **Go** for the native side. Tynd uses TypeScript.
+
+## The core tradeoff
+
+| | Tynd | Wails v3 |
+|---|---|---|
+| Backend language | TypeScript | Go |
+| Typed RPC | `createBackend<typeof backend>()` — zero codegen | `wails3 generate bindings` — Go → TS codegen |
+| IPC transport | `wry` postMessage + `tynd://` custom scheme, no TCP port | Wails runtime bridge |
+| Release size | Measure the signed artifact for each target and feature set | Measure the signed artifact for each target and feature set |
+| HTTP server middleware | ❌ | ✅ asset-server middleware |
+| Server mode (no GUI) | ❌ | ✅ |
+| GTK4 / WebKitGTK 6.0 | ❌ | ✅ experimental |
+| Mobile | ❌ | ❌ |
+
+## Feature comparison
+
+Wails cells name the Wails v3 API. Features left out of this table are not compared.
+
+| Feature | Tynd | Wails v3 |
+|---|---|---|
+| Multi-window | `multiwindow` handles, also from the backend (`getWindow`) | ✅ |
+| Window effects | `setEffects`: Mica, Tabbed, Acrylic, Blur (Windows), macOS materials; rejects on Linux | Windows backdrops, macOS translucency, Liquid Glass |
+| Frameless drag regions | `data-tynd-drag` / `data-tynd-no-drag` / `data-tynd-resize` | CSS `--wails-draggable` |
+| Context menus | Programmatic + declarative (`data-tynd-contextmenu`, with element data) | Named context menus with context data |
+| Tray | Several icons; attached popover window (Windows, macOS) | System tray with an attached window |
+| Single instance | Per-user named pipe / owner-only Unix socket with a per-user secret | Encrypted (AES-256-GCM) second-instance messages |
+| Custom protocols | `app.protocol` + asset protocol with Range seeking | Asset-server handlers and middleware |
+| Security | Capabilities per window / webview / origin, default file scope, runtime grants, IPC frame token, auto-injected CSP | Bound services define exposure |
+
+## When Tynd wins
+
+- **TypeScript end-to-end** — no Go on either side. Your team already knows TS.
+- **Zero-codegen typed RPC** — Tynd's `typeof backend` flows through `Proxy`. Wails requires running `wails3 generate bindings` to produce TypeScript files, and those need to stay in sync with the Go source.
+- **Bun backend** — full Bun and Node-compatible npm access. Wails uses Go.
+- **Security layers** — deny-by-default native command capabilities, a default app-folder file scope with protected locations, and runtime grants.
+- **Distribution in the CLI** — NSIS, MSI, MSIX, `.app`, DMG, AppImage, deb, rpm, Flatpak, Snap and PKGBUILD targets, BLAKE3 pack integrity, and a signed updater with patch updates, channels and staged rollout.
+
+## When Wails wins
+
+- **Reuse Go libraries.** If your team already has Go code (crypto, gRPC, DB drivers, image processing), Wails lets you call it directly.
+- **Richer window effects.** Liquid Glass (macOS), SnapAssist (Windows 11), custom window shape (mask), a larger set of native menu roles.
+- **HTTP middleware on the asset server.** Add middleware, custom endpoints, intercept asset requests. Tynd has no request interception; `app.protocol` serves separate schemes.
+- **Server mode.** Run a Wails app without a GUI window, serving over HTTP/WS. Useful for CLIs that optionally have a GUI.
+- **Synchronous cancellable event hooks.** Wails exposes more cancellation points in the system-event pipeline than Tynd does.
+- **GTK4 / WebKitGTK 6.0** — experimental but Wails-first.
+- **Wayland improvements.** Fractional scaling support, auto-disable DMA-BUF on NVIDIA.
+
+## Where they're tied
+
+- **Native WebView** — both use the OS WebView (WebView2 / WKWebView / WebKitGTK).
+- **OS APIs that both cover** — dialogs, tray, menu, context menus, clipboard, shell, notification, FS basics, single instance.
+- **No cross-compilation in Tynd.** `tynd build` builds for the machine it runs on; use a CI matrix.
+
+## Migration path
+
+Porting Wails → Tynd:
+
+- **`type MyService struct { … }`** with bound methods → `export async function method(…)` in `backend/main.ts`.
+- **`EventsEmit(ctx, "name", data)`** → `events.emit("name", data)`.
+- **`EventsOn(callback)`** → `api.on("name", handler)` on the frontend.
+- **Go libraries** — reimplement in TS / pure-JS, or wrap a Go binary as a `sidecar` and call via `process.exec`.
+- **Asset-server middleware / custom routes** — no direct equivalent. Serve a custom scheme with `app.protocol`, or move server-like concerns into the backend or a real HTTP service.
+
+Porting Tynd → Wails:
+
+- **TS backend** → rewrite each export as a Go method with `wails3 generate bindings`.
+- **TypeScript backend runtime** — N/A; Wails is Go-only.
+- **Zero-codegen typing** — you'll run `wails3 generate bindings` as part of your dev loop.
+
+## Related
+
+- [Comparisons overview](/docs/v1.0/compare).
+- [Backend API](/docs/v1.0/api/backend).

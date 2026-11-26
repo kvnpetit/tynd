@@ -1,0 +1,38 @@
+---
+title: tynd size
+description: "Report the disk size of the frontend assets, release output and build cache."
+---
+
+# `tynd size`
+
+```bash
+tynd size
+tynd size --json
+```
+
+Measures three directories of the project, when they exist:
+
+| Entry | Directory |
+|---|---|
+| `frontend` | `frontendDir` from the config (`frontend` when the config cannot be loaded) |
+| `release` | `release/` |
+| `.tynd/cache` | `.tynd/cache/` |
+
+Each size is the sum of the regular files below the directory. A directory reached twice (for example `frontendDir` pointing into `release/`) is counted once. The human output prints one line per entry and a `total` line.
+
+## Flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--cwd <dir>` | `.` | Start of the project-root search |
+| `--json` | false | Print `{ "totalBytes": n, "entries": { "<name>": bytes } }` |
+
+## What can go wrong
+
+- The command refuses symbolic links inside the measured directories and fails with `refusing symlink while sizing`.
+- It reports disk usage, not the size of the packed executable; look at the file under `release/<platform>-<arch>/` for that.
+
+## Related
+
+- [`tynd build`](/docs/v1.0/cli/build)
+- [`tynd clean`](/docs/v1.0/cli/clean)

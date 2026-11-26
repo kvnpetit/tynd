@@ -1,0 +1,138 @@
+---
+title: Production Checklist
+description: "Current release checks for native Rust tooling, Bun application assets, platform packaging, signing, and updates."
+---
+
+# Production Checklist
+
+Use product-specific QA, but keep Tynd release gates aligned with what the tooling actually validates/builds.
+
+## Project inputs
+
+- [ ] `tynd config show` shows expected merged environment config.
+- [ ] `backend` and `frontendDir` resolve inside the intended project.
+- [ ] Window/menu/tray behavior is configured in backend `app.start`, not `tynd.config.ts`.
+- [ ] `.bun-version` pins the exact Bun runtime intended for packaging.
+- [ ] Package lock is enforced by the package-manager CI step.
+- [ ] `@tynd/host-src` is a dev dependency on the same release line as `@tynd/cli`.
+- [ ] Requested native APIs/plugins are minimal and plugin permissions use least privilege.
+- [ ] `bundle.identifier` is stable reverse-DNS when installers/updater are used.
+- [ ] Explicit `icon` path exists when custom branding is required.
+
+```bash
+tynd validate --ci
+```
+
+Remember: `validate --ci` checks config/path/package/Bun pin/host plan/host sources/bundler inputs. It does not validate `bun.lock`, run app tests/typechecking, invoke Cargo, check the Rust version, or inspect every installer/signing tool.
+
+## Build
+
+- [ ] Build on every shipped OS/architecture; cross-compilation is unsupported.
+- [ ] Raw executable exists under `release/<platform>-<arch>/`.
+- [ ] Installer target list is valid for that host.
+- [ ] Rust 1.95+ and the platform build tools are installed on the build host; the directory set in `TYND_CACHE_DIR` is cached in CI so the host is not recompiled from scratch.
+- [ ] Requested format prerequisites are installed on the build host.
+- [ ] App installs, launches, upgrades, and uninstalls on representative machines.
+- [ ] Checksums/provenance cover exact published bytes.
+
+```bash
+tynd build
+tynd build --bundle all
+```
+
+`.tynd/cache` is staging, not a hash-skip guarantee. Use `tynd clean --dry-run` then `tynd clean --yes` when a clean generated state is required.
+
+## Platform signing
+
+### Windows
+
+- [ ] `bundle.sign.windows.certificate` is a file, subject, or SHA-1 thumbprint accepted by Tynd.
+- [ ] Password uses `env:NAME`.
+- [ ] `signtool` is on `PATH`; no registry/SDK auto-discovery is assumed.
+- [ ] Raw executable and every eligible installer verify from its platform release directory.
+
+```powershell
+signtool verify /pa /v release\win32-x64\MyApp.exe
+```
+
+### macOS
+
+- [ ] PKCS#12 Developer ID identity is available.
+- [ ] Password and App Store Connect API-key path use secrets/environment references.
+- [ ] Required entitlements are explicit.
+- [ ] `.app` and `.dmg` signatures verify.
+- [ ] Notarization is accepted and ticket stapled.
+- [ ] Updater archive is `<binary>-<version>-macos.zip`.
+
+```bash
+codesign --verify --deep --strict release/darwin-arm64/MyApp.app
+spctl --assess --type execute --verbose release/darwin-arm64/MyApp.app
+```
+
+### Linux
+
+- [ ] Decide/apply distribution-specific package signatures outside Tynd when required.
+- [ ] WebKitGTK/runtime dependencies match supported distros.
+
+## Signed updates
+
+- [ ] App-scoped Ed25519 private key is backed up and never committed.
+- [ ] `updater.endpoints` are stable HTTPS and `publicKeys` match the signing key.
+- [ ] Each platform directory contains exactly one publishable updater payload.
+- [ ] macOS was built with `--bundle macos` so the signed app archive exists.
+- [ ] `tynd updater publish <version> --target manifest-only` creates `manifest.json` and `.sig`.
+- [ ] Manifest signature, artifact signature, and patch/reconstructed release signature failures are rejected.
+- [ ] A signed N-1 install updates to N and relaunches on every shipped OS/architecture.
+- [ ] Full-payload route works even when patches are enabled.
+- [ ] macOS app archive swap/rollback is exercised on a real machine.
+
+External publication requirements:
+
+- GitHub target needs `gh` and an existing `v<version>` release.
+- S3/R2 targets need `aws` plus complete credentials/profile.
+- Local QA server requires a previously generated signed manifest.
+
+## Runtime safety
+
+- [ ] Plugin API/command permissions remain default-deny and minimal.
+- [ ] Untrusted workloads run out-of-process through a deliberate sidecar protocol.
+- [ ] Secrets use keyring/vault facilities, not plain JSON store.
+- [ ] CSP does not add unsafe directives without product review.
+- [ ] Unsaved-change and single-instance flows behave under forced close/second launch.
+- [ ] Sidecars are explicit, versioned, and covered by artifact provenance.
+- [ ] Startup, steady memory, and package size meet documented product budgets.
+
+## User-flow QA
+
+- [ ] Window/WebView creation, navigation, dialogs, menus, tray, shortcuts, and shutdown used by the app work on each target OS.
+- [ ] Keyboard navigation, focus, screen-reader, contrast, reduced-motion, and locale/RTL behavior are checked where supported.
+- [ ] Offline launch works when the updater endpoint is unavailable.
+- [ ] WebView/runtime absence produces an actionable launch/install error; CLI preflight is not expected.
+- [ ] Debug/MCP evaluation and external-launch capabilities are not enabled in shipped production configuration.
+
+## Diagnostics before publication
+
+```bash
+tynd info --json
+tynd validate --ci
+tynd doctor
+tynd report
+```
+
+`info`/`doctor` intentionally avoid registry, WebView, network, and broad toolchain checks. Exercise requested installer/signing commands themselves for those prerequisites.
+
+## Release artifacts
+
+- [ ] npm distribution includes the six `@tynd/tooling-<os>-<arch>` packages with `tynd`, `tynd-mcp`, and `tynd-bundler`.
+- [ ] `@tynd/cli` and `@tynd/mcp` remain tiny launchers; no TypeScript server/CLI bundle or postinstall downloader is published.
+- [ ] `@tynd/host-src` is published at the same version as `@tynd/cli`; no prebuilt host package is published.
+- [ ] Docs/changelog/NOTICE match actual Rust/TypeScript dependency ownership.
+- [ ] Checksums/signatures are generated after final signing/notarization.
+
+## Related
+
+- [Build Pipeline](/docs/v1.0/concepts/build-pipeline)
+- [Bundling](/docs/v1.0/guides/bundling)
+- [Code Signing](/docs/v1.0/guides/code-signing)
+- [Auto-Updates](/docs/v1.0/guides/auto-updates)
+- [Security](/docs/v1.0/concepts/security)
