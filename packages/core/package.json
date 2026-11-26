@@ -59,12 +59,12 @@
     "build:devalue": "bun build scripts/devalue-shim-entry.ts --target=browser --format=iife --minify --outfile=../../crates/host/src/webview/shim/devalue.bundle.js"
   },
   "dependencies": {
-    "devalue": "^6.0.3",
+    "devalue": "^6.0.4",
     "pathe": "^2.0.3",
     "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.8",
+    "@biomejs/biome": "2.6.9",
     "@types/bun": "1.4.5",
     "typescript": "~7.0.2"
   },
