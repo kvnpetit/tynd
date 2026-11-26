@@ -157,7 +157,7 @@ windows-registry = "0.100"
 # handler). `os::shortcuts` keeps the manager in a process-wide static used from
 # IPC worker threads; upgrading needs the manager marshalled onto the tao
 # event-loop thread, which cannot be verified off-Windows here.
-global-hotkey = "0.5"
+global-hotkey = "0.10"
 # Cross-platform recycle bin (IShellItem on Windows, NSFileManager trashItemAtURL
 # on macOS, freedesktop.org Trash Spec on Linux).
 trash = "5"
@@ -180,7 +180,7 @@ mac-notification-sys     = "0.6"
 # capture, audio mute). Same versions as wry's own WebView2 bindings, so no
 # extra crate enters the graph.
 webview2-com = "0.39"
-windows-core = { version = "0.62", default-features = false, features = [ "std" ] }
+windows-core = { version = "0.100", default-features = false, features = [ "std" ] }
 
 # Launch-at-boot — registry on Windows, Launch Agents on macOS, autostart
 # .desktop on Linux.
@@ -382,7 +382,7 @@ iana-time-zone = "0.1"
 
 # Debounced FS watcher — collapses multi-event renames + tracks paths
 # across moves. Sits on top of `notify` and keeps the same OS backend.
-notify-debouncer-full = "0.7"
+notify-debouncer-full = "0.8"
 
 # Generate TypeScript types from Rust IPC structs. Source-of-truth for
 # `@tynd/core/client` — no manual `.d.ts` drift between Rust IPC commands
@@ -440,7 +440,7 @@ if-addrs = "0.15"
 # share apps; no native equivalent in Tauri.
 # Pinned `=0.8.1`: it is the newest xcap on `pipewire ^0.8`. xcap >= 0.8.2 moves
 # to a newer PipeWire dependency. Review that dependency when upgrading xcap.
-xcap = "=0.8.1"
+xcap = "=0.9.10"
 
 # Battery info for `power.battery()` — level, status, time remaining.
 # Maintained fork of the abandoned `battery` crate; the upstream
