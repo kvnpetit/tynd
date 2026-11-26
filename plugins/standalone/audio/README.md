@@ -14,6 +14,9 @@ explicitly (see [Feature gates](#feature-gates) below).
 **Requires** a Rust toolchain on the development machine; Tynd compiles the
 plugin crate into the app's host automatically.
 
+On Ubuntu and Debian, install the ALSA development headers with
+`sudo apt-get install libasound2-dev` before building your app.
+
 ## Install
 
 ```sh

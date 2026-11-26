@@ -23,6 +23,8 @@ export default {
 
 `tynd dev` and `tynd build` link the plugin's Rust crate into the app host they compile.
 
+On Ubuntu and Debian, install the ALSA development headers with `sudo apt-get install libasound2-dev` before building an app that uses this plugin.
+
 Installing through Tynd enables the `capture` and `wav` Cargo features. A direct Cargo dependency without features builds a portable stub, where each method fails with a "rebuild with the feature" error.
 
 ## Use

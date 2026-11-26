@@ -352,17 +352,20 @@ Content style: English only, active voice, code samples that run as written, val
 
 ## Releases
 
-Releases are cut manually by maintainers. The flow:
+Maintainers publish releases manually from GitHub Actions.
 
-1. Bump versions in `package.json` + `Cargo.toml` (workspace + members).
-2. Update `CHANGELOG.md` with the new entry.
-3. Commit `chore: release vX.Y.Z`, tag `vX.Y.Z`, push tag.
+1. Update the package versions, exact tooling pins, Cargo versions, lockfiles and changelog for the scope being released.
+2. Push the release commit to `main` and wait for CI on that exact commit.
+3. Create and push `vX.Y.Z` for the framework or `plugins-vX.Y.Z` for standalone plugins. Run the corresponding workflow and supply the tag.
+4. For a framework release, select the tag as the workflow ref, or select `main` while it still points to the tagged commit. Approve publication in the `release` environment. The workflow uses the configured `NPM_TOKEN` to publish public packages with provenance.
 
 Release workflows build the three native developer executables for macOS, Linux, and Windows on x64/ARM64. No prebuilt application host is published: every app compiles its own host with cargo from `@tynd/host-src`. Published npm packages include `@tynd/tooling` plus six platform packages, `@tynd/cli`, `@tynd/mcp`, `@tynd/core`, `@tynd/host-src`, and plugin SDK/packages in release scope.
 
 CLI, MCP and tooling versions move together. The release stages `tynd`, `tynd-mcp` and `tynd-bundler` into the six `@tynd/tooling-<os>-<arch>` packages. `@tynd/mcp` ships with the framework version and an exact `@tynd/tooling` pin. `scripts/check-release-version.ts` rejects versions and pins that differ from the tag.
 
-Prepare the version and changelog, then wait for CI to pass on that commit on `main`. Push `vX.Y.Z` for the framework or `plugins-vX.Y.Z` for standalone plugins. In GitHub Actions, run the corresponding release workflow and supply that tag. For the framework, select the tag's commit as the workflow ref; `main` works if it still points at the same commit. The publish job waits for approval in the `release` environment. Enable `verify_reproducibility` on the framework workflow when you want a clean rebuild and digest comparison before publication.
+Changes to the framework release build configuration on `main` trigger **Release validation**, which compiles all six native targets and verifies the bundler assets and attestations without publishing to npm or GitHub Releases. The manual framework workflow uses the same build and verifies the remote tag again before publishing. Enable `verify_reproducibility` for a clean rebuild and digest comparison before publication.
+
+Both Linux tooling targets use Ubuntu 24.04 runners, with a native ARM64 runner for Linux ARM64. Standalone plugin validation also uses Ubuntu 24.04 and the shared CI system dependencies, including the ALSA headers required by the audio plugin's published features.
 
 Contributors don't touch versions — only maintainers cut releases.
 
