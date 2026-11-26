@@ -10,6 +10,8 @@ By opening a pull request, you agree that your contribution is licensed under th
 
 ## Setup
 
+Use the repository versions in `.bun-version`, `.node-version`, and `rust-toolchain.toml` for local development. Node.js runs the documentation tooling and npm release steps. Bun runs the application backend and the TypeScript tests.
+
 ```bash
 git clone https://github.com/kvnpetit/tynd
 cd tynd
