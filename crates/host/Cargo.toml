@@ -390,6 +390,7 @@ webkit2gtk = { version = "=2.0.2", features = [ "v2_38" ] }
 # the `api::power` watcher. `default-features = false` + `blocking-api`
 # keeps the async-io runtime out of the dep graph — the watcher runs on
 # its own dedicated `std::thread`.
+# Linux notification and power workers use the synchronous API removed in zbus 6.
 zbus = { version = "5.19", default-features = false, features = [ "blocking-api" ], optional = true }
 
 # Window materials for `window.setEffects` (Windows + macOS; Linux has none).

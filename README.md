@@ -142,7 +142,8 @@ Linux host development dependencies:
 sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev librsvg2-dev \
   libxdo-dev libxss-dev libpipewire-0.3-dev libgbm-dev \
-  libdrm-dev libclang-dev rpm patchelf
+  libdrm-dev libclang-dev libxcb1-dev libxrandr-dev \
+  libdbus-1-dev libwayland-dev libegl-dev rpm patchelf
 ```
 
 ## Repo Layout

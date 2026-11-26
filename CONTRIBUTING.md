@@ -25,7 +25,8 @@ sudo apt-get install -y \
   libgtk-3-dev libwebkit2gtk-4.1-dev \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
   libxdo-dev libxss-dev libpipewire-0.3-dev \
-  libgbm-dev libdrm-dev libclang-dev
+  libgbm-dev libdrm-dev libclang-dev libxcb1-dev libxrandr-dev \
+  libdbus-1-dev libwayland-dev libegl-dev
 ```
 
 Install Rust (1.95 or newer, via [rustup](https://rustup.rs)) for repository development and for any Tynd app: every app's host is compiled with `cargo`, and the native CLI does not download/manage a toolchain. Bun is required for application TypeScript, project commands, config, and package workflows.

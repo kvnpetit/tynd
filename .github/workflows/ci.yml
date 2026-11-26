@@ -37,7 +37,6 @@ jobs:
 
   check:
     name: Check
-    # Linux builds need PipeWire headers compatible with xcap's libspa 0.8.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

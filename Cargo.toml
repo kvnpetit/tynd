@@ -64,9 +64,9 @@ serde_yaml = "0.9"
 zstd       = { version = "0.14.4", default-features = false }
 zip        = { version = "9.6", default-features = false, features = [ "deflate" ] }
 
-# wry / tao ecosystem
-wry       = "0.57.2"
-tao       = "0.37.2"
+# wry / tao ecosystem. Keep the GTK 0.18 family together until drag moves GDK to 0.19.
+wry       = "0.57.4"
+tao       = "0.37.3"
 muda      = "0.21.2"
 tray-icon = "0.26"
 # Standalone DPI primitives (`LogicalPosition`, `PhysicalSize`, …) shared by
@@ -304,6 +304,8 @@ bidiff  = { version = "1.0", features = [ "enc" ] }
 # used by the `codesign` subcommand without the legacy macOS-only wrapper.
 # `tauri-bundler` still pulls `tauri-macos-sign` internally for its own macOS
 # signing path; Tynd does not expose that wrapper and signs through `codesign`.
+# Cargo resolves 2.10.2 while apple-codesign uses xz2. Tauri's newer RPM
+# stack needs liblzma-sys, which would link a second copy of native lzma.
 tauri-bundler  = "2.10"
 tauri-utils    = "2.10"
 apple-codesign = "0.29"
@@ -382,7 +384,7 @@ iana-time-zone = "0.1"
 
 # Debounced FS watcher — collapses multi-event renames + tracks paths
 # across moves. Sits on top of `notify` and keeps the same OS backend.
-notify-debouncer-full = "0.7"
+notify-debouncer-full = "0.8"
 
 # Generate TypeScript types from Rust IPC structs. Source-of-truth for
 # `@tynd/core/client` — no manual `.d.ts` drift between Rust IPC commands
@@ -438,9 +440,7 @@ if-addrs = "0.15"
 
 # Screenshot of screen / window. Used by capture / annotation / screen
 # share apps; no native equivalent in Tauri.
-# Pinned `=0.8.1`: it is the newest xcap on `pipewire ^0.8`. xcap >= 0.8.2 moves
-# to a newer PipeWire dependency. Review that dependency when upgrading xcap.
-xcap = "=0.8.1"
+xcap = "0.9.10"
 
 # Battery info for `power.battery()` — level, status, time remaining.
 # Maintained fork of the abandoned `battery` crate; the upstream
