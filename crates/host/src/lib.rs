@@ -3,7 +3,7 @@
 // the correct entitlements — camera, microphone, accessibility prompts fire
 // at the OS level instead of being silently denied.
 #[cfg(target_os = "macos")]
-embed_plist::embed_plist!("Info.plist");
+embed_plist::embed_info_plist!("../Info.plist");
 
 // Wire formats (audio f32 lanes, rkyv payloads) reinterpret host bytes as
 // little-endian; refuse to build on big-endian targets to keep that

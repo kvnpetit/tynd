@@ -16,8 +16,6 @@
     <string>This app uses the camera for video calls.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>This app uses the microphone for audio calls.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Tynd plugins use Apple Events to integrate with other macOS apps.</string>
     <key>NSScreenCaptureUsageDescription</key>
     <string>Tynd captures screen content for recording features you initiate.</string>
 </dict>
