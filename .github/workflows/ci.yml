@@ -117,7 +117,7 @@ jobs:
           toolchain: "1.100.0"
       - name: Install Linux GUI build dependencies
         if: runner.os == 'Linux'
-        run: bash scripts/install-linux-ci-deps.sh xvfb xauth
+        run: bash scripts/install-linux-ci-deps.sh xvfb xauth libasound2-dev
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
           shared-key: ci-test-${{ matrix.runner }}
@@ -125,8 +125,8 @@ jobs:
             . -> target
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Test workspace (all host APIs)
-        run: cargo test --locked --workspace --features tynd-host/api-all
+      - name: Test workspace (all host APIs and the native audio backend)
+        run: cargo test --locked --workspace --features tynd-host/api-all,tynd-plugin-audio/capture
       - name: Test TypeScript packages
         if: runner.os != 'Linux'
         run: bun run test

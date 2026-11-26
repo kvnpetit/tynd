@@ -16,7 +16,8 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # The workspace build uses the same PipeWire headers as CI.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       actions: read
@@ -49,15 +50,16 @@ jobs:
         with:
           bun-version-file: ".bun-version"
           no-cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17 # stable
         with:
           toolchain: "1.100.0"
           components: clippy
       - name: Install Linux GUI build dependencies
         # Release jobs run without caches (no cache poisoning across runs).
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libxdo-dev libxss-dev libpipewire-0.3-dev libgbm-dev libdrm-dev libclang-dev
+        run: bash scripts/install-linux-ci-deps.sh libasound2-dev
       - run: bun install --frozen-lockfile
       - name: Read canonical plugin matrix
         id: plugin-matrix
@@ -73,19 +75,20 @@ jobs:
         run: bun scripts/check-release-version.ts plugins "$TAG"
       - run: bunx biome ci --error-on-warnings plugins/standalone
       - run: bunx tsc --noEmit -p plugins/standalone
-      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo clippy --locked --workspace --all-targets --features tynd-plugin-audio/capture -- -D warnings
       - name: Dry-run every plugin before publishing any plugin
+        env:
+          PLUGIN_MATRIX: ${{ steps.plugin-matrix.outputs.plugins }}
         shell: bash
         run: |
-          # The single-quoted strings are JavaScript for `bun -e`, not shell.
           set -euo pipefail
-          # shellcheck disable=SC2016
-          for plugin in $(bun -e 'const fs = require("node:fs"); const names = fs.readdirSync("plugins/standalone").filter((n) => fs.existsSync(`plugins/standalone/${n}/package.json`)).sort(); console.log(names.join(" "))'); do
+          plugins="$(jq -er '.[]' <<<"$PLUGIN_MATRIX")"
+          while IFS= read -r plugin; do
             tag="$(bun scripts/publish-npm-package.ts --print-tag "plugins/standalone/$plugin")"
             echo "::group::npm publish --dry-run plugins/standalone/$plugin"
             (cd "plugins/standalone/$plugin" && npm publish --access public --tag "$tag" --dry-run)
             echo "::endgroup::"
-          done
+          done <<<"$plugins"
 
   publish:
     name: Publish @tynd/plugin-${{ matrix.plugin }}
