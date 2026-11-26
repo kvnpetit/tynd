@@ -35,7 +35,7 @@ workspace = true
 # the way the CLI does for apps requiring a custom host.
 #
 # NOTE: `tynd-runtime` ships with NO bundled plugins by default — keeps the base
-# binary lightweight. Apps that need plugins (sql, terminal, audio, llm, etc.)
+# binary lightweight. Apps that need plugins (sql, terminal, audio, etc.)
 # declare them in `tynd.config.ts`; the CLI generates a custom Cargo.toml
 # under `.tynd/build/` that pulls only the plugins the app actually uses.
 tynd-host            = { path = "../host", version = "1.0.0", default-features = false }

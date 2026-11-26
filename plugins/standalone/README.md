@@ -13,21 +13,17 @@ Standalone official Tynd plugins workspace — native and pure-JS plugins for th
 | [`@tynd/plugin-command-palette`](./command-palette) | Headless command registry + fuzzy search (no UI imposed — bring your own components) |
 | [`@tynd/plugin-gpu`](./gpu) | GPU diagnostics + benchmark + readiness checks (WebGPU / WebGL2 / WebGL1 capabilities, vendor/renderer detection, quick compute-shader benchmark) |
 | [`@tynd/plugin-http-server`](./http-server) | Embedded HTTP + WebSocket server via `Bun.serve` |
-| [`@tynd/plugin-llm`](./llm) | Local LLM inference — GGUF via `llama.cpp` |
 | [`@tynd/plugin-oauth`](./oauth) | Loopback OAuth callback listener with PKCE-style state validation |
-| [`@tynd/plugin-screen-rec`](./screen-rec) | Screen capture + MJPEG recorder via `scap` |
 | [`@tynd/plugin-sql`](./sql) | Bundled SQLite via `bun:sqlite` |
 | [`@tynd/plugin-terminal`](./terminal) | Embedded PTY — spawn shells, stream output, resize, real `kill()` |
 | [`@tynd/plugin-tts`](./tts) | Text-to-speech — SAPI / AVSpeechSynthesizer / espeak |
-| [`@tynd/plugin-wgpu`](./wgpu) | Experimental native wgpu surface — Metal / DX12 / Vulkan / GL window that bypasses the webview renderer |
-| [`@tynd/plugin-whisper`](./whisper) | Local speech-to-text — Whisper GGML/GGUF via `whisper.cpp` (optional GPU `metal`/`cuda`/`vulkan`) |
 
 > **Host API split:** the host core only compiles window/webview, IPC,
 > lifecycle, `acl` and `log`. Other host APIs (autolaunch, biometric,
 > deep-link, power, shortcuts, updater, vault, network, AppleScript, ...) are
 > host-backed official plugins under [`plugins/host`](../host). The plugins here
-> cover heavier cases: terminal/PTY, screen recording, HTTP/WebSocket serving,
-> SQL, audio, speech, and local AI. For i18n or QR codes, use npm libraries
+> cover terminal/PTY, HTTP/WebSocket serving, SQL, audio and text-to-speech.
+> For i18n or QR codes, use npm libraries
 > directly (`i18next` / `lingui` / `formatjs`; `qrcode`).
 
 ## Plugin types
@@ -39,7 +35,7 @@ Standalone official Tynd plugins workspace — native and pure-JS plugins for th
 `http-server`, `oauth`, `sql`
 
 **Native (Rust)** — ship a Rust crate compiled into the app's host:
-`audio`, `llm`, `screen-rec`, `terminal`, `tts`, `wgpu`, `whisper`
+`audio`, `terminal`, `tts`
 
 Native packages declare the Cargo features required for their advertised
 baseline API. The CLI enables those features automatically. An app only lists
@@ -47,7 +43,7 @@ extra features when it wants an optional accelerator or codec:
 
 ```ts
 plugins: [
-  { pkg: "@tynd/plugin-screen-rec", features: ["gpu-encode"] },
+  { pkg: "@tynd/plugin-audio", features: ["capture"] },
 ]
 ```
 
@@ -61,14 +57,6 @@ Stable published plugins ship at `1.0.x`. Stable native-backed plugins
 (`audio`, `terminal`, `tts`) carry the same SemVer guarantee as the rest, but
 their platform backends evolve independently — pin exact versions in
 production until your native deps stabilise.
-
-`@tynd/plugin-llm`, `@tynd/plugin-screen-rec`, `@tynd/plugin-wgpu`, and
-`@tynd/plugin-whisper` are explicitly **experimental** and publish under the
-npm `experimental` dist-tag rather than `latest`. LLM and Whisper still need
-their inference feature proven across the supported native matrix; screen-rec
-still needs optional codec/platform coverage; WGPU still needs
-its render-command bridge. None belongs to the production-ready stable plugin
-set until those gaps close.
 
 ## Development
 

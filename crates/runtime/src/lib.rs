@@ -3,7 +3,7 @@
 //! Preset build (`default = ["preset"]`): the minimal host core
 //! (always includes `acl` + `log`) plus the debug protocol are linked, no
 //! other OS API, and NO plugins are bundled — keeps the base binary lightweight. Apps that
-//! need plugins (sql, terminal, audio, llm, etc.) declare them in
+//! need plugins (sql, terminal, audio, etc.) declare them in
 //! `tynd.config.ts` and the CLI generates a custom wrapper crate that
 //! pulls only the plugins the app actually uses.
 //!

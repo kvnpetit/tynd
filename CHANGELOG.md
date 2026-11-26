@@ -33,9 +33,7 @@ First stable release.
 - Official plugins, in two groups: host-backed (`@tynd/plugin-fs`, `-http`,
   `-process`, `-keyring`, `-notification`, `-shortcuts`, `-vault`,
   `-websocket`, ...) and standalone (`audio`, `command-palette`, `gpu`,
-  `http-server`, `llm`, `oauth`, `screen-rec`, `sql`, `terminal`, `tts`,
-  `wgpu`, `whisper`). `llm`, `whisper`, `screen-rec` and `wgpu` are
-  experimental and published under the npm `experimental` dist-tag.
+  `http-server`, `oauth`, `sql`, `terminal`, `tts`).
 - CLI commands: `create`, `init`, `add`, `remove`, `dev`, `start`, `test`,
   `build`, `clean`, `upgrade`, `validate`, `doctor` (with `--fix`), `icon`,
   `info`, `size`, `explain`, `config show`, `plugin new|check|dev|list|types`,
@@ -137,9 +135,10 @@ First stable release.
   renderer creates (watches, sockets, processes, shortcuts, ...) belong to the
   webview and frame origin that created them; the updater trusts only
   backend-supplied configuration and verification keys.
-- With no `security` policy, `fs`, `http` and `process` stay open, but
-  `tynd validate` and `tynd build` warn. HTTP allow/deny rules match the
-  normalized URL.
+- With no `security` policy, the HTTP URL scope is open, filesystem access
+  remains app-scoped, and process execution requires `processAllowedBinaries`.
+  `tynd validate` and `tynd build` warn when no policy is configured. HTTP
+  allow/deny rules match the normalized URL.
 - Spawned processes refuse loader, shell, interpreter and Git environment
   variables; `process.execShell` refuses a caller-supplied `env`.
 - `shell.openPath` refuses launcher, script, installer, disk-image and

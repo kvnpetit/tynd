@@ -153,8 +153,8 @@ mod tests {
         );
         assert_eq!(native_crate_name("My.Plugin"), "my-plugin");
         assert_eq!(
-            native_crate_ident("tynd-plugin-screen-rec"),
-            "tynd_plugin_screen_rec"
+            native_crate_ident("tynd-plugin-demo-capture"),
+            "tynd_plugin_demo_capture"
         );
     }
 

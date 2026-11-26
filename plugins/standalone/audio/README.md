@@ -6,8 +6,7 @@ I/O for Tynd apps. Native Rust via [`cpal`][cpal] (capture/playback) and
 
 **Status: implemented.** Capture (`startCapture`/`stopCapture`),
 playback (`playFile`/`playSamples`/`stopPlayback`) and WAV save
-(`saveWav`) all run against real `cpal` / `hound` backends — the
-`audio` + `whisper` voice pipeline is operational end-to-end. Installing the
+(`saveWav`) use the native `cpal` and `hound` backends. Installing the
 plugin through Tynd automatically enables `capture` and `wav`. A direct Cargo
 dependency still defaults to a portable stub unless features are selected
 explicitly (see [Feature gates](#feature-gates) below).
@@ -121,30 +120,8 @@ await handle.stop()
 `cpal` carries OS-specific bindings (CoreAudio / WASAPI / ALSA) that don't
 cross-compile out of the box on every CI runner. `hound` is small but
 adds ~2k LoC of WAV parsing nobody uses for capture-only apps. Splitting
-them out lets downstream apps pay only for what they actually use, the
-same way `@tynd/plugin-llm` and `@tynd/plugin-screen-rec` keep their
-heavy native deps behind Cargo features while package metadata enables the
-advertised Tynd baseline automatically.
-
-## Voice pipeline (audio + whisper)
-
-The end-to-end live transcription pipeline now works:
-
-```ts
-import { audio }   from "@tynd/plugin-audio"
-import { whisper } from "@tynd/plugin-whisper"
-
-const model = await whisper.load({ path: "./ggml-tiny.bin" })
-const stream = audio.startCapture({ sampleRate: 16_000, channels: 1 })
-
-async function* asSamples(s: AsyncIterable<{ samples: Float32Array }>) {
-  for await (const c of s) yield c.samples
-}
-
-for await (const seg of whisper.transcribeStream(model.id, asSamples(stream))) {
-  console.log(seg.text)
-}
-```
+them out keeps the direct Rust build light. Tynd enables the advertised
+features from the plugin's package metadata.
 
 ## Capture events
 

@@ -115,7 +115,6 @@ pub(crate) const API_PLUGIN_PACKAGES: &[(&str, &str)] = &[
 /// `(name, plugin package, host API)` for every id and alias of plugins/catalog.json, as
 /// accepted by `tynd add`. The API is set for host-backed plugins that front one.
 pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
-    ("ai", "@tynd/plugin-llm", None),
     (
         "apple-script",
         "@tynd/plugin-apple-script",
@@ -136,7 +135,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
     ("biometric", "@tynd/plugin-biometric", Some("biometric")),
     ("biometrics", "@tynd/plugin-biometric", Some("biometric")),
     ("bun-server", "@tynd/plugin-http-server", None),
-    ("chat", "@tynd/plugin-llm", None),
     ("cli", "@tynd/plugin-cli", Some("cli")),
     ("clipboard", "@tynd/plugin-clipboard", Some("clipboard")),
     ("cmdk", "@tynd/plugin-command-palette", None),
@@ -174,7 +172,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
     ("keyring", "@tynd/plugin-keyring", Some("keyring")),
     ("keys", "@tynd/plugin-keys", Some("keys")),
     ("kv", "@tynd/plugin-store", Some("store")),
-    ("llm", "@tynd/plugin-llm", None),
     ("menu", "@tynd/plugin-menu", Some("menu")),
     ("menubar", "@tynd/plugin-tray", Some("tray")),
     ("menus", "@tynd/plugin-menu", Some("menu")),
@@ -189,8 +186,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
         "@tynd/plugin-multiwindow",
         Some("multiwindow"),
     ),
-    ("native-gpu", "@tynd/plugin-wgpu", None),
-    ("native-renderer", "@tynd/plugin-wgpu", None),
     ("net", "@tynd/plugin-network", Some("network")),
     ("network", "@tynd/plugin-network", Some("network")),
     (
@@ -218,7 +213,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
     ("protocols", "@tynd/plugin-deep-link", Some("deep-link")),
     ("pty", "@tynd/plugin-terminal", None),
     ("random-bytes", "@tynd/plugin-compute", Some("compute")),
-    ("recorder", "@tynd/plugin-screen-rec", None),
     ("request", "@tynd/plugin-http", Some("http")),
     ("requests", "@tynd/plugin-http", Some("http")),
     (
@@ -226,8 +220,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
         "@tynd/plugin-screenshot",
         Some("screenshot"),
     ),
-    ("screen-rec", "@tynd/plugin-screen-rec", None),
-    ("screen-record", "@tynd/plugin-screen-rec", None),
     ("screenshot", "@tynd/plugin-screenshot", Some("screenshot")),
     ("secret", "@tynd/plugin-keyring", Some("keyring")),
     ("secrets", "@tynd/plugin-keyring", Some("keyring")),
@@ -259,13 +251,11 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
     ("sound", "@tynd/plugin-audio", None),
     ("spawn", "@tynd/plugin-process", Some("process")),
     ("speech", "@tynd/plugin-tts", None),
-    ("speech-to-text", "@tynd/plugin-whisper", None),
     ("sql", "@tynd/plugin-sql", None),
     ("sqlite", "@tynd/plugin-sql", None),
     ("startup", "@tynd/plugin-autolaunch", Some("autolaunch")),
     ("stats", "@tynd/plugin-system-stats", Some("system-stats")),
     ("store", "@tynd/plugin-store", Some("store")),
-    ("stt", "@tynd/plugin-whisper", None),
     (
         "system-stats",
         "@tynd/plugin-system-stats",
@@ -281,7 +271,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
     ("text-to-speech", "@tynd/plugin-tts", None),
     ("theme", "@tynd/plugin-theme", Some("theme")),
     ("themes", "@tynd/plugin-theme", Some("theme")),
-    ("transcription", "@tynd/plugin-whisper", None),
     ("tray", "@tynd/plugin-tray", Some("tray")),
     ("tts", "@tynd/plugin-tts", None),
     ("update", "@tynd/plugin-updater", Some("updater")),
@@ -291,8 +280,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
     ("webgpu", "@tynd/plugin-gpu", None),
     ("websocket", "@tynd/plugin-websocket", Some("websocket")),
     ("webviews", "@tynd/plugin-multiwindow", Some("multiwindow")),
-    ("wgpu", "@tynd/plugin-wgpu", None),
-    ("whisper", "@tynd/plugin-whisper", None),
     (
         "window-state",
         "@tynd/plugin-window-state",
@@ -314,9 +301,4 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
 
 /// `(plugin package, npm dist-tag)` for the catalog plugins published under a tag other
 /// than `latest`; `tynd add` installs them as `<package>@<tag>`.
-pub(crate) const PLUGIN_DIST_TAGS: &[(&str, &str)] = &[
-    ("@tynd/plugin-llm", "experimental"),
-    ("@tynd/plugin-screen-rec", "experimental"),
-    ("@tynd/plugin-wgpu", "experimental"),
-    ("@tynd/plugin-whisper", "experimental"),
-];
+pub(crate) const PLUGIN_DIST_TAGS: &[(&str, &str)] = &[];

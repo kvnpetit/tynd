@@ -40,13 +40,9 @@
     "command-palette",
     "gpu",
     "http-server",
-    "llm",
     "oauth",
-    "screen-rec",
     "sql",
     "terminal",
-    "tts",
-    "wgpu",
-    "whisper"
+    "tts"
   ]
 }

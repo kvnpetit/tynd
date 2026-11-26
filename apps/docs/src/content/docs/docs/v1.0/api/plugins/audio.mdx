@@ -60,7 +60,6 @@ Capture streams emit `audio:samples`, `audio:warn` (`sample-rate-fallback`, `cha
 
 - Playback is bounded by two pools: decode permits (`available_parallelism()`, each decode can allocate up to 256 MiB) and playback slots (`4 x available_parallelism()`). When the slots are exhausted, `playFile` and `playSamples` reject with a "too many live playbacks; stop one first" error; a call waiting for a decode permit fails after 15 seconds.
 - Plugin events go through the host's bounded event queue (1,024 events, delivered to webviews in batches of 64). A stalled renderer drops new events and the host logs one aggregated diagnostic.
-- Pair with [`whisper`](/docs/v1.0/api/plugins/whisper) for live transcription: pass `audio.startCapture({ sampleRate: 16000, channels: 1 })` samples to `whisper.transcribeStream`.
 
 ## Related
 

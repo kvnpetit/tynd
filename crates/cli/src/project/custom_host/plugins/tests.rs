@@ -43,13 +43,13 @@ fn plugin_crate_names_are_cargo_packages_mapped_to_rust_idents() {
         default_plugin_crate_name("@acme/plugin.foo"),
         "acme-plugin-foo"
     );
-    assert!(is_cargo_package_name("tynd-plugin-screen-rec"));
+    assert!(is_cargo_package_name("tynd-plugin-demo-capture"));
     assert!(is_cargo_package_name("legacy_name"));
     for invalid in ["", "-lead", "9lives", "Upper", "crate", "a b"] {
         assert!(!is_cargo_package_name(invalid), "{invalid}");
     }
     assert_eq!(
-        crate_ident("tynd-plugin-screen-rec"),
-        "tynd_plugin_screen_rec"
+        crate_ident("tynd-plugin-demo-capture"),
+        "tynd_plugin_demo_capture"
     );
 }

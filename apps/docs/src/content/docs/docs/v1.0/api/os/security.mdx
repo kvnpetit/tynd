@@ -87,7 +87,7 @@ With no `security` policy configured, the whole [default filesystem scope](#defa
 | `defaultDeny` | `boolean` | `false` | An empty `allow` list denies everything instead of allowing everything |
 | `processAllowedBinaries` | `string[]` | none | Binaries `process.exec` and `process.spawn` may run. Unset refuses every call. An entry matches the exact string passed as `cmd` or the same canonical path (case-insensitive on Windows) |
 | `shellExecAllowedCommands` | `string[]` | `[]` | First tokens `process.execShell` may run. Empty refuses every call |
-| `allowedSensitiveCapabilities` | `("audioInput" \| "audioOutput" \| "screenCapture" \| "window")[]` | `[]` | Capabilities that native plugins (audio, screen recording, wgpu windows) must be granted once a policy is configured |
+| `allowedSensitiveCapabilities` | `("audioInput" \| "audioOutput" \| "screenCapture" \| "window")[]` | `[]` | Capabilities that native plugins (such as audio capture) must be granted once a policy is configured |
 | `persistGrants` | `boolean` | `false` | Keep [runtime grants](#runtime-grants-backend) across restarts |
 
 ```ts

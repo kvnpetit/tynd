@@ -15,12 +15,8 @@ members = [
     "crates/plugin-sdk",
     "crates/plugin-macros",
     "plugins/standalone/audio/native",
-    "plugins/standalone/llm/native",
-    "plugins/standalone/screen-rec/native",
     "plugins/standalone/terminal/native",
     "plugins/standalone/tts/native",
-    "plugins/standalone/wgpu/native",
-    "plugins/standalone/whisper/native",
 ]
 # Generated/vendored trees that should not be members of the monorepo
 # workspace. `packages/host-src/native/` is a flattened mirror of
@@ -447,8 +443,7 @@ if-addrs = "0.15"
 # Screenshot of screen / window. Used by capture / annotation / screen
 # share apps; no native equivalent in Tauri.
 # Pinned `=0.8.1`: it is the newest xcap on `pipewire ^0.8`. xcap >= 0.8.2 moves
-# to pipewire 0.9, which conflicts (`links = "pipewire-0.3"`) with `scap 0.0.8`
-# used by the screen-rec plugin. Bump together once scap follows.
+# to a newer PipeWire dependency. Review that dependency when upgrading xcap.
 xcap = "=0.8.1"
 
 # Battery info for `power.battery()` — level, status, time remaining.

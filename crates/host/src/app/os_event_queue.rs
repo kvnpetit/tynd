@@ -125,11 +125,8 @@ fn is_high_rate_event(event: &str) -> bool {
         event,
         "audio:samples"
             | "http:request-chunk"
-            | "llm:token"
             | "terminal:data"
             | "websocket:message"
-            | "wgpu:frame"
-            | "whisper:segment"
             | "ws:message"
     )
 }

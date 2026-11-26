@@ -23,7 +23,7 @@ automatically. Optional accelerators/codecs use an object entry:
 
 ```ts
 plugins: [
-  { pkg: "@tynd/plugin-screen-rec", features: ["gpu-encode"] },
+  { pkg: "@tynd/plugin-audio", features: ["capture"] },
 ]
 ```
 
@@ -86,14 +86,10 @@ These are released independently; native ones ship their own Rust crate, linked 
 | `@tynd/plugin-command-palette` | Pure JS | Headless command registry and fuzzy search. | [API](/docs/v1.0/api/plugins/command-palette) |
 | `@tynd/plugin-gpu` | Pure JS | GPU diagnostics, readiness checks, benchmarks. | [API](/docs/v1.0/api/plugins/gpu) |
 | `@tynd/plugin-http-server` | Bun/TS | Embedded HTTP and WebSocket server through `Bun.serve`. | [API](/docs/v1.0/api/plugins/http-server) |
-| `@tynd/plugin-llm` | Native, experimental | Local GGUF inference through `llama.cpp`; native matrix pending. | [API](/docs/v1.0/api/plugins/llm) |
 | `@tynd/plugin-oauth` | Bun/TS | Loopback OAuth callback listener. | [API](/docs/v1.0/api/plugins/oauth) |
-| `@tynd/plugin-screen-rec` | Native, experimental | Region/screen recording with selectable sources; optional codec/platform matrix pending. | [API](/docs/v1.0/api/plugins/screen-rec) |
 | `@tynd/plugin-sql` | Bun/TS | Embedded SQLite via `bun:sqlite`. | [API](/docs/v1.0/api/plugins/sql) |
 | `@tynd/plugin-terminal` | Native | Real PTY terminal. | [API](/docs/v1.0/api/plugins/terminal) |
 | `@tynd/plugin-tts` | Native | Text-to-speech through platform engines. | [API](/docs/v1.0/api/plugins/tts) |
-| `@tynd/plugin-wgpu` | Native, experimental | Native `wgpu` window lifecycle; render-command bridge incomplete. | [API](/docs/v1.0/api/plugins/wgpu) |
-| `@tynd/plugin-whisper` | Native, experimental | Local speech-to-text through Whisper; native matrix pending. | [API](/docs/v1.0/api/plugins/whisper) |
 
 ### Host-backed plugins
 

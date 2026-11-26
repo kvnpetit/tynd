@@ -306,9 +306,9 @@ proxy.
 
 ```ts
 import { composePluginClient, defineTypedPlugin } from "@tynd/plugin-sdk"
-import type { CommandsCatalog } from "./screen-rec.gen"
+import type { CommandsCatalog } from "./demo-capture.gen"
 
-const api = defineTypedPlugin<CommandsCatalog>("screen-rec")
+const api = defineTypedPlugin<CommandsCatalog>("demo-capture")
 export const screenRec = composePluginClient(api, {
   async start(output: string) {
     return api.start({ opts: { output } })
@@ -1080,7 +1080,7 @@ are host-backed official plugins, not examples of custom native plugin dispatch.
 
 - [`@tynd/cli`](https://github.com/kvnpetit/tynd/tree/main/packages/cli) — scaffold, dev, build, ship
 - [`@tynd/core`](https://github.com/kvnpetit/tynd) (in `kvnpetit/tynd`) — core OS APIs and runtime
-- [Standalone official plugins](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone) — sql, terminal, llm, whisper, …
+- [Standalone official plugins](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone) — sql, terminal, audio, and more
 - [`@tynd/mcp`](https://github.com/kvnpetit/tynd/tree/main/packages/mcp) — Model Context Protocol server
 - [Documentation site](https://github.com/kvnpetit/tynd/tree/main/apps/docs)
 

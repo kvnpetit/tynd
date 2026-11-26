@@ -415,47 +415,8 @@
         "@tynd/plugin-sdk",
       ],
     },
-    "plugins/standalone/llm": {
-      "name": "@tynd/plugin-llm",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@ai-sdk/provider": "^4.0.39",
-        "@biomejs/biome": "2.6.8",
-        "@types/bun": "1.4.5",
-        "typescript": "~7.0.2",
-      },
-      "peerDependencies": {
-        "@ai-sdk/provider": "^3.0.10 || ^4.0.39",
-        "@tynd/core": "^1.0.0",
-        "@tynd/plugin-sdk": "^1.0.0",
-        "ai": "^6.0.0 || ^7.0.0",
-      },
-      "optionalPeers": [
-        "@ai-sdk/provider",
-        "@tynd/core",
-        "@tynd/plugin-sdk",
-        "ai",
-      ],
-    },
     "plugins/standalone/oauth": {
       "name": "@tynd/plugin-oauth",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@biomejs/biome": "2.6.8",
-        "@types/bun": "1.4.5",
-        "typescript": "~7.0.2",
-      },
-      "peerDependencies": {
-        "@tynd/core": "^1.0.0",
-        "@tynd/plugin-sdk": "^1.0.0",
-      },
-      "optionalPeers": [
-        "@tynd/core",
-        "@tynd/plugin-sdk",
-      ],
-    },
-    "plugins/standalone/screen-rec": {
-      "name": "@tynd/plugin-screen-rec",
       "version": "1.0.0",
       "devDependencies": {
         "@biomejs/biome": "2.6.8",
@@ -481,11 +442,9 @@
       },
       "peerDependencies": {
         "@tynd/core": "^1.0.0",
-        "@tynd/plugin-sdk": "^1.0.0",
       },
       "optionalPeers": [
         "@tynd/core",
-        "@tynd/plugin-sdk",
       ],
     },
     "plugins/standalone/terminal": {
@@ -522,49 +481,11 @@
         "@tynd/plugin-sdk",
       ],
     },
-    "plugins/standalone/wgpu": {
-      "name": "@tynd/plugin-wgpu",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@biomejs/biome": "2.6.8",
-        "@types/bun": "1.4.5",
-        "typescript": "~7.0.2",
-      },
-      "peerDependencies": {
-        "@tynd/core": "^1.0.0",
-        "@tynd/plugin-sdk": "^1.0.0",
-        "three": ">=0.158.0",
-      },
-      "optionalPeers": [
-        "@tynd/core",
-        "@tynd/plugin-sdk",
-        "three",
-      ],
-    },
-    "plugins/standalone/whisper": {
-      "name": "@tynd/plugin-whisper",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@biomejs/biome": "2.6.8",
-        "@types/bun": "1.4.5",
-        "typescript": "~7.0.2",
-      },
-      "peerDependencies": {
-        "@tynd/core": "^1.0.0",
-        "@tynd/plugin-sdk": "^1.0.0",
-      },
-      "optionalPeers": [
-        "@tynd/core",
-        "@tynd/plugin-sdk",
-      ],
-    },
   },
   "trustedDependencies": [
     "sharp",
   ],
   "packages": {
-    "@ai-sdk/provider": ["@ai-sdk/provider@4.0.39", "", { "dependencies": { "json-schema": "^0.4.0" } }, "sha512-jRvAhvW23+TeMGVCME2WGejP/TjzyDg7TplUep3t8HcEYnC2/8zqhCy9RRrjjVs1ljcygABZ8pQ21MbCRdF01w=="],
-
     "@astrojs/astro2tsx": ["@astrojs/astro2tsx@0.1.4", "", { "dependencies": { "@emnapi/core": "1.11.3", "@emnapi/runtime": "1.11.3", "@napi-rs/wasm-runtime": "1.2.4" } }, "sha512-5dJqY4i1AlXxcsSFHkaegnrgdVs9J4U93y/YF0xmvmSOcNYVQnf4db3IhvqHZ5v8biLPlPlFmlYsqHj0c4/ZSA=="],
 
     "@astrojs/compiler-binding": ["@astrojs/compiler-binding@0.5.3", "", { "optionalDependencies": { "@astrojs/compiler-binding-android-arm64": "0.5.3", "@astrojs/compiler-binding-darwin-arm64": "0.5.3", "@astrojs/compiler-binding-darwin-x64": "0.5.3", "@astrojs/compiler-binding-linux-arm64-gnu": "0.5.3", "@astrojs/compiler-binding-linux-arm64-musl": "0.5.3", "@astrojs/compiler-binding-linux-x64-gnu": "0.5.3", "@astrojs/compiler-binding-linux-x64-musl": "0.5.3", "@astrojs/compiler-binding-wasm32-wasi": "0.5.3", "@astrojs/compiler-binding-win32-arm64-msvc": "0.5.3", "@astrojs/compiler-binding-win32-x64-msvc": "0.5.3" } }, "sha512-fHG6eWKvnSlV11dUMZSi4AynOGjVbNBgZZc704Hi9DW8WeKtbsS7fJQT3omz1Nba+5mccLQQGAWOQ65cnuNLtg=="],
@@ -1005,8 +926,6 @@
 
     "@tynd/plugin-keys": ["@tynd/plugin-keys@workspace:plugins/host/keys"],
 
-    "@tynd/plugin-llm": ["@tynd/plugin-llm@workspace:plugins/standalone/llm"],
-
     "@tynd/plugin-menu": ["@tynd/plugin-menu@workspace:plugins/host/menu"],
 
     "@tynd/plugin-multiwindow": ["@tynd/plugin-multiwindow@workspace:plugins/host/multiwindow"],
@@ -1020,8 +939,6 @@
     "@tynd/plugin-power": ["@tynd/plugin-power@workspace:plugins/host/power"],
 
     "@tynd/plugin-process": ["@tynd/plugin-process@workspace:plugins/host/process"],
-
-    "@tynd/plugin-screen-rec": ["@tynd/plugin-screen-rec@workspace:plugins/standalone/screen-rec"],
 
     "@tynd/plugin-screenshot": ["@tynd/plugin-screenshot@workspace:plugins/host/screenshot"],
 
@@ -1054,10 +971,6 @@
     "@tynd/plugin-vault": ["@tynd/plugin-vault@workspace:plugins/host/vault"],
 
     "@tynd/plugin-websocket": ["@tynd/plugin-websocket@workspace:plugins/host/websocket"],
-
-    "@tynd/plugin-wgpu": ["@tynd/plugin-wgpu@workspace:plugins/standalone/wgpu"],
-
-    "@tynd/plugin-whisper": ["@tynd/plugin-whisper@workspace:plugins/standalone/whisper"],
 
     "@tynd/plugin-window-state": ["@tynd/plugin-window-state@workspace:plugins/host/window-state"],
 
@@ -1470,8 +1383,6 @@
     "jiti": ["jiti@2.7.0", "", { "bin": { "jiti": "lib/jiti-cli.mjs" } }, "sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ=="],
 
     "js-tokens": ["js-tokens@10.0.0", "", {}, "sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q=="],
-
-    "json-schema": ["json-schema@0.4.0", "", {}, "sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA=="],
 
     "json-schema-traverse": ["json-schema-traverse@1.0.0", "", {}, "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug=="],
 

@@ -229,11 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn plugins_published_under_a_dist_tag_install_with_it() {
-        assert_eq!(
-            install_spec("@tynd/plugin-llm"),
-            "@tynd/plugin-llm@experimental"
-        );
+    fn untagged_plugins_install_by_package_name() {
         assert_eq!(install_spec("@tynd/plugin-fs"), "@tynd/plugin-fs");
         assert_eq!(install_spec("@acme/plugin-x"), "@acme/plugin-x");
     }

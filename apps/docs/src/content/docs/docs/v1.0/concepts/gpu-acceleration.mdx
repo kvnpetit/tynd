@@ -217,9 +217,7 @@ they're not Tynd-specific, but worth flagging:
   WebView2 ships it experimentally, WKWebView doesn't, WebKitGTK
   doesn't. No Tynd native bridge today.
 - **Direct Vulkan / Metal / D3D12 access without the webview.**
-  `@tynd/plugin-wgpu` is experimental: native window lifecycle works, but the
-  render-command bridge is incomplete. It is not part of the stable plugin set
-  or `@tynd/core/client`.
+  Run rendering through WebGPU or WebGL in the system webview.
 - **GPU memory introspection.** Use Chrome DevTools (the webview's
   built-in inspector) or vendor tools (NVIDIA Nsight, RenderDoc,
   Xcode Instruments) for the deep dive.

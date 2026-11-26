@@ -462,22 +462,6 @@
     "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/terminal/"
   },
   {
-    "id": "llm",
-    "kind": "standalone",
-    "pkg": "@tynd/plugin-llm",
-    "aliases": ["ai", "chat"],
-    "apis": [],
-    "importName": "llm",
-    "importPath": "@tynd/plugin-llm/client",
-    "description": "Native local LLM inference (GGUF)",
-    "maturity": "experimental",
-    "permissions": ["network", "secrets"],
-    "estimatedSizeKb": 260,
-    "install": "tynd add llm",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/llm/",
-    "distTag": "experimental"
-  },
-  {
     "id": "audio",
     "kind": "standalone",
     "pkg": "@tynd/plugin-audio",
@@ -548,22 +532,6 @@
     "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/oauth/"
   },
   {
-    "id": "screen-rec",
-    "kind": "standalone",
-    "pkg": "@tynd/plugin-screen-rec",
-    "aliases": ["screen-record", "recorder"],
-    "apis": [],
-    "importName": "screenRec",
-    "importPath": "@tynd/plugin-screen-rec",
-    "description": "Native screen recorder",
-    "maturity": "experimental",
-    "permissions": ["screen-recording", "local-files"],
-    "estimatedSizeKb": 1800,
-    "install": "tynd add screen-rec",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/screen-rec/",
-    "distTag": "experimental"
-  },
-  {
     "id": "tts",
     "kind": "standalone",
     "pkg": "@tynd/plugin-tts",
@@ -576,37 +544,5 @@
     "estimatedSizeKb": 300,
     "install": "tynd add tts",
     "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/tts/"
-  },
-  {
-    "id": "wgpu",
-    "kind": "standalone",
-    "pkg": "@tynd/plugin-wgpu",
-    "aliases": ["native-gpu", "native-renderer"],
-    "apis": [],
-    "importName": "wgpu",
-    "importPath": "@tynd/plugin-wgpu",
-    "description": "Native wgpu rendering surface",
-    "maturity": "experimental",
-    "permissions": ["gpu", "native-window"],
-    "estimatedSizeKb": 5000,
-    "install": "tynd add wgpu",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/wgpu/",
-    "distTag": "experimental"
-  },
-  {
-    "id": "whisper",
-    "kind": "standalone",
-    "pkg": "@tynd/plugin-whisper",
-    "aliases": ["stt", "speech-to-text", "transcription"],
-    "apis": [],
-    "importName": "whisper",
-    "importPath": "@tynd/plugin-whisper",
-    "description": "Native local speech-to-text",
-    "maturity": "experimental",
-    "permissions": ["microphone", "local-models"],
-    "estimatedSizeKb": 5000,
-    "install": "tynd add whisper",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/whisper/",
-    "distTag": "experimental"
   }
 ]

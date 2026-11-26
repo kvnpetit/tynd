@@ -16,8 +16,7 @@ First stable release.
 ### Added
 
 - Standalone official plugins workspace: `audio`, `command-palette`, `gpu`,
-  `http-server`, `llm`, `oauth`, `screen-rec`, `sql`, `terminal`, `tts`,
-  `wgpu` and `whisper`.
+  `http-server`, `oauth`, `sql`, `terminal` and `tts`.
 
 [Unreleased]: https://github.com/kvnpetit/tynd/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/kvnpetit/tynd/releases/tag/v1.0.0

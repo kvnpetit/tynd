@@ -39,7 +39,7 @@ export const FRAMEWORK_DOCS: Record<string, string> = {
 };
 
 /** Official plugins whose generated schema ships in the catalog. */
-export const PLUGIN_SCHEMAS = ["audio", "llm", "screen-rec", "terminal", "tts", "wgpu", "whisper"];
+export const PLUGIN_SCHEMAS = ["audio", "terminal", "tts"];
 
 const IMPORT_LINE = /^import .* from '.*';?$/;
 const ASIDE_TAGS: [string, string][] = [

@@ -21,7 +21,7 @@ Electron ships Chromium and Node.js with the application. Tynd reuses the system
 | `BrowserWindow` | `app.start({ window })` / `multiwindow.create({ label })` |
 | `BrowserWindow.loadFile` / `loadURL` | `tynd://localhost/` served from `dist/` |
 | `session` API (cookies, cache, proxy) | **Not exposed.** WebView uses OS defaults. |
-| `desktopCapturer`, `printToPDF` | No direct Chromium equivalent. Use `screenshot` for PNG captures, `@tynd/plugin-screen-rec` for recording, or a sidecar for PDF workflows. |
+| `desktopCapturer`, `printToPDF` | No direct Chromium equivalent. Use `screenshot` for PNG captures, or a sidecar for PDF workflows. |
 
 ## What you inherit
 
@@ -34,7 +34,7 @@ Electron ships Chromium and Node.js with the application. Tynd reuses the system
 
 - **Rendering consistency.** WebView2 version varies by Windows install, WebKitGTK varies by distro, WKWebView tracks macOS. Your CSS/JS feature detection becomes more important.
 - **Node compatibility differences.** Bun supports most `node:*` APIs, but verify dependencies that rely on obscure Node internals or native addons. Tynd OS APIs cover common desktop capabilities.
-- **Chromium-only features.** `desktopCapturer` MediaStreams, `printToPDF`, `findInPage`, built-in spellchecker, Chrome extensions, Touch Bar (macOS), StoreKit IAP. Some workflows have Tynd alternatives (`screenshot`, `@tynd/plugin-screen-rec`, sidecars), but not direct Electron API parity.
+- **Chromium-only features.** `desktopCapturer` MediaStreams, `printToPDF`, `findInPage`, built-in spellchecker, Chrome extensions, Touch Bar (macOS), StoreKit IAP. Some workflows have Tynd alternatives (`screenshot`, sidecars), but not direct Electron API parity.
 - **Bundled runtime.** Users' OS WebView version matters. Windows 10 VMs without WebView2 fail at launch — ship an Evergreen Bootstrapper on Windows or document the requirement.
 
 ## Step-by-step
@@ -175,7 +175,7 @@ Most Node APIs work through Bun in the backend. From the frontend, use the Tynd 
 
 ### What has no Tynd replacement
 
-- **`desktopCapturer`** (screen/window MediaStreams). No direct Electron API equivalent. Use `screenshot` for PNG captures, `@tynd/plugin-screen-rec` for recording, or a native CLI via `sidecar` for specialized capture.
+- **`desktopCapturer`** (screen/window MediaStreams). No direct Electron API equivalent. Use `screenshot` for PNG captures, or a native CLI via `sidecar` for specialized capture.
 - **`printToPDF`** (webview to PDF). Use a pure-JS lib like `jspdf`, or render server-side via `sidecar`.
 - **`findInPage`**. Implement in JS with a content-search overlay on your app HTML.
 - **Built-in spellcheck**. Use `nspell` + Hunspell dictionaries, or the browser's native spellcheck attribute.

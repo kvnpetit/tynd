@@ -101,11 +101,6 @@ allow                  = [
 ]
 confidence-threshold   = 0.93
 exceptions = [
-  # Optional screen-recorder plugin only. Upstream ffmpeg-next crates declare
-  # WTFPL; scope acceptance to exact audited versions instead of allowing it
-  # globally across the workspace.
-  { name = "ffmpeg-next", version = "=7.1.0", allow = [ "WTFPL" ] },
-  { name = "ffmpeg-sys-next", version = "=7.1.3", allow = [ "WTFPL" ] },
   # tynd-bundler only: CBOR codec pulled by apple-codesign. BlueOak-1.0.0 is a
   # permissive OSI-approved license; scoped to these crates, not allowed globally.
   { name = "minicbor", allow = [ "BlueOak-1.0.0" ] },

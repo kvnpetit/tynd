@@ -34,7 +34,7 @@ If the project has no config yet, `tynd add` first runs [`tynd init`](/docs/v1.0
 
 ## Plugin entries
 
-If a plugin dependency is already declared but missing locally, the command runs `bun install`; if undeclared, it runs `bun add <package>`. A catalog plugin published only under an npm dist-tag (the `distTag` of `plugins/catalog.json`, for example `experimental` for `llm`, `screen-rec`, `wgpu` and `whisper`) is installed as `bun add <package>@<tag>`.
+If a plugin dependency is already declared but missing locally, the command runs `bun install`; if undeclared, it runs `bun add <package>`. A catalog plugin published only under an npm dist-tag (the `distTag` of `plugins/catalog.json`) is installed as `bun add <package>@<tag>`.
 
 Without `--apis`, the entry is a package string. With selectors, it is an object:
 

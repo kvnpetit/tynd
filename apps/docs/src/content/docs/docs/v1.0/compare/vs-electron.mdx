@@ -72,7 +72,7 @@ Electron columns name the Electron API (or, for packaging and updates, the usual
 
 - **Rendering consistency.** WebView2 version varies by Windows install, WebKitGTK version varies by distro, WKWebView is tied to the macOS version. Electron's bundled Chromium guarantees the same engine everywhere.
 - **Full Node stdlib.** `node:fs`, `child_process`, `net`, `tls`, `dns`, `http.createServer` — everything in the main process without IPC.
-- **Chromium-level hooks** that Tynd does not expose: `desktopCapturer` MediaStreams (Tynd has [`screenshot`](/docs/v1.0/api/os/screenshot) and `@tynd/plugin-screen-rec`), `webRequest` interception, runtime permission-request handlers, download progress and cancel, `login` / `certificate-error` handlers, built-in spellchecker API, Chrome extensions.
+- **Chromium-level hooks** that Tynd does not expose: `desktopCapturer` MediaStreams (Tynd has [`screenshot`](/docs/v1.0/api/os/screenshot)), `webRequest` interception, runtime permission-request handlers, download progress and cancel, `login` / `certificate-error` handlers, built-in spellchecker API, Chrome extensions.
 - **Platform extras:** Windows thumbnail toolbar, tray balloons, Touch Bar, StoreKit in-app purchase.
 - **Build reach:** universal macOS binaries and some cross-platform builds through its packaging tools.
 - **Massive npm ecosystem** — any npm package (including native bindings) works in the main process.
@@ -96,7 +96,7 @@ Porting Electron → Tynd:
 - **`printToPDF` / `capturePage`** → `tyndWebview.printToPdf` / `capturePage`.
 - **`setPermissionRequestHandler`** → the static `permissions` window option.
 - **`crashReporter`** → `app.crashReporter` (local reports; upload them yourself).
-- **`desktopCapturer`**, `webRequest`, `DownloadItem` progress — no direct replacement. Use [`screenshot`](/docs/v1.0/api/os/screenshot), `@tynd/plugin-screen-rec`, the backend's own `fetch`, or a native CLI via `sidecar` depending on the workflow.
+- **`desktopCapturer`**, `webRequest`, `DownloadItem` progress — no direct replacement. Use [`screenshot`](/docs/v1.0/api/os/screenshot), the backend's own `fetch`, or a native CLI via `sidecar` depending on the workflow.
 
 Porting Tynd → Electron:
 

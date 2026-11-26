@@ -89,9 +89,5 @@ at https://github.com/kvnpetit/tynd/tree/main/plugins/standalone.
 - tynd-plugin-audio
 - tynd-plugin-command-palette
 - tynd-plugin-gpu
-- tynd-plugin-llm
-- tynd-plugin-screen-rec
 - tynd-plugin-terminal
 - tynd-plugin-tts
-- tynd-plugin-wgpu
-- tynd-plugin-whisper

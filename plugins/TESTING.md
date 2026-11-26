@@ -41,8 +41,7 @@ Plugin logic is tested with `bun test` and `*.test.ts` files placed next to the 
 
 ## Native plugins
 
-Standalone plugins with a `native/` crate (`audio`, `llm`, `screen-rec`, `terminal`, `tts`, `wgpu`,
-`whisper`) are Rust crates tested with scope-limited cargo commands:
+The `audio`, `terminal` and `tts` plugins include Rust crates. Test each crate with a scoped Cargo command:
 
 ```sh
 cargo test -p tynd-plugin-<name>
