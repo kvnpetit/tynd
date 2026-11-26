@@ -15,8 +15,7 @@ First stable release.
 
 ### Added
 
-- Standalone official plugins workspace: `audio`, `oauth`, `sql`,
-  `terminal` and `tts`.
+- Standalone official plugins workspace: `audio`, `oauth`, `sql` and `terminal`.
 
 ### Removed from the pre-release catalog
 
@@ -24,6 +23,7 @@ First stable release.
   Use WebGPU and WebGL capability checks to replace `gpu`.
 - Replace `http-server` with `Bun.serve` in the backend. Use `createBackend`
   for calls from a Tynd WebView to its own backend.
+- The native `tts` package is outside the 1.0 distribution.
 
 [Unreleased]: https://github.com/kvnpetit/tynd/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/kvnpetit/tynd/releases/tag/v1.0.0

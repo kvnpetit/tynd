@@ -7,12 +7,12 @@ How the plugins under `plugins/host/*` and `plugins/standalone/*` are tested.
 `plugins/manifests.test.ts` runs with `bun test` and validates every
 plugin `package.json`:
 
-- `@tynd/*` peer dependencies are optional (`peerDependenciesMeta`), so a frozen install never
-  fetches them from the public registry.
+- Host-backed plugins require `@tynd/core` in the range `>=1.0.0 <2`.
+  Standalone plugins mark their `@tynd/*` peers as optional.
 - `homepage` is `https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/<dir>`.
 - `@tynd/*` entries in `dependencies`, `devDependencies` and `optionalDependencies` use `workspace:` ranges.
-- the `tynd` field exists and its `kind` matches the group directory (host-backed plugins also declare `sdk: true`
-  and `apis: ["<dir>"]`).
+- The `tynd.kind` field matches the group directory. Host-backed plugins also
+  declare `tynd.apis: ["<dir>"]`.
 
 ```sh
 bun test plugins/manifests.test.ts
@@ -37,11 +37,12 @@ bunx biome check plugins
 
 Plugin logic is tested with `bun test` and `*.test.ts` files placed next to the code they cover
 (for example `plugins/standalone/sql/backend.test.ts`). Backend plugins that use Bun APIs
-(`bun:sqlite`, `Bun.serve`) run directly under `bun test`; avoid tests that need a running host.
+(`bun:sqlite` for SQL and `Bun.serve` for OAuth callbacks) run directly under
+`bun test`.
 
 ## Native plugins
 
-The `audio`, `terminal` and `tts` plugins include Rust crates. Test each crate with a scoped Cargo command:
+The `audio` and `terminal` plugins include Rust crates. Test each crate with a scoped Cargo command:
 
 ```sh
 cargo test -p tynd-plugin-<name>

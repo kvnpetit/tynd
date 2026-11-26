@@ -80,7 +80,7 @@ Every row links to the API page that documents it, including its per-OS limits.
 - **Per-OS rejections** — these calls reject instead of silently doing nothing:
   - Linux: `tray.attachWindow`, `tray.popUpContextMenu`, `setEffects`, `setAspectRatio`, `setMovable`, `getPrinters`, notification inline `reply`, clipboard RTF and custom formats, recent documents. Tray icons report no bounds and no hover events; renderer crashes are not reported.
   - macOS: `setAudioMuted` / `isAudioMuted`, silent `print`, `getPrinters`, notification `getDelivered` / `remove` / `removeAll`, per-window menu bars (one app-wide bar). `printToPdf` renders one continuous page and ignores layout options.
-  - Windows-only: `setEnabled`, jump list, tray `onDoubleClick`. macOS-only: `app.dock.*`, `askForMediaAccess`, `titleBarStyle`, `appleScript`.
+  - Windows-only: `setEnabled`, jump list, tray `onDoubleClick`. macOS-only: `app.dock.*`, `askForMediaAccess`, `titleBarStyle`.
 
 ## Detailed comparisons
 

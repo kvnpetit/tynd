@@ -3,7 +3,6 @@
 // hand; run `bun scripts/gen-api-catalog.ts`. Included by config/model.rs.
 pub(crate) const KNOWN_APIS: &[&str] = &[
     "acl",
-    "apple-script",
     "autolaunch",
     "biometric",
     "cli",
@@ -44,7 +43,6 @@ pub(crate) const CORE_HOST_APIS: &[&str] = &["acl", "log"];
 /// tests use it, to check that `KNOWN_APIS` is exactly core plus plugin-first.
 #[cfg(test)]
 pub(crate) const PLUGIN_FIRST_APIS: &[&str] = &[
-    "apple-script",
     "autolaunch",
     "biometric",
     "cli",
@@ -79,7 +77,6 @@ pub(crate) const PLUGIN_FIRST_APIS: &[&str] = &[
 
 /// `(api, plugin package)` for every plugin-first API.
 pub(crate) const API_PLUGIN_PACKAGES: &[(&str, &str)] = &[
-    ("apple-script", "@tynd/plugin-apple-script"),
     ("autolaunch", "@tynd/plugin-autolaunch"),
     ("biometric", "@tynd/plugin-biometric"),
     ("cli", "@tynd/plugin-cli"),
@@ -115,16 +112,6 @@ pub(crate) const API_PLUGIN_PACKAGES: &[(&str, &str)] = &[
 /// `(name, plugin package, host API)` for every id and alias of plugins/catalog.json, as
 /// accepted by `tynd add`. The API is set for host-backed plugins that front one.
 pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
-    (
-        "apple-script",
-        "@tynd/plugin-apple-script",
-        Some("apple-script"),
-    ),
-    (
-        "applescript",
-        "@tynd/plugin-apple-script",
-        Some("apple-script"),
-    ),
     ("args", "@tynd/plugin-cli", Some("cli")),
     ("argv", "@tynd/plugin-cli", Some("cli")),
     ("audio", "@tynd/plugin-audio", None),
@@ -160,7 +147,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
     ("hotkey", "@tynd/plugin-shortcuts", Some("shortcuts")),
     ("hotkeys", "@tynd/plugin-shortcuts", Some("shortcuts")),
     ("http", "@tynd/plugin-http", Some("http")),
-    ("jxa", "@tynd/plugin-apple-script", Some("apple-script")),
     ("key-blocking", "@tynd/plugin-keys", Some("keys")),
     ("keyring", "@tynd/plugin-keyring", Some("keyring")),
     ("keys", "@tynd/plugin-keys", Some("keys")),
@@ -241,7 +227,6 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
     ("socket", "@tynd/plugin-websocket", Some("websocket")),
     ("sound", "@tynd/plugin-audio", None),
     ("spawn", "@tynd/plugin-process", Some("process")),
-    ("speech", "@tynd/plugin-tts", None),
     ("sql", "@tynd/plugin-sql", None),
     ("sqlite", "@tynd/plugin-sql", None),
     ("startup", "@tynd/plugin-autolaunch", Some("autolaunch")),
@@ -259,11 +244,9 @@ pub(crate) const PLUGIN_ADD_NAMES: &[(&str, &str, Option<&str>)] = &[
         Some("system-stats"),
     ),
     ("terminal", "@tynd/plugin-terminal", None),
-    ("text-to-speech", "@tynd/plugin-tts", None),
     ("theme", "@tynd/plugin-theme", Some("theme")),
     ("themes", "@tynd/plugin-theme", Some("theme")),
     ("tray", "@tynd/plugin-tray", Some("tray")),
-    ("tts", "@tynd/plugin-tts", None),
     ("update", "@tynd/plugin-updater", Some("updater")),
     ("updater", "@tynd/plugin-updater", Some("updater")),
     ("updates", "@tynd/plugin-updater", Some("updater")),

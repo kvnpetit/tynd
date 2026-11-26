@@ -95,7 +95,7 @@ describe("syncCatalog", () => {
   });
 
   test("a missing source is an error", () => {
-    rmSync(path.join(sandbox, "plugins/standalone/tts/tts.gen.ts"));
+    rmSync(path.join(sandbox, "plugins/standalone/terminal/terminal.gen.ts"));
     expect(() => syncCatalog(sandbox, true)).toThrow("missing source");
   });
 });

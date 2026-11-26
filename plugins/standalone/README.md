@@ -13,13 +13,12 @@ Standalone official Tynd plugins workspace — native and pure-JS plugins for th
 | [`@tynd/plugin-oauth`](./oauth) | Loopback OAuth callback listener with PKCE-style state validation |
 | [`@tynd/plugin-sql`](./sql) | Bundled SQLite via `bun:sqlite` |
 | [`@tynd/plugin-terminal`](./terminal) | Embedded PTY — spawn shells, stream output, resize, real `kill()` |
-| [`@tynd/plugin-tts`](./tts) | Text-to-speech — SAPI / AVSpeechSynthesizer / espeak |
 
 > **Host API split:** the host core only compiles window/webview, IPC,
 > lifecycle, `acl` and `log`. Other host APIs (autolaunch, biometric,
-> deep-link, power, shortcuts, updater, vault, network, AppleScript, ...) are
+> deep-link, power, shortcuts, updater, vault, network, ...) are
 > host-backed official plugins under [`plugins/host`](../host). The plugins here
-> cover terminal/PTY, OAuth callbacks, SQL, audio and text-to-speech.
+> cover terminal/PTY, OAuth callbacks, SQL and audio.
 > For i18n or QR codes, use npm libraries
 > directly (`i18next` / `lingui` / `formatjs`; `qrcode`).
 
@@ -29,7 +28,7 @@ Standalone official Tynd plugins workspace — native and pure-JS plugins for th
 `oauth`, `sql`
 
 **Native (Rust)** — ship a Rust crate compiled into the app's host:
-`audio`, `terminal`, `tts`
+`audio` and `terminal`
 
 Native packages declare the Cargo features required for their advertised
 baseline API. The CLI enables those features automatically. An app only lists
@@ -48,7 +47,7 @@ plugin installation.
 ## Status
 
 Stable published plugins ship at `1.0.x`. Stable native-backed plugins
-(`audio`, `terminal`, `tts`) carry the same SemVer guarantee as the rest, but
+(`audio` and `terminal`) carry the same SemVer guarantee as the rest, but
 their platform backends evolve independently — pin exact versions in
 production until your native deps stabilise.
 

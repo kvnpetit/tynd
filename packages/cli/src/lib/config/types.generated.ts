@@ -35,7 +35,6 @@ export interface TyndConfig {
 /** Native API that can be enabled in an app-specific Tynd host. */
 export type ApiName =
   | "acl"
-  | "apple-script"
   | "autolaunch"
   | "biometric"
   | "cli"

@@ -331,7 +331,7 @@ cargo build --release -p tynd-plugin-terminal  # one native plugin
 ```
 
 - A native crate depends only on the plugin SDK; shared workspace dependencies are version pins, not shared logic. Extract a shared helper crate only when the same logic is duplicated in at least three plugins.
-- Put heavy optional backends behind features (`capture`, `inference`, `synthesis`, ...) so default builds stay portable and fast.
+- Put heavy optional backends behind features (for example, `capture` for audio) so default builds stay portable and fast.
 - Touch one plugin per PR when possible, and update that plugin's `README.md` and `CHANGELOG.md` for public API or behavior changes.
 
 ### Docs site (`apps/docs`)

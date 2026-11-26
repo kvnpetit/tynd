@@ -134,13 +134,6 @@
         "typescript": "~7.0.2",
       },
     },
-    "plugins/host/apple-script": {
-      "name": "@tynd/plugin-apple-script",
-      "version": "1.0.0",
-      "peerDependencies": {
-        "@tynd/core": ">=1.0.0 <2",
-      },
-    },
     "plugins/host/autolaunch": {
       "name": "@tynd/plugin-autolaunch",
       "version": "1.0.0",
@@ -402,23 +395,6 @@
     },
     "plugins/standalone/terminal": {
       "name": "@tynd/plugin-terminal",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@biomejs/biome": "2.6.8",
-        "@types/bun": "1.4.5",
-        "typescript": "~7.0.2",
-      },
-      "peerDependencies": {
-        "@tynd/core": "^1.0.0",
-        "@tynd/plugin-sdk": "^1.0.0",
-      },
-      "optionalPeers": [
-        "@tynd/core",
-        "@tynd/plugin-sdk",
-      ],
-    },
-    "plugins/standalone/tts": {
-      "name": "@tynd/plugin-tts",
       "version": "1.0.0",
       "devDependencies": {
         "@biomejs/biome": "2.6.8",
@@ -847,8 +823,6 @@
 
     "@tynd/mcp": ["@tynd/mcp@workspace:packages/mcp"],
 
-    "@tynd/plugin-apple-script": ["@tynd/plugin-apple-script@workspace:plugins/host/apple-script"],
-
     "@tynd/plugin-audio": ["@tynd/plugin-audio@workspace:plugins/standalone/audio"],
 
     "@tynd/plugin-autolaunch": ["@tynd/plugin-autolaunch@workspace:plugins/host/autolaunch"],
@@ -910,8 +884,6 @@
     "@tynd/plugin-theme": ["@tynd/plugin-theme@workspace:plugins/host/theme"],
 
     "@tynd/plugin-tray": ["@tynd/plugin-tray@workspace:plugins/host/tray"],
-
-    "@tynd/plugin-tts": ["@tynd/plugin-tts@workspace:plugins/standalone/tts"],
 
     "@tynd/plugin-updater": ["@tynd/plugin-updater@workspace:plugins/host/updater"],
 

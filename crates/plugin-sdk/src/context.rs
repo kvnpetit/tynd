@@ -46,7 +46,6 @@ fn normalize_api_key(api: &str) -> String {
 
 fn canonical_host_api(api: &str) -> String {
     match normalize_api_key(api).as_str() {
-        "applescript" => "appleScript".to_string(),
         "deeplink" => "deepLink".to_string(),
         "networkloopback" => "network-loopback".to_string(),
         "networkpublic" => "network-public".to_string(),

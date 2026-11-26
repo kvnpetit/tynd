@@ -32,7 +32,8 @@ First stable release.
   JavaScript plugins are injected into the backend bootstrap.
 - Official plugins, in two groups: host-backed (`@tynd/plugin-fs`, `-http`,
   `-process`, `-keyring`, `-notification`, `-shortcuts`, `-vault`,
-  `-websocket`, ...) and standalone (`audio`, `oauth`, `sql`, `terminal`, `tts`).
+  `-websocket`, ...) and standalone (`audio`, `oauth`, `sql`, `terminal`).
+- Removed the macOS-only `apple-script` API and plugin before the first stable release.
 - CLI commands: `create`, `init`, `add`, `remove`, `dev`, `start`, `test`,
   `build`, `clean`, `upgrade`, `validate`, `doctor` (with `--fix`), `icon`,
   `info`, `size`, `explain`, `config show`, `plugin new|check|dev|list|types`,

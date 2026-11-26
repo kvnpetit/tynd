@@ -117,7 +117,7 @@ Relative paths resolve from the project root.
 | Group | Names |
 |---|---|
 | Core, always compiled into every host | `acl`, `log` |
-| Fronted by a host-backed official plugin `@tynd/plugin-<name>` | `apple-script`, `autolaunch`, `biometric`, `cli`, `clipboard`, `compute`, `deep-link`, `dialog`, `fs`, `http`, `keyring`, `keys`, `menu`, `multiwindow`, `network`, `notification`, `power`, `process`, `screenshot`, `shell`, `shortcuts`, `sidecar`, `single-instance`, `store`, `system-stats`, `theme`, `tray`, `updater`, `vault`, `websocket`, `window-state` |
+| Fronted by a host-backed official plugin `@tynd/plugin-<name>` | `autolaunch`, `biometric`, `cli`, `clipboard`, `compute`, `deep-link`, `dialog`, `fs`, `http`, `keyring`, `keys`, `menu`, `multiwindow`, `network`, `notification`, `power`, `process`, `screenshot`, `shell`, `shortcuts`, `sidecar`, `single-instance`, `store`, `system-stats`, `theme`, `tray`, `updater`, `vault`, `websocket`, `window-state` |
 
 [`tynd add <name>`](/docs/v1.0/cli/add) adds a name to `apis` and, for a plugin-first API, also installs and declares its `@tynd/plugin-<name>` package. The next `tynd dev` or `tynd build` compiles it into the host. `acl` has no TypeScript client: its host commands are `isAllowed` and `list` (read-only, callable from the renderer) and `generateSchema` (writes the permission schema to a path; backend only). Capabilities are declared in config and sent once at startup; nothing can load or change them at runtime.
 

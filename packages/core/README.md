@@ -133,7 +133,6 @@ Host-backed official plugins:
 | Network interfaces | `@tynd/plugin-network` | `@tynd/plugin-network/client` |
 | Deep links | `@tynd/plugin-deep-link` | `@tynd/plugin-deep-link/client` |
 | Biometric auth | `@tynd/plugin-biometric` | `@tynd/plugin-biometric/client` |
-| AppleScript/JXA | `@tynd/plugin-apple-script` | `@tynd/plugin-apple-script/client` |
 | Dialogs | `@tynd/plugin-dialog` | `@tynd/plugin-dialog/client` |
 | Clipboard | `@tynd/plugin-clipboard` | `@tynd/plugin-clipboard/client` |
 | Key-value store | `@tynd/plugin-store` | `@tynd/plugin-store/client` |

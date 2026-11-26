@@ -184,7 +184,6 @@ nutype.workspace = true
 # fails when anything drifted. Do not edit the generated blocks by hand.
 [package.metadata.tynd.apis]
 acl = { core = true }
-apple-script = { plugin = "@tynd/plugin-apple-script" }
 autolaunch = { plugin = "@tynd/plugin-autolaunch" }
 biometric = { plugin = "@tynd/plugin-biometric" }
 cli = { plugin = "@tynd/plugin-cli" }
@@ -254,7 +253,6 @@ debug-screenshot = [ "debug-protocol", "dep:xcap", "dep:base64" ]
 # how custom hosts narrow the attack surface
 # and binary size.
 api-all = [
-    "api-apple-script",
     "api-autolaunch",
     "api-biometric",
     "api-cli",
@@ -371,21 +369,6 @@ obs-otel = [
 ]
 obs-sentry = [ "dep:sentry" ]
 
-# === macOS-only Tauri-parity additions ===
-#
-# No-op on Linux/Windows (the dep lives in the
-# `target.'cfg(target_os = "macos")'.dependencies` table below).
-# `api-apple-script` exposes `os.appleScript.run(script)` via osakit.
-
-# AppleScript runner (macOS only). Registers the `appleScript` row of the
-# host API table (`api::HOST_APIS`) — frontends hit `os.appleScript.run("tell
-# app \"Finder\" ...")` and get the OSA result back. On non-mac builds the
-# row compiles no module, so calls report `api_disabled("apple-script")`.
-# `dep:osakit` resolves only on macOS targets thanks to the
-# `target.'cfg(target_os = "macos")'.dependencies` table — toggling
-# this feature on Linux/Windows is a no-op at link time.
-api-apple-script = [ "dep:osakit" ]
-
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
@@ -475,11 +458,6 @@ robius-authentication = { workspace = true, optional = true }
 # Keyring on macOS uses Keychain via the apple-native backend
 # (Security.framework — `SecItemAdd`/`SecItemCopyMatching`).
 keyring              = { workspace = true, features = [ "v1" ], optional = true }
-# AppleScript runner (osakit) — wired through `api::apple_script` behind
-# `api-apple-script`. macOS-only crate; declared here so non-mac
-# builds skip it entirely. The `appleScript` table row is gated on
-# `target_os = "macos"` too, so other platforms report the API disabled.
-osakit               = { workspace = true, optional = true }
 # AppKit bindings: NSWorkspace.notificationCenter observers for the
 # `api::power` watcher, NSAlert for `dialog.message`, NSDocumentController
 # for `app.addRecentDocument`, NSBeep for `shell.beep`. Always on: wry and

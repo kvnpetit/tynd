@@ -252,20 +252,6 @@
     "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/autolaunch/"
   },
   {
-    "id": "apple-script",
-    "kind": "host",
-    "pkg": "@tynd/plugin-apple-script",
-    "aliases": ["applescript", "jxa"],
-    "apis": ["apple-script"],
-    "importName": "appleScript",
-    "importPath": "@tynd/plugin-apple-script/client",
-    "description": "AppleScript/JXA bridge",
-    "permissions": ["host:apple-script", "macos-automation"],
-    "estimatedSizeKb": 150,
-    "install": "tynd add apple-script",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/apple-script/"
-  },
-  {
     "id": "cli",
     "kind": "host",
     "pkg": "@tynd/plugin-cli",
@@ -488,19 +474,5 @@
     "estimatedSizeKb": 30,
     "install": "tynd add oauth",
     "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/oauth/"
-  },
-  {
-    "id": "tts",
-    "kind": "standalone",
-    "pkg": "@tynd/plugin-tts",
-    "aliases": ["speech", "text-to-speech"],
-    "apis": [],
-    "importName": "tts",
-    "importPath": "@tynd/plugin-tts",
-    "description": "Native text-to-speech",
-    "permissions": ["speaker"],
-    "estimatedSizeKb": 300,
-    "install": "tynd add tts",
-    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/tts/"
   }
 ]

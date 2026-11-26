@@ -4,7 +4,6 @@
     "index",
     "bridge",
     "---Host-backed plugins---",
-    "apple-script",
     "autolaunch",
     "biometric",
     "cli",
@@ -39,7 +38,6 @@
     "audio",
     "oauth",
     "sql",
-    "terminal",
-    "tts"
+    "terminal"
   ]
 }

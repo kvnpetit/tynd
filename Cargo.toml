@@ -16,7 +16,6 @@ members = [
     "crates/plugin-macros",
     "plugins/standalone/audio/native",
     "plugins/standalone/terminal/native",
-    "plugins/standalone/tts/native",
 ]
 # Generated/vendored trees that should not be members of the monorepo
 # workspace. `packages/host-src/native/` is a flattened mirror of
@@ -473,16 +472,6 @@ zeroize = { version = "1.9", features = ["zeroize_derive"] }
 robius-authentication = "0.3"
 
 # === Optional ===
-
-# === Tauri-parity additions ===
-
-# Native AppleScript runner — used by `os::apple_script` (macOS only)
-# behind the `api-apple-script` feature. Unlocks integrations the
-# webview can't do natively: post-update relaunch via
-# `tell application "Finder" to activate`, OS-level automation
-# (Calendar, Reminders, …), and any vendor-specific script bridge that
-# expects an OSA host. Not pulled on Linux/Windows.
-osakit = "0.3"
 
 # === Observability — production export pipelines (opt-in) ===
 #

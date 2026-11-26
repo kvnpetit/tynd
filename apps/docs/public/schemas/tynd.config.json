@@ -4,7 +4,6 @@
       "description": "Native API that can be enabled in an app-specific Tynd host.",
       "enum": [
         "acl",
-        "apple-script",
         "autolaunch",
         "biometric",
         "cli",

@@ -16,8 +16,6 @@
 // (a line without a row, a cfg that differs from the row).
 // <api-modules>
 pub(crate) mod app;
-#[cfg(all(feature = "api-apple-script", target_os = "macos"))]
-pub(crate) mod apple_script;
 #[cfg(feature = "api-autolaunch")]
 pub(crate) mod autolaunch;
 #[cfg(feature = "api-biometric")]
@@ -319,9 +317,6 @@ host_apis! {
         // URLs before the other APIs go away.
         "deepLink" => deep_link, "api-deep-link",
         "singleInstance" => single_instance, "api-single-instance",
-        // macOS only: on other targets the feature compiles nothing and the
-        // API reports itself disabled.
-        "appleScript" => apple_script, "api-apple-script" if target_os = "macos",
         "autolaunch" => autolaunch, "api-autolaunch",
         "biometric" => biometric, "api-biometric",
         "cli" => cli, "api-cli",

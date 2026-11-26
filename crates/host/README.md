@@ -95,7 +95,6 @@ Strongly-typed method signatures with automatic serde deserialization. The macro
 | deep_link | api-deep-link | URL schemes |
 | keys | api-keys | Key intercept |
 | cli | api-cli | argv parsing |
-| apple_script (macOS) | api-apple-script | osakit |
 
 ## Feature flags
 
@@ -119,7 +118,7 @@ dialog, key intercept, menu, multiwindow, shell, single-instance, store, theme,
 tray, autolaunch, biometric,
 filesystem, host HTTP, WebSocket client, notifications, network interfaces,
 power/battery/idle, process/sidecar, screenshot, shortcuts, updater, vault,
-deep-link, AppleScript, enterprise TLS, window state,
+deep-link, enterprise TLS, window state,
 system stats, native plugins, and observability.
 
 ### Observability (opt-in)
