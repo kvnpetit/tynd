@@ -33,8 +33,8 @@ mod tests {
     use super::*;
 
     fn menu(items: Value) -> TrayMenu {
-        let items: Vec<MenuItemDef> = serde_json::from_value(items).unwrap();
-        build(&items).unwrap()
+        let items: Vec<MenuItemDef> = serde_json::from_value(items).expect("valid tray menu items");
+        build(&items).expect("build the test tray menu")
     }
 
     fn checked(menu: &TrayMenu, id: &str) -> bool {

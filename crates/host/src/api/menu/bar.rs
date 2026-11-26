@@ -180,8 +180,8 @@ mod tests {
     use super::*;
 
     fn bar(items: Value) {
-        let items: Vec<MenuItemDef> = serde_json::from_value(items).unwrap();
-        build_bar(&items).unwrap();
+        let items: Vec<MenuItemDef> = serde_json::from_value(items).expect("valid menu items");
+        build_bar(&items).expect("build the test menu bar");
     }
 
     fn with_bar<T>(f: impl FnOnce(&MenuRegistry) -> T) -> T {

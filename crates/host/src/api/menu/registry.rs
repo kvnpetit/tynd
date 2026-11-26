@@ -645,8 +645,8 @@ mod tests {
     use super::*;
 
     fn menu(scope: Scope, items: Value) -> MenuRegistry {
-        let items: Vec<MenuItemDef> = serde_json::from_value(items).unwrap();
-        MenuRegistry::build(scope, &items).unwrap()
+        let items: Vec<MenuItemDef> = serde_json::from_value(items).expect("valid menu items");
+        MenuRegistry::build(scope, &items).expect("build the test menu")
     }
 
     fn sizes() -> Value {
