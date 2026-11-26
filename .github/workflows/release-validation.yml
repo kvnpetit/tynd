@@ -1,0 +1,25 @@
+name: Release validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-build.yml'
+      - '.github/workflows/release-validation.yml'
+      - '.cargo/config.toml'
+      - 'scripts/check-release-*.ts'
+      - 'scripts/check-reproducible-artifact.ts'
+      - 'scripts/package-release-asset.ts'
+      - 'npm/tooling*/package.json'
+      - 'npm/tooling/scripts/check-platform-packages.js'
+
+permissions:
+  attestations: write
+  contents: read
+  id-token: write
+
+jobs:
+  native-tooling:
+    uses: ./.github/workflows/release-build.yml
