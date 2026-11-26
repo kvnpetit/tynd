@@ -791,24 +791,25 @@ fn generated_debug_socket(app_id: &str) -> Result<DebugSocket> {
 }
 
 /// Fresh, randomly named directory owned by the current user with no group/other access, under
-/// `$XDG_RUNTIME_DIR` when set (already per-user and `0700`) and the temp directory otherwise. A
-/// `mkdir` that succeeds proves we created it, so nobody can have pre-created the name or planted a
-/// symlink; the mode is still verified because a umask or an odd filesystem could loosen it.
+/// `$XDG_RUNTIME_DIR` when available and the temp directory otherwise. Request private permissions
+/// when creating the directory, then verify the mode reported by the filesystem.
 fn private_socket_dir() -> Result<PathBuf> {
     let base = std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .filter(|dir| dir.is_absolute() && dir.is_dir())
         .unwrap_or_else(std::env::temp_dir);
-    let dir = tempfile::Builder::new()
-        .prefix("tynd-dev-")
-        .tempdir_in(&base)
-        .with_context(|| format!("create a private directory in {}", base.display()))?
-        .keep();
-    if let Err(error) = verify_private_dir(&dir) {
-        let _ = fs::remove_dir_all(&dir);
-        return Err(error);
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("tynd-dev-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        builder.permissions(fs::Permissions::from_mode(0o700));
     }
-    Ok(dir)
+    let dir = builder
+        .tempdir_in(&base)
+        .with_context(|| format!("create a private directory in {}", base.display()))?;
+    verify_private_dir(dir.path())?;
+    Ok(dir.keep())
 }
 
 #[cfg(unix)]
