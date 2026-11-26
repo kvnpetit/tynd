@@ -64,17 +64,17 @@ jobs:
             bundler_artifact: tynd-bundler.exe
             bundler_asset: tynd-bundler-aarch64-pc-windows-msvc.zip
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17 # stable
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # stable
         with:
           toolchain: "1.100.0"
           targets: ${{ matrix.target }}
 
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: ".bun-version"
           no-cache: true
@@ -145,7 +145,7 @@ jobs:
           cp LICENSE "$package/LICENSE"
 
       - name: Attest native tooling provenance
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             npm/${{ matrix.npm_pkg }}/bin/tynd${{ matrix.bin_ext }}
@@ -153,7 +153,7 @@ jobs:
             npm/${{ matrix.npm_pkg }}/bin/tynd-bundler${{ matrix.bin_ext }}
 
       - name: Upload native tooling platform package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.npm_pkg }}
           path: npm/${{ matrix.npm_pkg }}/
@@ -182,14 +182,14 @@ jobs:
           "$hash  ${{ matrix.bundler_asset }}" | Out-File -Encoding ascii -NoNewline "${{ matrix.bundler_asset }}.sha256"
 
       - name: Attest bundler release asset
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}
             target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}.sha256
 
       - name: Upload bundler release evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bundler-evidence-${{ matrix.target }}
           path: |
@@ -209,18 +209,18 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: ".bun-version"
           no-cache: true
 
       - name: Download native tooling packages
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: tooling-*
           path: npm/
@@ -231,7 +231,7 @@ jobs:
           node npm/tooling/scripts/check-platform-packages.js
 
       - name: Download bundler evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: bundler-evidence-*
           path: .tynd/release-evidence/bundlers
@@ -284,7 +284,7 @@ jobs:
             --output .tynd/release-provenance-matrix.json
 
       - name: Upload verified release provenance
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-provenance-matrix
           path: .tynd/release-provenance-matrix.json
