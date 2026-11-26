@@ -89,7 +89,10 @@ export function parsePackInfo(output: string): PackInfo {
 }
 
 async function localPackInfo(packageDir: string): Promise<PackInfo> {
-  const result = await capture(["npm", "pack", "--dry-run", "--json"], packageDir);
+  const result = await capture(
+    ["npm", "pack", "--dry-run", "--json", "--foreground-scripts=false"],
+    packageDir,
+  );
   if (result.exitCode !== 0) throw new Error(`npm pack failed:\n${result.stderr}`);
   return parsePackInfo(result.stdout);
 }
