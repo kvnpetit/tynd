@@ -10,4 +10,4 @@ You may obtain a copy of the License at
 The package contains TypeScript source only: a thin client over the
 `dialog` API of the Tynd host. It bundles no third-party code; the native
 capabilities it calls are part of the Tynd host (see the NOTICE of
-https://github.com/tynd-apps/tynd).
+https://github.com/kvnpetit/tynd).

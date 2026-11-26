@@ -15,7 +15,7 @@ We provide security fixes for the current `1.x` line.
 **Please do not open a public GitHub issue for security reports.**
 
 Open a private GitHub Security Advisory at
-<https://github.com/tynd-apps/tynd/security/advisories/new>.
+<https://github.com/kvnpetit/tynd/security/advisories/new>.
 Settings -> Security -> Report a vulnerability.
 
 Please include:

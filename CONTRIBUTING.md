@@ -11,7 +11,7 @@ By opening a pull request, you agree that your contribution is licensed under th
 ## Setup
 
 ```bash
-git clone https://github.com/tynd-apps/tynd
+git clone https://github.com/kvnpetit/tynd
 cd tynd
 bun install
 ```
@@ -140,12 +140,12 @@ the relevant files under `apps/docs` **in the same commit** as the code:
 | [`README.md`](./README.md) | Pitch, quickstart, API summary table, or headline comparison changed. |
 | `packages/<pkg>/README.md` | That package's public API surface changed. |
 | [`NOTICE`](./NOTICE) | Added or removed a significant third-party dep. |
-| Docs site — [API reference](https://tynd-apps.github.io/tynd/docs/v1.0/api) | Public OS API, backend API, or frontend RPC surface changed. |
-| Docs site — [runtime](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/runtimes) | Bun or host behavior changed. |
-| Docs site — [frontend frameworks](https://tynd-apps.github.io/tynd/docs/v1.0/guides/frontend-frameworks) | Frontend framework support / detection / scaffolding changed. |
-| Docs site — [getting started](https://tynd-apps.github.io/tynd/docs/v1.0/getting-started) | Quickstart flow, CLI command names, first-app sample changed. |
-| Docs site — [troubleshooting](https://tynd-apps.github.io/tynd/docs/v1.0/troubleshooting) | New user-facing failure mode or error message. |
-| Docs site — [code signing](https://tynd-apps.github.io/tynd/docs/v1.0/guides/code-signing) | Signing / notarization workflow changed. |
+| Docs site — [API reference](https://kvnpetit.github.io/tynd/docs/v1.0/api) | Public OS API, backend API, or frontend RPC surface changed. |
+| Docs site — [runtime](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/runtimes) | Bun or host behavior changed. |
+| Docs site — [frontend frameworks](https://kvnpetit.github.io/tynd/docs/v1.0/guides/frontend-frameworks) | Frontend framework support / detection / scaffolding changed. |
+| Docs site — [getting started](https://kvnpetit.github.io/tynd/docs/v1.0/getting-started) | Quickstart flow, CLI command names, first-app sample changed. |
+| Docs site — [troubleshooting](https://kvnpetit.github.io/tynd/docs/v1.0/troubleshooting) | New user-facing failure mode or error message. |
+| Docs site — [code signing](https://kvnpetit.github.io/tynd/docs/v1.0/guides/code-signing) | Signing / notarization workflow changed. |
 
 Doc-only PRs skip the build step but never skip this table.
 
@@ -368,4 +368,4 @@ Contributors don't touch versions — only maintainers cut releases.
 
 ## Questions?
 
-Open an [issue](https://github.com/tynd-apps/tynd/issues), a [GitHub Discussion](https://github.com/tynd-apps/tynd/discussions), or a draft PR. For architectural context, the [docs site concepts section](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/architecture) covers IPC, the TYNDPKG format, generated staging, and Bun runtime.
+Open an [issue](https://github.com/kvnpetit/tynd/issues), a [GitHub Discussion](https://github.com/kvnpetit/tynd/discussions), or a draft PR. For architectural context, the [docs site concepts section](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/architecture) covers IPC, the TYNDPKG format, generated staging, and Bun runtime.

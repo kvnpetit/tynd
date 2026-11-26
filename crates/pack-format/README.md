@@ -38,7 +38,7 @@ macOS code signature follows it.
 - `tynd-runtime` and `tynd-host` read it at startup (`embed.rs`).
 - `crates/cli` opens packs to check them during signing and `tynd updater release`.
 
-See [TYNDPKG](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg) for
+See [TYNDPKG](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg) for
 the entry list.
 
 ## Validation

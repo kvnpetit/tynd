@@ -390,7 +390,7 @@ fn typegen_cargo_context(plugin: &NativePluginTarget) -> Result<TypegenCargoCont
 fn typegen_workspace_manifest(sdk: &Path) -> Result<String> {
     let sdk_path = portable_path(&sdk.to_string_lossy());
     Ok(format!(
-        "[workspace]\nresolver = \"2\"\nmembers = [\"plugin\"]\n\n[workspace.package]\nversion = \"0.1.0\"\npublish = false\nedition = \"2021\"\nrust-version = \"1.95\"\nlicense = \"Apache-2.0\"\nrepository = \"https://github.com/tynd-apps/tynd\"\nhomepage = \"https://tynd-apps.github.io/tynd/\"\ndocumentation = \"https://tynd-apps.github.io/tynd/docs/v1.0/\"\nauthors = []\nkeywords = []\ncategories = []\nreadme = \"README.md\"\n\n[workspace.dependencies]\ntynd-plugin-sdk = {{ path = {} }}\n",
+        "[workspace]\nresolver = \"2\"\nmembers = [\"plugin\"]\n\n[workspace.package]\nversion = \"0.1.0\"\npublish = false\nedition = \"2021\"\nrust-version = \"1.95\"\nlicense = \"Apache-2.0\"\nrepository = \"https://github.com/kvnpetit/tynd\"\nhomepage = \"https://kvnpetit.github.io/tynd/\"\ndocumentation = \"https://kvnpetit.github.io/tynd/docs/v1.0/\"\nauthors = []\nkeywords = []\ncategories = []\nreadme = \"README.md\"\n\n[workspace.dependencies]\ntynd-plugin-sdk = {{ path = {} }}\n",
         serde_json::to_string(&sdk_path)?
     ))
 }

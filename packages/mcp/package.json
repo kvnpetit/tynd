@@ -4,15 +4,15 @@
   "description": "Native Rust Model Context Protocol server for Tynd.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
-  "homepage": "https://tynd-apps.github.io/tynd/",
+  "homepage": "https://kvnpetit.github.io/tynd/",
   "funding": "https://github.com/sponsors/kvnpetit",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
     "directory": "packages/mcp"
   },
   "bugs": {
-    "url": "https://github.com/tynd-apps/tynd/issues"
+    "url": "https://github.com/kvnpetit/tynd/issues"
   },
   "keywords": [
     "tynd",

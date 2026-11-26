@@ -2,7 +2,7 @@ use std::fs;
 
 use super::super::load::load_typed;
 
-const SCHEMA_URL: &str = "https://tynd-apps.github.io/tynd/schemas/tynd.config.json";
+const SCHEMA_URL: &str = "https://kvnpetit.github.io/tynd/schemas/tynd.config.json";
 
 #[test]
 fn top_level_schema_is_accepted_in_every_layer() {

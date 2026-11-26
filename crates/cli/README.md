@@ -47,7 +47,7 @@ cargo test -p tynd-cli
 The `local-socket` feature (default) enables Unix socket and named-pipe
 transport for the debug bridge.
 
-See the [CLI reference](https://tynd-apps.github.io/tynd/docs/v1.0/cli) and
+See the [CLI reference](https://kvnpetit.github.io/tynd/docs/v1.0/cli) and
 [`@tynd/mcp`](../../packages/mcp/README.md).
 
 ## License

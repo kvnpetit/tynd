@@ -9,7 +9,7 @@ plugin `package.json`:
 
 - `@tynd/*` peer dependencies are optional (`peerDependenciesMeta`), so a frozen install never
   fetches them from the public registry.
-- `homepage` is `https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/<dir>`.
+- `homepage` is `https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/<dir>`.
 - `@tynd/*` entries in `dependencies`, `devDependencies` and `optionalDependencies` use `workspace:` ranges.
 - the `tynd` field exists and its `kind` matches the group directory (host-backed plugins also declare `sdk: true`
   and `apis: ["<dir>"]`).

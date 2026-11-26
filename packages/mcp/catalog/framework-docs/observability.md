@@ -129,6 +129,6 @@ Any OTLP/gRPC-compatible collector works for OTel; only `endpoint` changes. The 
 
 ## Related
 
-- [`tynd.config.ts`](https://tynd-apps.github.io/tynd/docs/v1.0/cli/config#observability)
-- [Debugging guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/debugging)
-- [Production checklist](https://tynd-apps.github.io/tynd/docs/v1.0/production-checklist)
+- [`tynd.config.ts`](https://kvnpetit.github.io/tynd/docs/v1.0/cli/config#observability)
+- [Debugging guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/debugging)
+- [Production checklist](https://kvnpetit.github.io/tynd/docs/v1.0/production-checklist)

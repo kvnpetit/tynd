@@ -2,7 +2,7 @@ Tynd
 Copyright 2026 Kevin Petit (@kvnpetit)
 
 This product includes software developed by Kevin Petit (@kvnpetit) and
-the Tynd contributors (https://github.com/tynd-apps/tynd).
+the Tynd contributors (https://github.com/kvnpetit/tynd).
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ copy of the Bun runtime:
 
 Native plugins ship Rust crates and are statically linked into the app's
 host binary when enabled. Bun/TypeScript plugins add no Rust crate. They live
-at https://github.com/tynd-apps/plugins.
+at https://github.com/kvnpetit/tynd/tree/main/plugins/standalone.
 
 - tynd-plugin-audio
 - tynd-plugin-command-palette

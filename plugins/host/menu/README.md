@@ -23,4 +23,4 @@ it rejects the calls with an error naming
 The menu item types (`MenuItem`, `MenuSubmenu`, ...) are exported from the
 package root: `import type { MenuItem } from "@tynd/plugin-menu"`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/menu/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/menu/

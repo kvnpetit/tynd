@@ -118,4 +118,4 @@ Currently-active flow ids — useful for debug overlays.
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

@@ -142,7 +142,7 @@ Three flow-control mechanisms keep streaming safe at arbitrary yield rates:
 
 Combined guarantee: 10k+ yields/sec to the UI without freezing it.
 
-See the [Streaming RPC guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/streaming).
+See the [Streaming RPC guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/streaming).
 
 ## OS calls — frontend → Rust directly
 
@@ -190,7 +190,7 @@ The origin of the scheme depends on the OS: `tynd-bin://localhost` on macOS and 
 
 The TS client wraps these — `fs.readBinary(path)`, `compute.hash(bytes)` — users never touch the scheme directly. Small / non-binary calls (`randomBytes`, text helpers, terminal events) stay on the JSON IPC where it's simpler.
 
-See the [Binary Data guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/binary-data).
+See the [Binary Data guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/binary-data).
 
 ## Event emitter infrastructure
 
@@ -204,10 +204,10 @@ Subscribe on the frontend via `window.__tynd__.os_on(name, handler)` — or use 
 - Every frontend call includes the originating window's label; responses route back to it only.
 - Window events (resize, focus, close, …) are delivered to every app-local webview (never to remote content) with a `label` field in the payload. Client-side helpers filter by `__TYND_WINDOW_LABEL__` (injected at WebView creation) so handlers only fire for their own window.
 
-See the [Multi-Window guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/multi-window).
+See the [Multi-Window guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/multi-window).
 
 ## Next
 
-- [Build Pipeline](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/build-pipeline)
-- [TYNDPKG Format](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg)
-- [Streaming RPC guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/streaming)
+- [Build Pipeline](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/build-pipeline)
+- [TYNDPKG Format](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg)
+- [Streaming RPC guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/streaming)

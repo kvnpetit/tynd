@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-single-instance` feature. A host w
 it rejects the calls with an error naming
 `@tynd/plugin-single-instance`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/single-instance/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/single-instance/

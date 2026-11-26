@@ -19,5 +19,5 @@ First stable release.
   `http-server`, `llm`, `oauth`, `screen-rec`, `sql`, `terminal`, `tts`,
   `wgpu` and `whisper`.
 
-[Unreleased]: https://github.com/tynd-apps/tynd/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/tynd-apps/tynd/releases/tag/v1.0.0
+[Unreleased]: https://github.com/kvnpetit/tynd/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/kvnpetit/tynd/releases/tag/v1.0.0

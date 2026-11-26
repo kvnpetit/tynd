@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-cli` feature. A host without
 it rejects the calls with an error naming
 `@tynd/plugin-cli`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/cli/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/cli/

@@ -64,7 +64,7 @@ pub(crate) enum BundleError {
     #[error("unknown bundle target: {target}")]
     #[diagnostic(
         code(tynd::bundler::unknown_target),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
             "valid targets: msi, nsis, msix, dmg, app, deb, rpm, appimage, flatpak, snap, \
              pkgbuild. Check `targets` in your tynd.config.ts."
@@ -75,7 +75,7 @@ pub(crate) enum BundleError {
     #[error("icon not found: {path}")]
     #[diagnostic(
         code(tynd::bundler::missing_icon),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
             "every entry in `icons` must point to an existing .svg/.png/.ico file. Paths are \
              resolved relative to the project root."
@@ -86,7 +86,7 @@ pub(crate) enum BundleError {
     #[error("binary not found: {path}")]
     #[diagnostic(
         code(tynd::bundler::missing_binary),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
             "the `binary_path` in BundleConfig must point to a built executable. Run your build \
              step before `tynd-bundler bundle`."
@@ -97,7 +97,7 @@ pub(crate) enum BundleError {
     #[error("project_root not found: {path}")]
     #[diagnostic(
         code(tynd::bundler::missing_project_root),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
             "`project_root` must be an existing directory; the bundler writes intermediate \
              artifacts under it."
@@ -108,7 +108,7 @@ pub(crate) enum BundleError {
     #[error("WebView2 fixed runtime directory not found: {path}")]
     #[diagnostic(
         code(tynd::bundler::missing_webview2_fixed_runtime),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
             "`bundle.windows.webviewInstallMode.path` must name an existing project-relative \
              directory containing an extracted Microsoft WebView2 fixed runtime."
@@ -119,7 +119,7 @@ pub(crate) enum BundleError {
     #[error("WebView2 fixed runtime path must be project-relative: {path}")]
     #[diagnostic(
         code(tynd::bundler::invalid_webview2_fixed_runtime),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
             "`bundle.windows.webviewInstallMode.path` cannot be absolute or contain empty, dot, \
              or parent segments."
@@ -130,7 +130,7 @@ pub(crate) enum BundleError {
     #[error("failed to assemble bundler settings: {cause}")]
     #[diagnostic(
         code(tynd::bundler::settings_build),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
             "tauri-bundler refused the BundleConfig. Common culprits: an unsupported `category`, \
              an empty `targets` list, or a binary path with the wrong arch."
@@ -141,7 +141,7 @@ pub(crate) enum BundleError {
     #[error("tauri-bundler failed: {cause}")]
     #[diagnostic(
         code(tynd::bundler::bundle_project),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling"),
         help(
             "the underlying tauri-bundler call failed. Check the lines above for stderr from \
              external tools (WiX, signtool, fpm, makensis, ...)."

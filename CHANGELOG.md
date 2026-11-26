@@ -154,7 +154,7 @@ First stable release.
 - Apps that set their own CSP need `worker-src blob:` for `workers.spawn`.
 - `binaryArgs` and a packaged app's own arguments reach the backend after
   `--` in `process.argv`.
-- The documentation site is https://tynd-apps.github.io/tynd/, and the config
+- The documentation site is https://kvnpetit.github.io/tynd/, and the config
   schema is served at
-  `https://tynd-apps.github.io/tynd/schemas/tynd.config.json`.
+  `https://kvnpetit.github.io/tynd/schemas/tynd.config.json`.
 - MSRV is Rust 1.95.

@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-store` feature. A host without
 it rejects the calls with an error naming
 `@tynd/plugin-store`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/store/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/store/

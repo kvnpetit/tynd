@@ -48,7 +48,7 @@ export default defineConfig({
 });
 ```
 
-The host only trusts the version and `updater` configuration that the backend sends at startup; renderer `updaterIpc` calls cannot choose the version, endpoints or keys (see [updater trust model](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/updater#trust-model)). Every endpoint must be HTTP(S). Every key must decode to exactly 32 bytes. Adding `updater` makes the effective host plan include the native updater API.
+The host only trusts the version and `updater` configuration that the backend sends at startup; renderer `updaterIpc` calls cannot choose the version, endpoints or keys (see [updater trust model](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/updater#trust-model)). Every endpoint must be HTTP(S). Every key must decode to exactly 32 bytes. Adding `updater` makes the effective host plan include the native updater API.
 
 ### Mirrors, channels and key rotation
 
@@ -69,7 +69,7 @@ updater: {
 - **Templating.** `{{channel}}`, `{{target}}` (`windows`, `darwin`, `linux`), `{{arch}}` (`x86_64`, `aarch64`) and `{{current_version}}` are replaced (values are percent-encoded; unknown placeholders are left as written).
 - **Channel.** `channel` is the default release channel (`stable` when unset; letters, digits, `.`, `_`, `-`, at most 64 characters, not starting with `.`). `updater.setChannel(name)` overrides it and is persisted per install; `updater.getChannel()` reads the current one. Switching drops a pending update found on the old channel.
 - **Key rotation.** A signature is valid when any listed key verifies it. To rotate: ship a release that lists old and new keys in `publicKeys`; once installs have updated, sign new releases with the new key; later drop the old key. Keys are pinned at host build time (`TYND_UPDATER_PUBKEY` accepts several keys separated by `,`, `;` or whitespace), so every configured key must match one of them. Keys, proxy and request headers are never taken from renderer calls.
-- **Private update servers.** `updater.headers` (for example `{ Authorization: "Bearer ${env:UPDATE_TOKEN}" }`) and `updater.proxy` are set in `tynd.config.ts` only. `${env:NAME}` is expanded at bundle time from the process environment, then `.env`. Headers go only to the origins of the configured endpoints (at least one needs a fixed origin) and are never sent to a redirect target on another origin. The values are baked into the backend bundle, so use read-only tokens; they are never exposed to the renderer. Without `proxy`, `HTTPS_PROXY` / `ALL_PROXY` apply. Limits and rejected header names: [`updater` config](https://tynd-apps.github.io/tynd/docs/v1.0/cli/config#updater).
+- **Private update servers.** `updater.headers` (for example `{ Authorization: "Bearer ${env:UPDATE_TOKEN}" }`) and `updater.proxy` are set in `tynd.config.ts` only. `${env:NAME}` is expanded at bundle time from the process environment, then `.env`. Headers go only to the origins of the configured endpoints (at least one needs a fixed origin) and are never sent to a redirect target on another origin. The values are baked into the backend bundle, so use read-only tokens; they are never exposed to the renderer. Without `proxy`, `HTTPS_PROXY` / `ALL_PROXY` apply. Limits and rejected header names: [`updater` config](https://kvnpetit.github.io/tynd/docs/v1.0/cli/config#updater).
 
 ### Optional server scaffold
 
@@ -264,8 +264,8 @@ Always exercise a signed N-1 to N update on each shipped OS/architecture before 
 
 ## Related
 
-- [`tynd updater keygen`](https://tynd-apps.github.io/tynd/docs/v1.0/cli/updater/keygen)
-- [`tynd updater publish`](https://tynd-apps.github.io/tynd/docs/v1.0/cli/updater/publish)
-- [`tynd updater server`](https://tynd-apps.github.io/tynd/docs/v1.0/cli/updater/server)
-- [Updater API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/updater)
-- [Code Signing](https://tynd-apps.github.io/tynd/docs/v1.0/guides/code-signing)
+- [`tynd updater keygen`](https://kvnpetit.github.io/tynd/docs/v1.0/cli/updater/keygen)
+- [`tynd updater publish`](https://kvnpetit.github.io/tynd/docs/v1.0/cli/updater/publish)
+- [`tynd updater server`](https://kvnpetit.github.io/tynd/docs/v1.0/cli/updater/server)
+- [Updater API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/updater)
+- [Code Signing](https://kvnpetit.github.io/tynd/docs/v1.0/guides/code-signing)

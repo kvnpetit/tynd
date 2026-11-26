@@ -47,11 +47,11 @@ const WORKSPACE_PACKAGE: &[(&str, &str)] = &[
     ("edition", r#""2021""#),
     ("rust-version", r#""1.95""#),
     ("license", r#""Apache-2.0""#),
-    ("repository", r#""https://github.com/tynd-apps/tynd""#),
-    ("homepage", r#""https://tynd-apps.github.io/tynd/""#),
+    ("repository", r#""https://github.com/kvnpetit/tynd""#),
+    ("homepage", r#""https://kvnpetit.github.io/tynd/""#),
     (
         "documentation",
-        r#""https://tynd-apps.github.io/tynd/docs/v1.0/""#,
+        r#""https://kvnpetit.github.io/tynd/docs/v1.0/""#,
     ),
     (
         "authors",

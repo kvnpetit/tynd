@@ -197,8 +197,8 @@ const current = await monitors.current();   // where the calling window is
 
 ## Next
 
-- [Window API reference](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/window)
-- [WebView API reference](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/webview)
-- [`multiwindow` plugin reference](https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/multiwindow)
-- [Menu API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/menu)
-- [Monitor API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/monitor)
+- [Window API reference](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/window)
+- [WebView API reference](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/webview)
+- [`multiwindow` plugin reference](https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/multiwindow)
+- [Menu API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/menu)
+- [Monitor API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/monitor)

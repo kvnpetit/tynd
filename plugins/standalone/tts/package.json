@@ -4,15 +4,15 @@
   "description": "Text-to-speech for Tynd apps — native (SAPI 5, AVSpeechSynthesizer, speech-dispatcher).",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
-  "homepage": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/tts",
+  "homepage": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/tts",
   "funding": "https://github.com/sponsors/kvnpetit",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
     "directory": "plugins/standalone/tts"
   },
   "bugs": {
-    "url": "https://github.com/tynd-apps/tynd/issues"
+    "url": "https://github.com/kvnpetit/tynd/issues"
   },
   "keywords": [
     "tynd",

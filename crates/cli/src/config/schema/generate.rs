@@ -6,7 +6,7 @@ use serde_json::{json, Map, Value};
 
 use crate::config::TyndConfig;
 
-const SCHEMA_ID: &str = "https://tynd-apps.github.io/tynd/schemas/tynd.config.json";
+const SCHEMA_ID: &str = "https://kvnpetit.github.io/tynd/schemas/tynd.config.json";
 
 /// The published schema of `tynd.config.*`.
 pub(super) fn config_schema() -> Value {

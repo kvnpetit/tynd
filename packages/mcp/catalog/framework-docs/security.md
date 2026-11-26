@@ -20,7 +20,7 @@ What's **not** in scope:
 
 - Protecting app secrets from a user with admin access on their own machine. Disk-encryption + OS-level isolation are the right answer, not app-level obfuscation.
 
-Tynd has two startup-only policy layers: [`security`](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/security) for path/URL/process rules, and structured `capabilities` for per-command, per-window, per-webview, per-origin, and per-platform grants.
+Tynd has two startup-only policy layers: [`security`](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/security) for path/URL/process rules, and structured `capabilities` for per-command, per-window, per-webview, per-origin, and per-platform grants.
 
 ## Transport — no TCP, no firewall prompt
 
@@ -48,7 +48,7 @@ A page can add its own `<meta http-equiv="Content-Security-Policy">` tag. The br
 
 Dev-server pages (`tynd dev`) get no CSP from Tynd; the host logs a warning at startup. Test the policy on a bundled build.
 
-If your custom policy sets `script-src`, `default-src` or `worker-src`, include `worker-src 'self' blob:`, or [`workers.spawn`](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/workers) fails because the browser blocks the `blob:` worker. Workers fall back to `script-src` when `worker-src` is absent, and `script-src 'self'` does not allow `blob:`.
+If your custom policy sets `script-src`, `default-src` or `worker-src`, include `worker-src 'self' blob:`, or [`workers.spawn`](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/workers) fails because the browser blocks the `blob:` worker. Workers fall back to `script-src` when `worker-src` is absent, and `script-src 'self'` does not allow `blob:`.
 
 <Callout type="warning">
   **Don't relax CSP without a reason.** Every loosening (`'unsafe-inline'`, `'unsafe-eval'`, broad `connect-src *`) widens the attack surface for any bug that injects HTML into your WebView.
@@ -68,7 +68,7 @@ Rust-side, only **`http://`**, **`https://`**, and **`mailto:`** schemes are acc
 shell.openPath("/Users/me/document.pdf");   // opens in OS default handler
 ```
 
-Passed to the OS's "open with default app" handler, which decides what handles the file. The host first refuses launcher, script, installer and shortcut types (`.exe`, `.bat`, `.ps1`, `.lnk`, `.app`, `.pkg`, `.sh`, `.desktop`, ...) on every OS, matching the final extension of the file name (`script.exe` is refused, `notes.exe.txt` opens with the `.txt` handler). See the [shell API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/shell#openpathpath-promisevoid) for the full list.
+Passed to the OS's "open with default app" handler, which decides what handles the file. The host first refuses launcher, script, installer and shortcut types (`.exe`, `.bat`, `.ps1`, `.lnk`, `.app`, `.pkg`, `.sh`, `.desktop`, ...) on every OS, matching the final extension of the file name (`script.exe` is refused, `notes.exe.txt` opens with the `.txt` handler). See the [shell API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/shell#openpathpath-promisevoid) for the full list.
 
 ## Custom URL schemes — reserved list
 
@@ -76,7 +76,7 @@ If you declare `protocols: ["myapp"]` in `tynd.config.ts`, the following are rej
 
 - `http`, `https`, `file`, `ftp`, `mailto`, `javascript`, `data`, `about`, `blob`, `tynd`, `tynd-bin`
 
-See [Deep Linking](https://tynd-apps.github.io/tynd/docs/v1.0/guides/deep-linking).
+See [Deep Linking](https://kvnpetit.github.io/tynd/docs/v1.0/guides/deep-linking).
 
 ## Secret storage — `keyring` > `store`
 
@@ -103,7 +103,7 @@ const prefs = createStore("com.example.app");
 await prefs.set("theme", "dark");
 ```
 
-See the [Persistence guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/persistence).
+See the [Persistence guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/persistence).
 
 ## Code signing — trust the binary
 
@@ -112,7 +112,7 @@ Unsigned binaries trigger SmartScreen warnings (Windows), Gatekeeper quarantine 
 - **Windows** — `signtool.exe` (SHA-256 + timestamp server).
 - **macOS** — built-in Rust signing with a Developer ID `.p12` / `.pfx`, plus optional App Store Connect API-key notarization.
 
-See the [Code Signing guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/code-signing).
+See the [Code Signing guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/code-signing).
 
 ## Auto-update — Ed25519 signatures
 
@@ -122,7 +122,7 @@ The updater downloads an artifact and **verifies an Ed25519 signature** over the
 - The CLI ships `tynd updater keygen` / `tynd updater sign` so you can produce signed manifests without third-party tools.
 - Native Rust Ed25519 signing and verification use raw 32-byte public keys and raw 64-byte signatures, with no external signing runtime.
 
-See the [Auto-Updates guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/auto-updates).
+See the [Auto-Updates guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/auto-updates).
 
 ## OS-level `process.exec` / `execShell`
 
@@ -133,7 +133,7 @@ process.execShell("ls -la");                       // shell=true — cmd.exe / s
 
 `process.exec` is the **safe default** — arguments are passed as an array, no shell interpolation. `process.execShell` is opt-in (`security.shellExecAllowedCommands` must list the first token), refuses command lines with shell metacharacters (including `% ^ !`) and refuses a caller-supplied `env`. Validate untrusted inputs yourself.
 
-Environment variables passed to `exec` / `spawn` are checked against a denylist of loader and interpreter hooks (`PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `GIT_CONFIG*`, `PYTHONPATH`, `NPM_CONFIG_*`, ...). A denied key makes the call fail. See [process](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/process#options).
+Environment variables passed to `exec` / `spawn` are checked against a denylist of loader and interpreter hooks (`PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `GIT_CONFIG*`, `PYTHONPATH`, `NPM_CONFIG_*`, ...). A denied key makes the call fail. See [process](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/process#options).
 
 ## Structural security — export = exposure
 
@@ -173,10 +173,10 @@ app.start({
 });
 ```
 
-Deny beats allow, and `fs.allow` rules are how a renderer reaches anything outside the app's own directories. Globs: `*` (intra-segment) + `**` (cross-segment). Paths normalized; case-insensitive on Windows (deny rules on macOS too). Only an allow rule starting with an absolute directory reaches outside the app's directories, and only below it; `**/*.pdf` just filters inside them. The trusted backend installs this policy before WebView creation; renderer IPC cannot mutate it. Full reference: [security API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/security).
+Deny beats allow, and `fs.allow` rules are how a renderer reaches anything outside the app's own directories. Globs: `*` (intra-segment) + `**` (cross-segment). Paths normalized; case-insensitive on Windows (deny rules on macOS too). Only an allow rule starting with an absolute directory reaches outside the app's directories, and only below it; `**/*.pdf` just filters inside them. The trusted backend installs this policy before WebView creation; renderer IPC cannot mutate it. Full reference: [security API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/security).
 
 <Callout type="warning">
-  **With no `security` policy configured, the `http` scope is open.** Any granted native command can then reach any URL. File-system access is never open: renderers and plugins reach only the app's own data, config, cache and temp directories (plus the working directory under `tynd dev`), and anything else needs an `fs.allow` rule or a runtime grant. Credential stores, browser profiles and Tynd's own grants file are refused even then. See [default filesystem scope](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/security#default-filesystem-scope). `process.exec` / `spawn` stay refused until `processAllowedBinaries` lists the binary. `tynd validate` and `tynd build` warn when no policy is configured. Configure `allow` lists (and ideally `defaultDeny: true`) before shipping.
+  **With no `security` policy configured, the `http` scope is open.** Any granted native command can then reach any URL. File-system access is never open: renderers and plugins reach only the app's own data, config, cache and temp directories (plus the working directory under `tynd dev`), and anything else needs an `fs.allow` rule or a runtime grant. Credential stores, browser profiles and Tynd's own grants file are refused even then. See [default filesystem scope](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/security#default-filesystem-scope). `process.exec` / `spawn` stay refused until `processAllowedBinaries` lists the binary. `tynd validate` and `tynd build` warn when no policy is configured. Configure `allow` lists (and ideally `defaultDeny: true`) before shipping.
 </Callout>
 
 `http` allow and deny patterns are matched against the **parsed** URL: scheme and host are lowercased and a default port (`:443` for `https`, `:80` for `http`) is dropped before matching, so `HTTPS://API.Example.com:443/v1` matches `https://api.example.com/v1`. Once a policy is configured, URLs with userinfo (`user@host`), backslashes or control characters, or that fail to parse, are refused. Matching is textual: a deny rule on a host or IP is **not** an SSRF boundary, because a DNS name that resolves (or rebinds) to a loopback or private address is not caught by it. IPv4-mapped IPv6 hosts (`[::ffff:127.0.0.1]`) are rewritten to plain IPv4 before matching.
@@ -284,11 +284,11 @@ app.start({
 
 With this configuration the `main` window can call `listFiles` and nothing else from the backend, and only `admin` can call any function. The `backend:` check uses the real window and webview labels and origin, which the host attaches itself; a renderer cannot supply them.
 
-Inside the backend, the same identity is available as `getCallContext()` and to `app.use` middleware, so you can add finer rules in code. See [Backend API](https://tynd-apps.github.io/tynd/docs/v1.0/api/backend#call-context-and-middleware).
+Inside the backend, the same identity is available as `getCallContext()` and to `app.use` middleware, so you can add finer rules in code. See [Backend API](https://kvnpetit.github.io/tynd/docs/v1.0/api/backend#call-context-and-middleware).
 
 ## Runtime scope grants
 
-The `fs` and `http` scopes can be widened after startup, for named paths and URL patterns only: `capabilities.allowPath` / `allowUrl` from the backend (the counterpart of Tauri's `fs` scope `allow_file` and persisted scope), or a file dialog opened with `grantAccess: true` (the user's pick is the consent). Renderers and native plugins cannot call `capabilities.*`, deny rules always win, paths are resolved by the OS when granted, read-only grants admit reads only, and `security.persistGrants` keeps grants across restarts with every entry re-resolved on load. Reference: [Runtime grants](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/security#runtime-grants-backend).
+The `fs` and `http` scopes can be widened after startup, for named paths and URL patterns only: `capabilities.allowPath` / `allowUrl` from the backend (the counterpart of Tauri's `fs` scope `allow_file` and persisted scope), or a file dialog opened with `grantAccess: true` (the user's pick is the consent). Renderers and native plugins cannot call `capabilities.*`, deny rules always win, paths are resolved by the OS when granted, read-only grants admit reads only, and `security.persistGrants` keeps grants across restarts with every entry re-resolved on load. Reference: [Runtime grants](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/security#runtime-grants-backend).
 
 ## Remote content: hard limits
 
@@ -360,6 +360,6 @@ If you let a user pass a path to `fs.readText` / `process.exec`, validate the pa
 
 ## Next
 
-- [Code Signing guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/code-signing)
-- [Auto-Updates guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/auto-updates)
-- [keyring API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/keyring)
+- [Code Signing guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/code-signing)
+- [Auto-Updates guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/auto-updates)
+- [keyring API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/keyring)

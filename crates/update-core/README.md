@@ -38,7 +38,7 @@ implementation is shared instead of being duplicated in each binary.
 - `tynd-bundler` (`crates/bundler`) uses `PatchCompression` when it
   writes patches.
 
-See [Auto-updates](https://tynd-apps.github.io/tynd/docs/v1.0/guides/auto-updates).
+See [Auto-updates](https://kvnpetit.github.io/tynd/docs/v1.0/guides/auto-updates).
 
 ## Validation
 

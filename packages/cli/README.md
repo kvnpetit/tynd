@@ -1,10 +1,10 @@
 # @tynd/cli
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://github.com/tynd-apps/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/tynd-apps/tynd/actions/workflows/ci.yml)
+[![CI](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@tynd/cli.svg)](https://www.npmjs.com/package/@tynd/cli)
 
-The native Rust CLI for [Tynd](https://github.com/tynd-apps/tynd): scaffold,
+The native Rust CLI for [Tynd](https://github.com/kvnpetit/tynd): scaffold,
 develop, build, and ship desktop apps whose application code stays TypeScript.
 
 ## Runtime model

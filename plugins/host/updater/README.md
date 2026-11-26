@@ -23,4 +23,4 @@ it rejects the calls with an error naming
 `updater.install` swaps and relaunches the binary on Windows and Linux, and
 replaces the `.app` bundle from an `app-archive` update on macOS.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/updater/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/updater/

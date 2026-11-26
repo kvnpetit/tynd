@@ -1,10 +1,10 @@
 # Tynd Docs
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../../LICENSE)
-[![Deploy](https://github.com/tynd-apps/tynd/actions/workflows/docs-deploy.yml/badge.svg)](https://github.com/tynd-apps/tynd/actions/workflows/docs-deploy.yml)
-[![Site](https://img.shields.io/website?url=https%3A%2F%2Ftynd-apps.github.io%2Ftynd%2F&label=tynd-apps.github.io%2Ftynd)](https://tynd-apps.github.io/tynd/)
+[![Deploy](https://github.com/kvnpetit/tynd/actions/workflows/docs-deploy.yml/badge.svg)](https://github.com/kvnpetit/tynd/actions/workflows/docs-deploy.yml)
+[![Site](https://img.shields.io/website?url=https%3A%2F%2Fkvnpetit.github.io%2Ftynd%2F&label=kvnpetit.github.io%2Ftynd)](https://kvnpetit.github.io/tynd/)
 
-Astro + Starlight + Pagefind, published to GitHub Pages at <https://tynd-apps.github.io/tynd/>.
+Astro + Starlight + Pagefind, published to GitHub Pages at <https://kvnpetit.github.io/tynd/>.
 
 ## Structure
 

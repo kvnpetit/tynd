@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-biometric` feature. A host without
 it rejects the calls with an error naming
 `@tynd/plugin-biometric`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/biometric/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/biometric/

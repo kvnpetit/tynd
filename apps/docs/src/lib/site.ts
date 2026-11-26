@@ -1,4 +1,4 @@
-const REPO_OWNER = "tynd-apps";
+const REPO_OWNER = "kvnpetit";
 const REPO_NAME = "tynd";
 const REPO = `https://github.com/${REPO_OWNER}/${REPO_NAME}`;
 

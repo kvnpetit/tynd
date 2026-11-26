@@ -94,7 +94,7 @@ fn catalog_entries() -> Vec<Value> {
 
 #[test]
 fn catalog_docs_urls_map_to_existing_pages() {
-    const SITE: &str = "https://tynd-apps.github.io/tynd/docs/";
+    const SITE: &str = "https://kvnpetit.github.io/tynd/docs/";
     let docs = repository_root().join("apps/docs/src/content/docs/docs");
     for entry in catalog_entries() {
         let url = entry["docs"].as_str().expect("catalog entry has docs");

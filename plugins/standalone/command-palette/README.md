@@ -90,4 +90,4 @@ what stays the same: the registry, search, and keyboard trigger.
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

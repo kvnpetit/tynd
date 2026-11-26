@@ -103,4 +103,4 @@ view.onResize(({ cols, rows }) => session.resize(cols, rows))
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

@@ -12,7 +12,7 @@ import { tyndWebview } from "@tynd/core/client";
 `tyndWebview` describes the WebView the code runs in. A native window can host
 several WebViews; each has its own label, IPC route, browsing-data store, and
 `capabilities.webviews` identity. Creating, closing and moving child webviews
-needs the [`multiwindow`](https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/multiwindow) plugin
+needs the [`multiwindow`](https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/multiwindow) plugin
 (`multiwindow.webview.*`), added with `tynd add multiwindow` and imported from
 `@tynd/plugin-multiwindow/client`.
 
@@ -21,7 +21,7 @@ only, plus subframes whose own location is app content. An iframe showing a
 remote site gets no bridge, and the host drops IPC messages that do not carry
 the webview's secret token, so the iframe cannot post through the platform
 message handler either. See
-[Local and remote webviews](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/security#local-and-remote-webviews).
+[Local and remote webviews](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/security#local-and-remote-webviews).
 
 ```ts
 console.log(tyndWebview.label());       // "preview"
@@ -252,8 +252,8 @@ filter is present.
 
 ## Related
 
-- [Window API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/window)
-- [Custom protocols](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/protocols) — `convertFileSrc` for local files, `app.protocol` for backend-served schemes
-- [`multiwindow` plugin](https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/multiwindow) — create and drive child webviews
-- [Multi-Window and Multi-WebView guide](https://tynd-apps.github.io/tynd/docs/v1.0/guides/multi-window)
-- [Security and capabilities](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/security)
+- [Window API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/window)
+- [Custom protocols](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/protocols) — `convertFileSrc` for local files, `app.protocol` for backend-served schemes
+- [`multiwindow` plugin](https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/multiwindow) — create and drive child webviews
+- [Multi-Window and Multi-WebView guide](https://kvnpetit.github.io/tynd/docs/v1.0/guides/multi-window)
+- [Security and capabilities](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/security)

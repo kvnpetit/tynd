@@ -34,7 +34,7 @@ const MAX_CONFIG_BYTES: u64 = 16 * 1024 * 1024;
 #[error("invalid bundler config")]
 #[diagnostic(
     code(tynd::bundler::config),
-    url("https://tynd-apps.github.io/tynd/docs/v1.0/cli/config"),
+    url("https://kvnpetit.github.io/tynd/docs/v1.0/cli/config"),
     help("check the JSON config piped in by `@tynd/cli`; the offending field is shown above")
 )]
 struct ConfigParseError {

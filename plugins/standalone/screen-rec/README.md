@@ -211,4 +211,4 @@ that don't need recording skip the entire `scap` build chain.
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

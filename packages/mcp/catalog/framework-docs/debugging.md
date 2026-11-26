@@ -56,7 +56,7 @@ bunx @tynd/mcp call ipc.recent --args '{"n":20}'
 bunx @tynd/mcp tap
 ```
 
-Evaluation and external-launch capabilities remain opt-in through MCP flags. Discovery defaults to loopback endpoints. See [`tynd-mcp`](https://tynd-apps.github.io/tynd/docs/v1.0/cli/mcp) for the flags and environment variables.
+Evaluation and external-launch capabilities remain opt-in through MCP flags. Discovery defaults to loopback endpoints. See [`tynd-mcp`](https://kvnpetit.github.io/tynd/docs/v1.0/cli/mcp) for the flags and environment variables.
 
 ## Project diagnostics
 
@@ -100,6 +100,6 @@ The discovery/debug socket is a development feature. The debug protocol is **dis
 
 ## Related
 
-- [Troubleshooting](https://tynd-apps.github.io/tynd/docs/v1.0/troubleshooting)
-- [Observability](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/observability)
-- [IPC Model](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/ipc)
+- [Troubleshooting](https://kvnpetit.github.io/tynd/docs/v1.0/troubleshooting)
+- [Observability](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/observability)
+- [IPC Model](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/ipc)

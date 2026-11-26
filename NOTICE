@@ -2,7 +2,7 @@ Tynd
 Copyright 2026 Kevin Petit (@kvnpetit)
 
 This product includes software developed by Kevin Petit (@kvnpetit) and
-the Tynd contributors (https://github.com/tynd-apps/tynd).
+the Tynd contributors (https://github.com/kvnpetit/tynd).
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -102,4 +102,4 @@ Applications packaged by `tynd build` contain the selected Bun runtime:
 
 Native plugins are Rust crates linked into an application-specific host.
 JavaScript plugins run with the application's Bun backend. Official plugins
-live under https://github.com/tynd-apps/tynd/tree/main/plugins/standalone.
+live under https://github.com/kvnpetit/tynd/tree/main/plugins/standalone.

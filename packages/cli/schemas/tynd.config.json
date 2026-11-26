@@ -718,10 +718,10 @@
       "type": "object"
     }
   },
-  "$id": "https://tynd-apps.github.io/tynd/schemas/tynd.config.json",
+  "$id": "https://kvnpetit.github.io/tynd/schemas/tynd.config.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Tynd application configuration, as written in `tynd.config.{ts,js,json,jsonc,yaml,toml}`. Full reference: <https://tynd-apps.github.io/tynd/docs/v1.0/cli/config>",
+  "description": "Tynd application configuration, as written in `tynd.config.{ts,js,json,jsonc,yaml,toml}`. Full reference: <https://kvnpetit.github.io/tynd/docs/v1.0/cli/config>",
   "properties": {
     "$schema": {
       "description": "Editor-only JSON Schema reference. Ignored by the CLI.",

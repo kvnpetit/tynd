@@ -56,7 +56,7 @@ Internally, stable contracts are isolated from the platform-heavy host:
 
 Your exported functions, typed emitters, and lifecycle hooks run in Bun. You get Bun + Node.js globals (`fetch`, `Bun.*`, `node:*`), JIT, and native npm bindings.
 
-The host carries the core plus the APIs of the declared host-backed plugins and the native crates of the declared standalone plugins; `tynd dev` and `tynd build` compile it for the app. The JavaScript runtime is always Bun. See [Runtime](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/runtimes).
+The host carries the core plus the APIs of the declared host-backed plugins and the native crates of the declared standalone plugins; `tynd dev` and `tynd build` compile it for the app. The JavaScript runtime is always Bun. See [Runtime](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/runtimes).
 
 ## Minimal core and composition
 
@@ -118,6 +118,6 @@ Frontend (WebView)  ──postMessage──►  Rust host (IPC handler)  ──s
 
 ## Next
 
-- [Runtime](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/runtimes) — Bun and custom native hosts.
-- [IPC Model](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/ipc) — call / event / stream flow in detail.
-- [Security](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/security) — CSP, scheme allowlists, structural model.
+- [Runtime](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/runtimes) — Bun and custom native hosts.
+- [IPC Model](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/ipc) — call / event / stream flow in detail.
+- [Security](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/security) — CSP, scheme allowlists, structural model.

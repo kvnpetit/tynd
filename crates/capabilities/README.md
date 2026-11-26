@@ -31,7 +31,7 @@ decide whether a command is allowed.
 each IPC call against the `Resolved` set in `app/dispatch.rs`. Command keys for
 native plugins are built with `plugin_command_key(plugin, method)`.
 
-See [Security](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/security)
+See [Security](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/security)
 for the user-facing model.
 
 ## Validation

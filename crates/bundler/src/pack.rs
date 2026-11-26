@@ -79,7 +79,7 @@ pub(crate) enum PackError {
     #[error("host binary not found: {path}")]
     #[diagnostic(
         code(tynd::bundler::pack::missing_host),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
         help(
             "the `host_binary` field must point at a built `tynd-runtime.exe` (or \
              platform equivalent). Run the relevant cargo build step first, then re-run `tynd \
@@ -91,7 +91,7 @@ pub(crate) enum PackError {
     #[error("backend bundle not found: {path}")]
     #[diagnostic(
         code(tynd::bundler::pack::missing_backend),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
         help(
             "the `backend_bundle` field must point at a Bun-bundled JS file (e.g. produced by \
              `bun build src/backend.ts`)."
@@ -102,7 +102,7 @@ pub(crate) enum PackError {
     #[error("frontend directory not found: {path}")]
     #[diagnostic(
         code(tynd::bundler::pack::missing_frontend),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
         help(
             "the `frontend_dir` field must point at the built frontend's output directory (Vite's \
              `dist/`, Next-export's `out/`, ...)."
@@ -113,7 +113,7 @@ pub(crate) enum PackError {
     #[error("icon source unsupported: {path}")]
     #[diagnostic(
         code(tynd::bundler::pack::bad_icon),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/icons-branding"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/icons-branding"),
         help("supported sources: .svg, .png, .ico (any case).")
     )]
     BadIcon { path: String },
@@ -121,7 +121,7 @@ pub(crate) enum PackError {
     #[error("icon render failed: {cause}")]
     #[diagnostic(
         code(tynd::bundler::pack::icon_render),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/guides/icons-branding"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/guides/icons-branding"),
         help(
             "the icon source could not be parsed/rasterised. For SVG, ensure the file is \
              well-formed (try opening it in a browser); for PNG, the file must be square."
@@ -132,7 +132,7 @@ pub(crate) enum PackError {
     #[error("path too long ({len} bytes): {path}")]
     #[diagnostic(
         code(tynd::bundler::pack::path_too_long),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
         help(
             "TYNDPKG encodes path lengths as u16 (max 65 535 bytes). Move/rename the offending \
              asset closer to the project root."
@@ -143,7 +143,7 @@ pub(crate) enum PackError {
     #[error("asset too large ({len} bytes): {path}")]
     #[diagnostic(
         code(tynd::bundler::pack::asset_too_large),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
         help(
             "TYNDPKG encodes data lengths as u32 (max ~4 GiB). Split or compress the asset before \
              packing."
@@ -170,7 +170,7 @@ pub(crate) enum PackError {
     #[error("PE patch failed: {cause}")]
     #[diagnostic(
         code(tynd::bundler::pack::pe_patch),
-        url("https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
+        url("https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg"),
         help(
             "the host binary could not be patched. Ensure `host_binary` is a valid PE32/PE32+ \
              executable; non-Windows targets should leave `windows.embed_icon` and \

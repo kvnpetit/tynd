@@ -23,4 +23,4 @@ it rejects the calls with an error naming
 The `TrayConfig` type is exported from the package root:
 `import type { TrayConfig } from "@tynd/plugin-tray"`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/tray/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/tray/

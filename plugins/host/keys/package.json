@@ -4,10 +4,10 @@
   "description": "Tynd keys plugin facade.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
-  "homepage": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/keys",
+  "homepage": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/keys",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
     "directory": "plugins/host/keys"
   },
   "private": false,

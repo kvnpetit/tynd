@@ -31,7 +31,7 @@ describe("mdxToMarkdown", () => {
     expect(mdxToMarkdown(source)).toBe(
       [
         '<Callout type="info">',
-        "See [IPC](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/ipc).",
+        "See [IPC](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/ipc).",
         "</Callout>",
         '<Callout type="warning">careful</Callout>',
       ].join("\n"),

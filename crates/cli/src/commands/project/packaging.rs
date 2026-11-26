@@ -42,7 +42,7 @@ pub(in crate::commands) fn build(args: &BuildArgs) -> Result<()> {
     if requested_targets.is_some() {
         ensure!(
             loaded.config.bundle.is_some(),
-            "installer bundles require a `bundle` section with `bundle.identifier` in tynd.config.ts, for example:\n\n  bundle: {{\n    identifier: \"com.example.myapp\",\n    displayName: \"My App\",\n  }},\n\nSee https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling#required-config"
+            "installer bundles require a `bundle` section with `bundle.identifier` in tynd.config.ts, for example:\n\n  bundle: {{\n    identifier: \"com.example.myapp\",\n    displayName: \"My App\",\n  }},\n\nSee https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling#required-config"
         );
     }
     ensure_plugin_imports_declared(&loaded)?;

@@ -1,6 +1,6 @@
 # @tynd/core
 
-The backend API and frontend client for [Tynd](https://github.com/tynd-apps/tynd) — desktop apps in TypeScript.
+The backend API and frontend client for [Tynd](https://github.com/kvnpetit/tynd) — desktop apps in TypeScript.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ curl -fsSL https://bun.sh/install | bash
 powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
-**[Rust](https://rustup.rs) 1.95 or newer** is also required, with the platform build tools: `tynd dev` and `tynd build` compile each app's native host with Cargo. You write no Rust. See [Installation](https://tynd-apps.github.io/tynd/docs/v1.0/getting-started/installation).
+**[Rust](https://rustup.rs) 1.95 or newer** is also required, with the platform build tools: `tynd dev` and `tynd build` compile each app's native host with Cargo. You write no Rust. See [Installation](https://kvnpetit.github.io/tynd/docs/v1.0/getting-started/installation).
 
 ```bash
 # macOS / Linux
@@ -155,7 +155,7 @@ their own repositories through npm/git dependencies; their manifest omits
 
 Other entry points: `@tynd/core/client/bridge` (`osCall`, `osOn`, `binFetch`, … — the host bridge plugin clients build on), `@tynd/core/plugin` (`definePlugin`, `createPluginClient`, no Bun or Node imports), `@tynd/core/testing` (`installTyndMock` for frontend unit tests) and `@tynd/core/env` (ambient types).
 
-**Full reference:** [API docs](https://tynd-apps.github.io/tynd/docs/v1.0/api).
+**Full reference:** [API docs](https://kvnpetit.github.io/tynd/docs/v1.0/api).
 
 ## Runtime
 

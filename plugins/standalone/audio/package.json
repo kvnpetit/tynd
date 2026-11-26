@@ -4,15 +4,15 @@
   "description": "Audio capture (mic), playback, and WAV I/O for Tynd apps — native via cpal + hound.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
-  "homepage": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/audio",
+  "homepage": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/audio",
   "funding": "https://github.com/sponsors/kvnpetit",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
     "directory": "plugins/standalone/audio"
   },
   "bugs": {
-    "url": "https://github.com/tynd-apps/tynd/issues"
+    "url": "https://github.com/kvnpetit/tynd/issues"
   },
   "keywords": [
     "tynd",

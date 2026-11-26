@@ -33,7 +33,7 @@ built with `tynd build --debug-protocol`. `tynd-mcp` (in `crates/cli`)
 reuses this crate's framing as a client; `@tynd/test` speaks the same protocol
 from TypeScript.
 
-See [Debugging](https://tynd-apps.github.io/tynd/docs/v1.0/guides/debugging).
+See [Debugging](https://kvnpetit.github.io/tynd/docs/v1.0/guides/debugging).
 
 ## Validation
 

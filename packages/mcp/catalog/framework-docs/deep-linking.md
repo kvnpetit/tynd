@@ -57,7 +57,7 @@ singleInstance.onOpenUrl((url) => {
 
 `onOpenUrl` fires both on **cold start** (argv contains the URL) and on **duplicate launch** (the primary receives the forwarded URL).
 
-The [`deep-link`](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/deepLink) official plugin (`tynd add deep-link`) offers the same flow without single-instance code: `deepLink.onUrl(handler)` receives the cold-start URL and URLs forwarded from later launches, `deepLink.getStartupUrl()` reads the launch URL once, and `register` / `unregister` / `isRegistered` manage a scheme at runtime.
+The [`deep-link`](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/deepLink) official plugin (`tynd add deep-link`) offers the same flow without single-instance code: `deepLink.onUrl(handler)` receives the cold-start URL and URLs forwarded from later launches, `deepLink.getStartupUrl()` reads the launch URL once, and `register` / `unregister` / `isRegistered` manage a scheme at runtime.
 
 ## Testing
 
@@ -162,7 +162,7 @@ bundle: {
 }
 ```
 
-Receive the files with [`app.onOpenFile`](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/app): it delivers
+Receive the files with [`app.onOpenFile`](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/app): it delivers
 the file that launched the app (buffered until you subscribe), macOS "Open
 with" requests, and, with the `single-instance` capability enabled, paths
 forwarded by later launches on Windows and Linux.
@@ -178,5 +178,5 @@ The raw command line stays available through `cli.raw()` and
 
 ## Next
 
-- [Single Instance](https://tynd-apps.github.io/tynd/docs/v1.0/guides/single-instance)
-- [singleInstance API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/single-instance)
+- [Single Instance](https://kvnpetit.github.io/tynd/docs/v1.0/guides/single-instance)
+- [singleInstance API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/single-instance)

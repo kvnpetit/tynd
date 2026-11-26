@@ -58,7 +58,7 @@ Every project generates `.tynd/build/Cargo.toml` and invokes `cargo build`. When
 
 ### First build is slow
 
-The first `tynd dev` or `tynd build` on a machine compiles the whole host and takes a few minutes (the CLI prints `Compiling Tynd host (first build can take a few minutes; dependencies are cached for every project in <path>)…`). Dependencies go to the [shared host build cache](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/build-pipeline#shared-host-build-cache), so later projects using the same host sources, Rust version, and target reuse them. Later builds are incremental, and a `tynd dev` run whose inputs did not change skips Cargo entirely. A Rust upgrade or a new `@tynd/host-src` version recompiles the dependencies once. In CI, set `TYND_CACHE_DIR` to a workspace path and cache it.
+The first `tynd dev` or `tynd build` on a machine compiles the whole host and takes a few minutes (the CLI prints `Compiling Tynd host (first build can take a few minutes; dependencies are cached for every project in <path>)…`). Dependencies go to the [shared host build cache](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/build-pipeline#shared-host-build-cache), so later projects using the same host sources, Rust version, and target reuse them. Later builds are incremental, and a `tynd dev` run whose inputs did not change skips Cargo entirely. A Rust upgrade or a new `@tynd/host-src` version recompiles the dependencies once. In CI, set `TYND_CACHE_DIR` to a workspace path and cache it.
 
 ### Host binary cannot be replaced (Windows)
 
@@ -79,7 +79,7 @@ export default {
 };
 ```
 
-Use [`tynd config show`](https://tynd-apps.github.io/tynd/docs/v1.0/cli/config/show) to inspect the merged/resolved value and [`tynd validate`](https://tynd-apps.github.io/tynd/docs/v1.0/cli/validate) for path checks.
+Use [`tynd config show`](https://kvnpetit.github.io/tynd/docs/v1.0/cli/config/show) to inspect the merged/resolved value and [`tynd validate`](https://kvnpetit.github.io/tynd/docs/v1.0/cli/validate) for path checks.
 
 ### Remote config `extends` rejected
 
@@ -129,7 +129,7 @@ The build creates `.tynd/cache/bundle.dist.js` and frontend production output.
 
 ### WebView unavailable at application launch
 
-Tynd does not preflight WebView availability through the registry. Windows installers default to `skip`, while supported Windows/macOS systems normally provide WebView2/WKWebView; Linux requires WebKitGTK runtime packages. If a locked-down Windows environment lacks Evergreen WebView2, install it or explicitly choose another Windows installer distribution mode. See [Bundling](https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling#windows-webview2-distribution).
+Tynd does not preflight WebView availability through the registry. Windows installers default to `skip`, while supported Windows/macOS systems normally provide WebView2/WKWebView; Linux requires WebKitGTK runtime packages. If a locked-down Windows environment lacks Evergreen WebView2, install it or explicitly choose another Windows installer distribution mode. See [Bundling](https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling#windows-webview2-distribution).
 
 ## Build and packaging
 
@@ -227,4 +227,4 @@ tynd info --json
 tynd validate --json
 ```
 
-Then open a [GitHub issue](https://github.com/tynd-apps/tynd/issues).
+Then open a [GitHub issue](https://github.com/kvnpetit/tynd/issues).

@@ -4,10 +4,10 @@
   "description": "Tynd OS credential-store capability backed by the core host.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
-  "homepage": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/keyring",
+  "homepage": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/keyring",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
     "directory": "plugins/host/keyring"
   },
   "private": false,

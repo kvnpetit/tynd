@@ -140,4 +140,4 @@ automatically only for apps that install this plugin.
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

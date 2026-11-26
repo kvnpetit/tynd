@@ -14,5 +14,5 @@ First stable release.
 ### Added
 
 - Documentation site on Astro + Starlight, published to GitHub Pages at
-  https://tynd-apps.github.io/tynd/, with `llms.txt` / `llms-full.txt` and the
+  https://kvnpetit.github.io/tynd/, with `llms.txt` / `llms-full.txt` and the
   config schema at `/schemas/tynd.config.json`.

@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-window-state` feature. A host with
 it rejects the calls with an error naming
 `@tynd/plugin-window-state`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/window-state/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/window-state/

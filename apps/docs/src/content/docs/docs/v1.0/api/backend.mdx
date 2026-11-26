@@ -321,7 +321,7 @@ Plugins built with `defineTyndPlugin` (from `@tynd/plugin-sdk/hooks`) can declar
 | `ipc:after(cx, cmd, result)` | After each successful call | Errors are logged and never change the result |
 | `window:created(cx, { label })` / `window:closed(cx, { label })` | When a window is created or destroyed | Needs a host that sends window events |
 
-`cx` is `{ name, log: { debug, info, warn, error }, state }`. A hook that throws is logged and does not block other plugins (except `ipc:before`, which rejects the call). See the [`@tynd/plugin-sdk` README](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk) for the full contract.
+`cx` is `{ name, log: { debug, info, warn, error }, state }`. A hook that throws is logged and does not block other plugins (except `ipc:before`, which rejects the call). See the [`@tynd/plugin-sdk` README](https://github.com/kvnpetit/tynd/tree/main/packages/plugin-sdk) for the full contract.
 
 ## Plugins — `definePlugin`
 

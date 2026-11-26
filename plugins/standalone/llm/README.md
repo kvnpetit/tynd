@@ -276,4 +276,4 @@ llama.cpp footprint.
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

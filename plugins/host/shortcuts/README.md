@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-shortcuts` feature. A host without
 it rejects the calls with an error naming
 `@tynd/plugin-shortcuts`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/shortcuts/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/shortcuts/

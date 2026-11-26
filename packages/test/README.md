@@ -37,4 +37,4 @@ with `tynd build --debug-protocol`; packaged apps refuse to start the debug serv
 
 Screenshots (`screenshot.window`) need a host built with the `debug-screenshot` feature.
 
-Guides: [Testing](https://tynd-apps.github.io/tynd/docs/v1.0/guides/testing) and [`tynd test`](https://tynd-apps.github.io/tynd/docs/v1.0/cli/test).
+Guides: [Testing](https://kvnpetit.github.io/tynd/docs/v1.0/guides/testing) and [`tynd test`](https://kvnpetit.github.io/tynd/docs/v1.0/cli/test).

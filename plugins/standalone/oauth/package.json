@@ -4,15 +4,15 @@
   "description": "Localhost OAuth callback receiver for Tynd apps — one-shot HTTP listener, parsed redirect params.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
-  "homepage": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/oauth",
+  "homepage": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/oauth",
   "funding": "https://github.com/sponsors/kvnpetit",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
     "directory": "plugins/standalone/oauth"
   },
   "bugs": {
-    "url": "https://github.com/tynd-apps/tynd/issues"
+    "url": "https://github.com/kvnpetit/tynd/issues"
   },
   "keywords": [
     "tynd",

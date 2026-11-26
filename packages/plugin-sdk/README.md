@@ -1,10 +1,10 @@
 # @tynd/plugin-sdk
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://github.com/tynd-apps/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/tynd-apps/tynd/actions/workflows/ci.yml)
+[![CI](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@tynd/plugin-sdk.svg)](https://www.npmjs.com/package/@tynd/plugin-sdk)
 
-Build [Tynd](https://github.com/tynd-apps/tynd) plugins — JavaScript-only or with native Rust code.
+Build [Tynd](https://github.com/kvnpetit/tynd) plugins — JavaScript-only or with native Rust code.
 
 ```bash
 bun add @tynd/plugin-sdk @tynd/core
@@ -643,7 +643,7 @@ the `Arc` out and run lock-free. Also available:
 
 Canonical usage in the plugin tree:
 
-- [`plugins/standalone/audio/native/src/lib.rs`](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/audio/native/src/lib.rs) — process-owned audio stream registry
+- [`plugins/standalone/audio/native/src/lib.rs`](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone/audio/native/src/lib.rs) — process-owned audio stream registry
 
 ### `PluginCx`
 
@@ -810,7 +810,7 @@ plain `_cx` without the type annotation isn't matched and falls through
 to a regular field. The arg is threaded into the dispatch arm only when
 present. `async fn` command bodies work too — the generated arm wraps
 them in
-[`__internal::block_on`](https://github.com/tynd-apps/tynd/blob/main/crates/plugin-sdk/src/lib.rs) (no tokio runtime; see the
+[`__internal::block_on`](https://github.com/kvnpetit/tynd/blob/main/crates/plugin-sdk/src/lib.rs) (no tokio runtime; see the
 WARNING in that doc).
 
 Typed plugins may also define the reserved, untagged methods
@@ -1068,21 +1068,21 @@ Community plugins omit `tynd.kind` (official plugins set `"host"` or `"standalon
 
 Real-world plugins built on this SDK:
 
-- [`@tynd/plugin-sql`](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/sql) — bundled SQLite, stateful handles
-- [`@tynd/plugin-terminal`](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/terminal) — PTY sessions, `cx.spawn_interval` polling pattern
-- [`@tynd/plugin-command-palette`](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone/command-palette) — pure-JS, complex client-side state
+- [`@tynd/plugin-sql`](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone/sql) — bundled SQLite, stateful handles
+- [`@tynd/plugin-terminal`](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone/terminal) — PTY sessions, `cx.spawn_interval` polling pattern
+- [`@tynd/plugin-command-palette`](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone/command-palette) — pure-JS, complex client-side state
 
 Stable host capabilities such as
-[`@tynd/plugin-keyring`](https://github.com/tynd-apps/tynd/tree/main/plugins/host/keyring)
+[`@tynd/plugin-keyring`](https://github.com/kvnpetit/tynd/tree/main/plugins/host/keyring)
 are host-backed official plugins, not examples of custom native plugin dispatch.
 
 ## Related repos
 
-- [`@tynd/cli`](https://github.com/tynd-apps/tynd/tree/main/packages/cli) — scaffold, dev, build, ship
-- [`@tynd/core`](https://github.com/tynd-apps/tynd) (in `tynd-apps/tynd`) — core OS APIs and runtime
-- [Standalone official plugins](https://github.com/tynd-apps/tynd/tree/main/plugins/standalone) — sql, terminal, llm, whisper, …
-- [`@tynd/mcp`](https://github.com/tynd-apps/tynd/tree/main/packages/mcp) — Model Context Protocol server
-- [Documentation site](https://github.com/tynd-apps/tynd/tree/main/apps/docs)
+- [`@tynd/cli`](https://github.com/kvnpetit/tynd/tree/main/packages/cli) — scaffold, dev, build, ship
+- [`@tynd/core`](https://github.com/kvnpetit/tynd) (in `kvnpetit/tynd`) — core OS APIs and runtime
+- [Standalone official plugins](https://github.com/kvnpetit/tynd/tree/main/plugins/standalone) — sql, terminal, llm, whisper, …
+- [`@tynd/mcp`](https://github.com/kvnpetit/tynd/tree/main/packages/mcp) — Model Context Protocol server
+- [Documentation site](https://github.com/kvnpetit/tynd/tree/main/apps/docs)
 
 ## License
 

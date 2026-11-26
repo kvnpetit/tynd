@@ -29,7 +29,7 @@ JavaScript always executes on Bun.
 
 `tynd dev` compiles the host with the Cargo `dev` profile and `tynd build` with
 `release`, from the host package generated in `.tynd/build`; Cargo output goes to
-the [shared host build cache](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/build-pipeline#shared-host-build-cache). The first build takes a few minutes; a dev
+the [shared host build cache](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/build-pipeline#shared-host-build-cache). The first build takes a few minutes; a dev
 run whose inputs did not change skips Cargo. `tynd start` runs the release host,
 so it needs a prior `tynd build`.
 
@@ -43,5 +43,5 @@ export default {
 ```
 
 Compiling the host requires Bun 1.3+ and Rust 1.95+; see
-[Installation](https://tynd-apps.github.io/tynd/docs/v1.0/getting-started/installation). You write no Rust
+[Installation](https://kvnpetit.github.io/tynd/docs/v1.0/getting-started/installation). You write no Rust
 application code.

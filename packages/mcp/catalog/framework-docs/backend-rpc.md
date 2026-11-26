@@ -53,7 +53,7 @@ Under the hood `createBackend` is a thin `Proxy` that sends the call over `windo
 - Primitives: `string`, `number`, `boolean`, `null`, `undefined`, `bigint`
 - Arrays, plain objects, nested structures, cyclic references
 - `Date`, `Map`, `Set`, `RegExp`, `URL`, `URLSearchParams`
-- `ArrayBuffer`, typed arrays (`Uint8Array`, ...) and `DataView` — encoded as base64 text inside the frame (about 4/3 of the size, plus JSON escaping). A frame is capped at 8 MiB, so keep binary payloads under about 5 MiB per call and use [binary IPC](https://tynd-apps.github.io/tynd/docs/v1.0/guides/binary-data) for anything larger
+- `ArrayBuffer`, typed arrays (`Uint8Array`, ...) and `DataView` — encoded as base64 text inside the frame (about 4/3 of the size, plus JSON escaping). A frame is capped at 8 MiB, so keep binary payloads under about 5 MiB per call and use [binary IPC](https://kvnpetit.github.io/tynd/docs/v1.0/guides/binary-data) for anything larger
 - `Channel<T>` arguments, which the backend pushes messages to (see below)
 
 **Not serializable:** functions, `Error` objects and class instances (non-plain objects). Encoding throws; convert them to plain data first.
@@ -154,7 +154,7 @@ for await (const n of stream) console.log(n);   // 1, 2, 3, 4, 5
 console.log(await stream);                      // "done"
 ```
 
-See [Streaming RPC](https://tynd-apps.github.io/tynd/docs/v1.0/guides/streaming) for flow control, cancellation, and multi-window routing.
+See [Streaming RPC](https://kvnpetit.github.io/tynd/docs/v1.0/guides/streaming) for flow control, cancellation, and multi-window routing.
 
 ## Channels — push to the caller
 
@@ -182,7 +182,7 @@ const progress = new Channel<{ done: number; total: number }>(({ done, total }) 
 const count = await api.importFiles(paths, progress);
 ```
 
-Use a channel for push-style progress next to a normal result, and an async generator when the frontend pulls a sequence with back-pressure. Details: [`Channel<T>`](https://tynd-apps.github.io/tynd/docs/v1.0/api/backend#channelt).
+Use a channel for push-style progress next to a normal result, and an async generator when the frontend pulls a sequence with back-pressure. Details: [`Channel<T>`](https://kvnpetit.github.io/tynd/docs/v1.0/api/backend#channelt).
 
 ## Cancellation and timeouts
 
@@ -201,7 +201,7 @@ export async function search(query: string) {
 }
 ```
 
-Aborting rejects the call with `signal.reason` (an `AbortError`); a timeout rejects with a `TyndIpcError` of code `TIMEOUT`. Either way, and also when the caller's page navigates or its window closes, the backend's `signal` aborts and the handler's result is dropped. See [Cancellation](https://tynd-apps.github.io/tynd/docs/v1.0/api/backend#cancellation).
+Aborting rejects the call with `signal.reason` (an `AbortError`); a timeout rejects with a `TyndIpcError` of code `TIMEOUT`. Either way, and also when the caller's page navigates or its window closes, the backend's `signal` aborts and the handler's result is dropped. See [Cancellation](https://kvnpetit.github.io/tynd/docs/v1.0/api/backend#cancellation).
 
 ## Calling between backend functions
 
@@ -288,10 +288,10 @@ const file = path.join(await os.appConfigDir(), "config.json");
 const config = JSON.parse(await fs.readText(file));
 ```
 
-`fs` belongs to `@tynd/plugin-fs`; install it with `tynd add fs`. When backend code needs a native host API, call it with [`hostCall`](https://tynd-apps.github.io/tynd/docs/v1.0/api/backend#hostcallapi-method-args-opts) from `@tynd/core`.
+`fs` belongs to `@tynd/plugin-fs`; install it with `tynd add fs`. When backend code needs a native host API, call it with [`hostCall`](https://kvnpetit.github.io/tynd/docs/v1.0/api/backend#hostcallapi-method-args-opts) from `@tynd/core`.
 
 ## Next
 
-- [Streaming RPC](https://tynd-apps.github.io/tynd/docs/v1.0/guides/streaming)
-- [Binary Data](https://tynd-apps.github.io/tynd/docs/v1.0/guides/binary-data)
-- [Backend API reference](https://tynd-apps.github.io/tynd/docs/v1.0/api/backend)
+- [Streaming RPC](https://kvnpetit.github.io/tynd/docs/v1.0/guides/streaming)
+- [Binary Data](https://kvnpetit.github.io/tynd/docs/v1.0/guides/binary-data)
+- [Backend API reference](https://kvnpetit.github.io/tynd/docs/v1.0/api/backend)

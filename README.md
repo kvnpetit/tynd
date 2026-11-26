@@ -3,7 +3,7 @@
 Tynd is a TypeScript-first desktop app framework built on native OS webviews,
 a Rust host and native Rust developer tooling. Bun runs application code.
 
-Documentation: <https://tynd-apps.github.io/tynd/>
+Documentation: <https://kvnpetit.github.io/tynd/>
 
 ## Quick Start
 
@@ -18,8 +18,8 @@ tynd dev        # run with hot reload
 tynd build      # produce the release binary
 ```
 
-See [Installation](https://tynd-apps.github.io/tynd/docs/v1.0/getting-started/installation)
-and [First app](https://tynd-apps.github.io/tynd/docs/v1.0/getting-started/first-app).
+See [Installation](https://kvnpetit.github.io/tynd/docs/v1.0/getting-started/installation)
+and [First app](https://kvnpetit.github.io/tynd/docs/v1.0/getting-started/first-app).
 
 ## At A Glance
 
@@ -68,7 +68,7 @@ tynd updater release <version>
 Other commands: `remove`, `config show`, `explain`, `size`, `report`,
 `profile`, `completions`, the plugin group `plugin new|check|dev|list|types`
 and the updater group `updater keygen|sign|publish|release|server`. See the
-[CLI reference](https://tynd-apps.github.io/tynd/docs/v1.0/cli) or
+[CLI reference](https://kvnpetit.github.io/tynd/docs/v1.0/cli) or
 `tynd <command> --help`.
 
 ## Config
@@ -100,7 +100,7 @@ export default {
 
 Other keys include `extends`, `devCommandArgs`, `protocols`, `sidecars`,
 `bundle`, `updater` and `observability`. The
-[config reference](https://tynd-apps.github.io/tynd/docs/v1.0/cli/config) lists
+[config reference](https://kvnpetit.github.io/tynd/docs/v1.0/cli/config) lists
 every key and its default.
 
 ## Native Tooling Distribution

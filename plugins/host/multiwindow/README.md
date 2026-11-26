@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-multiwindow` feature. A host witho
 it rejects the calls with an error naming
 `@tynd/plugin-multiwindow`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/multiwindow/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/multiwindow/

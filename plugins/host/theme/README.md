@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-theme` feature. A host without
 it rejects the calls with an error naming
 `@tynd/plugin-theme`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/theme/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/theme/

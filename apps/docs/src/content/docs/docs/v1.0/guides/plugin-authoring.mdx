@@ -87,7 +87,7 @@ impl Plugin {
 }
 ```
 
-`native/src/bin/gen-types.rs` prints the TypeScript catalog (`gen_types_bin!`), and `echo.gen.ts` holds its output. Native commands are called from the webview only: the Bun backend cannot reach the crate. The [Plugin SDK README](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk#readme) documents command arguments, `PluginCx`, background work and capability permissions.
+`native/src/bin/gen-types.rs` prints the TypeScript catalog (`gen_types_bin!`), and `echo.gen.ts` holds its output. Native commands are called from the webview only: the Bun backend cannot reach the crate. The [Plugin SDK README](https://github.com/kvnpetit/tynd/tree/main/packages/plugin-sdk#readme) documents command arguments, `PluginCx`, background work and capability permissions.
 
 ## 2. The `tynd` manifest
 
@@ -209,4 +209,4 @@ tynd add @acme/plugin-echo
 
 - [Plugins overview](/docs/v1.0/api/plugins)
 - [`@tynd/core/client/bridge`](/docs/v1.0/api/plugins/bridge)
-- [Plugin SDK README](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk#readme)
+- [Plugin SDK README](https://github.com/kvnpetit/tynd/tree/main/packages/plugin-sdk#readme)

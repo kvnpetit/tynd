@@ -4,7 +4,7 @@
 
 /**
  * Tynd application configuration, as written in `tynd.config.{ts,js,json,jsonc,yaml,toml}`. Full
- * reference: <https://tynd-apps.github.io/tynd/docs/v1.0/cli/config>
+ * reference: <https://kvnpetit.github.io/tynd/docs/v1.0/cli/config>
  */
 export interface TyndConfig {
   /** Editor-only JSON Schema reference. Ignored by the CLI. */

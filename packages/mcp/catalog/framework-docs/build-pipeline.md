@@ -110,7 +110,7 @@ The pack step combines:
 - optional fixed WebView2 runtime;
 - package metadata.
 
-The payload uses the [TYNDPKG format](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/tyndpkg).
+The payload uses the [TYNDPKG format](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/tyndpkg).
 
 ## Installers and signing
 
@@ -128,6 +128,6 @@ Windows signing invokes `signtool` from `PATH` for eligible executable/installer
 
 ## Next
 
-- [Bundling](https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling)
-- [Code Signing](https://tynd-apps.github.io/tynd/docs/v1.0/guides/code-signing)
-- [Security](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/security)
+- [Bundling](https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling)
+- [Code Signing](https://kvnpetit.github.io/tynd/docs/v1.0/guides/code-signing)
+- [Security](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/security)

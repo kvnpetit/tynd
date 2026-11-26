@@ -17,7 +17,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export const DOCS_SOURCE_DIR = "apps/docs/src/content/docs/docs/v1.0";
-export const DOCS_BASE_URL = "https://tynd-apps.github.io/tynd/docs/";
+export const DOCS_BASE_URL = "https://kvnpetit.github.io/tynd/docs/";
 const CATALOG_DIR = "packages/mcp/catalog";
 
 /** Catalog slug (stable MCP resource name) -> docs page, relative to `DOCS_SOURCE_DIR`. */

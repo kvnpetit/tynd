@@ -140,4 +140,4 @@ from exhausting host memory.
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

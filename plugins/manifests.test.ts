@@ -18,7 +18,7 @@ interface Manifest {
 }
 
 const pluginsRoot = import.meta.dir;
-const HOMEPAGE_BASE = "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/";
+const HOMEPAGE_BASE = "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/";
 
 const plugins = (["host", "standalone"] as const).flatMap((kind: Kind) =>
   readdirSync(join(pluginsRoot, kind), { withFileTypes: true })

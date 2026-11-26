@@ -11,7 +11,7 @@
     "permissions": ["host:fs"],
     "estimatedSizeKb": 120,
     "install": "tynd add fs",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/fs/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/fs/"
   },
   {
     "id": "http",
@@ -25,7 +25,7 @@
     "permissions": ["host:http", "network"],
     "estimatedSizeKb": 180,
     "install": "tynd add http",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/http/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/http/"
   },
   {
     "id": "notification",
@@ -39,7 +39,7 @@
     "permissions": ["host:notification"],
     "estimatedSizeKb": 90,
     "install": "tynd add notification",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/notification/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/notification/"
   },
   {
     "id": "keyring",
@@ -53,7 +53,7 @@
     "permissions": ["host:keyring", "os-credentials"],
     "estimatedSizeKb": 260,
     "install": "tynd add keyring",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/keyring/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/keyring/"
   },
   {
     "id": "vault",
@@ -67,7 +67,7 @@
     "permissions": ["host:vault", "local-storage"],
     "estimatedSizeKb": 220,
     "install": "tynd add vault",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/vault/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/vault/"
   },
   {
     "id": "window-state",
@@ -81,7 +81,7 @@
     "permissions": ["host:window-state", "local-storage"],
     "estimatedSizeKb": 70,
     "install": "tynd add window-state",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/window-state/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/window-state/"
   },
   {
     "id": "deep-link",
@@ -95,7 +95,7 @@
     "permissions": ["host:deep-link", "os-protocol"],
     "estimatedSizeKb": 110,
     "install": "tynd add deep-link",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/deep-link/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/deep-link/"
   },
   {
     "id": "updater",
@@ -109,7 +109,7 @@
     "permissions": ["host:updater", "network", "local-files"],
     "estimatedSizeKb": 340,
     "install": "tynd add updater",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/updater/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/updater/"
   },
   {
     "id": "process",
@@ -123,7 +123,7 @@
     "permissions": ["host:process", "shell"],
     "estimatedSizeKb": 140,
     "install": "tynd add process",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/process/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/process/"
   },
   {
     "id": "sidecar",
@@ -137,7 +137,7 @@
     "permissions": ["host:sidecar", "child-process"],
     "estimatedSizeKb": 160,
     "install": "tynd add sidecar",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/sidecar/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/sidecar/"
   },
   {
     "id": "websocket",
@@ -151,7 +151,7 @@
     "permissions": ["host:websocket", "network"],
     "estimatedSizeKb": 170,
     "install": "tynd add websocket",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/websocket/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/websocket/"
   },
   {
     "id": "shortcuts",
@@ -165,7 +165,7 @@
     "permissions": ["host:shortcuts", "global-keyboard"],
     "estimatedSizeKb": 120,
     "install": "tynd add shortcuts",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/shortcuts/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/shortcuts/"
   },
   {
     "id": "screenshot",
@@ -179,7 +179,7 @@
     "permissions": ["host:screenshot", "screen-recording"],
     "estimatedSizeKb": 190,
     "install": "tynd add screenshot",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/screenshot/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/screenshot/"
   },
   {
     "id": "network",
@@ -193,7 +193,7 @@
     "permissions": ["host:network"],
     "estimatedSizeKb": 100,
     "install": "tynd add network",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/network/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/network/"
   },
   {
     "id": "power",
@@ -207,7 +207,7 @@
     "permissions": ["host:power"],
     "estimatedSizeKb": 80,
     "install": "tynd add power",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/power/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/power/"
   },
   {
     "id": "system-stats",
@@ -221,7 +221,7 @@
     "permissions": ["host:system-stats"],
     "estimatedSizeKb": 130,
     "install": "tynd add system-stats",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/system-stats/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/system-stats/"
   },
   {
     "id": "biometric",
@@ -235,7 +235,7 @@
     "permissions": ["host:biometric", "os-authentication"],
     "estimatedSizeKb": 170,
     "install": "tynd add biometric",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/biometric/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/biometric/"
   },
   {
     "id": "autolaunch",
@@ -249,7 +249,7 @@
     "permissions": ["host:autolaunch", "os-login-item"],
     "estimatedSizeKb": 120,
     "install": "tynd add autolaunch",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/autolaunch/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/autolaunch/"
   },
   {
     "id": "apple-script",
@@ -263,7 +263,7 @@
     "permissions": ["host:apple-script", "macos-automation"],
     "estimatedSizeKb": 150,
     "install": "tynd add apple-script",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/apple-script/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/apple-script/"
   },
   {
     "id": "cli",
@@ -277,7 +277,7 @@
     "permissions": ["host:cli"],
     "estimatedSizeKb": 40,
     "install": "tynd add cli",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/cli/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/cli/"
   },
   {
     "id": "clipboard",
@@ -291,7 +291,7 @@
     "permissions": ["host:clipboard"],
     "estimatedSizeKb": 110,
     "install": "tynd add clipboard",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/clipboard/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/clipboard/"
   },
   {
     "id": "compute",
@@ -305,7 +305,7 @@
     "permissions": ["host:compute"],
     "estimatedSizeKb": 90,
     "install": "tynd add compute",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/compute/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/compute/"
   },
   {
     "id": "dialog",
@@ -319,7 +319,7 @@
     "permissions": ["host:dialog"],
     "estimatedSizeKb": 130,
     "install": "tynd add dialog",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/dialog/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/dialog/"
   },
   {
     "id": "keys",
@@ -333,7 +333,7 @@
     "permissions": ["host:keys"],
     "estimatedSizeKb": 20,
     "install": "tynd add keys",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/keys/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/keys/"
   },
   {
     "id": "menu",
@@ -347,7 +347,7 @@
     "permissions": ["host:menu"],
     "estimatedSizeKb": 120,
     "install": "tynd add menu",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/menu/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/menu/"
   },
   {
     "id": "multiwindow",
@@ -361,7 +361,7 @@
     "permissions": ["host:multiwindow"],
     "estimatedSizeKb": 60,
     "install": "tynd add multiwindow",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/multiwindow/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/multiwindow/"
   },
   {
     "id": "shell",
@@ -375,7 +375,7 @@
     "permissions": ["host:shell"],
     "estimatedSizeKb": 30,
     "install": "tynd add shell",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/shell/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/shell/"
   },
   {
     "id": "single-instance",
@@ -389,7 +389,7 @@
     "permissions": ["host:single-instance"],
     "estimatedSizeKb": 50,
     "install": "tynd add single-instance",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/single-instance/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/single-instance/"
   },
   {
     "id": "store",
@@ -403,7 +403,7 @@
     "permissions": ["host:store", "local-storage"],
     "estimatedSizeKb": 60,
     "install": "tynd add store",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/store/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/store/"
   },
   {
     "id": "theme",
@@ -417,7 +417,7 @@
     "permissions": ["host:theme"],
     "estimatedSizeKb": 30,
     "install": "tynd add theme",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/theme/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/theme/"
   },
   {
     "id": "tray",
@@ -431,7 +431,7 @@
     "permissions": ["host:tray"],
     "estimatedSizeKb": 140,
     "install": "tynd add tray",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/tray/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/tray/"
   },
   {
     "id": "sql",
@@ -445,7 +445,7 @@
     "permissions": ["local-database", "fs"],
     "estimatedSizeKb": 35,
     "install": "tynd add sql",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/sql/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/sql/"
   },
   {
     "id": "terminal",
@@ -459,7 +459,7 @@
     "permissions": ["shell", "pty"],
     "estimatedSizeKb": 420,
     "install": "tynd add terminal",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/terminal/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/terminal/"
   },
   {
     "id": "llm",
@@ -474,7 +474,7 @@
     "permissions": ["network", "secrets"],
     "estimatedSizeKb": 260,
     "install": "tynd add llm",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/llm/",
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/llm/",
     "distTag": "experimental"
   },
   {
@@ -489,7 +489,7 @@
     "permissions": ["microphone", "speaker"],
     "estimatedSizeKb": 380,
     "install": "tynd add audio",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/audio/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/audio/"
   },
   {
     "id": "command-palette",
@@ -503,7 +503,7 @@
     "permissions": ["frontend-ui"],
     "estimatedSizeKb": 15,
     "install": "tynd add command-palette",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/command-palette/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/command-palette/"
   },
   {
     "id": "gpu",
@@ -517,7 +517,7 @@
     "permissions": ["gpu"],
     "estimatedSizeKb": 25,
     "install": "tynd add gpu",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/gpu/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/gpu/"
   },
   {
     "id": "http-server",
@@ -531,7 +531,7 @@
     "permissions": ["network-loopback", "network-public"],
     "estimatedSizeKb": 45,
     "install": "tynd add http-server",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/http-server/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/http-server/"
   },
   {
     "id": "oauth",
@@ -545,7 +545,7 @@
     "permissions": ["network-loopback", "secrets"],
     "estimatedSizeKb": 30,
     "install": "tynd add oauth",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/oauth/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/oauth/"
   },
   {
     "id": "screen-rec",
@@ -560,7 +560,7 @@
     "permissions": ["screen-recording", "local-files"],
     "estimatedSizeKb": 1800,
     "install": "tynd add screen-rec",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/screen-rec/",
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/screen-rec/",
     "distTag": "experimental"
   },
   {
@@ -575,7 +575,7 @@
     "permissions": ["speaker"],
     "estimatedSizeKb": 300,
     "install": "tynd add tts",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/tts/"
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/tts/"
   },
   {
     "id": "wgpu",
@@ -590,7 +590,7 @@
     "permissions": ["gpu", "native-window"],
     "estimatedSizeKb": 5000,
     "install": "tynd add wgpu",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/wgpu/",
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/wgpu/",
     "distTag": "experimental"
   },
   {
@@ -606,7 +606,7 @@
     "permissions": ["microphone", "local-models"],
     "estimatedSizeKb": 5000,
     "install": "tynd add whisper",
-    "docs": "https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/whisper/",
+    "docs": "https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/whisper/",
     "distTag": "experimental"
   }
 ]

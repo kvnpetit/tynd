@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-websocket` feature. A host without
 it rejects the calls with an error naming
 `@tynd/plugin-websocket`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/websocket/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/websocket/

@@ -111,4 +111,4 @@ JS so any Tynd app can pull it in without changing its build profile.
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

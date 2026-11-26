@@ -55,7 +55,7 @@ pub(crate) struct LoadedConfig {
 
 /// Tynd application configuration, as written in
 /// `tynd.config.{ts,js,json,jsonc,yaml,toml}`. Full reference:
-/// <https://tynd-apps.github.io/tynd/docs/v1.0/cli/config>
+/// <https://kvnpetit.github.io/tynd/docs/v1.0/cli/config>
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 #[schemars(title = "Tynd configuration", transform = super::schema::config_file_keys)]

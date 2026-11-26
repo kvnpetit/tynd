@@ -1,6 +1,6 @@
 <!--
 Thanks for the PR! Fill out the sections below and remove anything irrelevant.
-See the root [CONTRIBUTING.md](https://github.com/tynd-apps/tynd/blob/main/CONTRIBUTING.md) for documentation requirements.
+See the root [CONTRIBUTING.md](https://github.com/kvnpetit/tynd/blob/main/CONTRIBUTING.md) for documentation requirements.
 -->
 
 ## What

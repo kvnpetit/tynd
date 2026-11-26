@@ -310,4 +310,4 @@ cd plugins/wgpu/native && cargo build --features native
 
 ---
 
-See also: [tynd-apps/plugins](../README.md) — plugin index.
+See also: [Standalone plugin index](../README.md).

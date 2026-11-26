@@ -1,9 +1,9 @@
 # Tynd plugins
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://github.com/tynd-apps/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/tynd-apps/tynd/actions/workflows/ci.yml)
+[![CI](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml/badge.svg)](https://github.com/kvnpetit/tynd/actions/workflows/ci.yml)
 
-Standalone official Tynd plugins workspace — native and pure-JS plugins for the [Tynd](https://github.com/tynd-apps/tynd) framework.
+Standalone official Tynd plugins workspace — native and pure-JS plugins for the [Tynd](https://github.com/kvnpetit/tynd) framework.
 
 ## Plugins
 
@@ -80,7 +80,7 @@ bun run check
 
 ## Writing a plugin
 
-See [@tynd/plugin-sdk](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk) for the JS and Rust API surface.
+See [@tynd/plugin-sdk](https://github.com/kvnpetit/tynd/tree/main/packages/plugin-sdk) for the JS and Rust API surface.
 
 ```ts
 // backend.ts
@@ -120,11 +120,11 @@ Declare `tynd.native` in `package.json` for plugins that ship native Rust code:
 
 ## Related repos
 
-- [`@tynd/cli`](https://github.com/tynd-apps/tynd/tree/main/packages/cli) — scaffold, dev, build, ship
-- [`@tynd/core`](https://github.com/tynd-apps/tynd) (in `tynd-apps/tynd`) — core OS APIs and runtime
-- [`@tynd/plugin-sdk`](https://github.com/tynd-apps/tynd/tree/main/packages/plugin-sdk) — plugin authoring SDK
-- [`@tynd/mcp`](https://github.com/tynd-apps/tynd/tree/main/packages/mcp) — Model Context Protocol server
-- [Documentation site](https://github.com/tynd-apps/tynd/tree/main/apps/docs)
+- [`@tynd/cli`](https://github.com/kvnpetit/tynd/tree/main/packages/cli) — scaffold, dev, build, ship
+- [`@tynd/core`](https://github.com/kvnpetit/tynd) (in `kvnpetit/tynd`) — core OS APIs and runtime
+- [`@tynd/plugin-sdk`](https://github.com/kvnpetit/tynd/tree/main/packages/plugin-sdk) — plugin authoring SDK
+- [`@tynd/mcp`](https://github.com/kvnpetit/tynd/tree/main/packages/mcp) — Model Context Protocol server
+- [Documentation site](https://github.com/kvnpetit/tynd/tree/main/apps/docs)
 
 ## License
 

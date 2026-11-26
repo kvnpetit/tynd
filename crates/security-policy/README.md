@@ -42,8 +42,8 @@ the caller. `check_shell_exec` refuses every command until
 `tynd-host` wraps the policy in `src/security/policy.rs` and calls it from the fs,
 HTTP, process and shell APIs.
 
-See [Security](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/security) and
-the [`security` API](https://tynd-apps.github.io/tynd/docs/v1.0/api/os/security).
+See [Security](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/security) and
+the [`security` API](https://kvnpetit.github.io/tynd/docs/v1.0/api/os/security).
 
 ## Validation
 

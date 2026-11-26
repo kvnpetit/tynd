@@ -34,4 +34,4 @@ await keyring.delete({
 The app's host is then compiled with the `api-keyring` feature. A host without
 it rejects the calls with an error naming `@tynd/plugin-keyring`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/keyring/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/keyring/

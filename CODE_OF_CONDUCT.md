@@ -27,7 +27,7 @@ Examples of unacceptable behavior:
 
 Project maintainers are responsible for clarifying standards and will take appropriate action in response to any behavior they deem inappropriate.
 
-Reports can be made by opening a private GitHub Security Advisory at <https://github.com/tynd-apps/tynd/security/advisories/new>.
+Reports can be made by opening a private GitHub Security Advisory at <https://github.com/kvnpetit/tynd/security/advisories/new>.
 
 All reports will be reviewed and investigated promptly and fairly. Maintainers are obligated to respect the privacy and security of the reporter.
 

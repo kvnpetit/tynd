@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-notification` feature. A host with
 it rejects the calls with an error naming
 `@tynd/plugin-notification`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/notification/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/notification/

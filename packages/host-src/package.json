@@ -4,14 +4,14 @@
   "description": "Self-contained Rust host and runtime sources for Tynd custom builds.",
   "license": "Apache-2.0",
   "author": "Kevin Petit <74395438+kvnpetit@users.noreply.github.com> (https://github.com/kvnpetit)",
-  "homepage": "https://tynd-apps.github.io/tynd/",
+  "homepage": "https://kvnpetit.github.io/tynd/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tynd-apps/tynd.git",
+    "url": "git+https://github.com/kvnpetit/tynd.git",
     "directory": "packages/host-src"
   },
   "bugs": {
-    "url": "https://github.com/tynd-apps/tynd/issues"
+    "url": "https://github.com/kvnpetit/tynd/issues"
   },
   "keywords": [
     "tynd",

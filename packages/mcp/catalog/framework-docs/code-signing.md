@@ -7,7 +7,7 @@ description: "Configure current-host Windows Authenticode and macOS PKCS#12 sign
 
 Signing runs only when a matching `bundle.sign` block exists. Missing credentials or tools fail the build; Tynd never silently falls back to unsigned output.
 
-This platform signing is separate from Ed25519 updater signatures. See [Auto-Updates](https://tynd-apps.github.io/tynd/docs/v1.0/guides/auto-updates) for updater trust.
+This platform signing is separate from Ed25519 updater signatures. See [Auto-Updates](https://kvnpetit.github.io/tynd/docs/v1.0/guides/auto-updates) for updater trust.
 
 ## Windows
 
@@ -118,6 +118,6 @@ Then verify and publish files from `release/<platform>-<arch>/`. Tynd performs n
 
 ## Related
 
-- [Bundling](https://tynd-apps.github.io/tynd/docs/v1.0/guides/bundling)
-- [Auto-Updates](https://tynd-apps.github.io/tynd/docs/v1.0/guides/auto-updates)
-- [Security](https://tynd-apps.github.io/tynd/docs/v1.0/concepts/security)
+- [Bundling](https://kvnpetit.github.io/tynd/docs/v1.0/guides/bundling)
+- [Auto-Updates](https://kvnpetit.github.io/tynd/docs/v1.0/guides/auto-updates)
+- [Security](https://kvnpetit.github.io/tynd/docs/v1.0/concepts/security)

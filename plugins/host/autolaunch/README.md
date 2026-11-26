@@ -20,4 +20,4 @@ The app's host is then compiled with the `api-autolaunch` feature. A host withou
 it rejects the calls with an error naming
 `@tynd/plugin-autolaunch`.
 
-Docs: https://tynd-apps.github.io/tynd/docs/v1.0/api/plugins/autolaunch/
+Docs: https://kvnpetit.github.io/tynd/docs/v1.0/api/plugins/autolaunch/
