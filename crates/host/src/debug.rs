@@ -479,8 +479,14 @@ fn purge_stale(dir: &std::path::Path) {
 
 #[cfg(unix)]
 fn pid_alive(pid: u32) -> bool {
+    let Ok(pid) = i32::try_from(pid) else {
+        return false;
+    };
+    if pid == 0 {
+        return false;
+    }
     // `kill -0` returns 0 if the pid is alive, ESRCH otherwise.
-    let result = unsafe { libc_kill_zero(pid as i32) };
+    let result = unsafe { libc_kill_zero(pid) };
     result == 0
 }
 
@@ -576,5 +582,13 @@ mod tests {
     fn packed_apps_need_the_debug_flag() {
         assert!(!start_allowed(Some(false)));
         assert!(start_allowed(Some(true)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pid_probe_requires_a_positive_pid_in_range() {
+        assert!(!super::pid_alive(0));
+        assert!(!super::pid_alive(u32::MAX));
+        assert!(super::pid_alive(std::process::id()));
     }
 }
