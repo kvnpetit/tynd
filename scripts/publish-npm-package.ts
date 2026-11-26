@@ -65,31 +65,55 @@ async function capture(
   return { exitCode, stdout, stderr };
 }
 
+export function parsePackInfo(output: string): PackInfo {
+  const packed: unknown = JSON.parse(output);
+  // npm 12 wraps package metadata in an object keyed by package name.
+  const entries: unknown[] =
+    packed !== null && typeof packed === "object" ? Object.values(packed) : [];
+  const [info] = entries;
+  if (
+    entries.length !== 1 ||
+    !info ||
+    typeof info !== "object" ||
+    !("name" in info && "version" in info && "integrity" in info) ||
+    typeof info.name !== "string" ||
+    typeof info.version !== "string" ||
+    typeof info.integrity !== "string" ||
+    !info.name ||
+    !info.version ||
+    !info.integrity
+  ) {
+    throw new Error("npm pack did not return name, version, and integrity for exactly one package");
+  }
+  return { name: info.name, version: info.version, integrity: info.integrity };
+}
+
 async function localPackInfo(packageDir: string): Promise<PackInfo> {
   const result = await capture(["npm", "pack", "--dry-run", "--json"], packageDir);
   if (result.exitCode !== 0) throw new Error(`npm pack failed:\n${result.stderr}`);
-  const pack = JSON.parse(result.stdout) as PackInfo[];
-  const info = pack[0];
-  if (!info?.name || !info.version || !info.integrity) {
-    throw new Error("npm pack did not return name, version, and integrity");
+  return parsePackInfo(result.stdout);
+}
+
+export function parseRegistryIntegrity(output: string, packageVersion: string): string {
+  const parsed: unknown = JSON.parse(output);
+  const integrity: unknown = Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
+  if (typeof integrity !== "string" || !integrity) {
+    throw new Error(`registry returned invalid integrity for ${packageVersion}`);
   }
-  return info;
+  return integrity;
 }
 
 async function registryIntegrity(info: PackInfo, packageDir: string): Promise<string | null> {
+  const packageVersion = `${info.name}@${info.version}`;
   const result = await capture(
-    ["npm", "view", `${info.name}@${info.version}`, "dist.integrity", "--json"],
+    ["npm", "view", packageVersion, "dist.integrity", "--json"],
     packageDir,
   );
   if (result.exitCode === 0) {
-    const value = JSON.parse(result.stdout) as unknown;
-    if (typeof value !== "string" || value.length === 0) {
-      throw new Error(`registry returned invalid integrity for ${info.name}@${info.version}`);
-    }
-    return value;
+    return parseRegistryIntegrity(result.stdout, packageVersion);
   }
   if (/\bE404\b|404 Not Found/i.test(result.stderr)) return null;
-  throw new Error(`npm view failed for ${info.name}@${info.version}:\n${result.stderr}`);
+  throw new Error(`npm view failed for ${packageVersion}:\n${result.stderr}`);
 }
 
 async function publish(packageDir: string, info: PackInfo, tag: string): Promise<void> {
