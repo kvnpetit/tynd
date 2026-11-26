@@ -158,7 +158,8 @@ mod imp {
         // SAFETY: documented AppKit notification constant on the
         // process-wide center; nil object observes every sender, nil queue
         // runs the block on the posting (main) thread.
-        let token = unsafe {
+        // The notification center retains the observer for the process lifetime.
+        let _token = unsafe {
             center.addObserverForName_object_queue_usingBlock(
                 Some(NSApplicationDidChangeScreenParametersNotification),
                 None,
@@ -166,8 +167,6 @@ mod imp {
                 &block,
             )
         };
-        // The observer lives for the rest of the process.
-        std::mem::forget(token);
         Ok(())
     }
 }

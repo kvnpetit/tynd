@@ -52,21 +52,18 @@ pub(super) fn set_aspect_ratio(win: &Window, ratio: Option<f64>) -> Result<(), S
     // SAFETY: as above; both selectors take an NSSize. Resetting the
     // resize increments to 1×1 is how AppKit clears an aspect ratio.
     unsafe {
-        match ratio {
-            Some(ratio) => {
-                let size = NsSize {
-                    width: ratio,
-                    height: 1.0,
-                };
-                let _: () = msg_send![window, setContentAspectRatio: size];
-            },
-            None => {
-                let size = NsSize {
-                    width: 1.0,
-                    height: 1.0,
-                };
-                let _: () = msg_send![window, setContentResizeIncrements: size];
-            },
+        if let Some(ratio) = ratio {
+            let size = NsSize {
+                width: ratio,
+                height: 1.0,
+            };
+            let _: () = msg_send![window, setContentAspectRatio: size];
+        } else {
+            let size = NsSize {
+                width: 1.0,
+                height: 1.0,
+            };
+            let _: () = msg_send![window, setContentResizeIncrements: size];
         }
     }
     Ok(())

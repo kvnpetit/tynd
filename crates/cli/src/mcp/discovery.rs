@@ -18,6 +18,7 @@ const DEFAULT_MAX_AGE: Duration = Duration::from_hours(1);
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum DiscoveryTrust {
     UidScoped,
+    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
     SharedTmp,
 }
 

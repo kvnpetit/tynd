@@ -122,7 +122,7 @@ mod mac {
             return Ok(());
         };
         run_on_main(move |mtm| {
-            NSApplication::sharedApplication(mtm).cancelUserAttentionRequest(id)
+            NSApplication::sharedApplication(mtm).cancelUserAttentionRequest(id);
         });
         Ok(())
     }

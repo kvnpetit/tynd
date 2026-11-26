@@ -125,8 +125,8 @@ mod imp {
         run_on_main(|mtm| {
             // SAFETY: `clearRecentDocuments:` accepts a nil sender.
             unsafe {
-                NSDocumentController::sharedDocumentController(mtm).clearRecentDocuments(None)
-            };
+                NSDocumentController::sharedDocumentController(mtm).clearRecentDocuments(None);
+            }
         });
         Ok(())
     }
