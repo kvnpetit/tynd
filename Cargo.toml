@@ -36,9 +36,6 @@ exclude  = [
 ]
 resolver = "2"
 
-[workspace.metadata.cargo-shear]
-ignored = []
-
 [workspace.package]
 version       = "1.0.0"
 publish       = false

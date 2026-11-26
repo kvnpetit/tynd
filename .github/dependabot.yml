@@ -1,14 +1,13 @@
 version: 2
 
-# Weekly, grouped updates: one PR per ecosystem for minor/patch bumps, and a
+# Monthly, grouped updates: one PR per ecosystem for minor/patch bumps, and a
 # separate grouped PR for majors so breaking upgrades are reviewed on their own.
 # Release workflows require a green CI run, so every update goes through CI.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     groups:
       github-actions:
         patterns: ["*"]
@@ -16,8 +15,7 @@ updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 10
     groups:
       cargo-minor-patch:
@@ -28,8 +26,7 @@ updates:
   - package-ecosystem: bun
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 10
     groups:
       bun-minor-patch:

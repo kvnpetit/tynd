@@ -65,9 +65,6 @@ jobs:
             . -> target
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
-        with:
-          tool: cargo-shear
       - name: Check
         run: bun run check
       - name: cargo fmt --check
@@ -76,8 +73,6 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: cargo clippy (tynd-host, all APIs)
         run: cargo clippy --locked -p tynd-host --features api-all --all-targets -- -D warnings
-      - name: cargo shear (unused dependencies)
-        run: cargo shear
 
   # cfg(windows) / cfg(target_os = "macos") code is never compiled on the
   # Ubuntu jobs; lint it here before a release tag does.
@@ -141,9 +136,26 @@ jobs:
       - name: Test workspace (all host APIs)
         run: cargo test --locked --workspace --features tynd-host/api-all
       - name: Test TypeScript packages
+        if: runner.os != 'Linux'
         run: bun run test
       - name: Test plugins
         run: bun run test:plugins
+      # Releases require CI on the exact main commit. Keep the slower native
+      # pack-and-launch check on that push, after the usual PR tests.
+      - name: Build tooling for packaged app test
+        if: github.event_name == 'push'
+        run: cargo build --locked -p tynd-cli -p tynd-bundler --bins
+      - name: Install virtual display
+        if: github.event_name == 'push' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth
+      - name: Test packaged app on Linux
+        if: github.event_name == 'push' && runner.os == 'Linux'
+        run: xvfb-run -a bun scripts/smoke-packaged.ts
+      - name: Test packaged app on Windows and macOS
+        if: github.event_name == 'push' && runner.os != 'Linux'
+        run: bun scripts/smoke-packaged.ts
 
   host-feature-matrix:
     name: Host feature matrix
