@@ -1,8 +1,6 @@
 name: Release standalone plugins
 
 on:
-  push:
-    tags: ["plugins-v*"]
   workflow_dispatch:
     inputs:
       tag:
@@ -10,14 +8,13 @@ on:
         required: true
 
 concurrency:
-  group: release-plugins-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  group: release-plugins-${{ inputs.tag }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -26,12 +23,14 @@ jobs:
       contents: read
     outputs:
       plugins: ${{ steps.plugin-matrix.outputs.plugins }}
+      commit: ${{ steps.release-commit.outputs.sha }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: refs/tags/${{ inputs.tag }}
           persist-credentials: false
       - name: Require successful CI for the exact release commit
+        id: release-commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -40,10 +39,12 @@ jobs:
           # from GITHUB_SHA, so gate on the commit actually being published.
           sha="$(git rev-parse HEAD)"
           runs="$(
-            gh run list               --repo "$GITHUB_REPOSITORY"               --workflow ci.yml               --commit "$sha"               --status success               --limit 1               --json headSha
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+              --commit "$sha" --event push --branch main --status success --limit 1 --json headSha
           )"
           test "$(jq 'length' <<<"$runs")" -eq 1
           test "$(jq -r '.[0].headSha' <<<"$runs")" = "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
           bun-version-file: ".bun-version"
@@ -68,7 +69,7 @@ jobs:
           echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
       - name: Match tag to plugin package versions
         env:
-          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          TAG: ${{ inputs.tag }}
         run: bun scripts/check-release-version.ts plugins "$TAG"
       - run: bunx biome ci --error-on-warnings plugins/standalone
       - run: bunx tsc --noEmit -p plugins/standalone
@@ -102,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ needs.validate.outputs.commit }}
           persist-credentials: false
       - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:

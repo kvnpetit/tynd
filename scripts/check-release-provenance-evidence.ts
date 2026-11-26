@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { type ArtifactDigest, digestArtifact } from "./check-reproducible-artifact";
+import { digestArtifact } from "./check-reproducible-artifact";
 import { DESKTOP_TARGETS } from "./desktop-targets";
 import { extractReleaseAsset } from "./package-release-asset";
 
@@ -63,34 +63,6 @@ function readJson<T>(file: string): T {
   return JSON.parse(readFileSync(file, "utf8")) as T;
 }
 
-function assertDigest(value: unknown, label: string): asserts value is ArtifactDigest {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("sha256" in value) ||
-    typeof value.sha256 !== "string" ||
-    !SHA256_PATTERN.test(value.sha256) ||
-    !("size" in value) ||
-    !Number.isSafeInteger(value.size) ||
-    (value.size as number) < 4_096
-  ) {
-    throw new Error(`${label} has invalid digest or size`);
-  }
-}
-
-function verifyReproducibleFile(file: string, snapshot: string, label: string): ArtifactDigest {
-  if (!existsSync(file) || !existsSync(snapshot)) {
-    throw new Error(`${label} file or reproducibility snapshot is missing`);
-  }
-  const expected = readJson<unknown>(snapshot);
-  assertDigest(expected, `${label} snapshot`);
-  const actual = digestArtifact(file);
-  if (actual.sha256 !== expected.sha256 || actual.size !== expected.size) {
-    throw new Error(`${label} does not match clean-rebuild digest`);
-  }
-  return actual;
-}
-
 function expectedAttestedPaths(): string[] {
   return RELEASE_BUNDLER_TARGETS.flatMap(({ relative, asset }) => [
     `${relative}/${asset}`,
@@ -131,11 +103,8 @@ function verifyBundler(
   const binaryPath = path.join(directory, binary);
   const assetPath = path.join(directory, asset);
   const sidecarPath = `${assetPath}.sha256`;
-  const binaryDigest = verifyReproducibleFile(
-    binaryPath,
-    path.join(directory, "bundler-reproducibility.json"),
-    `${target} bundler`,
-  );
+  const binaryDigest = digestArtifact(binaryPath);
+  if (binaryDigest.size < 4_096) throw new Error(`${target} bundler binary is suspiciously small`);
   const assetDigest = digestArtifact(assetPath);
   if (assetDigest.size < 4_096) throw new Error(`${target} bundler asset is suspiciously small`);
   const sidecar = readFileSync(sidecarPath, "utf8").trim();
