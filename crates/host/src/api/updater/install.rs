@@ -281,30 +281,10 @@ pub(super) fn find_app_ancestor(path: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-/// Extract exactly one `.app` tree from an updater ZIP.
-///
-/// `enclosed_name` rejects absolute paths and `..` traversal. Symlinks (needed
-/// by `.framework` bundles: `Versions/Current`, `Headers`, ...) are collected
-/// while the regular files are written and created only afterwards, so no later
-/// entry can be written through a link. Each link must have a relative target
-/// and its parent directory must resolve inside the extraction root before it
-/// is created; once every link exists, each must resolve (symlinks followed)
-/// to a path still inside that root, otherwise the whole archive is refused.
 #[cfg(target_os = "macos")]
-pub(super) fn extract_app_archive(
-    archive_path: &Path,
-    destination: &Path,
-) -> Result<PathBuf, String> {
-    use std::{
-        collections::BTreeSet,
-        fs::{self, OpenOptions},
-        io,
-    };
+fn validate_app_archive(archive: &mut zip::ZipArchive<std::fs::File>) -> Result<PathBuf, String> {
+    use std::collections::BTreeSet;
 
-    let file = fs::File::open(archive_path)
-        .map_err(|e| format!("updater.install: open app archive: {e}"))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("updater.install: read app archive: {e}"))?;
     if archive.len() > MAX_APP_ARCHIVE_ENTRIES {
         return Err(format!(
             "updater.install: app archive has {} entries (max {MAX_APP_ARCHIVE_ENTRIES})",
@@ -353,10 +333,36 @@ pub(super) fn extract_app_archive(
             app_roots.len()
         ));
     }
-    let app_root = app_roots
+    app_roots
         .into_iter()
         .next()
-        .ok_or("updater.install: app archive contains no .app bundle")?;
+        .ok_or_else(|| "updater.install: app archive contains no .app bundle".into())
+}
+
+/// Extract exactly one `.app` tree from an updater ZIP.
+///
+/// `enclosed_name` rejects absolute paths and `..` traversal. Symlinks (needed
+/// by `.framework` bundles: `Versions/Current`, `Headers`, ...) are collected
+/// while the regular files are written and created only afterwards, so no later
+/// entry can be written through a link. Each link must have a relative target
+/// and its parent directory must resolve inside the extraction root before it
+/// is created; once every link exists, each must resolve (symlinks followed)
+/// to a path still inside that root, otherwise the whole archive is refused.
+#[cfg(target_os = "macos")]
+pub(super) fn extract_app_archive(
+    archive_path: &Path,
+    destination: &Path,
+) -> Result<PathBuf, String> {
+    use std::{
+        fs::{self, OpenOptions},
+        io,
+    };
+
+    let file = fs::File::open(archive_path)
+        .map_err(|e| format!("updater.install: open app archive: {e}"))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("updater.install: read app archive: {e}"))?;
+    let app_root = validate_app_archive(&mut archive)?;
     let app_parent = app_root.parent().unwrap_or_else(|| Path::new(""));
 
     let mut symlinks: Vec<(PathBuf, String)> = Vec::new();

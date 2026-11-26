@@ -222,10 +222,10 @@ unsafe extern "C" fn apple_event_handler(
             event,
             KEY_DIRECT_OBJECT,
             TYPE_UTF8_TEXT,
-            &mut actual_type,
+            &raw mut actual_type,
             buf.as_mut_ptr().cast::<c_void>(),
-            buf.len() as isize,
-            &mut actual_size,
+            buf.len().cast_signed(),
+            &raw mut actual_size,
         )
     };
     if status != 0 || actual_size <= 0 {
@@ -251,10 +251,10 @@ unsafe extern "C" fn apple_event_handler(
                 event,
                 KEY_DIRECT_OBJECT,
                 TYPE_UTF8_TEXT,
-                &mut heap_actual_type,
+                &raw mut heap_actual_type,
                 heap.as_mut_ptr().cast::<c_void>(),
-                heap.len() as isize,
-                &mut heap_actual_size,
+                actual_size,
+                &raw mut heap_actual_size,
             )
         };
         if heap_status != 0 || heap_actual_size <= 0 {

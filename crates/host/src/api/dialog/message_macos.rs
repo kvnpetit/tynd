@@ -79,18 +79,15 @@ pub(super) fn show(spec: &MessageSpec) -> Result<MessageOutcome, String> {
             .parent
             .then(|| NSApplication::sharedApplication(mtm).keyWindow())
             .flatten();
-        match sheet_window {
-            Some(window) => {
-                let retained = alert.clone();
-                let handler = RcBlock::new(move |response: NSModalResponse| {
-                    let _ = tx.send(outcome(&owned, &retained, response));
-                });
-                alert.beginSheetModalForWindow_completionHandler(&window, Some(&handler));
-            },
-            None => {
-                let response = alert.runModal();
-                let _ = tx.send(outcome(&owned, &alert, response));
-            },
+        if let Some(window) = sheet_window {
+            let retained = alert.clone();
+            let handler = RcBlock::new(move |response: NSModalResponse| {
+                let _ = tx.send(outcome(&owned, &retained, response));
+            });
+            alert.beginSheetModalForWindow_completionHandler(&window, Some(&handler));
+        } else {
+            let response = alert.runModal();
+            let _ = tx.send(outcome(&owned, &alert, response));
         }
     });
     rx.recv()

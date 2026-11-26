@@ -290,6 +290,7 @@ impl DeepLinkApi {
 
 fn register_impl(scheme: &str) -> Result<(), String> {
     validate_scheme(scheme)?;
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     let exe = current_exe_string()?;
 
     #[cfg(target_os = "windows")]
@@ -303,7 +304,6 @@ fn register_impl(scheme: &str) -> Result<(), String> {
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
-        let _ = exe;
         // Refuse the registration outright — silently inserting into
         // `state().schemes` would make `is_registered` lie about an
         // OS-level association that was never established.
@@ -469,6 +469,7 @@ fn forwarding_app_id() -> String {
 }
 
 /// Best-effort path to the current executable as a UTF-8 string.
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn current_exe_string() -> Result<String, String> {
     let p = std::env::current_exe().map_err(|e| format!("deepLink: current_exe: {e}"))?;
     p.to_str()

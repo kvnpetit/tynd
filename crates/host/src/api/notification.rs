@@ -908,6 +908,9 @@ mod tests {
                 title: "t".into(),
                 body: String::new(),
                 owner,
+                #[cfg(target_os = "macos")]
+                handle: platform::Handle,
+                #[cfg(not(target_os = "macos"))]
                 handle: platform::Handle::default(),
             },
         );
@@ -929,6 +932,9 @@ mod tests {
                 title: "t".into(),
                 body: String::new(),
                 owner,
+                #[cfg(target_os = "macos")]
+                handle: platform::Handle,
+                #[cfg(not(target_os = "macos"))]
                 handle: platform::Handle::default(),
             },
         );

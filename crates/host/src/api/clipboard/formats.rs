@@ -407,7 +407,7 @@ mod macos {
             return Ok(Vec::new());
         };
         let mut formats: Vec<String> = Vec::new();
-        for uti in types.iter() {
+        for uti in &*types {
             let format = mime_for_uti(&uti.to_string()).to_owned();
             if !formats.contains(&format) {
                 formats.push(format);
