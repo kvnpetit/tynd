@@ -1,8 +1,10 @@
 import { defineCollection } from "astro:content";
-import { docsLoader } from "@astrojs/starlight/loaders";
-import { docsSchema } from "@astrojs/starlight/schema";
+import { docsLoader, i18nLoader } from "@astrojs/starlight/loaders";
+import { docsSchema, i18nSchema } from "@astrojs/starlight/schema";
 
 export const collections = {
+  // Register English with no overrides so Starlight uses its built-in text.
+  i18n: defineCollection({ loader: i18nLoader(), schema: i18nSchema() }),
   docs: defineCollection({
     loader: docsLoader({
       // The default id generator slugifies path segments (`v1.0` -> `v10`); keep the
