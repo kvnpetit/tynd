@@ -6,11 +6,10 @@ on:
   push:
     branches: [main]
 
-# PR runs are superseded by newer pushes. Runs on main are never cancelled:
-# the release preflight (release.yml) requires a successful CI run on the
-# exact release commit.
+# Supersede stale PR runs. Keep a separate run per main commit because
+# release preflight requires CI on the exact release SHA.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -22,6 +21,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # Keep CI's compiled dependencies small and reduce linker work.
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
 
 jobs:
   actionlint:
@@ -58,6 +60,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ci-check
+          save-if: ${{ github.event_name == 'push' }}
           workspaces: |
             . -> target
       - name: Install dependencies
@@ -92,6 +95,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ci-native-${{ matrix.runner }}
+          save-if: ${{ github.event_name == 'push' }}
           workspaces: |
             . -> target
       - name: cargo clippy
@@ -123,6 +127,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ci-test-${{ matrix.runner }}
+          save-if: ${{ github.event_name == 'push' }}
           workspaces: |
             . -> target
       - name: Install dependencies
@@ -138,7 +143,7 @@ jobs:
       # pack-and-launch check on that push, after the usual PR tests.
       - name: Build tooling for packaged app test
         if: github.event_name == 'push'
-        run: cargo build --locked -p tynd-cli -p tynd-bundler --bins
+        run: cargo build --locked -p tynd-cli -p tynd-bundler --bin tynd --bin tynd-bundler
       - name: Test packaged app on Linux
         if: github.event_name == 'push' && runner.os == 'Linux'
         run: xvfb-run -a bun scripts/smoke-packaged.ts
@@ -162,6 +167,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ci-matrix
+          save-if: ${{ github.event_name == 'push' }}
       - name: Check feature matrix
         run: bash scripts/check-host-feature-matrix.sh
 
@@ -188,6 +194,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ci-host-src
+          save-if: ${{ github.event_name == 'push' }}
           workspaces: packages/host-src/native -> target
       - uses: taiki-e/install-action@073e1fd0bc889c9aee68dbaaa927cde1b5653a83 # v2.90.11
         with:
@@ -203,9 +210,12 @@ jobs:
       - name: cargo check (host-src mirror)
         run: cargo check --locked --manifest-path packages/host-src/native/Cargo.toml --workspace
       # Same policy as the root workspace: the mirror lock is a subset of the
-      # root lock, so the root deny.toml is the single ignore list.
+      # root lock, so root-only exceptions are expected to be unused here.
+      # The full supply-chain audit still reports unused exceptions.
       - name: cargo deny check (host-src mirror)
-        run: cargo deny --manifest-path packages/host-src/native/Cargo.toml --locked --config deny.toml check
+        run: >-
+          cargo deny --manifest-path packages/host-src/native/Cargo.toml --locked --config deny.toml check
+          --allow advisory-not-detected --allow license-exception-not-encountered
       - name: Generate the plugin-sdk mirror
         run: bun run --cwd packages/plugin-sdk sync
       # The npm tarball ships this mirror; it must build with no workspace above it.
@@ -235,6 +245,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ci-msrv
+          save-if: ${{ github.event_name == 'push' }}
           workspaces: |
             . -> target
             packages/host-src/native -> target

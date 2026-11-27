@@ -238,10 +238,12 @@ Scope when useful: `feat(cli): …`, `fix(core): …`, `fix(host): …`.
 
 1. Fork and branch from `main`.
 2. Run `bun run check` locally before opening.
-3. Open the PR against `main`. CI runs the workspace check on Ubuntu.
+3. Open the PR against `main`. CI checks the workspace on Ubuntu and runs native lint and tests on Windows and macOS. Pushes to `main` also build and launch a packaged app on all three platforms.
 4. Ensure the [Docs update table](#docs--update-in-the-same-commit) was followed.
 5. Explicitly flag any runtime-heavy API changes (`terminal`, `workers`, `http`, `sidecar`, PTY streams) in the PR description so reviewers exercise them by hand.
 6. One maintainer approval before merge.
+
+CI reuses compiled Rust dependencies from `main` on PRs. Successful `main` runs save the Rust caches. Debug symbols are disabled for CI's Rust development and test profiles to reduce build time and cache size.
 
 ### What reviewers check
 

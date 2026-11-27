@@ -11,6 +11,8 @@ all-features = true
 [advisories]
 db-urls       = ["https://github.com/rustsec/advisory-db"]
 yanked        = "deny"
+# cargo-deny 0.22 narrowed its default to workspace dependencies.
+unmaintained  = "all"
 # Surface ignores that no longer match any crate so stale ones get removed.
 unused-ignored-advisory = "warn"
 # Accepted native-stack advisories with no local direct replacement in this
