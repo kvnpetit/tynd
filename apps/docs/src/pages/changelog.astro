@@ -8,19 +8,19 @@ import { SITE } from "../lib/site";
 
 <Base
   title="Changelog - Tynd"
-  description="Release history."
+  description="Unreleased changes and published Tynd releases."
   canonicalPath="/changelog/"
   noindex
 >
   <section class="head">
     <Container>
-      <SectionTitle as="h1" eyebrow="Releases" title="Changelog" description="Release history." />
+      <SectionTitle as="h1" title="Changelog" />
     </Container>
   </section>
   <section class="body">
     <Container>
-      <p>Full release notes are on GitHub. A curated inline changelog will land here soon.</p>
-      <Button href={SITE.links.releases} external>View releases on GitHub</Button>
+      <Button href={`${SITE.links.github}/blob/main/CHANGELOG.md`} external>Read the repository changelog</Button>
+      <Button href={SITE.links.releases} variant="secondary" external>View published releases</Button>
     </Container>
   </section>
 </Base>
@@ -38,8 +38,5 @@ import { SITE } from "../lib/site";
     justify-items: center;
     gap: 1.5rem;
     text-align: center;
-  }
-  p {
-    color: var(--fg-subtle);
   }
 </style>

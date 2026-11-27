@@ -12,7 +12,8 @@ Astro + Starlight + Pagefind, published to GitHub Pages at <https://kvnpetit.git
 apps/docs/
 |-- astro.config.ts              # site/base, Starlight, sidebar, redirects, sitemap
 |-- src/
-|   |-- content.config.ts        # docs collection (keeps `v1.0` ids verbatim)
+|   |-- content.config.ts        # docs and Starlight UI translation collections
+|   |-- content/i18n/en.json     # English UI overrides, currently inherits Starlight defaults
 |   |-- content/docs/docs/       # MDX docs, under the `v1.0` URL segment  
 |   |   `-- v1.0/**/meta.json    # sidebar order and folder titles
 |   |-- pages/                   # landing, changelog, 404, robots.txt, og image
@@ -112,7 +113,9 @@ Site-level metadata lives in `src/lib/site.ts`.
 
 ## GitHub Pages
 
-`.github/workflows/docs-deploy.yml` builds the site and publishes `apps/docs/dist` with the official Pages actions on every push to `main` that touches `apps/docs/**`.
+The Docs deploy workflow checks types, builds the site, validates internal links and publishes `apps/docs/dist` with the official Pages actions. It runs on demand or on pushes to `main` that change the site, plugin catalog, root package manifest, Bun lockfile, runtime pins or deploy workflow. The CI workflow builds the docs and checks links on pull requests. [Docs deploy workflow](../../.github/workflows/docs-deploy.yml) · [CI workflow](../../.github/workflows/ci.yml)
+
+The site's `/changelog/` page points to unreleased changes and published versions. [Repository changelog](../../CHANGELOG.md) · [GitHub Releases](https://github.com/kvnpetit/tynd/releases)
 
 One-time setup: **Settings -> Pages -> Build and deployment -> Source: GitHub Actions**.
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Linked the changelog page to the repository changelog and published releases.
+
+### Fixed
+
+- Registered the English Starlight UI locale so the site builds without an
+  empty translation collection warning.
+
 ## [1.0.0] — Unreleased
 
 First stable release.

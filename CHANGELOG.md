@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a release validation workflow that builds all six native tooling
+  targets and verifies the bundler checksums and provenance ahead of publication.
+
+### Changed
+
+- CI saves smaller Rust dependency caches on `main` for reuse by pull
+  requests. Packaged app smoke tests on Linux, macOS and Windows build only
+  the CLI and bundler they use.
+- CI keeps an independent run for each commit pushed to `main` so release
+  preflight can check the exact tagged commit.
+- Updated the pinned Bun, Rust, Node.js and npm toolchains, workspace
+  dependencies, and GitHub Actions.
+
+### Removed
+
+- Dependabot version-update automation. The supply-chain workflow continues
+  to audit dependencies.
+
+### Fixed
+
+- Fixed npm 12 package metadata parsing and kept `npm pack --dry-run --json`
+  output machine-readable in the shared framework and plugin publish script.
+- Switched Windows ARM64 release builds to Visual Studio Developer PowerShell,
+  removing the GitHub Actions Node.js 20 deprecation warning.
+- Preserved audit coverage of unmaintained transitive crates after the
+  `cargo-deny` default changed.
+
 ## [1.0.0] — Unreleased
 
 First stable release.

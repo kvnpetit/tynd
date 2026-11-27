@@ -146,6 +146,12 @@ sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev \
   libdbus-1-dev libwayland-dev libegl-dev rpm patchelf
 ```
 
+## Contributing
+
+The contributor guide covers local checks, GitHub Actions and the manual release process. [Contributor guide](./CONTRIBUTING.md)
+
+The changelog tracks changes on `main`. GitHub Releases lists published versions. [Changelog](./CHANGELOG.md) · [GitHub Releases](https://github.com/kvnpetit/tynd/releases)
+
 ## Repo Layout
 
 ```text

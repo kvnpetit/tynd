@@ -95,7 +95,7 @@ CI also runs these; run the ones your change touches:
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo clippy --locked -p tynd-host --features api-all --all-targets -- -D warnings
-cargo test --locked --workspace --features tynd-host/api-all
+cargo test --locked --workspace --features tynd-host/api-all,tynd-plugin-audio/capture
 cargo deny --locked check  # advisories, licenses, bans, sources (deny.toml)
 actionlint                 # after editing .github/workflows
 ```
@@ -243,7 +243,16 @@ Scope when useful: `feat(cli): …`, `fix(core): …`, `fix(host): …`.
 5. Explicitly flag any runtime-heavy API changes (`terminal`, `workers`, `http`, `sidecar`, PTY streams) in the PR description so reviewers exercise them by hand.
 6. One maintainer approval before merge.
 
-CI reuses compiled Rust dependencies from `main` on PRs. Successful `main` runs save the Rust caches. Debug symbols are disabled for CI's Rust development and test profiles to reduce build time and cache size.
+### GitHub Actions
+
+| Workflow | Run conditions and checks |
+| --- | --- |
+| [CI](.github/workflows/ci.yml) | Pull requests and pushes to `main`. Checks formatting, lints, tests, host feature combinations, package mirrors and the Rust 1.95 minimum. PRs build the docs and check links. Pushes build and launch a packaged app on Linux, macOS and Windows, including native menu and tray checks on macOS and Windows. |
+| [Supply chain](.github/workflows/supply-chain.yml) | Runs `cargo deny` on relevant Cargo or audit config changes, weekly and on demand. Checks RustSec advisories, licenses, dependency bans and sources. Dependabot version updates are disabled. |
+| [Docs deploy](.github/workflows/docs-deploy.yml) | Builds the site, checks links and deploys to GitHub Pages after relevant pushes to `main` or a manual run. |
+| [Release validation](.github/workflows/release-validation.yml) | Builds the six native tooling targets after relevant pushes to `main` or a manual run. Checks distribution packages, bundler checksums and GitHub build attestations. |
+
+New updates supersede older CI runs for the same PR. Each `main` commit has its own run so it can qualify independently for release. PRs can restore compiled Rust dependencies from `main`. Only successful jobs on `main` save the Rust caches. CI omits Rust development and test debug symbols to reduce compile time and cache size.
 
 ### What reviewers check
 
@@ -357,7 +366,7 @@ Content style: English only, active voice, code samples that run as written, val
 
 ## Releases
 
-Maintainers publish releases manually from GitHub Actions.
+Maintainers publish releases manually from GitHub Actions. The release workflows pin the npm CLI separately from the Node.js runtime. [Framework workflow](.github/workflows/release.yml) · [Standalone plugins workflow](.github/workflows/release-plugins.yml)
 
 1. Update the package versions, exact tooling pins, Cargo versions, lockfiles and changelog for the scope being released.
 2. Push the release commit to `main` and wait for CI on that exact commit.
@@ -370,7 +379,7 @@ CLI, MCP and tooling versions move together. The release stages `tynd`, `tynd-mc
 
 Changes to the framework release build configuration on `main` trigger **Release validation**, which compiles all six native targets and verifies the bundler assets and attestations without publishing to npm or GitHub Releases. The manual framework workflow uses the same build and verifies the remote tag again before publishing. Enable `verify_reproducibility` for a clean rebuild and digest comparison before publication.
 
-Both Linux tooling targets use Ubuntu 24.04 runners, with a native ARM64 runner for Linux ARM64. Standalone plugin validation also uses Ubuntu 24.04 and the shared CI system dependencies, including the ALSA headers required by the audio plugin's published features.
+Both Linux tooling targets use Ubuntu 24.04 runners, with a native ARM64 runner for Linux ARM64. The x64 Windows runner uses Visual Studio Developer PowerShell to cross-compile the Windows ARM64 tooling. Standalone plugin validation also uses Ubuntu 24.04 and the shared CI system dependencies, including the ALSA headers required by the audio plugin's published features.
 
 Contributors don't touch versions — only maintainers cut releases.
 
